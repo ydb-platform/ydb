@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 #include <ydb/library/aclib/aclib.h>
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
@@ -78,6 +80,9 @@ struct TIndexDescription {
         ui32 HashesCount = 2;
         double FalsePositiveProbability = 0.1;
         bool CaseSensitive = true;
+        // DEPRECATED: old syntax
+        std::optional<ui32> FilterSizeBytes;
+        std::optional<ui32> RecordsCount;
     };
 
     enum class EType : ui32 {
@@ -351,6 +356,23 @@ void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription
 
 void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterDescription& desc,
     const TString& name, const TString& value, TString& error);
+
+// DEPRECATED: old syntax
+inline double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount, ui32 hashesCount) {
+    const double m = static_cast<double>(filterSizeBytes) * 8;
+    const double n = static_cast<double>(recordsCount);
+    const double k = static_cast<double>(hashesCount);
+    if (m <= 0 || n <= 0 || k <= 0) {
+        return 0.1;
+    }
+
+    const double fpp = std::pow(1.0 - std::exp(-k * n / m), k);
+    if (fpp <= 0.0 || !std::isfinite(fpp)) {
+        return 0.1;
+    }
+
+    return std::min(fpp, 1.0);
+}
 
 struct TColumnFamily {
     TString Name;

@@ -534,6 +534,26 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
         return;
     }
 
+    // DEPRECATED: old syntax
+    if (name == "filter_size_bytes") {
+        ui32 uiValue = 0;
+        if (!TryFromString<ui32>(value, uiValue)) {
+            error = TStringBuilder() << "Invalid filter_size_bytes value: " << value;
+            return;
+        }
+        desc.FilterSizeBytes = uiValue;
+        return;
+    }
+    if (name == "records_count") {
+        ui32 uiValue = 0;
+        if (!TryFromString<ui32>(value, uiValue)) {
+            error = TStringBuilder() << "Invalid records_count value: " << value;
+            return;
+        }
+        desc.RecordsCount = uiValue;
+        return;
+    }
+
     error = TStringBuilder() << "Unknown index setting: " << name;
     return;
 }

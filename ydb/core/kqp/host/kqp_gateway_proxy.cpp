@@ -568,13 +568,19 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 ngram->SetNGrammSize(settings.NgramSize);
                 ngram->SetHashesCount(settings.HashesCount);
                 ngram->SetCaseSensitive(settings.CaseSensitive);
-                ngram->SetFalsePositiveProbability(settings.FalsePositiveProbability);
+                // DEPRECATED: old syntax
+                double fpp = (settings.FilterSizeBytes && settings.RecordsCount)
+                    ? NYql::ComputeFalsePositiveProbabilityFromDeprecatedParams(
+                        *settings.FilterSizeBytes, *settings.RecordsCount, settings.HashesCount)
+                    : settings.FalsePositiveProbability;
+                ngram->SetFalsePositiveProbability(fpp);
                 break;
             }
             default:
                 break;
         }
     }
+
     return true;
 }
 

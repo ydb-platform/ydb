@@ -2465,7 +2465,14 @@ public:
                                 proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize);
                                 proto->set_hashes_count(localBloomNgramFilterDesc.HashesCount);
                                 proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive);
-                                proto->set_false_positive_probability(localBloomNgramFilterDesc.FalsePositiveProbability);
+                                // New syntax: old syntax
+                                double fpp = (localBloomNgramFilterDesc.FilterSizeBytes && localBloomNgramFilterDesc.RecordsCount)
+                                    ? ComputeFalsePositiveProbabilityFromDeprecatedParams(
+                                        *localBloomNgramFilterDesc.FilterSizeBytes,
+                                        *localBloomNgramFilterDesc.RecordsCount,
+                                        localBloomNgramFilterDesc.HashesCount)
+                                    : localBloomNgramFilterDesc.FalsePositiveProbability;
+                                proto->set_false_positive_probability(fpp);
                             }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown index setting: " << name));

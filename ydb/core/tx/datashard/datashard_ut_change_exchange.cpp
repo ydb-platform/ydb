@@ -1625,9 +1625,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"user":"user@test","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
             R"({"user":"user@test","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
             R"({"user":"user@test","erase":{},"key":[1],"oldImage":{"value":100}})",
-        }, true, NACLib::TUserContextBuilder()
-            .WithUserSID("user@test")
-            .Build());
+        }, true, NACLib::TUserContextBuilder().WithUserSID("user@test").Build());
     }
 
     Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserSIDDisabled, PqRunner, YdsRunner, TopicRunner) {

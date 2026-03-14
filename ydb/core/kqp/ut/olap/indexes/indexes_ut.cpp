@@ -443,6 +443,55 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBoth` DROP INDEX ngram_renamed;");
     }
 
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckSchemaChangesDuringTheTime, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableSchemaChanges`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                message Utf8,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (resource_id)
+                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        // Add column without index
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` ADD COLUMN extra Utf8;");
+
+        // Add column with index
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` ADD COLUMN filtered_col Utf8;");
+        ExecSchemeQuery(kikimr, UseQueryService, R"(
+            ALTER TABLE `/Root/olapTableSchemaChanges` ADD INDEX idx_extra_bloom LOCAL USING bloom_filter
+                ON (filtered_col) WITH (false_positive_probability = 0.01);)");
+
+        // Drop column without index
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` DROP COLUMN message;");
+
+        // Drop index then drop column
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` DROP INDEX idx_extra_bloom;");
+        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` DROP COLUMN filtered_col;");
+
+        // Verify table is still usable and indexed columns remain
+        {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(
+                "SELECT COUNT(*) FROM `/Root/olapTableSchemaChanges` WHERE resource_id = 'x';",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
     // DEPRECATED: old syntax
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomNgramIndexDeprecatedSyntaxFilterSizeRecordsCount, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);

@@ -257,6 +257,8 @@ namespace NKikimr::NDDisk {
                         pr.PartsCount = 0;
                     } else {
                         data = pr.JoinData(SectorSize);
+                        PersistentBufferInMemoryCacheSize += pr.Size;
+                        SanitizePersistentBufferInMemoryCache(pr);
                     }
                 }
             }

@@ -4,7 +4,7 @@
 #include "dq_opt_conflict_rules_collector.h"
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <memory.h>
@@ -18,7 +18,7 @@
  * If join has conflicts or complex predicate, then MakeHyperedge will create a complex edge.
  */
 
-namespace NYql::NDq {
+namespace NKikimr::NKqp {
 
 inline TVector<TString> GetConditionUsedRelationNames(const TVector<TJoinColumn>& lhs, const TVector<TJoinColumn>& rhs) {
     TVector<TString> res;
@@ -253,33 +253,40 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     bool logGraph = true
 ) {
     TJoinHypergraph<TNodeSet> graph{};
-
-    auto logHypergraph = [&graph, logGraph](const char* name) {
-        if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
-            YQL_CLOG(TRACE, CoreDq) << name << ": ";
-            YQL_CLOG(TRACE, CoreDq) << graph.String();
-        }
-    };
-
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
     TVector<typename TJoinHypergraph<TNodeSet>::TEdge> crossJoins;
     MakeJoinHypergraphRec(graph, joinTree, subtreeNodes, crossJoins);
-    logHypergraph("Hypergraph build");
 
-    TTransitiveClosureConstructor transitiveClosure(graph);
-    transitiveClosure.Construct();
-    logHypergraph("Hypergraph after transitive closure");
-
-    AddCrossJoins(graph, crossJoins);
-    logHypergraph("Hypergraph after cross joins");
+    if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        YQL_CLOG(TRACE, CoreDq) << "Hypergraph build: ";
+        YQL_CLOG(TRACE, CoreDq) << graph.String();
+    }
 
     if (!hints.JoinOrderHints->Hints.empty()) {
         TJoinOrderHintsApplier joinHints(graph);
         joinHints.Apply(*hints.JoinOrderHints);
-        logHypergraph("Hypergraph after hints");
+        if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+            YQL_CLOG(TRACE, CoreDq) << "Hypergraph after hints: ";
+            YQL_CLOG(TRACE, CoreDq) << graph.String();
+        }
+    }
+
+    TTransitiveClosureConstructor transitveClosure(graph);
+    transitveClosure.Construct();
+
+    if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        YQL_CLOG(TRACE, CoreDq) << "Hypergraph after transitive closure: ";
+        YQL_CLOG(TRACE, CoreDq) << graph.String();
+    }
+
+    AddCrossJoins(graph, crossJoins);
+
+    if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        YQL_CLOG(TRACE, CoreDq) << "Hypergraph after adding cross joins: ";
+        YQL_CLOG(TRACE, CoreDq) << graph.String();
     }
 
     return graph;
 }
 
-} // namespace NYql::NDq
+} // namespace NKikimr::NKqp

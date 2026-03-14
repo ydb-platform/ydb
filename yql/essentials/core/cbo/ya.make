@@ -1,12 +1,12 @@
 LIBRARY()
 
-# Type definitions and implementations have moved to ydb/core/kqp/opt/cbo/.
-# This library is now a thin alias wrapper — no SRCS, just re-exports the ydb libraries.
-
-PEERDIR(
-    ydb/core/kqp/opt/cbo
-    ydb/core/kqp/opt/cbo/optimizer
+SRCS(
+    cbo_optimizer_new.cpp
+    cbo_interesting_orderings.cpp
+    cbo_hints.cpp
 )
+
+GENERATE_ENUM_SERIALIZATION(cbo_optimizer_new.h)
 
 END()
 

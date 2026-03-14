@@ -1,11 +1,11 @@
 #pragma once
 
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
-const TString& ToString(NYql::EJoinKind);
-const TString& ToString(NYql::EJoinAlgoType);
+const TString& ToString(NKikimr::NKqp::EJoinKind);
+const TString& ToString(NKikimr::NKqp::EJoinAlgoType);
 
-namespace NYql::NDq {
+namespace NKikimr::NKqp {
 
 /**
  * Internal Join nodes are used inside the CBO. They don't own join condition data structures
@@ -137,4 +137,4 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
     const TFDStorage* fdStorage
 );
 
-} // namespace NYql::NDq
+} // namespace NKikimr::NKqp

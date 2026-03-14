@@ -1,19 +1,13 @@
 LIBRARY()
 
-SRCS(
-    cbo_interesting_orderings.cpp
-)
-
-GENERATE_ENUM_SERIALIZATION(cbo_interesting_orderings.h)
-
 PEERDIR(
     library/cpp/disjoint_sets
     library/cpp/iterator
+    library/cpp/json
+    library/cpp/string_utils/base64
+    yql/essentials/core
+    yql/essentials/core/cbo
     yql/essentials/utils/log
 )
 
 END()
-
-RECURSE(
-    optimizer
-)

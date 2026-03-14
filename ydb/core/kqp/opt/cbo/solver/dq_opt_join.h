@@ -1,0 +1,54 @@
+#pragma once
+
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+
+namespace NYql {
+
+struct TOptimizerStatistics;
+
+namespace NDq {
+
+NYql::NNodes::TExprBase DqRewriteEquiJoin(const NYql::NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, const NKikimr::NKqp::TOptimizerHints& hints = {});
+
+NYql::NNodes::TExprBase DqRewriteEquiJoin(const NYql::NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, int& joinCounter, const NKikimr::NKqp::TOptimizerHints& hints = {});
+
+NYql::NNodes::TExprBase DqBuildPhyJoin(const NYql::NNodes::TDqJoin& join, bool pushLeftStage, NYql::TExprContext& ctx, NYql::IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage=true);
+
+NYql::NNodes::TExprBase DqBuildJoin(
+    const NYql::NNodes::TExprBase& node,
+    NYql::TExprContext& ctx,
+    NYql::IOptimizationContext& optCtx,
+    const NYql::TParentsMap& parentsMap,
+    bool allowStageMultiUsage,
+    bool pushLeftStage,
+    EHashJoinMode hashJoin = EHashJoinMode::Off,
+    bool shuffleMapJoin = true,
+    bool useGraceCoreForMap = false,
+    bool useBlockHashJoin = false,
+    bool shuffleElimination = false,
+    bool shuffleEliminationWithMap = false,
+    bool buildCollectStage=true
+);
+
+NYql::NNodes::TExprBase DqBuildHashJoin(const NYql::NNodes::TDqJoin& join, EHashJoinMode mode, NYql::TExprContext& ctx, NYql::IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false);
+
+NYql::NNodes::TExprBase DqBuildBlockHashJoin(const NYql::NNodes::TDqJoin& join, NYql::TExprContext& ctx);
+
+NYql::NNodes::TExprBase DqBuildJoinDict(const NYql::NNodes::TDqJoin& join, NYql::TExprContext& ctx);
+
+NYql::NNodes::TDqJoin DqSuppressSortOnJoinInput(const NYql::NNodes::TDqJoin& node, NYql::TExprContext& ctx);
+
+bool DqCollectJoinRelationsWithStats(
+    TVector<std::shared_ptr<NKikimr::NKqp::TRelOptimizerNode>>& rels,
+    NYql::TTypeAnnotationContext& typesCtx,
+    const NYql::NNodes::TCoEquiJoin& equiJoin,
+    const std::function<void(TVector<std::shared_ptr<NKikimr::NKqp::TRelOptimizerNode>>&, TStringBuf, const NYql::TExprNode::TPtr, const std::shared_ptr<NKikimr::NKqp::TOptimizerStatistics>&)>& collector);
+
+NYql::NNodes::TExprBase DqRewriteStreamEquiJoinWithLookup(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx);
+
+} // namespace NDq
+} // namespace NYql

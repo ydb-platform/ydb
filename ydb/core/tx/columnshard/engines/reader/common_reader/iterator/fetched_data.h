@@ -55,7 +55,6 @@ public:
     }
 
     void ReturnTable(std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& table) {
-        AFL_VERIFY(!Table);
         Table = std::move(table);
     }
 

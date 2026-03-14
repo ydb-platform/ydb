@@ -6,11 +6,19 @@
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap::NCompaction::NDictionary {
 
 void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mergingContext*/) {
     for (auto&& i : input) {
+        if (!i) {
+            Iterators.emplace_back(TIterator(
+                std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(
+                    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>{}, 0, Context.GetResultField()->type()),
+                Context.GetLoader()));
+            continue;
+        }
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrList;
         NArrow::NAccessor::IChunkedArray::VisitDataOwners<bool>(i, [&arrList](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
             arrList.emplace_back(arr);
@@ -108,6 +116,7 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
     }
     std::shared_ptr<NArrow::NAccessor::TDictionaryArray> dictArr;
     auto rBuilder = NArrow::MakeBuilder(NArrow::NAccessor::NDictionary::TConstructor::GetTypeByVariantsCount(maskSize));
+    bool addNull = false;
     if (maskSize == ArrayVariantsFull->length()) {
         AFL_VERIFY(NArrow::SwitchType(rBuilder->type()->id(), [&](const auto type) {
             if constexpr (type.IsIndexType()) {
@@ -117,12 +126,15 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
                         NArrow::TStatusValidator::Validate(builderImpl->Append(r));
                     } else {
                         NArrow::TStatusValidator::Validate(builderImpl->AppendNull());
+                        addNull = true;
                     }
                 }
                 return true;
             }
             return false;
-            }));
+        }));
+
+        auto dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate({ArrayVariantsFull, NArrow::TThreadSimpleArraysCache::GetNull(ArrayVariantsFull->type(), 1)}));
         dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(ArrayVariantsFull, NArrow::FinishBuilder(std::move(rBuilder)));
     } else {
         std::vector<i32> remap;
@@ -140,6 +152,7 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
                 for (auto&& r : records) {
                     if (r < 0) {
                         NArrow::TStatusValidator::Validate(builderImpl->AppendNull());
+                        addNull = true;
                     } else {
                         AFL_VERIFY((ui32)r < remap.size());
                         AFL_VERIFY(remap[r] >= 0);
@@ -151,11 +164,23 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
             return false;
             }));
 
-        auto arr = NArrow::TColumnFilter(std::move(mask))
-                       .Apply(std::make_shared<NArrow::NAccessor::TTrivialArray>(ArrayVariantsFull))
-                       ->GetChunkedArray();
-        AFL_VERIFY(arr && arr->num_chunks() == 1);
-        dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(arr->chunk(0), NArrow::FinishBuilder(std::move(rBuilder)));
+        auto filtered = NArrow::TColumnFilter(std::move(mask))
+                            .Apply(std::make_shared<NArrow::NAccessor::TTrivialArray>(ArrayVariantsFull))
+                            ->GetChunkedArray();
+        std::shared_ptr<arrow::Array> dictArray;
+        if (!filtered || filtered->num_chunks() == 0) {
+            dictArray = NArrow::TThreadSimpleArraysCache::GetNull(ArrayVariantsFull->type(), 0);
+        } else {
+            arrow::ArrayVector parts;
+            for (int i = 0; i < filtered->num_chunks(); ++i) {
+                parts.push_back(filtered->chunk(i));
+            }
+            if (addNull) {
+                parts.push_back(NArrow::TThreadSimpleArraysCache::GetNull(ArrayVariantsFull->type(), 1));
+            }
+            dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
+        }
+        dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(dictArray, NArrow::FinishBuilder(std::move(rBuilder)));
     }
     IColumnMerger::TPortionColumnChunkWriter<NArrow::NAccessor::TDictionaryArray, NArrow::NAccessor::NDictionary::TConstructor> col(
         NArrow::NAccessor::NDictionary::TConstructor(), Context.GetColumnId());

@@ -5,6 +5,8 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
@@ -68,9 +70,20 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
     if (markCount == mask.size()) {
         return std::make_shared<TDictionaryArray>(ArrayDictionary, positionsNew);
     } else {
-        auto arr = TColumnFilter(std::move(mask)).Apply(std::make_shared<TTrivialArray>(ArrayDictionary))->GetChunkedArray();
-        AFL_VERIFY(arr && arr->num_chunks() == 1);
-        return std::make_shared<TDictionaryArray>(arr->chunk(0), positionsNew);
+        auto filtered = TColumnFilter(std::move(mask)).Apply(std::make_shared<TTrivialArray>(ArrayDictionary))->GetChunkedArray();
+        std::shared_ptr<arrow::Array> dictArray;
+        if (!filtered || filtered->num_chunks() == 0) {
+            dictArray = TThreadSimpleArraysCache::GetNull(ArrayDictionary->type(), 0);
+        } else if (filtered->num_chunks() == 1) {
+            dictArray = filtered->chunk(0);
+        } else {
+            arrow::ArrayVector parts;
+            for (int i = 0; i < filtered->num_chunks(); ++i) {
+                parts.push_back(filtered->chunk(i));
+            }
+            dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
+        }
+        return std::make_shared<TDictionaryArray>(dictArray, positionsNew);
     }
 }
 

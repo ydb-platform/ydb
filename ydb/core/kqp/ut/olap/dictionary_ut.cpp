@@ -386,6 +386,232 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionaryWithNulls)).Execute();
     }
 
+    TString scriptGroupBySomeDoubleNullInsert = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            message Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (1u, NULL);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (2u, NULL);
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;#];[2u;#]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[#;[""]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 1
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
+        EXPECTED_UNORDERED: [[#]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 2
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[#]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 2
+    )";
+    Y_UNIT_TEST(GroupBySomeDictionaryDoubleNullInsert) {
+        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDoubleNullInsert)).Execute();
+    }
+
+    TString scriptDeleteOneDictionaryValue = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            message Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (1u, 'a'),
+            (2u, 'b'),
+            (3u, 'a'),
+            (4u, NULL);
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        DATA:
+        DELETE FROM `/Root/ColumnTable` WHERE pk = 1;
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[2u;["b"]];[3u;["a"]];[4u;#]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
+        EXPECTED_UNORDERED: [[#];[["a"]];[["b"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[2u;["b"]];[3u;["a"]];[4u;#]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
+        EXPECTED_UNORDERED: [[#];[["a"]];[["b"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 1
+    )";
+    Y_UNIT_TEST(DeleteDictionaryOneDictionaryValue) {
+        Variator::ToExecutor(Variator::SingleScript(scriptDeleteOneDictionaryValue)).Execute();
+    }
+
+    TString scriptDeleteOneNullDictionaryValue = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            message Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (1u, 'a'),
+            (2u, 'b'),
+            (3u, 'a'),
+            (4u, NULL);
+        ------
+        DATA:
+        DELETE FROM `/Root/ColumnTable` WHERE pk = 4;
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;["a"]];[2u;["b"]];[3u;["a"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;["a"]];[2u;["b"]];[3u;["a"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 1
+    )";
+    Y_UNIT_TEST(DeleteDictionaryOneNullDictionaryValue) {
+        Variator::ToExecutor(Variator::SingleScript(scriptDeleteOneNullDictionaryValue)).Execute();
+    }
+
+    TString scriptDeleteAllDictionaryValues = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            message Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (1u, 'a'),
+            (2u, 'b'),
+            (3u, 'a'),
+            (4u, NULL);
+        ------
+        DATA:
+        DELETE FROM `/Root/ColumnTable`;
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: []
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
+        EXPECTED_UNORDERED: []
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: []
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
+        EXPECTED_UNORDERED: []
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+    )";
+    Y_UNIT_TEST(DeleteDictionaryAllDictionaryValues) {
+        Variator::ToExecutor(Variator::SingleScript(scriptDeleteAllDictionaryValues)).Execute();
+    }
+
     TString scriptDictCompactionAndActualization = R"(
         STOP_COMPACTION
         ------

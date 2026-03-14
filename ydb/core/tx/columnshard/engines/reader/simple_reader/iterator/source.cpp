@@ -349,9 +349,15 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
     const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx());
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    if (addr.GetUseDictionaryOnly() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
+
+    const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter = GetStageData().HasTable()
+        ? GetStageData().GetAppliedFilter()
+        : context.GetResources().GetAppliedFilter();
+    const bool canUseDictionaryOnly = addr.GetUseDictionaryOnly() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
-            NArrow::NAccessor::IChunkedArray::EType::Dictionary && UsageClass == TPKRangeFilter::EUsageClass::FullUsage) {
+            NArrow::NAccessor::IChunkedArray::EType::Dictionary && UsageClass == TPKRangeFilter::EUsageClass::FullUsage &&
+        (!appliedFilter || appliedFilter->IsTotalAllowFilter());
+    if (canUseDictionaryOnly) {
         GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
         return std::make_shared<NCommon::TDictionaryFetchLogic>(addr.GetColumnId(), source);
     } else if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&

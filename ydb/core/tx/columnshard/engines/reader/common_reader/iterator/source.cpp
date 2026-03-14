@@ -34,8 +34,17 @@ void TExecutionContext::Stop() {
 void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program, const TFetchingScriptCursor& step) {
     auto readMeta = source->GetContext()->GetCommonContext()->GetReadMetadata();
+    std::unique_ptr<NArrow::NAccessor::TAccessorsCollection> contextTable;
+    const auto& stageData = source->GetStageData();
+    if (stageData.GetAppliedFilter() && !stageData.GetAppliedFilter()->IsTotalAllowFilter()) {
+        contextTable = std::make_unique<NArrow::NAccessor::TAccessorsCollection>(source->GetRecordsCount());
+        contextTable->SetFilterUsage(true);
+        contextTable->AddFilter(*stageData.GetAppliedFilter());
+    } else {
+        contextTable = source->MutableStageData().ExtractTable();
+    }
     NArrow::NSSA::TProcessorContext context(
-        source, source->MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
+        source, std::move(contextTable), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
     auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(std::move(context));
     SetProgramIterator(program->BuildIterator(visitor), visitor);
     SetCursorStep(step);

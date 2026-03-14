@@ -48,7 +48,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
 
     NACLib::TUserContextBuilder builder;
     auto token = GetUserToken();
-    if (token != nullptr ) {
+    if (token != nullptr) {
         builder.WithUserSID(token->GetUserSID());
     }
     builder.WithUserTraceId(ctx->GetTraceId().GetOrEmplace(""));

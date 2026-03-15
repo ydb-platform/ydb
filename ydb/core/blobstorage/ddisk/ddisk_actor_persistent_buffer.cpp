@@ -523,7 +523,7 @@ namespace NKikimr::NDDisk {
         }
         TActivationContext::Send(h.release());
 
-        const bool ok = (inflight.Status == NKikimrProto::OK);
+        const bool ok = (inflight.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
         Counters.Interface.ReadPersistentBuffer.Reply(ok, data.size());
         inflight.Span.End();
         PersistentBufferDiskOperationInflight.erase(inflightIt);

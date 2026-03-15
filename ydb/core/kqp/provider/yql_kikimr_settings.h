@@ -71,7 +71,7 @@ public:
     NCommon::TConfSetting<bool, Static> DqHashOperatorsUseBlocks;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
-    NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
+    NCommon::TConfSetting<NKikimr::NKqp::TOptimizerHints, Static> OptimizerHints;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, Static> OptDisableTopSort;

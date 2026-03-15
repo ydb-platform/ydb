@@ -1,29 +1,37 @@
 #pragma once
 
-// ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h
+// YDB-owned header for ordering-related types used by the CBO optimizer.
+// The ordering types (TOrderingsStateMachine, TFDStorage, etc.) are tightly
+// coupled to TOptimizerStatistics (yql/essentials/core/yql_statistics.h) whose
+// fields have these exact types.  To keep assignment compatibility we import
+// them as aliases rather than independent copies.
 //
-// Re-exports NYql::NDq interesting orderings types into NKikimr::NKqp.
-// Using type aliases (rather than independent definitions) ensures that
-// NKikimr::NKqp::TJoinColumn IS NYql::NDq::TJoinColumn, so values flow
-// freely across the bridge where TOptimizerStatistics (NYql) and the
-// KQP solver (NKikimr::NKqp) exchange join-column vectors.
+// The frozen YQL copy of the definitions lives in
+//   yql/essentials/core/cbo/cbo_interesting_orderings.h
+// These two are intentionally separate: edits here do NOT affect YQL/YT.
 
+#include <yql/essentials/core/yql_cost_function.h>
 #include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
-// Note: NYql::EJoinAlgoType and NYql::AllJoinAlgos come from
-// yql_cost_function.h which is included transitively above.
+
+#include <util/generic/hash.h>
+#include <util/generic/algorithm.h>
 
 namespace NKikimr::NKqp {
 
-using EJoinAlgoType          = NYql::EJoinAlgoType;
+// Non-cbo types from yql/essentials/core — forward the same aliases used
+// by cbo_optimizer_new.h so both headers are self-contained.
+using TJoinColumn   = NYql::NDq::TJoinColumn;
+using EJoinAlgoType = NYql::EJoinAlgoType;
 using NYql::AllJoinAlgos;
 
-using TJoinColumn            = NYql::NDq::TJoinColumn;
-using TOrdering              = NYql::NDq::TOrdering;
-using TFunctionalDependency  = NYql::NDq::TFunctionalDependency;
-using TTableAliasMap         = NYql::NDq::TTableAliasMap;
-using TSorting               = NYql::NDq::TSorting;
-using TShuffling             = NYql::NDq::TShuffling;
-using TFDStorage             = NYql::NDq::TFDStorage;
-using TOrderingsStateMachine = NYql::NDq::TOrderingsStateMachine;
+// Ordering types: aliases to NYql::NDq because TOptimizerStatistics carries
+// fields of exactly these types (LogicalOrderings, SortingOrderings, etc.).
+using TOrdering                = NYql::NDq::TOrdering;
+using TFunctionalDependency    = NYql::NDq::TFunctionalDependency;
+using TTableAliasMap           = NYql::NDq::TTableAliasMap;
+using TSorting                 = NYql::NDq::TSorting;
+using TShuffling               = NYql::NDq::TShuffling;
+using TFDStorage               = NYql::NDq::TFDStorage;
+using TOrderingsStateMachine   = NYql::NDq::TOrderingsStateMachine;
 
 } // namespace NKikimr::NKqp

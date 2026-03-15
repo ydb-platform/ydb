@@ -20,9 +20,12 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSpl
     auto additionalData = Record.GetMeta().GetAdditionalAccessorData();
     auto accessor = ColumnInfo.GetLoader()->ApplyVerified(Data, GetRecordsCountVerified(), std::nullopt, std::move(additionalData));
 
+    std::vector<NArrow::NAccessor::TBlobWithAccessorMeta> dictionaryBlobsAndMeta;
     const auto predSaver = [&](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
         if (isDictionary) {
-            return NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(arr, ColumnInfo.GetLoader()->BuildAccessorContext(arr->GetRecordsCount())).Blob;
+            dictionaryBlobsAndMeta.push_back(NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(
+                arr, ColumnInfo.GetLoader()->BuildAccessorContext(arr->GetRecordsCount())));
+            return dictionaryBlobsAndMeta.back().Blob;
         }
         return ColumnInfo.GetLoader()->GetAccessorConstructor().SerializeToString(arr, ColumnInfo.GetLoader()->BuildAccessorContext(arr->GetRecordsCount()));
     };
@@ -32,11 +35,10 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSpl
     const ui16 baseChunkIdx = GetChunkIdxOptional().value_or(0);
     for (size_t i = 0; i < chunks.size(); ++i) {
         if (isDictionary) {
-            auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(
-                chunks[i].GetArray(), ColumnInfo.GetLoader()->BuildAccessorContext(chunks[i].GetArray()->GetRecordsCount()));
+            AFL_VERIFY(i < dictionaryBlobsAndMeta.size());
             newChunks.emplace_back(std::make_shared<TChunkPreparation>(
-                std::move(blobAndMeta.Blob), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo,
-                std::move(blobAndMeta.Meta)));
+                std::move(dictionaryBlobsAndMeta[i].Blob), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo,
+                std::move(dictionaryBlobsAndMeta[i].Meta)));
         } else {
             newChunks.emplace_back(std::make_shared<TChunkPreparation>(
                 chunks[i].GetSerializedData(), chunks[i].GetArray(), TChunkAddress(GetColumnId(), baseChunkIdx + i), ColumnInfo));

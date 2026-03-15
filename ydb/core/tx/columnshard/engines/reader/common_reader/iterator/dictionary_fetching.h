@@ -30,7 +30,7 @@ public:
         return DictionaryBlobRange;
     }
 
-    void SetDictionaryBlob(const TString& blob) {
+    void SetDictionaryBlob(TString&& blob) {
         AFL_VERIFY(!!DictionaryBlobRange);
         DictionaryBlobRange = std::nullopt;
         auto conclusion = NArrow::NAccessor::NDictionary::TConstructor::BuildDictionaryOnlyReader(blob, ChunkExternalInfo);

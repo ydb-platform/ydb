@@ -135,7 +135,7 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
         }));
 
         auto dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate({ArrayVariantsFull, NArrow::TThreadSimpleArraysCache::GetNull(ArrayVariantsFull->type(), 1)}));
-        dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(ArrayVariantsFull, NArrow::FinishBuilder(std::move(rBuilder)));
+        dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(dictArray, NArrow::FinishBuilder(std::move(rBuilder)));
     } else {
         std::vector<i32> remap;
         remap.resize(mask.size(), -1);

@@ -21,8 +21,6 @@
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
-#include <util/stream/output.h>
-
 namespace NKikimr::NOlap::NReader::NSimple {
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {

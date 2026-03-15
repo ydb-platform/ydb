@@ -161,7 +161,8 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
                     TStatusValidator::Validate(builder->AppendNull());
                 }
             }
-            auto recordsType = GetTypeByVariantsCount(indexByValue.size());
+            const ui32 variantsCount = indexByValue.size() + (hasNulls ? 1 : 0);
+            auto recordsType = GetTypeByVariantsCount(variantsCount);
             builderRecords = NArrow::MakeBuilder(recordsType);
             remap.resize(indexByValue.size(), -1);
             ui32 idx = 0;
@@ -224,13 +225,13 @@ TConclusion<std::shared_ptr<arrow::Array>> TConstructor::BuildDictionaryOnlyRead
 }
 
 std::shared_ptr<arrow::DataType> TConstructor::GetTypeByVariantsCount(const ui32 count) {
-    if (count < Max<ui8>()) {
+    if (count <= Max<ui8>()) {
         return arrow::uint8();
     }
-    if (count < Max<ui16>()) {
+    if (count <= Max<ui16>()) {
         return arrow::uint16();
     }
-    if (count < Max<ui32>()) {
+    if (count <= Max<ui32>()) {
         return arrow::uint32();
     }
     AFL_VERIFY(false);

@@ -8,6 +8,10 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
@@ -734,6 +738,100 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             injection += isLast ? "\n" : (delimiter + "\n");
             ++expectedIdx;
         }
+        Variator::ToExecutor(Variator::SingleScript(scriptPrefix + injection)).Execute();
+    }
+
+    // Corner cases: 254+254, 254+255, 255+255 (no nulls) then same pattern with nulls. Compaction merges same/different portion sizes; every step must succeed.
+    Y_UNIT_TEST(DictCornerCase254255256VariantsAndNulls) {
+        const TString scriptPrefix = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels":[{"class_name":"Zero","portions_count_limit":1048576,"expected_blobs_size":1048576,"portions_count_available":1,"portions_live_duration":"1s"},{"class_name":"OneLayer","expected_portion_size":2097152,"size_limit_guarantee":134217728}]}`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        )";
+        NArrow::NConstruction::TStringPoolFiller sPool(260, 52);
+        const TString delimiter = "------\n";
+        TString injection;
+        // addNull: false = numRows rows (all non-null); true = numRows non-null + 1 null (numRows+1 rows total), null at last row.
+        // Returns pkStart + totalRows for the next call.
+        auto addBulk = [&](ui32 numRows, ui32 pkStart, bool addNull = false) -> ui32 {
+            const ui32 totalRows = addNull ? numRows + 1 : numRows;
+            auto pkBuilder = NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable(
+                "pk", NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>(pkStart));
+            std::shared_ptr<arrow::Array> pkArray = pkBuilder->BuildArray(totalRows);
+            auto fieldBuilder = NArrow::MakeBuilder(std::make_shared<arrow::Field>("field", arrow::utf8(), true), totalRows, totalRows * 52);
+            auto* sb = static_cast<arrow::StringBuilder*>(fieldBuilder.get());
+            for (ui32 i = 0; i < totalRows; ++i) {
+                if (addNull && i == numRows) {
+                    Y_ABORT_UNLESS(sb->AppendNull().ok());
+                } else {
+                    Y_ABORT_UNLESS(sb->Append(sPool.GetValue(i)).ok());
+                }
+            }
+            std::shared_ptr<arrow::Array> fieldArray = NArrow::FinishBuilder(std::move(fieldBuilder));
+            auto schema = arrow::schema({arrow::field("pk", arrow::uint64(), false), arrow::field("field", arrow::utf8(), true)});
+            auto batch = arrow::RecordBatch::Make(schema, totalRows, {pkArray, fieldArray});
+            TString arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(batch));
+            injection += "BULK_UPSERT:\n    /Root/ColumnTable\n    " + arrowString + "\nPARTS_COUNT:1\n" + delimiter;
+            return pkStart + totalRows;
+        };
+        auto addReadAndCompact = [&](ui32 expectedCount, bool isLast) {
+            injection += "READ: SELECT COUNT(*) AS c FROM `/Root/ColumnTable`;\n";
+            injection += "EXPECTED: [[" + ToString(expectedCount) + "u]]\n";
+            injection += delimiter + "ONE_COMPACTION\n" + delimiter;
+            injection += "READ: SELECT COUNT(*) AS c FROM `/Root/ColumnTable`;\n";
+            injection += "EXPECTED: [[" + ToString(expectedCount) + "u]]\n";
+            injection += isLast ? "\n" : delimiter;
+        };
+        // Phase 1: no nulls — 254+254, 254+255, 255+255, 255+256, 256+256; compact after each pair.
+        ui32 pk = 0;
+        pk = addBulk(254, pk);
+        pk = addBulk(254, pk);
+        addReadAndCompact(pk, false);
+        pk = addBulk(254, pk);
+        pk = addBulk(255, pk);
+        addReadAndCompact(pk, false);
+        pk = addBulk(255, pk);
+        pk = addBulk(255, pk);
+        addReadAndCompact(pk, false);
+        pk = addBulk(255, pk);
+        pk = addBulk(256, pk);
+        addReadAndCompact(pk, false);
+        pk = addBulk(256, pk);
+        pk = addBulk(256, pk);
+        addReadAndCompact(pk, false);
+        // Phase 2: with nulls — same pattern; each batch is (numRows + 1) rows with one null in the same BULK_UPSERT.
+        pk = addBulk(254, pk, true);
+        pk = addBulk(254, pk, true);
+        addReadAndCompact(pk, false);
+        pk = addBulk(254, pk, true);
+        pk = addBulk(255, pk, true);
+        addReadAndCompact(pk, false);
+        pk = addBulk(255, pk, true);
+        pk = addBulk(255, pk, true);
+        addReadAndCompact(pk, false);
+        pk = addBulk(255, pk, true);
+        pk = addBulk(256, pk, true);
+        addReadAndCompact(pk, false);
+        pk = addBulk(256, pk, true);
+        pk = addBulk(256, pk, true);
+        addReadAndCompact(pk, true);
         Variator::ToExecutor(Variator::SingleScript(scriptPrefix + injection)).Execute();
     }
 

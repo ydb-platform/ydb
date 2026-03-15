@@ -164,4 +164,53 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY(dictParsed->GetChunkedArray()->length() == NumRecords);
         AFL_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == PrepareToCompare(dict->GetChunkedArray()->ToString()));
     }
+
+    // Corner cases around 254/255/256 variants: with and without nulls. Ensures positions type (uint8 vs uint16) and null slot are correct.
+    void RunCornerCaseVariants(ui32 numDistinct, bool withNulls, arrow::Type::type expectedPositionsType) {
+        const ui32 numRecords = numDistinct + (withNulls ? 1 : 0);
+        TTrivialArray::TPlainBuilder builder(numRecords, numRecords * 16);
+        for (ui32 i = 0; i < numRecords; ++i) {
+            if (withNulls && i == numDistinct) {
+                continue;
+            }
+            TString v = "v" + ToString(i % numDistinct);
+            builder.AddRecord(i, v);
+        }
+        auto arr = builder.Finish(numRecords);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        AFL_VERIFY(dict->GetPositions()->type()->id() == expectedPositionsType)
+            ("numDistinct", numDistinct)("withNulls", withNulls)("expected", static_cast<int>(expectedPositionsType))("actual", static_cast<int>(dict->GetPositions()->type()->id()));
+        AFL_VERIFY(dict->GetDictionary()->length() == numDistinct + (withNulls ? 1 : 0));
+
+        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        TChunkConstructionData infoWithMeta(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
+            std::nullopt, blobAndMeta.Meta);
+        auto dictParsed = std::static_pointer_cast<TDictionaryArray>(
+            NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
+        AFL_VERIFY(dictParsed->GetPositions()->type()->id() == expectedPositionsType);
+        AFL_VERIFY(dictParsed->GetDictionary()->length() == dict->GetDictionary()->length());
+        AFL_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == PrepareToCompare(dict->GetChunkedArray()->ToString()));
+    }
+
+    Y_UNIT_TEST(CornerCase254NoNulls) {
+        RunCornerCaseVariants(254, false, arrow::Type::UINT8); // 254 variants <= 255 -> uint8
+    }
+    Y_UNIT_TEST(CornerCase254WithNulls) {
+        RunCornerCaseVariants(254, true, arrow::Type::UINT8); // 255 variants (254 + null), 255 <= 255 -> uint8
+    }
+    Y_UNIT_TEST(CornerCase255NoNulls) {
+        RunCornerCaseVariants(255, false, arrow::Type::UINT8); // 255 variants <= 255 -> uint8
+    }
+    Y_UNIT_TEST(CornerCase255WithNulls) {
+        RunCornerCaseVariants(255, true, arrow::Type::UINT16); // 256 variants > 255 -> uint16
+    }
+    Y_UNIT_TEST(CornerCase256NoNulls) {
+        RunCornerCaseVariants(256, false, arrow::Type::UINT16); // 256 variants > 255 -> uint16
+    }
+    Y_UNIT_TEST(CornerCase256WithNulls) {
+        RunCornerCaseVariants(256, true, arrow::Type::UINT16); // 257 variants -> uint16
+    }
 };

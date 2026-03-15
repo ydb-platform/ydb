@@ -387,7 +387,7 @@ Y_UNIT_TEST(CreateTable) {
         {"create table user(user int32 (default 0, family f, not null))", "CREATE TABLE user (\n\tuser int32 (DEFAULT 0, FAMILY f, NOT NULL)\n);\n"},
         {"create  table\tuser(key int32, val int64 compression(algorithm=lz4))", "CREATE TABLE user (\n\tkey int32,\n\tval int64 COMPRESSION (algorithm = lz4)\n);\n"},
         {"create  table\tuser(key int32, val String encoding(dict))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (DICT)\n);\n"},
-        {"create  table\tuser(key int32, val String encoding(off))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (OFF)\n);\n"},
+        {"create  table\tuser(key int32, val String encoding(off))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (off)\n);\n"},
         {"create  table\tuser(key int32, val String encoding())", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING ()\n);\n"},
         {"create table user(key int32, val String encoding(dict(max_size=100)))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (DICT (max_size = 100))\n);\n"},
     };
@@ -616,7 +616,7 @@ Y_UNIT_TEST(AlterTable) {
         {"alter table t alter column c set encoding(dict)",
          "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING (DICT)\n;\n"},
         {"alter table t alter column c set encoding(off)",
-         "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING (OFF)\n;\n"},
+         "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING (off)\n;\n"},
         {"alter table t alter column c set encoding()",
          "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING ()\n;\n"},
         {"alter table t alter column c set encoding(dict(max_size=100))",

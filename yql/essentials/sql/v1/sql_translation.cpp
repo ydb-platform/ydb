@@ -1696,8 +1696,6 @@ static TString EncodingConfigName(const TRule_encoding_config_name& node, TTrans
             return Id(node.GetAlt_encoding_config_name1().GetRule_an_id1(), ctx);
         case TRule_encoding_config_name::kAltEncodingConfigName2:
             return "DICT";
-        case TRule_encoding_config_name::kAltEncodingConfigName3:
-            return "OFF";
         case TRule_encoding_config_name::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
@@ -1922,7 +1920,7 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         return {};
     }
 
-    const auto& opts = columnOptions.GetRef();
+    auto&& [defaultExpr, families, compression, nullable, columnEncoding] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1936,12 +1934,12 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         .Pos = std::move(pos),
         .Name = std::move(name),
         .Type = std::move(type),
-        .Families = opts.Families,
-        .DefaultExpr = opts.DefaultExpr,
-        .Compression = opts.Compression,
-        .Nullable = opts.Nullable,
+        .Families = std::move(families),
+        .DefaultExpr = std::move(defaultExpr),
+        .Compression = std::move(compression),
+        .Nullable = std::move(nullable),
         .Serial = serial,
-        .ColumnEncoding = opts.ColumnEncoding,
+        .ColumnEncoding = std::move(columnEncoding),
     };
 }
 

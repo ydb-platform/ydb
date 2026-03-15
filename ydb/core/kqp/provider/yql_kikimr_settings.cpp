@@ -87,7 +87,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
-    REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
+    REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NKikimr::NKqp::TOptimizerHints::Parse(v); });
     REGISTER_SETTING(*this, OptShuffleElimination);
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);

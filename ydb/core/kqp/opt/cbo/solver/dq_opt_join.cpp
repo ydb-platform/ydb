@@ -10,10 +10,11 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/utils/log/log.h>
 
-namespace NYql::NDq {
+namespace NKikimr::NKqp {
 
+using namespace NYql;
 using namespace NYql::NNodes;
-using namespace NKikimr::NKqp;
+using namespace NYql::NDq;
 
 namespace {
 
@@ -2188,4 +2189,4 @@ TExprBase DqRewriteStreamEquiJoinWithLookup(const TExprBase& node, TExprContext&
     return Build<TCoEquiJoin>(ctx, node.Pos()).Add(std::move(args)).Done();
 }
 
-} // namespace NYql::NDq
+} // namespace NKikimr::NKqp

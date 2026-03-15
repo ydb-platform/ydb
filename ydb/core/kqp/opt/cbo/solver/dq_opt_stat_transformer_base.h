@@ -4,34 +4,34 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
-namespace NYql::NDq {
+namespace NKikimr::NKqp {
 
-class TDqStatisticsTransformerBase : public TSyncTransformerBase {
+class TDqStatisticsTransformerBase : public NYql::TSyncTransformerBase {
 public:
     TDqStatisticsTransformerBase(
-        TTypeAnnotationContext* typeCtx,
-        const NKikimr::NKqp::IProviderContext& ctx,
-        const NKikimr::NKqp::TOptimizerHints& hints = {},
+        NYql::TTypeAnnotationContext* typeCtx,
+        const IProviderContext& ctx,
+        const TOptimizerHints& hints = {},
         TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr,
         const bool useFSMForSortElimination = false
     );
 
-    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
+    NYql::IGraphTransformer::TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) override;
     void Rewind() override;
 
 protected:
-    virtual bool BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) = 0;
-    virtual bool AfterLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) = 0;
+    virtual bool BeforeLambdasSpecific(const NYql::TExprNode::TPtr& input, NYql::TExprContext& ctx) = 0;
+    virtual bool AfterLambdasSpecific(const NYql::TExprNode::TPtr& input, NYql::TExprContext& ctx) = 0;
 
-    bool BeforeLambdasUnmatched(const TExprNode::TPtr& input, TExprContext& ctx);
-    bool BeforeLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
-    bool AfterLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
+    bool BeforeLambdasUnmatched(const NYql::TExprNode::TPtr& input, NYql::TExprContext& ctx);
+    bool BeforeLambdas(const NYql::TExprNode::TPtr& input, NYql::TExprContext& ctx);
+    bool AfterLambdas(const NYql::TExprNode::TPtr& input, NYql::TExprContext& ctx);
 
-    TTypeAnnotationContext* TypeCtx;
-    const NKikimr::NKqp::IProviderContext& Pctx;
-    NKikimr::NKqp::TOptimizerHints Hints;
+    NYql::TTypeAnnotationContext* TypeCtx;
+    const IProviderContext& Pctx;
+    TOptimizerHints Hints;
     TShufflingOrderingsByJoinLabels* ShufflingOrderingsByJoinLabels;
     const bool UseFSMForSortElimination;
 };
 
-} // namespace NYql::NDq
+} // namespace NKikimr::NKqp

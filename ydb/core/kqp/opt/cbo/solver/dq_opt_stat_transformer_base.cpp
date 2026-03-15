@@ -6,10 +6,11 @@
 #include <yql/essentials/utils/log/log.h>
 
 
-namespace NYql::NDq {
-using namespace NKikimr::NKqp;
+namespace NKikimr::NKqp {
 
-using namespace NNodes;
+using namespace NYql;
+using namespace NYql::NDq;
+using namespace NYql::NNodes;
 
 TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
     TTypeAnnotationContext* typeCtx,
@@ -24,6 +25,8 @@ TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
     , ShufflingOrderingsByJoinLabels(shufflingOrderingsByJoinLabels)
     , UseFSMForSortElimination(useFSMForSortElimination)
 { }
+
+namespace {
 
 void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
     auto inputNode = TExprBase(input);
@@ -63,6 +66,8 @@ void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnota
     typeCtx->SetStats(inputNode.Raw(), std::move(stats));
 }
 
+} // namespace
+
 IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
 
@@ -74,7 +79,7 @@ IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::
             // we need to take each generic callable and see if it includes a lambda
             // if so - we will map the input to the callable to the argument of the lambda
             if (input->IsCallable()) {
-                PropagateStatisticsToLambdaArgument(input, TypeCtx);
+                NDq::PropagateStatisticsToLambdaArgument(input, TypeCtx);
             }
 
             return true;
@@ -97,61 +102,61 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     bool matched = true;
     // Generic matchers
     if (TCoFilterBase::Match(input.Get())){
-        InferStatisticsForFilter(input, TypeCtx);
+        NDq::InferStatisticsForFilter(input, TypeCtx);
     }
     else if(TCoSkipNullMembers::Match(input.Get())){
-        InferStatisticsForSkipNullMembers(input, TypeCtx);
+        NDq::InferStatisticsForSkipNullMembers(input, TypeCtx);
     }
     else if(auto aggregateBase = TMaybeNode<TCoAggregateBase>(input.Get())){
-        InferStatisticsForAggregateBase(input, TypeCtx);
+        NDq::InferStatisticsForAggregateBase(input, TypeCtx);
     }
     else if(TCoAggregateMergeFinalize::Match(input.Get())){
-        InferStatisticsForAggregateMergeFinalize(input, TypeCtx);
+        NDq::InferStatisticsForAggregateMergeFinalize(input, TypeCtx);
     }
     else if (TCoAsList::Match(input.Get())){
-        InferStatisticsForAsList(input, TypeCtx);
+        NDq::InferStatisticsForAsList(input, TypeCtx);
     }
-    else if (TCoParameter::Match(input.Get()) && InferStatisticsForListParam(input, TypeCtx)) {
+    else if (TCoParameter::Match(input.Get()) && NDq::InferStatisticsForListParam(input, TypeCtx)) {
     }
 
-    // Join matchers
+    // Join matchers (use NKikimr::NKqp::IProviderContext overloads from dq_opt_stat_kqp.cpp)
     else if(TCoMapJoinCore::Match(input.Get())) {
-        InferStatisticsForMapJoin(input, TypeCtx, Pctx, Hints);
+        NDq::InferStatisticsForMapJoin(input, TypeCtx, Pctx, Hints);
     }
     else if(TCoGraceJoinCore::Match(input.Get())) {
-        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, Hints, ShufflingOrderingsByJoinLabels);
+        NDq::InferStatisticsForGraceJoin(input, TypeCtx, Pctx, Hints, ShufflingOrderingsByJoinLabels);
     }
     else if (auto dqJoinBase = TMaybeNode<TDqJoinBase>(input.Get())) {
-        InferStatisticsForDqJoinBase(input, TypeCtx, Pctx, Hints);
+        NDq::InferStatisticsForDqJoinBase(input, TypeCtx, Pctx, Hints);
     }
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
     else if(TCoEquiJoin::Match(input.Get())){
-        InferStatisticsForEquiJoin(input, TypeCtx);
+        NDq::InferStatisticsForEquiJoin(input, TypeCtx);
     }
     // In case of DqSource, propagate the statistics from the correct argument
     else if (TDqSource::Match(input.Get())) {
-        InferStatisticsForDqSource(input, TypeCtx);
+        NDq::InferStatisticsForDqSource(input, TypeCtx);
     }
     else if (TDqCnMerge::Match(input.Get())) {
-        InferStatisticsForDqMerge(input, TypeCtx);
+        NDq::InferStatisticsForDqMerge(input, TypeCtx);
     }
     else if (auto extendBase = TMaybeNode<TCoExtendBase>(input)) { // == union all
-        InferStatisticsForExtendBase(input, TypeCtx);
+        NDq::InferStatisticsForExtendBase(input, TypeCtx);
     }
     else if (TCoAsStruct::Match(input.Get())) {
-        InferStatisticsForAsStruct(input, TypeCtx);
+        NDq::InferStatisticsForAsStruct(input, TypeCtx);
     }
     else if (auto topBase = TMaybeNode<TCoTopBase>(input)) {
-        InferStatisticsForTopBase(input, TypeCtx);
+        NDq::InferStatisticsForTopBase(input, TypeCtx);
     }
     else if (auto sortBase = TMaybeNode<TCoSortBase>(input)) {
-        InferStatisticsForSortBase(input, TypeCtx);
+        NDq::InferStatisticsForSortBase(input, TypeCtx);
     }
     else if (TCoUnionAll::Match(input.Get())) {
-        InferStatisticsForUnionAll(input, TypeCtx);
+        NDq::InferStatisticsForUnionAll(input, TypeCtx);
     }
     else if (TCoShuffleByKeys::Match(input.Get())) {
-        InferStatisticsForAggregationCallable<TCoShuffleByKeys>(input, TypeCtx);
+        NDq::InferStatisticsForAggregationCallable<TCoShuffleByKeys>(input, TypeCtx);
     }
     else {
         matched = false;
@@ -166,7 +171,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdasUnmatched(const TExprNode::TPtr&
     if (input->ChildrenSize() >= 1) {
         auto stats = TypeCtx->GetStats(input->ChildRef(0).Get());
         if (stats) {
-            TypeCtx->SetStats(input.Get(), RemoveOrderings(stats, input));
+            TypeCtx->SetStats(input.Get(), NDq::RemoveOrderings(stats, input));
         }
     }
     return true;
@@ -176,9 +181,9 @@ bool TDqStatisticsTransformerBase::AfterLambdas(const TExprNode::TPtr& input, TE
     Y_UNUSED(ctx);
     bool matched = true;
     if (TDqStageBase::Match(input.Get())) {
-        InferStatisticsForStage(input, TypeCtx);
+        NDq::InferStatisticsForStage(input, TypeCtx);
     } else if (TCoFlatMapBase::Match(input.Get())) {
-        InferStatisticsForFlatMap(input, TypeCtx);
+        NDq::InferStatisticsForFlatMap(input, TypeCtx);
     } else {
         matched = false;
     }
@@ -187,4 +192,4 @@ bool TDqStatisticsTransformerBase::AfterLambdas(const TExprNode::TPtr& input, TE
 
 void TDqStatisticsTransformerBase::Rewind() { }
 
-} // namespace NYql::NDq
+} // namespace NKikimr::NKqp

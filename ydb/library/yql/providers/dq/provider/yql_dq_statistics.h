@@ -10,6 +10,6 @@ namespace NYql {
 struct TDqState;
 using TDqStatePtr = TIntrusivePtr<TDqState>;
 
-THolder<IGraphTransformer> CreateDqsStatisticsTransformer(TDqStatePtr state, const IProviderContext& ctx);
+THolder<IGraphTransformer> CreateDqsStatisticsTransformer(TDqStatePtr state, const NKikimr::NKqp::IProviderContext& ctx);
 
 } // namespace NYql

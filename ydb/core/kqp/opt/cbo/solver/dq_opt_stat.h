@@ -20,9 +20,9 @@ void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, TTypeAnno
 void InferStatisticsForStage(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForDqSource(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForDqMerge(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
-void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints = {}, TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr);
-void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints = {});
-void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints = {});
+void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints = {}, NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr);
+void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints = {});
+void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints = {});
 void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
@@ -158,14 +158,14 @@ bool IsLiteralDataExpr(NNodes::TExprBase node);
 bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs = true);
 bool IsConstantExprWithParams(const TExprNode::TPtr& input);
 
-TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, TCardinalityHints& hints);
-TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, TCardinalityHints& hints);
+NKikimr::NKqp::TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, NKikimr::NKqp::TCardinalityHints& hints);
+NKikimr::NKqp::TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, NKikimr::NKqp::TCardinalityHints& hints);
 std::shared_ptr<TOptimizerStatistics> ApplyBytesHints(std::shared_ptr<TOptimizerStatistics>& inputStats,
     TVector<TString>& labels,
-    TCardinalityHints hints);
+    NKikimr::NKqp::TCardinalityHints hints);
 std::shared_ptr<TOptimizerStatistics> ApplyRowsHints(
     std::shared_ptr<TOptimizerStatistics>& inputStats,
     TVector<TString>& labels,
-    TCardinalityHints hints);
+    NKikimr::NKqp::TCardinalityHints hints);
 
 } // namespace NYql::NDq {

@@ -11,7 +11,7 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat_transformer_base.h>
+#include <ydb/core/kqp/opt/cbo/solver/dq_opt_stat_transformer_base.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -26,7 +26,7 @@ using namespace NOpt;
  * but will simply stop propagation if in encounters an operator that it has no rules for.
  * One of such operators is EquiJoin, but there is a special rule to handle EquiJoin.
 */
-class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase {
+class TKqpStatisticsTransformer : public TDqStatisticsTransformerBase {
 
     const TKikimrConfiguration::TPtr& Config;
     TKqpOptimizeContext& KqpCtx;

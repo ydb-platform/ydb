@@ -1,5 +1,12 @@
 LIBRARY()
 
+SRCS(
+    cbo_hints.cpp
+    cbo_optimizer_new.cpp
+)
+
+GENERATE_ENUM_SERIALIZATION(cbo_optimizer_new.h)
+
 PEERDIR(
     library/cpp/disjoint_sets
     library/cpp/iterator
@@ -9,5 +16,7 @@ PEERDIR(
     yql/essentials/core/cbo
     yql/essentials/utils/log
 )
+
+YQL_LAST_ABI_VERSION()
 
 END()

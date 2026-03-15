@@ -182,6 +182,7 @@ private:
     NThreading::TFuture<void> AsyncInit;
     std::shared_ptr<TFederatedDbState> FederationState;
     std::shared_ptr<TEventFederator> EventFederator;
+    std::function<void(NTopic::TReadSessionEvent::TDataReceivedEvent&)> SubsessionDataReceivedHandler = {};
 
     TLog Log;
 

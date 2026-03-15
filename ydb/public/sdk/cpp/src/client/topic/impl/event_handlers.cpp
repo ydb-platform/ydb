@@ -95,6 +95,45 @@ private:
     std::unordered_map<ui64, TReadSessionEvent::TStopPartitionSessionEvent> UnconfirmedDestroys; // Partition stream id -> destroy events.
 };
 
+TReadSessionSettings::TEventHandlers::TEventHandlers(const TEventHandlers& other)
+    : GracefulReleaseAfterCommit_(other.GracefulReleaseAfterCommit_)
+    , CommitDataAfterProcessing_(other.CommitDataAfterProcessing_)
+    , InitialDataReceivedHandler_(other.InitialDataReceivedHandler_)
+    , DataReceivedHandler_(other.DataReceivedHandler_)
+    , CommitOffsetAcknowledgementHandler_(other.CommitOffsetAcknowledgementHandler_)
+    , StartPartitionSessionHandler_(other.StartPartitionSessionHandler_)
+    , StopPartitionSessionHandler_(other.StopPartitionSessionHandler_)
+    , EndPartitionSessionHandler_(other.EndPartitionSessionHandler_)
+    , PartitionSessionClosedHandler_(other.PartitionSessionClosedHandler_)
+    , CommonHandler_(other.CommonHandler_)
+    , HandlersExecutor_(other.HandlersExecutor_)
+{
+    if (other.GracefulReleaseAfterCommit_) {
+        SimpleDataHandlers(other.InitialDataReceivedHandler_, other.CommitDataAfterProcessing_.value_or(false), other.GracefulReleaseAfterCommit_.value());
+    }
+}
+
+TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::operator=(const TEventHandlers& other) {
+    if (this == &other) {
+        return *this;
+    }
+    GracefulReleaseAfterCommit_ = other.GracefulReleaseAfterCommit_;
+    CommitDataAfterProcessing_ = other.CommitDataAfterProcessing_;
+    InitialDataReceivedHandler_ = other.InitialDataReceivedHandler_;
+    DataReceivedHandler_ = other.DataReceivedHandler_;
+    CommitOffsetAcknowledgementHandler_ = other.CommitOffsetAcknowledgementHandler_;
+    StartPartitionSessionHandler_ = other.StartPartitionSessionHandler_;
+    StopPartitionSessionHandler_ = other.StopPartitionSessionHandler_;
+    EndPartitionSessionHandler_ = other.EndPartitionSessionHandler_;
+    PartitionSessionClosedHandler_ = other.PartitionSessionClosedHandler_;
+    CommonHandler_ = other.CommonHandler_;
+    HandlersExecutor_ = other.HandlersExecutor_;
+    if (other.GracefulReleaseAfterCommit_) {
+        SimpleDataHandlers(other.InitialDataReceivedHandler_, other.CommitDataAfterProcessing_.value_or(false), other.GracefulReleaseAfterCommit_.value());
+    }
+    return *this;
+}
+
 TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::SimpleDataHandlers(std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler,
                                                                                                bool commitDataAfterProcessing,
                                                                                                bool gracefulReleaseAfterCommit) {
@@ -103,6 +142,10 @@ TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::Simp
     PartitionSessionStatusHandler([](TReadSessionEvent::TPartitionSessionStatusEvent&){});
 
     if (gracefulReleaseAfterCommit) {
+        InitialDataReceivedHandler_ = dataHandler;
+        GracefulReleaseAfterCommit_.emplace(gracefulReleaseAfterCommit);
+        CommitDataAfterProcessing_.emplace(commitDataAfterProcessing);
+
         auto handlers = MakeIntrusive<TGracefulReleasingSimpleDataHandlers>(std::move(dataHandler), commitDataAfterProcessing);
         DataReceivedHandler([handlers](TReadSessionEvent::TDataReceivedEvent& event) {
             handlers->OnDataReceived(event);

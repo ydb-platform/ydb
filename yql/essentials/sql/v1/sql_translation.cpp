@@ -1693,9 +1693,9 @@ static bool EncodingSettingEntry(const TRule_encoding_setting_entry& node, TTran
 static TString EncodingConfigName(const TRule_encoding_config_name& node, TTranslation& ctx) {
     switch (node.Alt_case()) {
         case TRule_encoding_config_name::kAltEncodingConfigName1:
-            return Id(node.GetAlt_encoding_config_name1().GetRule_an_id1(), ctx);
+            return to_lower(Id(node.GetAlt_encoding_config_name1().GetRule_an_id1(), ctx));
         case TRule_encoding_config_name::kAltEncodingConfigName2:
-            return "DICT";
+            return "dict";
         case TRule_encoding_config_name::ALT_NOT_SET:
             Y_UNREACHABLE();
     }

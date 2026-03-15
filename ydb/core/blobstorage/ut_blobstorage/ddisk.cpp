@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             return res->Get()->Record.GetFreeSpace();
         }
 
-        void ReadPB() {
+        void ReadPB(ui32 repeat = 1) {
             std::vector<ui64> lsns;
             lsns.reserve(PersistentBuffers.size());
             for (ui64 lsn : PersistentBuffers | std::views::keys) {
@@ -224,18 +224,19 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             Cerr << "read persistent buffer offset# " << offsetInBytes << " size# " << size
                 << " lsn# " << lsn << "\n";
-
-            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvReadPersistentBuffer(
-                PBCreds, {VChunkIndex, offsetInBytes, size}, lsn, {true})), Edge.NodeId());
-            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvReadPersistentBufferResult>(Edge, false);
-            const auto& rr = res->Get()->Record;
-            UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-            UNIT_ASSERT(rr.HasReadResult());
-            const auto& rr2 = rr.GetReadResult();
-            UNIT_ASSERT(rr2.HasPayloadId());
-            UNIT_ASSERT_VALUES_EQUAL(rr2.GetPayloadId(), 0);
-            TRope rope = res->Get()->GetPayload(0);
-            UNIT_ASSERT_VALUES_EQUAL(rope.ConvertToString(), buffer);
+            for (ui32 _ : xrange(repeat)) {
+                Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvReadPersistentBuffer(
+                    PBCreds, {VChunkIndex, offsetInBytes, size}, lsn, {true})), Edge.NodeId());
+                auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvReadPersistentBufferResult>(Edge, false);
+                const auto& rr = res->Get()->Record;
+                UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                UNIT_ASSERT(rr.HasReadResult());
+                const auto& rr2 = rr.GetReadResult();
+                UNIT_ASSERT(rr2.HasPayloadId());
+                UNIT_ASSERT_VALUES_EQUAL(rr2.GetPayloadId(), 0);
+                TRope rope = res->Get()->GetPayload(0);
+                UNIT_ASSERT_VALUES_EQUAL(rope.ConvertToString(), buffer);
+            }
         }
 
         double ErasePB(ui64 lsn = 0) {
@@ -548,6 +549,24 @@ Y_UNIT_TEST_SUITE(DDisk) {
             Cerr << "freeSpace: " << freeSpace << Endl;
         }
         UNIT_ASSERT(freeSpace == 1);
+    }
+
+    Y_UNIT_TEST(PersistentBufferFillAndRead) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        for (ui32 i = 1; i < 2000; ++i) {
+            f.WritePB(0, 128); // Max size records to overfill in memory buffer
+        }
+        for (ui32 i = 1; i < 1000; ++i) {
+            f.ReadPB(2);
+        }
+        f.RestartNode();
+        f.ListPB();
+        for (ui32 i = 1; i < 1000; ++i) {
+            f.ReadPB(2);
+        }
     }
 
 }

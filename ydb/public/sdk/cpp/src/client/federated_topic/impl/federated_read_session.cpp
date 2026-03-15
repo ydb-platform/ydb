@@ -75,7 +75,6 @@ TFederatedReadSessionImpl::TFederatedReadSessionImpl(const TFederatedReadSession
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
     , EventFederator(std::make_shared<TEventFederator>())
-    , SubsessionDataReceivedHandler(settings.EventHandlers_.DataReceivedHandler_)
     , Log(Connections->GetLog())
     , SessionId(CreateGuidAsString())
 {

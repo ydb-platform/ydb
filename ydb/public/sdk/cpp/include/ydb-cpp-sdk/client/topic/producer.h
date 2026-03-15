@@ -43,7 +43,8 @@ struct TProducerSettings : public TWriteSessionSettings {
     FLUENT_SETTING_DEFAULT(std::string, SessionId, "");
 
     //! Maximum block time for write. If set, write will block for up to MaxBlockMs when the buffer is overloaded.
-    FLUENT_SETTING_DEFAULT(TDuration, MaxBlock, TDuration::Zero());
+    //! If not set, Write will block until the message is written to the buffer.
+    FLUENT_SETTING_DEFAULT(TDuration, MaxBlock, TDuration::Max());
 
     //! Key producer function.
     FLUENT_SETTING_OPTIONAL(std::function<std::string(const TWriteMessage& message)>, KeyProducer);

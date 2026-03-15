@@ -675,12 +675,14 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRan
     node->Selectivity = ComputeInequalitySelectivity(*leftPtr, *rightPtr, collectMembers, inequalitySign);
 
     TMaybe<TString> literal = ExtractLiteral(*rightPtr);
-    if (inequalitySign == EInequalityPredicateType::Less || inequalitySign == EInequalityPredicateType::LessOrEqual) {
-        TPredicateRange rangeNode(Nothing(), Nothing(), false, *rightPtr, literal.GetRef(), inclusive);
-        node->Range = std::move(rangeNode);
-    } else if (inequalitySign == EInequalityPredicateType::Greater || inequalitySign == EInequalityPredicateType::GreaterOrEqual) {
-        TPredicateRange rangeNode(*rightPtr, literal.GetRef(), inclusive, Nothing(), Nothing(), false);
-        node->Range = std::move(rangeNode);
+    if (literal.Defined()) {
+        if (inequalitySign == EInequalityPredicateType::Less || inequalitySign == EInequalityPredicateType::LessOrEqual) {
+            TPredicateRange rangeNode(Nothing(), Nothing(), false, *rightPtr, literal.GetRef(), inclusive);
+            node->Range = std::move(rangeNode);
+        } else if (inequalitySign == EInequalityPredicateType::Greater || inequalitySign == EInequalityPredicateType::GreaterOrEqual) {
+            TPredicateRange rangeNode(*rightPtr, literal.GetRef(), inclusive, Nothing(), Nothing(), false);
+            node->Range = std::move(rangeNode);
+        }
     }
 
     TString ref = leftAttr.GetRef();
@@ -779,8 +781,10 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
     }
 
     TMaybe<TString> literal = ExtractLiteral(*rightPtr);
-    TPredicateRange rangeNode(*rightPtr, literal.GetRef(), true, *rightPtr, literal.GetRef(), true);
-    node->Range = std::move(rangeNode);
+    if (literal.Defined()) {
+        TPredicateRange rangeNode(*rightPtr, literal.GetRef(), true, *rightPtr, literal.GetRef(), true);
+        node->Range = std::move(rangeNode);
+    }
 
     return node;
 }

@@ -46,6 +46,22 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
             settings.FederatedEventHandlers_.SimpleDataHandlers_.GracefulStopAfterCommit);
     }
 
+#define MAYBE_OVERRIDE_EVENT_HANDLER(name)                                                                      \
+    if (settings.EventHandlers_.name##_) {                                                                      \
+        SubsessionSettings.EventHandlers_.name(settings.EventHandlers_.name##_);                                \
+    }
+
+    MAYBE_OVERRIDE_EVENT_HANDLER(DataReceivedHandler);
+    MAYBE_OVERRIDE_EVENT_HANDLER(CommitOffsetAcknowledgementHandler);
+    MAYBE_OVERRIDE_EVENT_HANDLER(StartPartitionSessionHandler);
+    MAYBE_OVERRIDE_EVENT_HANDLER(StopPartitionSessionHandler);
+    MAYBE_OVERRIDE_EVENT_HANDLER(EndPartitionSessionHandler);
+    MAYBE_OVERRIDE_EVENT_HANDLER(PartitionSessionStatusHandler);
+    MAYBE_OVERRIDE_EVENT_HANDLER(PartitionSessionClosedHandler);
+    MAYBE_OVERRIDE_EVENT_HANDLER(CommonHandler);
+
+#undef MAYBE_OVERRIDE_EVENT_HANDLER
+
 #define MAYBE_CONVERT_HANDLER(type, name)                                                                       \
     if (settings.FederatedEventHandlers_.name##_) {                                                             \
         SubsessionSettings.EventHandlers_.name(                                                                 \

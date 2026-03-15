@@ -230,8 +230,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
 
     SetTxKeys(tableInfo, tabletId, keyValidator);
     UserCtx = NACLib::TUserContextBuilder()
-        .WithUserSID(ev.Record.GetUserSID())
-        .WithUserTraceId(ev.Record.GetUserTraceId())
+        .Deserialize(ev.Record)
         .Build();
     return {NKikimrTxDataShard::TError::OK, {}};
 }

@@ -1209,8 +1209,7 @@ public:
             : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         if (UserCtx != nullptr) {
-            evWrite->Record.SetUserSID(UserCtx->GetUserSID());
-            evWrite->Record.SetUserTraceId(UserCtx->GetUserTraceId());
+            UserCtx->Serialize(evWrite->Record);
         }
 
         if (isImmediateCommit) {
@@ -3785,8 +3784,7 @@ public:
                 ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
                 : NKikimrDataEvents::TEvWrite::MODE_PREPARE));
         if (UserCtx != nullptr) {
-            evWrite->Record.SetUserSID(UserCtx->GetUserSID());
-            evWrite->Record.SetUserTraceId(UserCtx->GetUserTraceId());
+            UserCtx->Serialize(evWrite->Record);
         }
 
         if (isRollback) {
@@ -5560,8 +5558,7 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
         TString(NYql::KqpTableSinkName),
         [counters] (NKikimrKqp::TKqpTableSinkSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args) {
             auto userCtx = NACLib::TUserContextBuilder()
-                .WithUserSID(settings.GetUserSID())
-                .WithUserTraceId(settings.GetUserTraceId())
+                .Deserialize(settings)
                 .Build();
             if (!ActorIdFromProto(settings.GetBufferActorId())) {
                 auto* actor = new TKqpDirectWriteActor(std::move(settings), std::move(args), counters, userCtx);

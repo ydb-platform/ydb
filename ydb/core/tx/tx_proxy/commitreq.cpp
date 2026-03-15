@@ -302,8 +302,7 @@ private:
                 ctx.SelfID, TxId, txBody,
                 TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0));
             if (UserCtx != nullptr) {
-                event->Record.SetUserSID(UserCtx->GetUserSID());
-                event->Record.SetUserTraceId(UserCtx->GetUserTraceId());
+                UserCtx->Serialize(event->Record);
             }
             Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(event, shardId, true));
 

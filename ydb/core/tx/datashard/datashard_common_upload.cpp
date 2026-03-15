@@ -224,8 +224,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
                 Y_ENSURE(CollectChanges);
 
                 auto userCtx = NACLib::TUserContextBuilder()
-                    .WithUserSID(Ev->Get()->GetUserSID())
-                    .WithUserTraceId(Ev->Get()->GetUserTraceId())
+                    .Deserialize(*(Ev->Get()))
                     .Build();
                 if (!volatileDependencies.empty()) {
                     if (!globalTxId) {

@@ -3385,8 +3385,7 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
         }
 
         auto userCtx = NACLib::TUserContextBuilder()
-            .WithUserSID(ev->Get()->Record.GetUserSID())
-            .WithUserTraceId(ev->Get()->Record.GetUserTraceId())
+            .Deserialize(ev->Get()->Record)
             .Build();
         Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), userCtx),
             ctx );
@@ -3483,8 +3482,7 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                     }
 
                     auto userCtx = NACLib::TUserContextBuilder()
-                        .WithUserSID(event->Get()->Record.GetUserSID())
-                        .WithUserTraceId(event->Get()->Record.GetUserTraceId())
+                        .Deserialize(event->Get()->Record)
                         .Build();
                     Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), userCtx), ctx);
                     return;

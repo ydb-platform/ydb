@@ -206,6 +206,12 @@ public:
         return UserTraceId;
     }
 
+    template <typename T>
+    void Serialize(T& to) {
+        to.SetUserSID(GetUserSID());
+        to.SetUserTraceId(GetUserTraceId());
+    }
+
 protected:
     TString UserSID;
     TString UserTraceId;
@@ -229,6 +235,12 @@ public:
     TUserContextBuilder WithUserTraceId(const TString& userTraceId) {
         UserTraceId = userTraceId;
         return *this;
+    }
+
+    template <typename T>
+    TUserContextBuilder Deserialize(const T& from) {
+        return WithUserSID(from.GetUserSID())
+            .WithUserTraceId(from.GetUserTraceId());
     }
 
     TUserContext::TPtr Build() {

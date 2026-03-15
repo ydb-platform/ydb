@@ -16,8 +16,7 @@ TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalMKQL::TPtr &ev)
 
     auto& record = ev->Get()->Record;
     auto userCtx = NACLib::TUserContextBuilder()
-        .WithUserSID(record.GetUserSID())
-        .WithUserTraceId(record.GetUserTraceId())
+        .Deserialize(record)
         .Build();
     return new TFlatLocalMiniKQL(ev->Sender, program, this, userCtx);
 }

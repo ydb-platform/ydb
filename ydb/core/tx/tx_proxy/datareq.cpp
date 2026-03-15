@@ -1127,8 +1127,7 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
                 ctx.SelfID, TxId, transactionBuffer, TxFlags | (shardData.Immediate ? NTxDataShard::TTxFlags::Immediate : 0));
         }
         if (UserCtx != nullptr) {
-            ev->Record.SetUserSID(UserCtx->GetUserSID());
-            ev->Record.SetUserTraceId(UserCtx->GetUserTraceId());
+            UserCtx->Serialize(ev->Record);
         }
 
         Send(pipeCache, new TEvPipeCache::TEvForward(ev, shardData.ShardId, true));
@@ -1216,8 +1215,7 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
             ctx.SelfID, TxId, transactionBuffer,
             TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0));
         if (UserCtx != nullptr) {
-            ev->Record.SetUserSID(UserCtx->GetUserSID());
-            ev->Record.SetUserTraceId(UserCtx->GetUserTraceId());
+            UserCtx->Serialize(ev->Record);
         }
         Send(pipeCache, new TEvPipeCache::TEvForward(ev, partition.ShardId, true));
     }

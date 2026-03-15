@@ -1128,8 +1128,7 @@ private:
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record = state->Headers;
         if (UserCtx != nullptr) {
-            ev->Record.SetUserSID(UserCtx->GetUserSID());
-            ev->Record.SetUserTraceId(UserCtx->GetUserTraceId());
+            UserCtx->Serialize(ev->Record);
         }
         for (const auto& pr : state->Rows) {
             auto* row = ev->Record.AddRows();
@@ -1178,8 +1177,7 @@ private:
                 shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
-                ev->Record.SetUserSID(UserCtx->GetUserSID());
-                ev->Record.SetUserTraceId(UserCtx->GetUserTraceId());
+                UserCtx->Serialize(ev->Record);
 
                 ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                 if (keyRange->TableId.SchemaVersion) {

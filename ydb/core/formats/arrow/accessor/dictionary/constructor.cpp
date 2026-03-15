@@ -8,6 +8,7 @@
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 
@@ -91,7 +92,13 @@ TBlobWithAccessorMeta TConstructor::SerializeToBlobAndMeta(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) {
     const TDictionaryArray* arr = static_cast<const TDictionaryArray*>(columnData.get());
     auto arrDictionary = arr->GetDictionary();
-    auto arrPositions = arr->GetPositions();
+    std::shared_ptr<arrow::Array> arrPositions = arr->GetPositions();
+    const std::shared_ptr<arrow::DataType> requiredPositionsType = GetTypeByVariantsCount(arrDictionary->length());
+    if (!arrPositions->type()->Equals(*requiredPositionsType)) {
+        auto castResult = arrow::compute::Cast(*arrPositions, requiredPositionsType);
+        AFL_VERIFY(castResult.ok())("error", castResult.status().ToString());
+        arrPositions = std::move(*castResult);
+    }
     auto schemaDictionary = NArrow::BuildFakeSchema({ arrDictionary });
     auto schemaPositions = NArrow::BuildFakeSchema({ arrPositions });
     const TString blobDictionary =

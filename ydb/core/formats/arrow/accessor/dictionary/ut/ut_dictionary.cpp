@@ -128,4 +128,40 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY(PrepareToCompare(dictionaryArray->ToString()) == PrepareToCompare(dict->GetDictionary()->ToString()));
         AFL_VERIFY(dictionaryArray->length() == dict->GetDictionary()->length());
     }
+
+    Y_UNIT_TEST(ManyDistinctValuesUint16Positions) {
+        // Use > 255 distinct values so positions are serialized as uint16 (not uint8).
+        constexpr ui32 NumDistinct = 300;
+        constexpr ui32 NumRecords = 320;
+        TTrivialArray::TPlainBuilder builder(NumRecords, NumRecords * 16);
+        for (ui32 i = 0; i < NumRecords; ++i) {
+            if (i == 50 || i == 150 || i == 250) {
+                continue; // nulls
+            }
+            TString v = "v" + ToString(i % NumDistinct);
+            builder.AddRecord(i, v);
+        }
+        auto arr = builder.Finish(NumRecords);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        // Dictionary has 300 distinct values + null slot = 301 variants -> uint16 positions
+        AFL_VERIFY(dict->GetPositions()->type()->id() == arrow::Type::UINT16);
+
+        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
+        AFL_VERIFY(dictData);
+        AFL_VERIFY(dictData->PositionsBlobSize > 0);
+
+        TChunkConstructionData infoWithMeta(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
+            std::nullopt, blobAndMeta.Meta);
+        auto dictParsed = std::static_pointer_cast<TDictionaryArray>(
+            NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
+
+        AFL_VERIFY(dictParsed->GetPositions()->type()->id() == arrow::Type::UINT16);
+        AFL_VERIFY(dictParsed->GetDictionary()->length() == dict->GetDictionary()->length());
+        AFL_VERIFY(dictParsed->GetChunkedArray()->length() == NumRecords);
+        AFL_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == PrepareToCompare(dict->GetChunkedArray()->ToString()));
+    }
 };

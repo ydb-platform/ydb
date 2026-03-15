@@ -668,6 +668,75 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(Sprintf(scriptDictCompactionAndActualization.c_str(), cycleBlocks.c_str()))).Execute();
     }
 
+    // Multiple inserts and compactions: 150+150, compact; 300+150, compact; 300+300, compact. Verify correct data after each step (incl. uint16 dictionary path).
+    Y_UNIT_TEST(DictMultipleInsertsAndCompactions) {
+        const TString scriptPrefix = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels":[{"class_name":"Zero","portions_count_limit":1048576,"expected_blobs_size":1048576,"portions_count_available":1,"portions_live_duration":"1s"},{"class_name":"OneLayer","expected_portion_size":2097152,"size_limit_guarantee":134217728}]}`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        )";
+        const std::vector<std::pair<ui32, ui32>> steps = {
+            {150, 0},    // 150 rows, pk start 0
+            {150, 150},  // 150 rows, pk start 150
+            {0, 0},      // compaction (rows=0 means compaction only)
+            {300, 300},  // 300 rows, pk start 300
+            {150, 600},  // 150 rows, pk start 600
+            {0, 0},      // compaction
+            {300, 750},  // 300 rows, pk start 750
+            {300, 1050}, // 300 rows, pk start 1050
+            {0, 0},      // compaction
+        };
+        const std::vector<ui32> expectedCounts = {150, 300, 300, 600, 750, 750, 1050, 1350, 1350};
+        NArrow::NConstruction::TStringPoolFiller sPool(300, 52);
+        TString injection;
+        ui32 expectedIdx = 0;
+        const TString delimiter = "------\n";
+        for (size_t i = 0; i < steps.size(); ++i) {
+            const bool isLast = (i == steps.size() - 1);
+            const ui32 numRows = steps[i].first;
+            const ui32 pkStart = steps[i].second;
+            if (numRows == 0) {
+                injection += "ONE_COMPACTION\n" + delimiter;
+                injection += "READ: SELECT COUNT(*) AS c FROM `/Root/ColumnTable`;\n";
+                injection += "EXPECTED: [[" + ToString(expectedCounts[expectedIdx]) + "u]]";
+                injection += isLast ? "\n" : (delimiter + "\n");
+                ++expectedIdx;
+                continue;
+            }
+            std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
+            builders.emplace_back(
+                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable(
+                    "pk", NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>(pkStart)));
+            builders.emplace_back(
+                std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>>("field", sPool));
+            NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
+            TString arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(batchBuilder.BuildBatch(numRows)));
+            injection += "BULK_UPSERT:\n    /Root/ColumnTable\n    " + arrowString + "\nPARTS_COUNT:1\n" + delimiter;
+            injection += "READ: SELECT COUNT(*) AS c FROM `/Root/ColumnTable`;\n";
+            injection += "EXPECTED: [[" + ToString(expectedCounts[expectedIdx]) + "u]]";
+            injection += isLast ? "\n" : (delimiter + "\n");
+            ++expectedIdx;
+        }
+        Variator::ToExecutor(Variator::SingleScript(scriptPrefix + injection)).Execute();
+    }
+
     // ChunkDetails in .sys/primary_index_stats for dictionary column: check deterministic output for 1 row.
     TString scriptChunkDetailsDictionary = R"(
         STOP_COMPACTION

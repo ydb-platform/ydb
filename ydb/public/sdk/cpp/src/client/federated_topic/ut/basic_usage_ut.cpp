@@ -470,15 +470,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             true  // commit on receive
         );
 
-        // settings.FederatedEventHandlers_.SimpleDataHandlers(
-        //     [&receivedMessages](NYdb::NFederatedTopic::TReadSessionEvent::TDataReceivedEvent& event) {
-        //         for (const auto& message: event.GetMessages()) {
-        //             receivedMessages.push_back(TString(message.GetData()));
-        //         }
-        //     },
-        //     true  // commit on receive
-        // );
-
         auto session = client.CreateReadSession(settings);
         std::jthread thread([&] {
             Sleep(TDuration::Seconds(3));

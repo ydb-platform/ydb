@@ -39,6 +39,13 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
             settings.FederatedEventHandlers_.SimpleDataHandlers_.GracefulStopAfterCommit);
     }
 
+    if (settings.EventHandlers_.DataReceivedHandler_) {
+        SubsessionSettings.EventHandlers_.SimpleDataHandlers(
+            settings.EventHandlers_.DataReceivedHandler_,
+            settings.FederatedEventHandlers_.SimpleDataHandlers_.CommitDataAfterProcessing,
+            settings.FederatedEventHandlers_.SimpleDataHandlers_.GracefulStopAfterCommit);
+    }
+
 #define MAYBE_CONVERT_HANDLER(type, name)                                                                       \
     if (settings.FederatedEventHandlers_.name##_) {                                                             \
         SubsessionSettings.EventHandlers_.name(                                                                 \

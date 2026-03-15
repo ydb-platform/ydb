@@ -18,16 +18,18 @@ template <typename TKey, typename TValue>
 class TBlockRangeMap
 {
 public:
+    struct TFindItem
+    {
+        const TKey Key;
+        const TBlockRange64 Range;
+        TValue& Value;
+    };
+
     struct TItem
     {
-        TKey Key = {};
+        TKey Key;
         TBlockRange64 Range;
-        TValue Value = {};
-
-        TValue& AccessValue() const
-        {
-            return const_cast<TValue&>(Value);
-        }
+        TValue Value;
     };
 
     enum class EEnumerateContinuation
@@ -36,20 +38,23 @@ public:
         Stop,
     };
     using TEnumerateFunc =
-        std::function<EEnumerateContinuation(const TItem& item)>;
+        std::function<EEnumerateContinuation(TFindItem& item)>;
 
 private:
-    struct TRangeComparator
+    struct TItemKey
     {
-        bool operator()(const TItem& lhs, const TItem& rhs) const
+        TKey Key;
+        TBlockRange64 Range;
+
+        bool operator<(const TItemKey& other) const
         {
-            return std::tie(lhs.Range.End, lhs.Range.Start, lhs.Key) <
-                   std::tie(rhs.Range.End, rhs.Range.Start, rhs.Key);
+            return std::tie(Range.End, Range.Start, Key) <
+                   std::tie(other.Range.End, other.Range.Start, other.Key);
         }
     };
 
     ui64 MaxLength = 0;
-    TSet<TItem, TRangeComparator> Ranges;
+    TMap<TItemKey, TValue> Ranges;
     THashMap<TKey, decltype(Ranges.begin())> RangeByKey;
 
 public:
@@ -61,8 +66,9 @@ public:
             return false;
         }
         MaxLength = Max(MaxLength, range.Size());
-        auto [it, inserted] = Ranges.insert(
-            TItem{.Key = key, .Range = range, .Value = std::move(value)});
+        auto [it, inserted] = Ranges.emplace(
+            TItemKey{.Key = key, .Range = range},
+            std::move(value));
         Y_DEBUG_ABORT_UNLESS(inserted);
         RangeByKey[key] = it;
         return true;
@@ -74,10 +80,16 @@ public:
     {
         auto it = RangeByKey.find(key);
         if (it != RangeByKey.end()) {
-            auto node = Ranges.extract(it->second);
+            auto& rangesIt = it->second;
+            std::optional<TItem> result(
+                {.Key = rangesIt->first.Key,
+                 .Range = rangesIt->first.Range,
+                 .Value = std::move(rangesIt->second)});
+
+            Ranges.erase(it->second);
             RangeByKey.erase(it);
-            TItem& item = node.value();
-            return std::make_optional<TItem>(std::move(item));
+
+            return result;
         }
 
         return std::nullopt;
@@ -93,51 +105,88 @@ public:
     // Checks that the other range overlaps with any range in Ranges.
     // A pointer to the item describing the range will be returned. Otherwise,
     // nullptr will be returned.
-    [[nodiscard]] const TItem* FindFirstOverlapping(TBlockRange64 other) const
+    [[nodiscard]] std::optional<TFindItem> FindFirstOverlapping(
+        TBlockRange64 other)
     {
-        const TItem* result = nullptr;
+        std::optional<TFindItem> result = std::nullopt;
 
         EnumerateOverlapping(
             other,
-            [&](const TItem& item)
+            [&](TFindItem& item)
             {
-                result = &item;
+                result.emplace(item);
                 return EEnumerateContinuation::Stop;
             });
 
         return result;
     }
 
-    // Enumerate all overlapped ranges.
-    void EnumerateOverlapping(TBlockRange64 other, TEnumerateFunc f) const
+    // Checks that the other range overlaps with any range in Ranges.
+    [[nodiscard]] bool HasOverlaps(TBlockRange64 other) const
     {
         // 1. Find the range x which: x.end >= other.start in the list sorted
         //    by end of range + length + key.
         // 2. Move through the list of ranges. Check overlapping x with other.
         // 3. when x.begin >= other.end + MaxLength stop iterating.
 
-        auto left = TItem{
+        auto left = TItemKey{
             .Key = {},
             .Range = TBlockRange64::MakeClosedInterval(0, other.Start)};
         const ui64 safeRight = (Max<ui64>() - MaxLength) > other.End
                                    ? other.End + MaxLength
                                    : Max<ui64>();
         for (auto it = Ranges.lower_bound(left); it != Ranges.end(); ++it) {
-            if (it->Range.Overlaps(other)) {
-                if (f(*it) == EEnumerateContinuation::Stop) {
+            const auto& itemKey = it->first;
+            if (itemKey.Range.Overlaps(other)) {
+                return true;
+            }
+            if (safeRight <= itemKey.Range.Start) {
+                break;
+            }
+        }
+        return false;
+    }
+
+    // Enumerate all overlapped ranges.
+    void EnumerateOverlapping(TBlockRange64 other, TEnumerateFunc f)
+    {
+        // 1. Find the range x which: x.end >= other.start in the list sorted
+        //    by end of range + length + key.
+        // 2. Move through the list of ranges. Check overlapping x with other.
+        // 3. when x.begin >= other.end + MaxLength stop iterating.
+
+        auto left = TItemKey{
+            .Key = {},
+            .Range = TBlockRange64::MakeClosedInterval(0, other.Start)};
+        const ui64 safeRight = (Max<ui64>() - MaxLength) > other.End
+                                   ? other.End + MaxLength
+                                   : Max<ui64>();
+        for (auto it = Ranges.lower_bound(left); it != Ranges.end(); ++it) {
+            const auto& itemKey = it->first;
+            if (itemKey.Range.Overlaps(other)) {
+                TFindItem findItem{
+                    .Key = itemKey.Key,
+                    .Range = itemKey.Range,
+                    .Value = it->second};
+
+                if (f(findItem) == EEnumerateContinuation::Stop) {
                     break;
                 }
             }
-            if (safeRight <= it->Range.Start) {
+            if (safeRight <= itemKey.Range.Start) {
                 break;
             }
         }
     }
 
-    void Enumerate(TEnumerateFunc f) const
+    void Enumerate(TEnumerateFunc f)
     {
-        for (const TItem& item: Ranges) {
-            if (f(item) == EEnumerateContinuation::Stop) {
+        for (auto& [itemKey, value]: Ranges) {
+            TFindItem findItem{
+                .Key = itemKey.Key,
+                .Range = itemKey.Range,
+                .Value = value};
+            if (f(findItem) == EEnumerateContinuation::Stop) {
                 break;
             }
         }
@@ -168,8 +217,8 @@ public:
     {
         TStringStream ss;
 
-        for (const auto r: Ranges) {
-            ss << r.Key << r.Range.Print();
+        for (const auto& [keyAndRange, _]: Ranges) {
+            ss << keyAndRange.Key << keyAndRange.Range.Print();
         }
         return ss.Str();
     }

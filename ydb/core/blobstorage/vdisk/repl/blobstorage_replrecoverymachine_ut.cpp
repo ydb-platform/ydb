@@ -97,6 +97,13 @@ namespace NKikimr {
                 << Endl;
         }
 
+        void PrintDeallocationCheck(TStringBuf name, ui64 before, ui64 after) {
+            Cerr << "deallocating " << name
+                << ": before# " << before
+                << " after# " << after
+                << Endl;
+        }
+
         Y_UNIT_TEST(BasicFunctionality) {
             TRopeArena arena(&TRopeArenaBackend::Allocate);
             TVector<TVDiskID> vdisks;
@@ -217,6 +224,7 @@ namespace NKikimr {
                 PrintAccountingCheck("TRecoveryMachine::LostVec", true, base, GetReplicationMem(replCtx));
                 UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
             }
+            PrintDeallocationCheck("TRecoveryMachine::LostVec", base, GetReplicationMem(replCtx));
             UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
 
             {
@@ -225,6 +233,7 @@ namespace NKikimr {
                 PrintAccountingCheck("TVDiskProxy::Ids", true, base, GetReplicationMem(replCtx));
                 UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
             }
+            PrintDeallocationCheck("TVDiskProxy::Ids", base, GetReplicationMem(replCtx));
             UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
 
             {
@@ -233,6 +242,7 @@ namespace NKikimr {
                 PrintAccountingCheck("TDataPortion::Items", true, base, GetReplicationMem(replCtx));
                 UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
             }
+            PrintDeallocationCheck("TDataPortion::Items", base, GetReplicationMem(replCtx));
             UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
 
             {
@@ -241,6 +251,7 @@ namespace NKikimr {
                 PrintAccountingCheck("TBlobIdQueue", false, base, GetReplicationMem(replCtx));
                 UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
             }
+            PrintDeallocationCheck("TBlobIdQueue", base, GetReplicationMem(replCtx));
 
             {
                 TUnreplicatedBlobRecords records;
@@ -248,6 +259,7 @@ namespace NKikimr {
                 PrintAccountingCheck("TUnreplicatedBlobRecords", false, base, GetReplicationMem(replCtx));
                 UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
             }
+            PrintDeallocationCheck("TUnreplicatedBlobRecords", base, GetReplicationMem(replCtx));
         }
     }
 

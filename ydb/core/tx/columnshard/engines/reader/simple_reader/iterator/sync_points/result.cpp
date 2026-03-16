@@ -48,7 +48,7 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
             
             // Track page creation for backpressure
             const bool isStreamingMode = source->GetAs<IDataSource>()->IsStreamingMode();
-            if (isStreamingMode && Collection) {
+            if (isStreamingMode) {
                 Collection->OnPageCreated();
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_created")
                     ("source_idx", source->GetSourceIdx())("pages_in_flight", Collection->GetPagesInFlightCount());

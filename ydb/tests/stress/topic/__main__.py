@@ -15,6 +15,7 @@ if __name__ == '__main__':
     parser.add_argument('--topic_prefix', default='topic', help='Topic name')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
     parser.add_argument('--limit-memory-usage', action='store_true', help='Try to use less memory for intermediate buffers')
+    parser.add_argument('--chunk-index', default=None, type=lambda x: int(x), help='Test chunk index')
 
     args = parser.parse_args()
 
@@ -35,6 +36,8 @@ if __name__ == '__main__':
         producers=args.producers,
         tables_prefix=args.topic_prefix,
         limit_memory_usage=args.limit_memory_usage,
+        chunk_index=args.chunk_index,
+        chunk_size=1
     )
     workload.start()
     workload.join()

@@ -4,6 +4,7 @@
 #include <library/cpp/string_utils/url/url.h>
 #include <util/digest/murmur.h>
 #include <util/string/hex.h>
+#include <util/generic/guid.h>
 
 #include <format>
 
@@ -1428,7 +1429,8 @@ TProducer::TProducer(
     std::shared_ptr<TTopicClient::TImpl> client,
     std::shared_ptr<TGRpcConnectionsImpl> connections,
     TDbDriverStatePtr dbDriverState)
-    : Connections(connections),
+    : Id(CreateGuidAsString()),
+    Connections(connections),
     Client(client),
     DbDriverState(dbDriverState),
     Metrics(this),
@@ -1457,7 +1459,7 @@ TProducer::TProducer(
         return a.GetPartitionId() < b.GetPartitionId();
     });
 
-    PartitionChooserStrategy = settings.PartitionChooserStrategy_;
+    auto partitionChooserStrategy = settings.PartitionChooserStrategy_;
     auto strategy = topicConfig.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
     auto autoPartitioningEnabled = (strategy != EAutoPartitioningStrategy::Disabled &&
                                 strategy != EAutoPartitioningStrategy::Unspecified);
@@ -1496,7 +1498,7 @@ TProducer::TProducer(
         }
     }
 
-    switch (PartitionChooserStrategy) {
+    switch (partitionChooserStrategy) {
         case TProducerSettings::EPartitionChooserStrategy::Bound:
             PartitioningKeyHasher = settings.PartitioningKeyHasher_;
             PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
@@ -1513,9 +1515,9 @@ TProducer::TProducer(
                 PartitionsIndex[partition.GetFromBound().value_or("")] = partition.GetPartitionId();
             }
             break;
-        case TProducerSettings::EPartitionChooserStrategy::Hash:
+        case TProducerSettings::EPartitionChooserStrategy::KafkaHash:
             if (autoPartitioningEnabled) {
-                throw TContractViolation("Hash partition chooser strategy is not supported with auto partitioning enabled");
+                throw TContractViolation("KafkaHash partition chooser strategy is not supported with auto partitioning enabled");
             }
 
             std::vector<std::uint32_t> partitionsIds;
@@ -1628,6 +1630,11 @@ void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
 TProducer::~TProducer() {
     auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
     Settings.EventHandlers_.HandlersExecutor_->Stop();
+
+    if (MainWorkerState.load() == 0) {
+        ShutdownPromise.TrySetValue();
+    }
+
     ShutdownFuture.Wait();
 }
 
@@ -1791,7 +1798,7 @@ void TProducer::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSessio
 }
 
 TStringBuilder TProducer::LogPrefix() {
-    return TStringBuilder() << " SessionId: " << Settings.SessionId_ << " Epoch: " << Epoch.load() << " ";
+    return TStringBuilder() << " Id: " << Id << " Epoch: " << Epoch.load() << " ";
 }
 
 void TProducer::NextEpoch() {
@@ -1942,14 +1949,8 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
 
             chosenPartition = message.Partition_.value();
         } else if (!message.Key_.has_value()) {
-            std::string key;
-            if (Settings.KeyProducer_) {
-                key = (*Settings.KeyProducer_)(message);
-            } else {
-                key = Settings.ProducerIdPrefix_;
-            }
-            message.Key(key);
-            chosenPartition = PartitionChooser->ChoosePartition(key);
+            message.Key(Settings.ProducerIdPrefix_);
+            chosenPartition = PartitionChooser->ChoosePartition(Settings.ProducerIdPrefix_);
         } else {
             chosenPartition = PartitionChooser->ChoosePartition(*message.Key_);
         }
@@ -1970,7 +1971,7 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
 }
 
 TWriteResult TProducer::Write(TWriteMessage&& message) {
-    auto remainingTimeout = Settings.MaxBlock_;
+    auto remainingTimeout = Settings.MaxBlockTimeout_;
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
         if (Closed.load()) {

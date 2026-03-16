@@ -1079,7 +1079,7 @@ void TOrderingsStateMachine::TDFSM::Build(
         for (std::size_t nfsmNodeIdx = 0; nfsmNodeIdx < nfsm.Nodes_.size(); ++nfsmNodeIdx) {
             if (nfsm.Nodes_[nfsmNodeIdx].Ordering == interestingOrderings[i]) {
                 auto nfsmNodes = CollectNodesWithEpsOrFdEdge(nfsm, {i}, fds);
-                InitStateByOrderingIdx_[i] = TInitState{AddNode(std::move(nfsmNodes)), interestingOrderings[i].Items.size()};
+                InitStateByOrderingIdx_[i] = TInitState{.StateIdx = AddNode(std::move(nfsmNodes)), .ShuffleHashFuncArgsCount = interestingOrderings[i].Items.size()};
             }
         }
     }

@@ -2136,7 +2136,7 @@ TChain1MapTraits::TPtr ProcessRowFrameAggregateTraitOldPipeline(TQueueParams& qu
             YQL_ENSURE(first.Defined());
             ui64 beginIndex = currentRowIndex + *first;
             ui64 endIndex = last.Defined() ? (currentRowIndex + *last + 1) : Max<ui64>();
-            return new TChain1MapTraitsGeneric(name, trait, TChain1MapTraitsGeneric::TFixedQueueRange{beginIndex, endIndex});
+            return new TChain1MapTraitsGeneric(name, trait, TChain1MapTraitsGeneric::TFixedQueueRange{.QueueBegin=beginIndex, .QueueEnd=endIndex});
         }
         case EFrameBoundsType::EMPTY: {
             return new TChain1MapTraitsEmpty(name, trait);

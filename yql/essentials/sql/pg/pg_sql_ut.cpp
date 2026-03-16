@@ -732,11 +732,11 @@ Y_UNIT_TEST(InsertValues) {
     desc.SqlPaths.push_back(h.Name());
     NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
     auto validate = [&]() {
-        const auto& table = NPg::LookupStaticTable({"pg_catalog", "mytable"});
+        const auto& table = NPg::LookupStaticTable({.Schema = "pg_catalog", .Name = "mytable"});
         UNIT_ASSERT(table.Kind == NPg::ERelKind::Relation);
         size_t remap[2]; // NOLINT(modernize-avoid-c-arrays)
         size_t rowStep;
-        const auto& data = *NPg::ReadTable({"pg_catalog", "mytable"}, {"foo", "bar"}, remap, rowStep);
+        const auto& data = *NPg::ReadTable({.Schema = "pg_catalog", .Name = "mytable"}, {"foo", "bar"}, remap, rowStep);
         UNIT_ASSERT_VALUES_EQUAL(rowStep, 3);
         UNIT_ASSERT_VALUES_EQUAL(data.size(), 2 * rowStep);
         UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 0 + remap[0]], "1");

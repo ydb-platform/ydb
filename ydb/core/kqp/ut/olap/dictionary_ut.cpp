@@ -276,6 +276,123 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute();
     }
 
+    TString scriptGroupBySomeDictionaryWithCompaction = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            otherPk Uint64 NOT NULL,
+            message Utf8,
+            other Uint64,
+            PRIMARY KEY (pk, otherPk)
+        )
+        PARTITION BY HASH(pk, otherPk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
+            (1u, 1u, 'a', 4u),
+            (2u, 2u, 'b', 3u),
+            (3u, 3u, 'a', 2u),
+            (4u, 4u, 'c', 1u);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
+            (1u, 1u, 'a', 4u),
+            (2u, 2u, 'b', 3u),
+            (3u, 3u, 'a', 2u),
+            (4u, 4u, 'c', 1u);
+        ------
+        ONE_COMPACTION
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[["a"];["a"]];[["b"];["b"]];[["c"];["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 1
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 2
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 0 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 3
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 0 AND pk < 5 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 4
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk >= 1 AND pk <= 5 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 5
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk < 5 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 6
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(pk), pk FROM `/Root/ColumnTable` GROUP BY pk ORDER BY pk;
+        EXPECTED: [[1u;1u];[2u;2u];[3u;3u];[4u;4u]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE other > 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE otherPk > 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE otherPk > 0 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk > 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["c"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message) FROM `/Root/ColumnTable` WHERE pk <= 2 GROUP BY message;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message, MIN(pk) FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[["a"];["a"];1u];[["b"];["b"];2u];[["c"];["c"];4u]]
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message, MIN(message) FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
+        EXPECTED: [[["a"];["a"];["a"]];[["b"];["b"];["b"]];[["c"];["c"];["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 6
+    )";
+    Y_UNIT_TEST(GroupBySomeDictionaryWithCompaction) {
+        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionaryWithCompaction)).Execute();
+    }
+
     // TODO: fix bug that return "" here (and 2 more tests after):
     // READ: PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SOME(message), message FROM `/Root/ColumnTable` GROUP BY message ORDER BY message;
     // EXPECTED: [[#;[""]];[["a"];["a"]];[["b"];["b"]]]
@@ -742,7 +859,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     }
 
     // Corner cases: 254+254, 254+255, 255+255 (no nulls) then same pattern with nulls. Compaction merges same/different portion sizes; every step must succeed.
-    Y_UNIT_TEST(DictCornerCase254255256VariantsAndNulls) {
+    Y_UNIT_TEST(DictCornerCaseVariantsAndNulls) {
         const TString scriptPrefix = R"(
         STOP_COMPACTION
         ------
@@ -791,47 +908,27 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             injection += "BULK_UPSERT:\n    /Root/ColumnTable\n    " + arrowString + "\nPARTS_COUNT:1\n" + delimiter;
             return pkStart + totalRows;
         };
-        auto addReadAndCompact = [&](ui32 expectedCount, bool isLast) {
+        auto addReadAndCompact = [&](ui32 expectedCount) {
             injection += "READ: SELECT COUNT(*) AS c FROM `/Root/ColumnTable`;\n";
             injection += "EXPECTED: [[" + ToString(expectedCount) + "u]]\n";
             injection += delimiter + "ONE_COMPACTION\n" + delimiter;
             injection += "READ: SELECT COUNT(*) AS c FROM `/Root/ColumnTable`;\n";
             injection += "EXPECTED: [[" + ToString(expectedCount) + "u]]\n";
-            injection += isLast ? "\n" : delimiter;
+            injection += delimiter;
         };
-        // Phase 1: no nulls — 254+254, 254+255, 255+255, 255+256, 256+256; compact after each pair.
+        const std::vector<std::pair<ui32, ui32>> pairs = {
+            {253, 253}, {253, 254}, {254, 254}, {254, 255}, {255, 255}, {255, 256}, {256, 256}, {256, 257}, {257, 257}
+        };
         ui32 pk = 0;
-        pk = addBulk(254, pk);
-        pk = addBulk(254, pk);
-        addReadAndCompact(pk, false);
-        pk = addBulk(254, pk);
-        pk = addBulk(255, pk);
-        addReadAndCompact(pk, false);
-        pk = addBulk(255, pk);
-        pk = addBulk(255, pk);
-        addReadAndCompact(pk, false);
-        pk = addBulk(255, pk);
-        pk = addBulk(256, pk);
-        addReadAndCompact(pk, false);
-        pk = addBulk(256, pk);
-        pk = addBulk(256, pk);
-        addReadAndCompact(pk, false);
-        // Phase 2: with nulls — same pattern; each batch is (numRows + 1) rows with one null in the same BULK_UPSERT.
-        pk = addBulk(254, pk, true);
-        pk = addBulk(254, pk, true);
-        addReadAndCompact(pk, false);
-        pk = addBulk(254, pk, true);
-        pk = addBulk(255, pk, true);
-        addReadAndCompact(pk, false);
-        pk = addBulk(255, pk, true);
-        pk = addBulk(255, pk, true);
-        addReadAndCompact(pk, false);
-        pk = addBulk(255, pk, true);
-        pk = addBulk(256, pk, true);
-        addReadAndCompact(pk, false);
-        pk = addBulk(256, pk, true);
-        pk = addBulk(256, pk, true);
-        addReadAndCompact(pk, true);
+        for (const bool withNull : {false, true}) {
+            for (size_t i = 0; i < pairs.size(); ++i) {
+                const auto [a, b] = pairs[i];
+                pk = addBulk(a, pk, withNull);
+                pk = addBulk(b, pk, withNull);
+                addReadAndCompact(pk);
+            }
+        }
+        injection += "STOP_COMPACTION\n";
         Variator::ToExecutor(Variator::SingleScript(scriptPrefix + injection)).Execute();
     }
 

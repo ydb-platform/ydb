@@ -35,3 +35,17 @@ def ydbcli_db_schema_exec(cluster, operation_proto):
     ]
     r = subprocess.run(args, capture_output=True, env={**os.environ})
     assert r.returncode == 0, r.stderr.decode('utf-8')
+
+
+def ydbcli_db_schema_exec_allow_failure(cluster, operation_proto):
+    """Execute ModifyScheme; does not assert on failure. Returns subprocess.CompletedProcess."""
+    endpoint = cluster_endpoint(cluster)
+    args = [
+        cluster.nodes[1].binary_path,
+        f'--server=grpc://{endpoint}',
+        'db',
+        'schema',
+        'exec',
+        operation_proto,
+    ]
+    return subprocess.run(args, capture_output=True, env={**os.environ})

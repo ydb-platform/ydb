@@ -10,7 +10,7 @@ import pytest
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.fixtures import ydb_database_ctx
 
-from helpers import CaptureFileOutput, ydbcli_db_schema_exec
+from helpers import CaptureFileOutput, ydbcli_db_schema_exec, ydbcli_db_schema_exec_allow_failure
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,36 @@ def topic_audit_file_path(ydb_cluster):
     return ydb_cluster.config.audit_file_path
 
 
+def create_topic_invalid(cluster, database_path, topic_name):
+    """Create topic with invalid params (TotalGroupCount: 0) to provoke error."""
+    proto = r'''ModifyScheme {
+        OperationType: ESchemeOpCreatePersQueueGroup
+        WorkingDir: "%s"
+        CreatePersQueueGroup {
+            Name: "%s"
+            TotalGroupCount: 0
+            PartitionPerTablet: 2
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 10 } }
+        }
+    }''' % (database_path, topic_name)
+    return ydbcli_db_schema_exec_allow_failure(cluster, proto)
+
+
+def alter_topic_invalid_params(cluster, database_path, topic_name):
+    """Alter topic with invalid TotalGroupCount (< current) to provoke error in alter_pq."""
+    proto = r'''ModifyScheme {
+        OperationType: ESchemeOpAlterPersQueueGroup
+        WorkingDir: "%s"
+        AlterPersQueueGroup {
+            Name: "%s"
+            TotalGroupCount: 2
+            PartitionPerTablet: 2
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 42 } }
+        }
+    }''' % (database_path, topic_name)
+    return ydbcli_db_schema_exec_allow_failure(cluster, proto)
+
+
 def _parse_cloud_event_from_audit(captured, event_type_suffix):
     """Extract and parse cloud event JSON from audit log output."""
     full_type = f'yandex.cloud.events.ydb.topics.{event_type_suffix}'
@@ -91,6 +121,53 @@ def _parse_cloud_event_from_audit(captured, event_type_suffix):
         assert inner_json, f'No cloud_event_json in line: {line[:200]}'
         return json.loads(inner_json)
     assert False, f'No audit line with {full_type} found in: {captured[:500]}'
+
+
+def test_create_topic_error_cloud_event_logged(ydb_cluster, _database, topic_audit_file_path):
+    """Create topic with invalid params and verify CreateTopic cloud event has event_status ERROR."""
+    topic_name = 'InvalidTopic'
+    topic_path = os.path.join(_database, topic_name)
+    capture_audit = CaptureFileOutput(topic_audit_file_path)
+
+    with capture_audit:
+        create_topic_invalid(ydb_cluster, _database, topic_name)
+    time.sleep(2)
+
+    print(capture_audit.captured, file=sys.stderr)
+    assert 'cloud_event_json' in capture_audit.captured
+    assert 'yandex.cloud.events.ydb.topics.CreateTopic' in capture_audit.captured
+
+    ev = _parse_cloud_event_from_audit(capture_audit.captured, 'CreateTopic')
+    assert ev.get('event_status') == 'ERROR', f'Expected event_status ERROR, got {ev.get("event_status")}'
+    # request_parameters should contain the attempted path
+    req = ev.get('request_parameters', {})
+    assert req.get('path') == topic_path
+    # error field contains the failure message (google.rpc.Status)
+    if ev.get('error'):
+        assert 'message' in ev['error'] or 'code' in ev['error']
+
+
+def test_alter_topic_error_cloud_event_logged(ydb_cluster, _database, topic_audit_file_path):
+    """Alter topic with invalid params (TotalGroupCount < current) and verify AlterTopic cloud event has event_status ERROR."""
+    topic_name = 'AlterErrorTopic'
+    topic_path = os.path.join(_database, topic_name)
+    capture_audit = CaptureFileOutput(topic_audit_file_path)
+
+    create_topic(ydb_cluster, _database, topic_name)
+    time.sleep(1)
+
+    with capture_audit:
+        alter_topic_invalid_params(ydb_cluster, _database, topic_name)
+    time.sleep(2)
+
+    print(capture_audit.captured, file=sys.stderr)
+    assert 'cloud_event_json' in capture_audit.captured
+    assert 'yandex.cloud.events.ydb.topics.AlterTopic' in capture_audit.captured
+
+    ev = _parse_cloud_event_from_audit(capture_audit.captured, 'AlterTopic')
+    assert ev.get('event_status') == 'ERROR', f'Expected event_status ERROR, got {ev.get("event_status")}'
+    req = ev.get('request_parameters', {})
+    assert req.get('path') == topic_path
 
 
 def test_create_topic_cloud_event_logged(ydb_cluster, _database, topic_audit_file_path):

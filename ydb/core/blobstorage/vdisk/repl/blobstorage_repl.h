@@ -142,14 +142,22 @@ namespace NKikimr {
 
         TUnreplicatedBlobRecords(TUnreplicatedBlobRecords&& other) noexcept
             : Records(std::move(other.Records))
-            , Consumer(std::move(other.Consumer))
             , LastBytes(std::exchange(other.LastBytes, 0))
-        {}
+        {
+            if (other.Consumer) {
+                Consumer.emplace(std::move(*other.Consumer));
+                other.Consumer.reset();
+            }
+        }
 
         TUnreplicatedBlobRecords& operator=(TUnreplicatedBlobRecords&& other) noexcept {
             if (this != &other) {
                 Records = std::move(other.Records);
-                Consumer = std::move(other.Consumer);
+                Consumer.reset();
+                if (other.Consumer) {
+                    Consumer.emplace(std::move(*other.Consumer));
+                    other.Consumer.reset();
+                }
                 LastBytes = std::exchange(other.LastBytes, 0);
             }
             return *this;

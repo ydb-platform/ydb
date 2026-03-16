@@ -1678,7 +1678,8 @@ endDiskTypeCheck:   ;
     }
 
     void ValidateMetadata(const NJson::TJsonValue& metadata) {
-        Y_ENSURE_BT(metadata.Has("cluster") && metadata["cluster"].IsString(), "Metadata must contain a string 'cluster' field");
+        Y_ENSURE_BT(metadata.Has("cluster") && (metadata["cluster"].IsString() || metadata["cluster"].IsUInteger()),
+                    "Metadata must contain a string or numeric 'cluster' field");
         Y_ENSURE_BT(metadata.Has("version") && metadata["version"].IsUInteger(), "Metadata must contain an unsigned int 'version' field");
     }
 

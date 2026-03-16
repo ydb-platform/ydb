@@ -254,12 +254,13 @@ namespace NKikimr {
             PrintDeallocationCheck("TBlobIdQueue", base, GetReplicationMem(replCtx));
 
             {
-                TUnreplicatedBlobRecords records;
+                TUnreplicatedBlobRecords records(TMemoryConsumer(replCtx->VCtx->Replication.GetCounter()));
                 records.try_emplace(id, TUnreplicatedBlobRecord{});
-                PrintAccountingCheck("TUnreplicatedBlobRecords", false, base, GetReplicationMem(replCtx));
-                UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
+                PrintAccountingCheck("TUnreplicatedBlobRecords", true, base, GetReplicationMem(replCtx));
+                UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
             }
             PrintDeallocationCheck("TUnreplicatedBlobRecords", base, GetReplicationMem(replCtx));
+            UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
         }
     }
 

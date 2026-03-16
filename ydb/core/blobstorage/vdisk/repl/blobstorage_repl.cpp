@@ -765,6 +765,7 @@ namespace NKikimr {
             , NextMinHugeBlobInBytes(ReplCtx->MinHugeBlobInBytes)
             , History(HistorySize)
             , State(Relaxation)
+            , UnreplicatedBlobRecords(TMemoryConsumer(ReplCtx->VCtx->Replication.GetCounter()))
             , ReplProgressWatchdog(
                 ReplCtx->VDiskCfg->ReplMaxTimeToMakeProgress,
                 std::bind(&TThis::ReplStuck, this)

@@ -103,7 +103,85 @@ namespace NKikimr {
         bool LooksLikePhantom = false;
     };
 
-    using TUnreplicatedBlobRecords = std::unordered_map<TLogoBlobID, TUnreplicatedBlobRecord>;
+    using TUnreplicatedBlobRecordsMap = std::unordered_map<TLogoBlobID, TUnreplicatedBlobRecord>;
+
+    class TUnreplicatedBlobRecords {
+        TUnreplicatedBlobRecordsMap Records;
+        std::optional<TMemoryConsumerWithDropOnDestroy> Consumer;
+        size_t LastBytes = 0;
+
+        static size_t CalcBytes(const TUnreplicatedBlobRecordsMap& records) {
+            return records.bucket_count() * sizeof(void*) +
+                records.size() * sizeof(TUnreplicatedBlobRecordsMap::value_type);
+        }
+
+        void Sync() {
+            const size_t bytes = CalcBytes(Records);
+            if (Consumer) {
+                if (bytes > LastBytes) {
+                    Consumer->Add(bytes - LastBytes);
+                } else {
+                    Consumer->Subtract(LastBytes - bytes);
+                }
+            }
+            LastBytes = bytes;
+        }
+
+    public:
+        using value_type = TUnreplicatedBlobRecordsMap::value_type;
+        using iterator = TUnreplicatedBlobRecordsMap::iterator;
+        using const_iterator = TUnreplicatedBlobRecordsMap::const_iterator;
+
+        TUnreplicatedBlobRecords() = default;
+
+        explicit TUnreplicatedBlobRecords(TMemoryConsumer consumer)
+            : Consumer(std::move(consumer))
+        {}
+
+        std::pair<iterator, bool> try_emplace(const TLogoBlobID& id, const TUnreplicatedBlobRecord& record) {
+            auto res = Records.try_emplace(id, record);
+            Sync();
+            return res;
+        }
+
+        iterator find(const TLogoBlobID& id) {
+            return Records.find(id);
+        }
+
+        const_iterator find(const TLogoBlobID& id) const {
+            return Records.find(id);
+        }
+
+        iterator erase(iterator it) {
+            auto res = Records.erase(it);
+            Sync();
+            return res;
+        }
+
+        size_t size() const {
+            return Records.size();
+        }
+
+        bool empty() const {
+            return Records.empty();
+        }
+
+        iterator begin() {
+            return Records.begin();
+        }
+
+        const_iterator begin() const {
+            return Records.begin();
+        }
+
+        iterator end() {
+            return Records.end();
+        }
+
+        const_iterator end() const {
+            return Records.end();
+        }
+    };
 
     struct TEvReplInvoke : TEventLocal<TEvReplInvoke, TEvBlobStorage::EvReplInvoke> {
         std::function<void(const TUnreplicatedBlobRecords&, TString)> Callback;

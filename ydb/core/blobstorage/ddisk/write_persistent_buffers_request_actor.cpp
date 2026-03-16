@@ -53,18 +53,19 @@ namespace NKikimr::NDDisk {
 
     void TWritePersistentBuffersRequestActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
         const ui32 node = ev->Get()->NodeId;
-        for (auto& [k, v] : Inflights) {
-            for (auto& [partCookie, inflight] : v.Inflights) {
+        for (auto it = Inflights.begin(); it != Inflights.end(); ) {
+            auto current = it++;
+            for (auto& [partCookie, inflight] : current->second.Inflights) {
                 if (!inflight.Received && inflight.NodeId == node) {
                     inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
                     inflight.ErrorReason = TStringBuilder() << "Node " << node << " disconnected";
                     inflight.Received = true;
-                    v.Received++;
+                    current->second.Received++;
                     auto cnt = InflightParts.erase(partCookie);
                     Y_ABORT_UNLESS(cnt == 1);
                 }
             }
-            CheckReply(k);
+            CheckReply(current->first);
         }
     }
 

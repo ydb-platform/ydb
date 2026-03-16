@@ -236,21 +236,21 @@ private:
     }
 };
 
-using TEvCreateTestShardRequest =
-    TGrpcRequestOperationCall<Ydb::TestShard::CreateTestShardRequest,
-        Ydb::TestShard::CreateTestShardResponse>;
-using TEvDeleteTestShardRequest =
-    TGrpcRequestOperationCall<Ydb::TestShard::DeleteTestShardRequest,
-        Ydb::TestShard::DeleteTestShardResponse>;
+using TEvCreateTestShardSetRequest =
+    TGrpcRequestOperationCall<Ydb::TestShardSet::CreateTestShardSetRequest,
+        Ydb::TestShardSet::CreateTestShardSetResponse>;
+using TEvDeleteTestShardSetRequest =
+    TGrpcRequestOperationCall<Ydb::TestShardSet::DeleteTestShardSetRequest,
+        Ydb::TestShardSet::DeleteTestShardSetResponse>;
 
-class TCreateTestShardRequest : public TRpcSchemeRequestActor<TCreateTestShardRequest, TEvCreateTestShardRequest> {
+class TCreateTestShardSetRequest : public TRpcSchemeRequestActor<TCreateTestShardSetRequest, TEvCreateTestShardSetRequest> {
 public:
-    using TBase = TRpcSchemeRequestActor<TCreateTestShardRequest, TEvCreateTestShardRequest>;
+    using TBase = TRpcSchemeRequestActor<TCreateTestShardSetRequest, TEvCreateTestShardSetRequest>;
     using TBase::TBase;
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
-        Become(&TCreateTestShardRequest::StateFunc);
+        Become(&TCreateTestShardSetRequest::StateFunc);
         SendProposeRequest(ctx);
     }
 
@@ -322,7 +322,7 @@ public:
             return this->Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
         }
 
-        Ydb::TestShard::CreateTestShardResult result;
+        Ydb::TestShardSet::CreateTestShardSetResult result;
         const auto& testShardSetDesc = pathDescription.GetTestShardSetDescription();
         for (auto tabletId : testShardSetDesc.GetTabletIds()) {
             result.add_tablet_ids(tabletId);
@@ -339,14 +339,14 @@ public:
     }
 };
 
-class TDeleteTestShardRequest : public TRpcSchemeRequestActor<TDeleteTestShardRequest, TEvDeleteTestShardRequest> {
+class TDeleteTestShardSetRequest : public TRpcSchemeRequestActor<TDeleteTestShardSetRequest, TEvDeleteTestShardSetRequest> {
 public:
-    using TBase = TRpcSchemeRequestActor<TDeleteTestShardRequest, TEvDeleteTestShardRequest>;
+    using TBase = TRpcSchemeRequestActor<TDeleteTestShardSetRequest, TEvDeleteTestShardSetRequest>;
     using TBase::TBase;
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
-        Become(&TDeleteTestShardRequest::StateFunc);
+        Become(&TDeleteTestShardSetRequest::StateFunc);
         SendProposeRequest(ctx);
     }
 
@@ -381,12 +381,12 @@ public:
     }
 };
 
-void DoCreateTestShard(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TCreateTestShardRequest(p.release()));
+void DoCreateTestShardSet(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TCreateTestShardSetRequest(p.release()));
 }
 
-void DoDeleteTestShard(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TDeleteTestShardRequest(p.release()));
+void DoDeleteTestShardSet(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TDeleteTestShardSetRequest(p.release()));
 }
 
 } // namespace NKikimr::NGRpcService

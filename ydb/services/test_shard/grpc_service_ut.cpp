@@ -44,7 +44,7 @@ public:
         ServerSettings->AddStoragePool("hdd", "hdd-pool");
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
-        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TTestShardGRpcService>("test_shard");
+        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TTestShardSetGRpcService>("test_shard");
 
         Server_.Reset(new Tests::TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));
@@ -131,10 +131,10 @@ Y_UNIT_TEST_SUITE(TestShardGRPCService) {
     }
 
     void CreateTestShard(auto &channel, const TString &path, ui16 port) {
-        std::unique_ptr<Ydb::TestShard::V1::TestShardService::Stub> stub;
-        stub = Ydb::TestShard::V1::TestShardService::NewStub(channel);
+        std::unique_ptr<Ydb::TestShardSet::V1::TestShardSetService::Stub> stub;
+        stub = Ydb::TestShardSet::V1::TestShardSetService::NewStub(channel);
 
-        Ydb::TestShard::CreateTestShardRequest request;
+        Ydb::TestShardSet::CreateTestShardSetRequest request;
         request.set_path(path);
         request.set_count(1);
         request.add_channels("ssd");
@@ -178,30 +178,30 @@ validation:
         SubstGlobal(config, "__TSSERVER_PORT__", ToString(port));
         request.set_config(config);
 
-        Ydb::TestShard::CreateTestShardResponse response;
-        Ydb::TestShard::CreateTestShardResult result;
+        Ydb::TestShardSet::CreateTestShardSetResponse response;
+        Ydb::TestShardSet::CreateTestShardSetResult result;
 
         grpc::ClientContext ctx;
         AdjustCtxForDB(ctx);
-        stub->CreateTestShard(&ctx, request, &response);
+        stub->CreateTestShardSet(&ctx, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
         response.operation().result().UnpackTo(&result);
         UNIT_ASSERT_VALUES_EQUAL(result.tablet_ids_size(), 1);
     }
 
     void DeleteTestShard(auto &channel, const TString &path) {
-        std::unique_ptr<Ydb::TestShard::V1::TestShardService::Stub> stub;
-        stub = Ydb::TestShard::V1::TestShardService::NewStub(channel);
+        std::unique_ptr<Ydb::TestShardSet::V1::TestShardSetService::Stub> stub;
+        stub = Ydb::TestShardSet::V1::TestShardSetService::NewStub(channel);
 
-        Ydb::TestShard::DeleteTestShardRequest request;
+        Ydb::TestShardSet::DeleteTestShardSetRequest request;
         request.set_path(path);
 
-        Ydb::TestShard::DeleteTestShardResponse response;
-        Ydb::TestShard::DeleteTestShardResult result;
+        Ydb::TestShardSet::DeleteTestShardSetResponse response;
+        Ydb::TestShardSet::DeleteTestShardSetResult result;
 
         grpc::ClientContext ctx;
         AdjustCtxForDB(ctx);
-        stub->DeleteTestShard(&ctx, request, &response);
+        stub->DeleteTestShardSet(&ctx, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
         response.operation().result().UnpackTo(&result);
     }
@@ -230,19 +230,19 @@ validation:
     }
 
     void CreateTestShardWithInvalidConfig(auto &channel, const TString &path, const TString & config, Ydb::StatusIds::StatusCode expectedStatus, const TString& expectedErrorSubstring = "") {
-        std::unique_ptr<Ydb::TestShard::V1::TestShardService::Stub> stub;
-        stub = Ydb::TestShard::V1::TestShardService::NewStub(channel);
+        std::unique_ptr<Ydb::TestShardSet::V1::TestShardSetService::Stub> stub;
+        stub = Ydb::TestShardSet::V1::TestShardSetService::NewStub(channel);
 
-        Ydb::TestShard::CreateTestShardRequest request;
+        Ydb::TestShardSet::CreateTestShardSetRequest request;
         request.set_path(path);
         request.set_count(1);
         request.set_config(config);
 
-        Ydb::TestShard::CreateTestShardResponse response;
+        Ydb::TestShardSet::CreateTestShardSetResponse response;
 
         grpc::ClientContext ctx;
         AdjustCtxForDB(ctx);
-        stub->CreateTestShard(&ctx, request, &response);
+        stub->CreateTestShardSet(&ctx, request, &response);
         
         UNIT_ASSERT_CHECK_STATUS(response.operation(), expectedStatus);
         

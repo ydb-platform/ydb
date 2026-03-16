@@ -6,19 +6,19 @@
 #include <ydb/public/api/grpc/ydb_test_shard_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_test_shard.pb.h>
 
-namespace NYdb::NTestShard {
+namespace NYdb::NTestShardSet {
 
-class TTestShardClient::TImpl : public TClientImplCommon<TTestShardClient::TImpl> {
+class TTestShardSetClient::TImpl : public TClientImplCommon<TTestShardSetClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
     {}
 
-    TAsyncCreateTestShardResult CreateTestShard(const std::string& path,
+    TAsyncCreateTestShardSetResult CreateTestShardSet(const std::string& path,
             const std::vector<std::string>& channels, uint32_t count,
             const std::string& config,
-            const TCreateTestShardSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::TestShard::CreateTestShardRequest>(settings);
+            const TCreateTestShardSetSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::TestShardSet::CreateTestShardSetRequest>(settings);
         request.set_path(path);
         for (const auto& channel : channels) {
             request.add_channels(channel);
@@ -28,12 +28,12 @@ public:
             request.set_config(config);
         }
 
-        auto promise = NThreading::NewPromise<TCreateTestShardResult>();
+        auto promise = NThreading::NewPromise<TCreateTestShardSetResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
             std::vector<uint64_t> tabletIds;
             if (any) {
-                Ydb::TestShard::CreateTestShardResult result;
+                Ydb::TestShardSet::CreateTestShardSetResult result;
                 if (any->UnpackTo(&result)) {
                     tabletIds.reserve(result.tablet_ids_size());
                     for (int i = 0; i < result.tablet_ids_size(); ++i) {
@@ -41,13 +41,13 @@ public:
                     }
                 }
             }
-            promise.SetValue(TCreateTestShardResult(TStatus(std::move(status)), std::move(tabletIds)));
+            promise.SetValue(TCreateTestShardSetResult(TStatus(std::move(status)), std::move(tabletIds)));
         };
 
-        Connections_->RunDeferred<Ydb::TestShard::V1::TestShardService, Ydb::TestShard::CreateTestShardRequest, Ydb::TestShard::CreateTestShardResponse>(
+        Connections_->RunDeferred<Ydb::TestShardSet::V1::TestShardSetService, Ydb::TestShardSet::CreateTestShardSetRequest, Ydb::TestShardSet::CreateTestShardSetResponse>(
             std::move(request),
             extractor,
-            &Ydb::TestShard::V1::TestShardService::Stub::AsyncCreateTestShard,
+            &Ydb::TestShardSet::V1::TestShardSetService::Stub::AsyncCreateTestShardSet,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -55,34 +55,34 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncStatus DeleteTestShard(const std::string& path,
-            const TDeleteTestShardSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::TestShard::DeleteTestShardRequest>(settings);
+    TAsyncStatus DeleteTestShardSet(const std::string& path,
+            const TDeleteTestShardSetSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::TestShardSet::DeleteTestShardSetRequest>(settings);
         request.set_path(path);
 
-        return RunSimple<Ydb::TestShard::V1::TestShardService, Ydb::TestShard::DeleteTestShardRequest, Ydb::TestShard::DeleteTestShardResponse>(
+        return RunSimple<Ydb::TestShardSet::V1::TestShardSetService, Ydb::TestShardSet::DeleteTestShardSetRequest, Ydb::TestShardSet::DeleteTestShardSetResponse>(
             std::move(request),
-            &Ydb::TestShard::V1::TestShardService::Stub::AsyncDeleteTestShard,
+            &Ydb::TestShardSet::V1::TestShardSetService::Stub::AsyncDeleteTestShardSet,
             TRpcRequestSettings::Make(settings));
     }
 };
 
-TTestShardClient::TTestShardClient(const TDriver& driver, const TCommonClientSettings& settings)
+TTestShardSetClient::TTestShardSetClient(const TDriver& driver, const TCommonClientSettings& settings)
     : Impl_(new TImpl(CreateInternalInterface(driver), settings))
 {}
 
-TTestShardClient::~TTestShardClient() = default;
+TTestShardSetClient::~TTestShardSetClient() = default;
 
-TAsyncCreateTestShardResult TTestShardClient::CreateTestShard(const std::string& path,
+TAsyncCreateTestShardSetResult TTestShardSetClient::CreateTestShardSet(const std::string& path,
         const std::vector<std::string>& channels, uint32_t count,
         const std::string& config,
-        const TCreateTestShardSettings& settings) {
-    return Impl_->CreateTestShard(path, channels, count, config, settings);
+        const TCreateTestShardSetSettings& settings) {
+    return Impl_->CreateTestShardSet(path, channels, count, config, settings);
 }
 
-TAsyncStatus TTestShardClient::DeleteTestShard(const std::string& path,
-        const TDeleteTestShardSettings& settings) {
-    return Impl_->DeleteTestShard(path, settings);
+TAsyncStatus TTestShardSetClient::DeleteTestShardSet(const std::string& path,
+        const TDeleteTestShardSetSettings& settings) {
+    return Impl_->DeleteTestShardSet(path, settings);
 }
 
-} // namespace NYdb::NTestShard
+} // namespace NYdb::NTestShardSet

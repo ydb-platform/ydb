@@ -1,15 +1,15 @@
 syntax = "proto3";
 
-package Ydb.TestShard;
+package Ydb.TestShardSet;
 
-option java_package = "com.yandex.ydb.test_shard";
+option java_package = "com.yandex.ydb.test_shard_set";
 
 import "ydb/public/api/protos/ydb_operation.proto";
 
-message CreateTestShardRequest {
+message CreateTestShardSetRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
-    // Path to the TestShard object to create
+    // Path to the TestShardSet object to create
     string path = 2;
 
     // Storage pool names for tablet channels (optional)
@@ -65,24 +65,24 @@ message CreateTestShardRequest {
     string config = 5;
 }
 
-message CreateTestShardResponse {
+message CreateTestShardSetResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-message CreateTestShardResult {
+message CreateTestShardSetResult {
     // Created tablet IDs
     repeated uint64 tablet_ids = 1;
 }
 
-message DeleteTestShardRequest {
+message DeleteTestShardSetRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
-    // Path to the TestShard object to delete
+    // Path to the TestShardSet object to delete
     string path = 2;
 }
 
-message DeleteTestShardResponse {
+message DeleteTestShardSetResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-message DeleteTestShardResult {}
+message DeleteTestShardSetResult {}

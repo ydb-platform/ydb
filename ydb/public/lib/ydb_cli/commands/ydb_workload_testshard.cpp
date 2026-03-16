@@ -51,9 +51,9 @@ void TCommandTestShardInit::Parse(TConfig& config) {
 
 int TCommandTestShardInit::Run(TConfig& config) {
     auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NTestShard::TTestShardClient(*driver);
+    auto client = NYdb::NTestShardSet::TTestShardSetClient(*driver);
 
-    auto result = client.CreateTestShard(
+    auto result = client.CreateTestShardSet(
         Path, std::vector<std::string>(Channels.begin(), Channels.end()), Count,
         std::string(ConfigYaml)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -88,9 +88,9 @@ void TCommandTestShardClean::Parse(TConfig& config) {
 
 int TCommandTestShardClean::Run(TConfig& config) {
     auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NTestShard::TTestShardClient(*driver);
+    auto client = NYdb::NTestShardSet::TTestShardSetClient(*driver);
 
-    auto result = client.DeleteTestShard(Path).GetValueSync();
+    auto result = client.DeleteTestShardSet(Path).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "TestShard object deleted successfully." << Endl;

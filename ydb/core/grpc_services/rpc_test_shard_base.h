@@ -17,11 +17,11 @@
 namespace NKikimr::NGRpcService {
 
 template <typename TDerived, typename TRequest, typename TResultRecord>
-class TTestShardRequestBase : public TRpcOperationRequestActor<TDerived, TRequest> {
+class TTestShardSetRequestBase : public TRpcOperationRequestActor<TDerived, TRequest> {
     using TBase = TRpcOperationRequestActor<TDerived, TRequest>;
 
 public:
-    TTestShardRequestBase(IRequestOpCtx* request)
+    TTestShardSetRequestBase(IRequestOpCtx* request)
         : TBase(request) {}
 
     void Bootstrap() {

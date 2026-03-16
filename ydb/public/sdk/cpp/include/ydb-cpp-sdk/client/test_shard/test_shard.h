@@ -9,15 +9,15 @@
 #include <string>
 #include <vector>
 
-namespace NYdb::NTestShard {
+namespace NYdb::NTestShardSet {
 
-struct TCreateTestShardSettings : public TOperationRequestSettings<TCreateTestShardSettings> {};
+struct TCreateTestShardSetSettings : public TOperationRequestSettings<TCreateTestShardSetSettings> {};
 
-struct TDeleteTestShardSettings : public TOperationRequestSettings<TDeleteTestShardSettings> {};
+struct TDeleteTestShardSetSettings : public TOperationRequestSettings<TDeleteTestShardSetSettings> {};
 
-class TCreateTestShardResult : public TStatus {
+class TCreateTestShardSetResult : public TStatus {
 public:
-    TCreateTestShardResult(TStatus&& status, std::vector<uint64_t> tabletIds)
+    TCreateTestShardSetResult(TStatus&& status, std::vector<uint64_t> tabletIds)
         : TStatus(std::move(status))
         , TabletIds_(std::move(tabletIds))
     {}
@@ -30,27 +30,27 @@ private:
     std::vector<uint64_t> TabletIds_;
 };
 
-using TAsyncCreateTestShardResult = NThreading::TFuture<TCreateTestShardResult>;
+using TAsyncCreateTestShardSetResult = NThreading::TFuture<TCreateTestShardSetResult>;
 
-class TTestShardClient {
+class TTestShardSetClient {
 public:
-    explicit TTestShardClient(const TDriver& driver, const TCommonClientSettings& settings = {});
-    ~TTestShardClient();
+    explicit TTestShardSetClient(const TDriver& driver, const TCommonClientSettings& settings = {});
+    ~TTestShardSetClient();
 
-    TAsyncCreateTestShardResult CreateTestShard(
+    TAsyncCreateTestShardSetResult CreateTestShardSet(
         const std::string& path,
         const std::vector<std::string>& channels,
         uint32_t count = 1,
         const std::string& config = {},
-        const TCreateTestShardSettings& settings = {});
+        const TCreateTestShardSetSettings& settings = {});
 
-    TAsyncStatus DeleteTestShard(
+    TAsyncStatus DeleteTestShardSet(
         const std::string& path,
-        const TDeleteTestShardSettings& settings = {});
+        const TDeleteTestShardSetSettings& settings = {});
 
 private:
     class TImpl;
     std::unique_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::NTestShard
+} // namespace NYdb::NTestShardSet

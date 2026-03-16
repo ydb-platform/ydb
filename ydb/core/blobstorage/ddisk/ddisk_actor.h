@@ -593,6 +593,8 @@ namespace NKikimr::NDDisk {
         std::unordered_set<ui32> PersistentBufferAllocatedChunks;
         std::unordered_set<ui32> PersistentBufferRestoringChunks;
 
+        TActorId WritePersistentBuffersActor;
+
         void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();

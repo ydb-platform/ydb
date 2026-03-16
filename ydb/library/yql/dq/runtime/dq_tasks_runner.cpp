@@ -23,6 +23,7 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/core/user_data/yql_user_data.h>
+
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -30,6 +31,7 @@
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <util/generic/scope.h>
+#include <util/system/backtrace.h>
 
 
 using namespace NKikimr;
@@ -894,7 +896,14 @@ public:
         }
 
         InputConsumed = false;
-        auto runStatus = FetchAndDispatch();
+        ERunStatus runStatus;
+        try {
+            runStatus = FetchAndDispatch();
+        } catch (const std::exception& e) {
+            Cerr << "FetchAndDispatch exception: " << e.what() << Endl;
+            PrintBackTrace();
+            throw;
+        }
         LastFetchTime = TInstant::Now();
         LastFetchStatus = runStatus;
 

@@ -11,6 +11,8 @@
 
 #include <arrow/scalar.h>
 
+#include <util/system/backtrace.h>
+
 #include "dq_join_common.h"
 
 namespace NKikimr::NMiniKQL {
@@ -280,6 +282,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
 
       private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
+          try {
             size_t expectedSize = Meta_->Renames.size() + 1;
             MKQL_ENSURE(width == expectedSize,
                         Sprintf("runtime(%i) vs compile-time(%i) tuple width mismatch", width, expectedSize));
@@ -309,6 +312,11 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 }
             }
             return FlushTo(output);
+          } catch (const std::exception& e) {
+            Cerr << "WideFetch exception: " << e.what() << Endl;
+            PrintBackTrace();
+            throw;
+          }
         }
 
       private:

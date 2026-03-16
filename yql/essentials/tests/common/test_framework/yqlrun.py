@@ -217,6 +217,7 @@ class YQLRun(object):
         cmd += '--mounts=' + yql_utils.get_mount_config_file() + ' '
         cmd += '--validate-result-format '
         cmd += '--fuzz-untyped-lambda '
+        # cmd += '--fuzz-universal '
 
         if files:
             for f in files:

@@ -1777,8 +1777,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto res = session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/t1` (
+<<<<<<< HEAD
                 a Int64	NOT NULL,
                 b Int32,
+=======
+                a Uint64 NOT NULL,
+                b Uint32 NOT NULL,
+                c Timestamp NOT NULL,
+>>>>>>> 5e2697d3880 ([OLAP] Fix olap pushdown for just on column. (#35910))
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1787,6 +1793,24 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(res.IsSuccess());
 
         std::vector<TString> queries = {
+            R"(
+                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
+                SELECT
+                    *
+                FROM
+                    `/Root/t1`
+                WHERE
+                    (cast(c as Timestamp?) > $some_time)
+            )",
+            R"(
+                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
+                SELECT
+                    *
+                FROM
+                    `/Root/t1`
+                WHERE
+                    (just(c) > $some_time)
+            )",
             R"(
                 $sub = (select distinct (b) from `/Root/t1` where b > 10);
 

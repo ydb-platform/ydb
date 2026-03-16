@@ -1,5 +1,11 @@
 #include "vchunk.h"
 
+#include "flush_request.h"
+#include "read_request.h"
+#include "write_request.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -11,61 +17,50 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr size_t PersistentBufferCount = 5;
-
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TVChunk::TVChunk(
-    ui32 index,
+    NActors::TActorSystem* actorSystem,
+    const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    ui32 syncRequestsBatchSize)
-    : Index(index)
-    , BlocksCount(128 * 1024 * 1024 / 4096)
+    ui32 syncRequestsBatchSize,
+    TDuration traceSamplePeriod)
+    : ActorSystem(actorSystem)
+    , VChunkConfig(vChunkConfig)
+    , BlocksCount(VChunkSize / DefaultBlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
-    , Executor(TExecutor::Create(TStringBuilder() << "VChunk_" << Index))
-    , DirtyMap(std::make_unique<TDirtyMap>())
+    , TraceSamplePeriod(traceSamplePeriod)
+    , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
-    , PendingSyncRequestsByPersistentBufferIndex(PersistentBufferCount)
-{
-    Executor->Start();
-}
+{}
+
+TVChunk::~TVChunk() = default;
 
 void TVChunk::Start()
 {
+    // ActorSystem thread
+
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this()]() mutable
         {
+            // Executor thread
             if (auto self = weakSelf.lock()) {
-                auto future = self->DirectBlockGroup->EstablishConnections(
-                    self->Executor,
-                    {},   // traceId
-                    self->Index);
-
-                self->Executor->WaitFor(future);
-
-                const auto restoreMeta =
+                auto future =
                     self->DirectBlockGroup->RestoreFromPersistentBuffers(
-                        self->Executor,
-                        {},   // traceId
-                        self->Index);
-                for (const auto& meta: restoreMeta) {
-                    self->DirtyMap->TryUpdateLsnByPersistentBufferIndex(
-                        meta.BlockIndex,
-                        meta.PersistBufferIndex,
-                        meta.Lsn);
-                }
+                        self->VChunkConfig.VChunkIndex);
+                future.Subscribe(
+                    [weakSelf = std::move(weakSelf)]   //
+                    (const TFuture<TDBGRestoreResponse>& f) mutable
+                    {
+                        if (auto self = weakSelf.lock()) {
+                            self->UpdateDirtyMap(UnsafeExtractValue(f));
+                        }
+                    });
             }
         });
 }
-
-TVChunk::~TVChunk()
-{
-    Executor->Stop();
-}
-
-////////////////////////////////////////////////////////////////////////////////
 
 NThreading::TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
     TCallContextPtr callContext,
@@ -147,6 +142,25 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+NWilson::TTraceId TVChunk::SpanTrace()
+{
+    return NWilson::TTraceId::NewTraceIdThrottled(
+        15,                           // verbosity
+        4095,                         // timeToLive
+        LastTraceTs,                  // atomic counter for throttling
+        NActors::TMonotonic::Now(),   // current monotonic time
+        TraceSamplePeriod             // 100ms between samples
+    );
+}
+
+void TVChunk::UpdateDirtyMap(TDBGRestoreResponse response)
+{
+    // Executor thread
+    Y_UNUSED(response);
+
+    DirtyMapRestored = true;
+}
+
 void TVChunk::DoReadBlocksLocal(
     TPromise<TReadBlocksLocalResponse> promise,
     TCallContextPtr callContext,
@@ -154,61 +168,35 @@ void TVChunk::DoReadBlocksLocal(
     NWilson::TTraceId traceId)
 {
     // Executor thread
-    const ui64 blockIndex = request->Range.Start;
 
-    if (!DirtyMap->IsBlockWritten(blockIndex)) {
-        if (auto guard = request->Sglist.Acquire()) {
-            const auto& sglist = guard.Get();
-            const auto& block = sglist[0];
-            memset(const_cast<char*>(block.Data()), 0, block.Size());
-        }
-        TReadBlocksLocalResponse response;
-        response.Error = MakeError(S_OK);
-        // Note! Do not set promise when sgList acquired.
-        promise.SetValue(std::move(response));
+    if (!DirtyMapRestored) {
+        promise.SetValue(TReadBlocksLocalResponse{
+            .Error = MakeError(E_REJECTED, "dirty map not restored")});
         return;
     }
 
-    const bool readFromPersistentBuffer =
-        !DirtyMap->IsBlockFlushedToDDisk(blockIndex);
+    auto hints = BlocksDirtyMap.MakeReadHint(request->Range);
+    auto requestExecutor = std::make_shared<TReadRequestExecutor>(
+        ActorSystem,
+        VChunkConfig,
+        DirectBlockGroup,
+        std::move(hints),
+        std::move(callContext),
+        std::move(request),
+        std::move(traceId));
 
-    TFuture<TDBGReadBlocksResponse> future;
-
-    if (readFromPersistentBuffer) {
-        ui8 persistentBufferIndex = 0;
-        ui64 lsn = DirtyMap->GetLsnByPersistentBufferIndex(
-            blockIndex,
-            persistentBufferIndex);
-        future = DirectBlockGroup->ReadBlocksLocalFromPersistentBuffer(
-            Index,
-            persistentBufferIndex,
-            std::move(callContext),
-            std::move(request),
-            std::move(traceId),
-            lsn);
-    } else {
-        future = DirectBlockGroup->ReadBlocksLocalFromDDisk(
-            Index,
-            std::move(callContext),
-            std::move(request),
-            std::move(traceId));
-    }
-
+    auto future = requestExecutor->GetFuture();
     future.Subscribe(
-        [executor = Executor, promise = std::move(promise)]   //
-        (const NThreading::TFuture<TDBGReadBlocksResponse>& f) mutable
+        [promise = std::move(promise)]   //
+        (const NThreading::TFuture<TReadRequestExecutor::TResponse>& f) mutable
         {
-            // ActorSystem thread
-            executor->ExecuteSimple(
-                [promise = std::move(promise),
-                 value = UnsafeExtractValue(f)]   //
-                () mutable
-                {
-                    // Executor thread
-                    promise.SetValue(TReadBlocksLocalResponse{
-                        .Error = std::move(value.Error)});
-                });
+            // Executor thread
+            auto value = UnsafeExtractValue(f);
+            promise.SetValue(
+                TReadBlocksLocalResponse{.Error = std::move(value.Error)});
         });
+
+    requestExecutor->Run();
 }
 
 void TVChunk::DoWriteBlocksLocal(
@@ -220,149 +208,139 @@ void TVChunk::DoWriteBlocksLocal(
     // Executor thread
 
     auto range = request->Range;
-    auto future = DirectBlockGroup->WriteBlocksLocal(
-        Index,
+    auto writeExecutor = std::make_shared<TWriteRequestExecutor>(
+        ActorSystem,
+        VChunkConfig,
+        DirectBlockGroup,
         std::move(callContext),
         std::move(request),
-        traceId.GetTraceId());
+        std::move(traceId));
+    auto future = writeExecutor->GetFuture();
     future.Subscribe(
         [weakSelf = weak_from_this(),
          range,
-         traceId = traceId.GetTraceId(),
          promise = std::move(promise)]   //
-        (const NThreading::TFuture<TDBGWriteBlocksResponse>& f) mutable
+        (const NThreading::TFuture<TWriteRequestExecutor::TResponse>& f) mutable
         {
-            // ActorSystem thread
+            // Executor thread
             auto self = weakSelf.lock();
             if (!self) {
                 promise.SetValue(
                     TWriteBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
                 return;
             }
-            self->Executor->ExecuteSimple(
-                [weakSelf = std::move(weakSelf),
-                 range,
-                 traceId,
-                 promise = std::move(promise),
-                 value = UnsafeExtractValue(f)]   //
-                () mutable
-                {
-                    // Executor thread
-                    if (auto self = weakSelf.lock()) {
-                        self->OnWriteBlocksResponse(
-                            std::move(promise),
-                            range,
-                            traceId,
-                            std::move(value));
-                    } else {
-                        promise.SetValue(TWriteBlocksLocalResponse{
-                            .Error = MakeError(E_CANCELLED)});
-                    }
-                });
+            self->OnWriteBlocksResponse(
+                std::move(promise),
+                range,
+                f.GetValue());
         });
+
+    writeExecutor->Run();
 }
 
 void TVChunk::OnWriteBlocksResponse(
     NThreading::TPromise<TWriteBlocksLocalResponse> promise,
     TBlockRange64 range,
-    ui64 traceId,
-    TDBGWriteBlocksResponse response)
+    const TWriteRequestExecutor::TResponse& response)
 {
     // Executor thread
 
     promise.SetValue(TWriteBlocksLocalResponse{.Error = response.Error});
 
-    for (const auto& meta: response.Meta) {
-        DirtyMap->OnBlockWriteCompleted(
-            range.Start,
-            TPersistentBufferWriteMeta(meta.Index, meta.Lsn));
-    }
+    BlocksDirtyMap.WriteFinished(
+        response.Lsn,
+        range,
+        response.RequestedWrites,
+        response.CompletedWrites);
 
-    RequestBlockFlush(range.Start, traceId);
+    DoFlush();
 }
 
-void TVChunk::RequestBlockFlush(
-    ui64 blockIndex,
-    const NWilson::TTraceId& traceId)
+void TVChunk::DoFlush()
 {
     // Executor thread
 
-    for (size_t i = 0; i < PersistentBufferCount; i++) {
-        PendingSyncRequestsByPersistentBufferIndex[i].emplace_back(
-            blockIndex,
-            DirtyMap->GetLsnByPersistentBufferIndex(blockIndex, i));
+    auto hints = BlocksDirtyMap.MakeFlushHint(SyncRequestsBatchSize);
 
-        if (PendingSyncRequestsByPersistentBufferIndex[i].size() >=
-            SyncRequestsBatchSize)
-        {
-            ProcessSyncQueue(i, traceId);
-        }
+    for (auto& [location, hint]: hints) {
+        Y_ABORT_UNLESS(IsPBuffer(location));
+
+        auto flushExecutor = std::make_shared<TFlushRequestExecutor>(
+            ActorSystem,
+            VChunkConfig,
+            DirectBlockGroup,
+            location,
+            std::move(hint),
+            SpanTrace());
+
+        auto future = flushExecutor->GetFuture();
+        future.Subscribe(
+            [weakSelf = weak_from_this()]   //
+            (const NThreading::TFuture<TFlushRequestExecutor::TResponse>&
+                 f) mutable
+            {
+                // Executor thread
+                if (auto self = weakSelf.lock()) {
+                    self->OnFlushResponse(f.GetValue());
+                }
+            });
+
+        flushExecutor->Run();
     }
 }
 
-void TVChunk::ProcessSyncQueue(
-    size_t persistBufferIndex,
-    const NWilson::TTraceId& traceId)
+void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
 {
     // Executor thread
-    auto syncRequests = std::move(
-        PendingSyncRequestsByPersistentBufferIndex[persistBufferIndex]);
-    PendingSyncRequestsByPersistentBufferIndex[persistBufferIndex] = {};
 
-    auto future = DirectBlockGroup->SyncWithPersistentBuffer(
-        Index,
-        persistBufferIndex,
-        syncRequests,
-        NWilson::TTraceId(traceId));
-    future.Subscribe(
-        [weakSelf = weak_from_this(),
-         persistBufferIndex,
-         syncRequests = std::move(syncRequests)]   //
-        (const NThreading::TFuture<TDBGSyncBlocksResponse>& f) mutable
-        {
-            // ActorSystem thread
-            auto self = weakSelf.lock();
-            if (!self) {
-                return;
-            }
+    BlocksDirtyMap.FlushFinished(
+        response.Location,
+        response.FlushOk,
+        response.FlushFailed);
 
-            self->Executor->ExecuteSimple(
-                [weakSelf,
-                 persistBufferIndex,
-                 syncRequests = std::move(syncRequests),
-                 response = UnsafeExtractValue(f)]   //
-                () mutable
-                {
-                    // Executor thread
-                    auto self = weakSelf.lock();
-                    if (!self) {
-                        return;
-                    }
-
-                    self->OnBlocksFlushed(
-                        persistBufferIndex,
-                        syncRequests,
-                        response);
-                });
-        });
+    DoErase();
 }
 
-void TVChunk::OnBlocksFlushed(
-    size_t persistBufferIndex,
-    const TVector<TSyncRequest>& syncRequests,
-    const TDBGSyncBlocksResponse& response)
+void TVChunk::DoErase()
 {
     // Executor thread
-    if (HasError(response.Error)) {
-        // TODO
-        return;
+    auto hints = BlocksDirtyMap.MakeEraseHint(SyncRequestsBatchSize);
+
+    for (auto& [location, hint]: hints) {
+        Y_ABORT_UNLESS(IsPBuffer(location));
+
+        auto eraseExecutor = std::make_shared<TEraseRequestExecutor>(
+            ActorSystem,
+            VChunkConfig,
+            DirectBlockGroup,
+            location,
+            std::move(hint),
+            SpanTrace());
+
+        auto future = eraseExecutor->GetFuture();
+        future.Subscribe(
+            [weakSelf = weak_from_this()]   //
+            (const NThreading::TFuture<TEraseRequestExecutor::TResponse>&
+                 f) mutable
+            {
+                // Executor thread
+                if (auto self = weakSelf.lock()) {
+                    self->OnEraseResponse(f.GetValue());
+                }
+            });
+
+        eraseExecutor->Run();
     }
-    for (const auto& syncRequest: syncRequests) {
-        DirtyMap->OnBlockFlushCompleted(
-            syncRequest.StartIndex,
-            persistBufferIndex,
-            syncRequest.Lsn);
-    }
+}
+
+void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
+{
+    // Executor thread
+
+    BlocksDirtyMap.EraseFinished(
+        response.Location,
+        response.EraseOk,
+        response.EraseFailed);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -177,6 +177,10 @@ namespace NKikimr {
             return Records.find(id);
         }
 
+        bool contains(const TLogoBlobID& id) const {
+            return Records.contains(id);
+        }
+
         iterator erase(iterator it) {
             auto res = Records.erase(it);
             Sync();

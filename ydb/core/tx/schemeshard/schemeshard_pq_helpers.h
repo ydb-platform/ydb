@@ -37,25 +37,4 @@ void SendTopicCloudEvent(
     const TString& maskedToken,
     ui64 txId);
 
-/** Build minimal TModifyScheme for CDC stream cloud event from full stream path (e.g. "/db/table/stream"). */
-NKikimrSchemeOp::TModifyScheme BuildCdcStreamModifyScheme(
-    const TString& streamPath,
-    NKikimrSchemeOp::EOperationType opType);
-
-/** Sets error status in response and sends cloud event. Call before returning error result. */
-template<typename TProposeResponse>
-void FinishWithError(
-    TProposeResponse* result,
-    const NKikimrSchemeOp::TModifyScheme& operation,
-    NKikimrScheme::EStatus status,
-    const TString& reason,
-    TSchemeShard* ss,
-    const TString& peerName,
-    const TString& userSID,
-    ui64 txId)
-{
-    result->SetError(status, reason);
-    SendTopicCloudEvent(operation, status, reason, ss, peerName, userSID, TString(), txId);
-}
-
 } // NKikimr::NSchemeShard

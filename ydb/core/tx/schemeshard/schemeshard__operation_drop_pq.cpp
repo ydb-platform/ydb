@@ -358,9 +358,7 @@ public:
             }
 
             if (!checks) {
-                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(),
-                    context.SS, context.PeerName,
-                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
+                result->SetError(checks.GetStatus(), checks.GetError());
                 if (path.IsResolved() && path.Base()->IsPQGroup() && path.Base()->PlannedToDrop()) {
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
@@ -393,25 +391,19 @@ public:
             }
 
             if (!checks) {
-                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(),
-                    context.SS, context.PeerName,
-                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
 
         if (dropPolicy != NKikimrSchemeOp::EDropFailOnChanges) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, "drop policy isn't supported",
-                context.SS, context.PeerName,
-                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "drop policy isn't supported");
             return result;
         }
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusPreconditionFailed, errStr,
-                context.SS, context.PeerName,
-                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
@@ -419,9 +411,7 @@ public:
         Y_ABORT_UNLESS(pqGroup);
 
         if (pqGroup->AlterData) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusMultipleModifications, "Drop over Create/Alter",
-                context.SS, context.PeerName,
-                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "Drop over Create/Alter");
             return result;
         }
 

@@ -1,44 +1,7 @@
-#include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h> 
 #include <ydb/core/persqueue/public/cloud_events/actor.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NSchemeShard {
-
-NKikimrSchemeOp::TModifyScheme BuildCdcStreamModifyScheme(
-    const TString& streamPath,
-    NKikimrSchemeOp::EOperationType opType)
-{
-    NKikimrSchemeOp::TModifyScheme op;
-    op.SetOperationType(opType);
-    auto pos = streamPath.rfind('/');
-    TString tableName;
-    TString streamName;
-    if (pos != TString::npos && pos > 0) {
-        op.SetWorkingDir(streamPath.substr(0, pos));
-        streamName = streamPath.substr(pos + 1);
-        auto pos2 = streamPath.rfind('/', pos - 1);
-        if (pos2 != TString::npos) {
-            tableName = streamPath.substr(pos2 + 1, pos - pos2 - 1);
-            op.SetWorkingDir(streamPath.substr(0, pos2));
-        } else {
-            tableName = streamPath.substr(0, pos);
-            op.SetWorkingDir(TString());
-        }
-    } else {
-        streamName = streamPath;
-    }
-    if (opType == NKikimrSchemeOp::ESchemeOpCreateCdcStream) {
-        op.MutableCreateCdcStream()->SetTableName(tableName);
-        op.MutableCreateCdcStream()->MutableStreamDescription()->SetName(streamName);
-    } else if (opType == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {
-        op.MutableAlterCdcStream()->SetTableName(tableName);
-        op.MutableAlterCdcStream()->SetStreamName(streamName);
-    } else if (opType == NKikimrSchemeOp::ESchemeOpDropCdcStream) {
-        op.MutableDropCdcStream()->SetTableName(tableName);
-        op.MutableDropCdcStream()->AddStreamName(streamName);
-    }
-    return op;
-}
 
 void SendTopicCloudEvent(
     const NKikimrSchemeOp::TModifyScheme& operation,
@@ -52,40 +15,18 @@ void SendTopicCloudEvent(
 {
     NPQ::NCloudEvents::TCloudEventInfo info;
     const TString workingDir = operation.GetWorkingDir();
-    TString topicPath;
+    TString name;
     if (operation.HasCreatePersQueueGroup()) {
-        const auto name = operation.GetCreatePersQueueGroup().GetName();
-        topicPath = workingDir.empty() ? name : workingDir + "/" + name;
+        name = operation.GetCreatePersQueueGroup().GetName();
     } else if (operation.HasAlterPersQueueGroup()) {
-        const auto name = operation.GetAlterPersQueueGroup().GetName();
-        topicPath = workingDir.empty() ? name : workingDir + "/" + name;
+        name = operation.GetAlterPersQueueGroup().GetName();
     } else if (operation.HasDrop()) {
-        const auto name = operation.GetDrop().GetName();
-        topicPath = workingDir.empty() ? name : workingDir + "/" + name;
-    } else if (operation.HasCreateCdcStream()) {
-        const auto& create = operation.GetCreateCdcStream();
-        const auto streamName = create.HasStreamDescription() && create.GetStreamDescription().HasName()
-            ? create.GetStreamDescription().GetName()
-            : "stream";
-        topicPath = workingDir.empty()
-            ? create.GetTableName() + "/" + streamName
-            : workingDir + "/" + create.GetTableName() + "/" + streamName;
-    } else if (operation.HasAlterCdcStream()) {
-        const auto& alter = operation.GetAlterCdcStream();
-        topicPath = workingDir.empty()
-            ? alter.GetTableName() + "/" + alter.GetStreamName()
-            : workingDir + "/" + alter.GetTableName() + "/" + alter.GetStreamName();
-    } else if (operation.HasDropCdcStream()) {
-        const auto& drop = operation.GetDropCdcStream();
-        const auto streamName = drop.StreamNameSize() > 0 ? drop.GetStreamName(0) : TString();
-        topicPath = workingDir.empty()
-            ? drop.GetTableName() + "/" + streamName
-            : workingDir + "/" + drop.GetTableName() + "/" + streamName;
+        name = operation.GetDrop().GetName();
     } else {
         return;
     }
 
-    info.TopicPath = topicPath;
+    info.TopicPath = workingDir.empty() ? name : workingDir + "/" + name;
 
     // Cloud / folder / database
     TPath dbPath = DatabasePathFromModifySchemeOperation(ss, operation);
@@ -101,7 +42,7 @@ void SendTopicCloudEvent(
     info.MaskedToken = maskedToken;
     info.Issue = reason;
     info.CreatedAt = TInstant::Now();
-    info.ModifyScheme = operation;
+    info.ModifyScheme = std::move(operation);
     info.OperationStatus = status;
 
     auto* sys = NActors::TActivationContext::ActorSystem();

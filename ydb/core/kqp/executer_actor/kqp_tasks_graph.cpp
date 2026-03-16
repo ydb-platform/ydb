@@ -272,7 +272,38 @@ TVector<TVector<TShardRangesWithShardId>> DistributeShardsToTasks(TVector<TShard
     return result;
 }
 
-} // anonymous namespace
+template<typename Proto>
+TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TTableConstInfo> tableInfo) {
+    TVector<TTaskMeta::TColumn> columns;
+    columns.reserve(op.GetColumns().size());
+
+    THashSet<TString> keyColumns;
+    for (auto column : tableInfo->KeyColumns) {
+        keyColumns.insert(std::move(column));
+    }
+
+    for (const auto& column : op.GetColumns()) {
+        TTaskMeta::TColumn c;
+
+        const auto& tableColumn = tableInfo->Columns.at(column.GetName());
+        c.Id = column.GetId();
+        c.Type = tableColumn.Type;
+        c.TypeMod = tableColumn.TypeMod;
+        c.Name = column.GetName();
+        c.NotNull = tableColumn.NotNull;
+        c.IsPrimary = keyColumns.contains(c.Name);
+
+        columns.emplace_back(std::move(c));
+    }
+
+    return columns;
+}
+
+struct TKqpTaskOutputType {
+    enum : ui32 {
+        ShardRangePartition = TTaskOutputType::COMMON_TASK_OUTPUT_TYPE_END
+    };
+};
 
 NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::EReadType ReadTypeToProto(const TTaskMeta::TReadInfo::EReadType& type) {
     switch (type) {
@@ -283,17 +314,6 @@ NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::EReadType ReadTypeToProto(co
     }
 
     YQL_ENSURE(false, "Invalid read type in task meta.");
-}
-
-TTaskMeta::TReadInfo::EReadType ReadTypeFromProto(const NKqpProto::TKqpPhyOpReadOlapRanges::EReadType& type) {
-    switch (type) {
-        case NKqpProto::TKqpPhyOpReadOlapRanges::ROWS:
-            return TTaskMeta::TReadInfo::EReadType::Rows;
-        case NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS:
-            return TTaskMeta::TReadInfo::EReadType::Blocks;
-        default:
-            YQL_ENSURE(false, "Invalid read type from TKqpPhyOpReadOlapRanges protobuf.");
-    }
 }
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task) {
@@ -336,6 +356,132 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
         NArrow::SerializeBatchNoCompression(recordBatch)
     );
 }
+
+void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
+    if (task.ComputeActorId) {
+        ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
+    }
+}
+
+void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta) {
+    meta->SetTablePath(stageInfo.Meta.TablePath);
+    meta->MutableTableId()->SetTableId(stageInfo.Meta.TableId.PathId.LocalPathId);
+    meta->MutableTableId()->SetOwnerId(stageInfo.Meta.TableId.PathId.OwnerId);
+    meta->SetSchemaVersion(stageInfo.Meta.TableId.SchemaVersion);
+    meta->SetSysViewInfo(stageInfo.Meta.TableId.SysViewInfo);
+    meta->SetTableKind((ui32)stageInfo.Meta.TableKind);
+}
+
+void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto::TDqTask& taskDesc) {
+    if (task.Meta.ScanTask || (stageInfo.Meta.IsSysView() && task.Meta.Reads.Defined())) {
+        NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
+
+        FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
+        if (stageInfo.Meta.TableConstInfo->SysViewInfo) {
+            *protoTaskMeta.MutableTable()->MutableSysViewDescription() = *stageInfo.Meta.TableConstInfo->SysViewInfo;
+        }
+
+        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+
+        for (const auto& keyColumnName : tableInfo->KeyColumns) {
+            const auto& keyColumn = tableInfo->Columns.at(keyColumnName);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn.Type, keyColumn.TypeMod);
+            protoTaskMeta.AddKeyColumnTypes(columnType.TypeId);
+            *protoTaskMeta.AddKeyColumnTypeInfos() = columnType.TypeInfo ?
+                *columnType.TypeInfo :
+                NKikimrProto::TTypeInfo();
+        }
+
+        for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {
+            protoTaskMeta.AddSkipNullKeys(skipNullKey);
+        }
+
+        switch (tableInfo->TableKind) {
+            case ETableKind::Unknown:
+            case ETableKind::External:
+            case ETableKind::SysView: {
+                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+                break;
+            }
+            case ETableKind::Datashard: {
+                if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
+                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
+                } else {
+                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+                }
+                break;
+            }
+            case ETableKind::Olap: {
+                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
+                break;
+            }
+        }
+
+        if (!task.Meta.Reads->empty()) {
+            protoTaskMeta.SetReverse(task.Meta.ReadInfo.IsReverse());
+            protoTaskMeta.SetOptionalSorting((ui32)task.Meta.ReadInfo.GetSorting());
+            protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
+            if (task.Meta.HasEnableShardsSequentialScan()) {
+                protoTaskMeta.SetEnableShardsSequentialScan(task.Meta.GetEnableShardsSequentialScanUnsafe());
+            }
+            protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
+
+            for (auto&& i : task.Meta.ReadInfo.GroupByColumnNames) {
+                protoTaskMeta.AddGroupByColumnNames(i.data(), i.size());
+            }
+
+            for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
+                auto* protoResultColumn = protoTaskMeta.AddResultColumns();
+                protoResultColumn->SetId(0);
+                auto protoColumnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnType, "");
+                protoResultColumn->SetType(protoColumnType.TypeId);
+                if (protoColumnType.TypeInfo) {
+                    *protoResultColumn->MutableTypeInfo() = *protoColumnType.TypeInfo;
+                }
+            }
+
+            if (tableInfo->TableKind == ETableKind::Olap) {
+                auto* olapProgram = protoTaskMeta.MutableOlapProgram();
+                auto [schema, parameters] = SerializeKqpTasksParametersForOlap(stageInfo, task);
+
+                olapProgram->SetProgram(task.Meta.ReadInfo.OlapProgram.Program);
+
+                olapProgram->SetParametersSchema(schema);
+                olapProgram->SetParameters(parameters);
+            } else {
+                YQL_ENSURE(task.Meta.ReadInfo.OlapProgram.Program.empty());
+            }
+
+            for (auto& column : task.Meta.Reads->front().Columns) {
+                auto* protoColumn = protoTaskMeta.AddColumns();
+                protoColumn->SetId(column.Id);
+                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, "");
+                protoColumn->SetType(columnType.TypeId);
+                if (columnType.TypeInfo) {
+                    *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
+                }
+                protoColumn->SetName(column.Name);
+            }
+        }
+
+        for (auto& read : *task.Meta.Reads) {
+            auto* protoReadMeta = protoTaskMeta.AddReads();
+            protoReadMeta->SetShardId(read.ShardId);
+            read.Ranges.SerializeTo(protoReadMeta);
+
+            YQL_ENSURE((int) read.Columns.size() == protoTaskMeta.GetColumns().size());
+            for (ui64 i = 0; i < read.Columns.size(); ++i) {
+                YQL_ENSURE(read.Columns[i].Id == protoTaskMeta.GetColumns()[i].GetId());
+                YQL_ENSURE(read.Columns[i].Type.GetTypeId() == protoTaskMeta.GetColumns()[i].GetType());
+            }
+        }
+
+
+        taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
+    }
+}
+
+} // anonymous namespace
 
 void TKqpTasksGraph::FillKqpTasksGraphStages() {
     for (size_t txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
@@ -1013,12 +1159,6 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
     }
 }
 
-void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
-    if (task.ComputeActorId) {
-        ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
-    }
-}
-
 void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TChannel& channel,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling) const
 {
@@ -1058,124 +1198,6 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
         channelDesc.SetTransportVersion(NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0);
     } else {
         channelDesc.SetTransportVersion(NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
-    }
-}
-
-void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta) {
-    meta->SetTablePath(stageInfo.Meta.TablePath);
-    meta->MutableTableId()->SetTableId(stageInfo.Meta.TableId.PathId.LocalPathId);
-    meta->MutableTableId()->SetOwnerId(stageInfo.Meta.TableId.PathId.OwnerId);
-    meta->SetSchemaVersion(stageInfo.Meta.TableId.SchemaVersion);
-    meta->SetSysViewInfo(stageInfo.Meta.TableId.SysViewInfo);
-    meta->SetTableKind((ui32)stageInfo.Meta.TableKind);
-}
-
-void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto::TDqTask& taskDesc) {
-    if (task.Meta.ScanTask || (stageInfo.Meta.IsSysView() && task.Meta.Reads.Defined())) {
-        NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
-
-        FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
-        if (stageInfo.Meta.TableConstInfo->SysViewInfo) {
-            *protoTaskMeta.MutableTable()->MutableSysViewDescription() = *stageInfo.Meta.TableConstInfo->SysViewInfo;
-        }
-
-        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-
-        for (const auto& keyColumnName : tableInfo->KeyColumns) {
-            const auto& keyColumn = tableInfo->Columns.at(keyColumnName);
-            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn.Type, keyColumn.TypeMod);
-            protoTaskMeta.AddKeyColumnTypes(columnType.TypeId);
-            *protoTaskMeta.AddKeyColumnTypeInfos() = columnType.TypeInfo ?
-                *columnType.TypeInfo :
-                NKikimrProto::TTypeInfo();
-        }
-
-        for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {
-            protoTaskMeta.AddSkipNullKeys(skipNullKey);
-        }
-
-        switch (tableInfo->TableKind) {
-            case ETableKind::Unknown:
-            case ETableKind::External:
-            case ETableKind::SysView: {
-                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
-                break;
-            }
-            case ETableKind::Datashard: {
-                if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
-                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
-                } else {
-                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
-                }
-                break;
-            }
-            case ETableKind::Olap: {
-                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
-                break;
-            }
-        }
-
-        if (!task.Meta.Reads->empty()) {
-            protoTaskMeta.SetReverse(task.Meta.ReadInfo.IsReverse());
-            protoTaskMeta.SetOptionalSorting((ui32)task.Meta.ReadInfo.GetSorting());
-            protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
-            if (task.Meta.HasEnableShardsSequentialScan()) {
-                protoTaskMeta.SetEnableShardsSequentialScan(task.Meta.GetEnableShardsSequentialScanUnsafe());
-            }
-            protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
-
-            for (auto&& i : task.Meta.ReadInfo.GroupByColumnNames) {
-                protoTaskMeta.AddGroupByColumnNames(i.data(), i.size());
-            }
-
-            for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
-                auto* protoResultColumn = protoTaskMeta.AddResultColumns();
-                protoResultColumn->SetId(0);
-                auto protoColumnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnType, "");
-                protoResultColumn->SetType(protoColumnType.TypeId);
-                if (protoColumnType.TypeInfo) {
-                    *protoResultColumn->MutableTypeInfo() = *protoColumnType.TypeInfo;
-                }
-            }
-
-            if (tableInfo->TableKind == ETableKind::Olap) {
-                auto* olapProgram = protoTaskMeta.MutableOlapProgram();
-                auto [schema, parameters] = SerializeKqpTasksParametersForOlap(stageInfo, task);
-
-                olapProgram->SetProgram(task.Meta.ReadInfo.OlapProgram.Program);
-
-                olapProgram->SetParametersSchema(schema);
-                olapProgram->SetParameters(parameters);
-            } else {
-                YQL_ENSURE(task.Meta.ReadInfo.OlapProgram.Program.empty());
-            }
-
-            for (auto& column : task.Meta.Reads->front().Columns) {
-                auto* protoColumn = protoTaskMeta.AddColumns();
-                protoColumn->SetId(column.Id);
-                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, "");
-                protoColumn->SetType(columnType.TypeId);
-                if (columnType.TypeInfo) {
-                    *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
-                }
-                protoColumn->SetName(column.Name);
-            }
-        }
-
-        for (auto& read : *task.Meta.Reads) {
-            auto* protoReadMeta = protoTaskMeta.AddReads();
-            protoReadMeta->SetShardId(read.ShardId);
-            read.Ranges.SerializeTo(protoReadMeta);
-
-            YQL_ENSURE((int) read.Columns.size() == protoTaskMeta.GetColumns().size());
-            for (ui64 i = 0; i < read.Columns.size(); ++i) {
-                YQL_ENSURE(read.Columns[i].Id == protoTaskMeta.GetColumns()[i].GetId());
-                YQL_ENSURE(read.Columns[i].Type.GetTypeId() == protoTaskMeta.GetColumns()[i].GetType());
-            }
-        }
-
-
-        taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
     }
 }
 
@@ -2970,7 +2992,6 @@ void TKqpTasksGraph::BuildInternalOutputTransform(const NKqpProto::TKqpOutputTra
 
     output.Transform = std::move(outputTransform);
 }
-
 
 void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const {
     const auto internalSinksOrder = BuildInternalSinksPriorityOrder();

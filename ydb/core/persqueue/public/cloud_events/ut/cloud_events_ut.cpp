@@ -162,7 +162,7 @@ static void AssertCloudEventJsonStructure(const NJson::TJsonValue& cloudEvent, c
 static TCloudEventInfo MakeDeleteTopicEventInfo(const TString& topicPath = "/root/db/topic1") {
     NKikimrSchemeOp::TModifyScheme modifyScheme;
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
-    modifyScheme.MutableDeallocatePersQueueGroup()->SetName(topicPath);
+    modifyScheme.MutableDrop()->SetName(topicPath);
 
     TCloudEventInfo info;
     info.CloudId = "cloud1";

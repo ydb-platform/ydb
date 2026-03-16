@@ -4,6 +4,7 @@
 #include <library/cpp/string_utils/url/url.h>
 #include <util/digest/murmur.h>
 #include <util/string/hex.h>
+#include <util/generic/guid.h>
 
 #include <format>
 
@@ -1428,7 +1429,8 @@ TProducer::TProducer(
     std::shared_ptr<TTopicClient::TImpl> client,
     std::shared_ptr<TGRpcConnectionsImpl> connections,
     TDbDriverStatePtr dbDriverState)
-    : Connections(connections),
+    : Id(CreateGuidAsString()),
+    Connections(connections),
     Client(client),
     DbDriverState(dbDriverState),
     Metrics(this),
@@ -1791,7 +1793,7 @@ void TProducer::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSessio
 }
 
 TStringBuilder TProducer::LogPrefix() {
-    return TStringBuilder() << " SessionId: " << Settings.SessionId_ << " Epoch: " << Epoch.load() << " ";
+    return TStringBuilder() << " Id: " << Id << " Epoch: " << Epoch.load() << " ";
 }
 
 void TProducer::NextEpoch() {
@@ -1942,14 +1944,8 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
 
             chosenPartition = message.Partition_.value();
         } else if (!message.Key_.has_value()) {
-            std::string key;
-            if (Settings.KeyProducer_) {
-                key = (*Settings.KeyProducer_)(message);
-            } else {
-                key = Settings.ProducerIdPrefix_;
-            }
-            message.Key(key);
-            chosenPartition = PartitionChooser->ChoosePartition(key);
+            message.Key(Settings.ProducerIdPrefix_);
+            chosenPartition = PartitionChooser->ChoosePartition(Settings.ProducerIdPrefix_);
         } else {
             chosenPartition = PartitionChooser->ChoosePartition(*message.Key_);
         }
@@ -1970,7 +1966,7 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
 }
 
 TWriteResult TProducer::Write(TWriteMessage&& message) {
-    auto remainingTimeout = Settings.MaxBlock_;
+    auto remainingTimeout = Settings.MaxBlockTimeout_;
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
         if (Closed.load()) {

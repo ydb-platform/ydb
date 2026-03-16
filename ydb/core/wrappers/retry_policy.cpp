@@ -19,20 +19,9 @@ bool ShouldRetry(const Aws::S3::S3Error& error) {
         return true;
     }
 
-    const int code = static_cast<int>(error.GetResponseCode());
-
     // Unexpected response code (connection failure, DNS, TLS, etc.)
+    const int code = static_cast<int>(error.GetResponseCode());
     if (code < 200) {
-        return true;
-    }
-
-    // Server errors
-    if (code >= 500) {
-        return true;
-    }
-
-    // Request Timeout, Conflict, or Too Many Requests
-    if (code == 408 || code == 409 || code == 429) {
         return true;
     }
 

@@ -43,6 +43,7 @@ SRCS(
     pdisk_write.cpp
     service_actor.cpp
     group_write.cpp
+    util.cpp
     vdisk_write.cpp
     yql_single_query.cpp
 

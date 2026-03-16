@@ -1,8 +1,8 @@
 diff --git a/include/__memory/unique_ptr.h b/include/__memory/unique_ptr.h
-index d52b58a..39e833e 100644
+index de6d81f..6e82345 100644
 --- a/include/__memory/unique_ptr.h
 +++ b/include/__memory/unique_ptr.h
-@@ -574,7 +574,7 @@ public:
+@@ -579,7 +579,7 @@ public:
    }
  
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX23 __add_lvalue_reference_t<_Tp> operator[](size_t __i) const {

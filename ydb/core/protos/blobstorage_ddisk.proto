@@ -130,6 +130,25 @@ message TEvWritePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     optional double FreeSpace = 3;
+    optional double PDiskNormalizedOccupancy = 4;
+}
+
+message TEvWritePersistentBuffers {
+    TQueryCredentials Credentials = 1;
+    TBlockSelector Selector = 2;
+    uint64 Lsn = 3;
+    TWriteInstruction Instruction = 4;
+    repeated TDDiskId PersistentBufferIds = 5;
+    uint32 ReplyTimeoutMicroseconds = 6;
+}
+
+message TEvWritePersistentBuffersResult {
+    message TResult {
+        TDDiskId PersistentBufferId = 1;
+        TEvWritePersistentBufferResult Result = 2;
+    }
+
+    repeated TResult Result = 1;
 }
 
 message TEvReadPersistentBuffer {
@@ -208,6 +227,7 @@ message TEvErasePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     optional double FreeSpace = 3;
+    optional double PDiskNormalizedOccupancy = 4;
 }
 
 message TEvListPersistentBuffer {

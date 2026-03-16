@@ -1,5 +1,6 @@
 #pragma once
 #include "dq_hash_join_table.h"
+#include "dq_block_hash_join_settings.h"
 #include <vector>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
@@ -358,8 +359,9 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         BuildingInMemoryTable(Self& self, TBucketsSpiller<Settings> spiller)
             : Spiller(std::move(spiller))
         {
+            bool trackUsed = (Kind == EJoinKind::Left) && self.Settings_.LeftIsBuild();
             for(int index = 0; index < std::ssize(Spiller.GetBuckets()); ++index) {
-                ProbeState.Buckets.push_back(TTable{self.Layouts_.Build});
+                ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, trackUsed});
             }
             self.Logger_.LogDebug("BuildingInMemoryTable stage started");
         }
@@ -451,11 +453,12 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     };
 
     THybridHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
-                    TSides<const NPackedTuple::TTupleLayout*> layouts)
+                    TSides<const NPackedTuple::TTupleLayout*> layouts, TBlockHashJoinSettings settings = {})
         : Logger_(ctx, componentName)
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
+        , Settings_(settings)
     {
     }
 
@@ -482,20 +485,37 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         };
         auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
             bool found = false;
-            table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                found = true;
-                if constexpr (Kind == EJoinKind::Inner || Kind == EJoinKind::Left) {
-                    consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+            if constexpr (Kind == EJoinKind::Left) {
+                if (Settings_.LeftIsBuild()) {
+                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                        found = true;
+                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                    });
+                } else {
+                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                        found = true;
+                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                    });
+                    if (!found) {
+                        consume(tuple);
+                    }
                 }
-            });
-            if constexpr (Kind == EJoinKind::Left || Kind == EJoinKind::LeftOnly) {
-                if (!found) {
-                    consume(tuple);
+            } else {
+                table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                    found = true;
+                    if constexpr (Kind == EJoinKind::Inner) {
+                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                    }
+                });
+                if constexpr (Kind == EJoinKind::LeftOnly) {
+                    if (!found) {
+                        consume(tuple);
+                    }
                 }
-            }
-            if constexpr(Kind == EJoinKind::LeftSemi) {
-                if (found) {
-                    consume(tuple);
+                if constexpr(Kind == EJoinKind::LeftSemi) {
+                    if (found) {
+                        consume(tuple);
+                    }
                 }
             }
         };
@@ -587,6 +607,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     state.FetchedPack = std::move(GetPayload(var));
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
+                    if constexpr (Kind == EJoinKind::Left) {
+                        if (Settings_.LeftIsBuild()) {
+                            EmitUnmatchedFromInMemoryBuckets(state.Spiller, consume);
+                        }
+                    }
                     std::unordered_map<int, TSpilledBucket> alreadyDumped;
                     TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>> futures;
                     for (int index = 0; index < std::ssize(state.Spiller.GetState().Buckets); ++index) {
@@ -688,7 +713,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         for (auto& future : tdata->Futures) {
                             vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
-                        NJoinTable::TNeumannJoinTable table{Layouts_.Build};
+                        bool trackUsed = (Kind == EJoinKind::Left) && Settings_.LeftIsBuild();
+                        NJoinTable::TNeumannJoinTable table{Layouts_.Build, trackUsed};
                         table.BuildWith(Flatten(std::move(vec)));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
                     } else {
@@ -703,6 +729,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     }
                     if (table->Futures.empty()) {
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
+                        if constexpr (Kind == EJoinKind::Left) {
+                            if (Settings_.LeftIsBuild()) {
+                                table->Table.ForEachUnused(consume);
+                            }
+                        }
                         state.SelectedPair = std::nullopt;
                     } else {
                         if (table->Futures.front().IsReady()) {
@@ -725,11 +756,25 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         return EFetchResult::One;
     }
 
+    template <typename TSpiller, typename F>
+    void EmitUnmatchedFromInMemoryBuckets(TSpiller& spiller, F&& consume) {
+        for (int index = 0; index < std::ssize(spiller.GetState().Buckets); ++index) {
+            if (spiller.IsBucketSpilled(index)) {
+                continue;
+            }
+            TTable* table = std::get_if<TTable>(&spiller.GetState().Buckets[index]);
+            if (table && !table->Empty()) {
+                table->ForEachUnused(std::forward<F>(consume));
+            }
+        }
+    }
+
   private:
     const Logger Logger_;
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
     Sources Sources_;
+    TBlockHashJoinSettings Settings_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };

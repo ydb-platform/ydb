@@ -1692,6 +1692,7 @@ using TMutNodeMap = THashMap<TUnboxedValue, TMutNode, TStringHash, TStringEquals
 
 struct TMutNode {
     std::variant<TUnboxedValue, TMutNodeList, TMutNodeMap> Storage;
+    TVector<TPair, TStdAllocatorForUdf<TPair>> Attributes;
 
     bool IsInvalidOrDeleted() const {
         auto valuePtr = std::get_if<TUnboxedValue>(&Storage);
@@ -1754,7 +1755,7 @@ struct TMutNode {
 
     TUnboxedValue Freeze(const IValueBuilder* valueBuilder) const {
         // clang-format off
-        return std::visit(TOverloaded{
+        auto ret = std::visit(TOverloaded{
             [](const TUnboxedValue& value) {
                 return value;
             }, [valueBuilder](const TMutNodeList& value) {
@@ -1763,11 +1764,22 @@ struct TMutNode {
                 return FreezeDict(value, valueBuilder);
             }}, Storage);
         // clang-format on
+        if (!Attributes.empty()) {
+            return SetNodeType<ENodeType::Attr>(TUnboxedValuePod(new TAttrNode(std::move(ret), Attributes.data(), Attributes.size())));
+        } else {
+            return ret;
+        }
     }
 
     void MeltDict() {
         auto originalValue = std::get<TUnboxedValue>(Storage);
         auto nodeType = GetNodeType(originalValue);
+        if (nodeType == ENodeType::Attr) {
+            SaveAttributes(originalValue);
+            originalValue = originalValue.GetVariantItem();
+            nodeType = GetNodeType(originalValue);
+        }
+
         if (nodeType != ENodeType::Dict) {
             throw yexception() << "Expected dict node, but got :" << TDebugPrinter(originalValue);
         }
@@ -1784,6 +1796,12 @@ struct TMutNode {
     void MeltList() {
         auto originalValue = std::get<TUnboxedValue>(Storage);
         auto nodeType = GetNodeType(originalValue);
+        if (nodeType == ENodeType::Attr) {
+            SaveAttributes(originalValue);
+            originalValue = originalValue.GetVariantItem();
+            nodeType = GetNodeType(originalValue);
+        }
+
         if (nodeType != ENodeType::List) {
             throw yexception() << "Expected list node, but got :" << TDebugPrinter(originalValue);
         }
@@ -1801,6 +1819,14 @@ struct TMutNode {
         list.reserve(len);
         for (ui64 i = 0; i < len; ++i) {
             list.emplace_back(elements[i]);
+        }
+    }
+
+    void SaveAttributes(const TUnboxedValue& attrNode) {
+        Attributes.reserve(attrNode.GetDictLength());
+        auto it = attrNode.GetDictIterator();
+        for (TUnboxedValue x, y; it.NextPair(x, y);) {
+            Attributes.emplace_back(std::move(x), std::move(y));
         }
     }
 };

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "public.h"
-#include "execution_stack.h"
+#include "pooled_execution_stack.h"
 
 #include <yt/yt/core/actions/callback.h>
 
@@ -49,7 +49,7 @@ private:
         Completed,
     };
 
-    std::shared_ptr<TExecutionStack> CoroutineStack_;
+    std::shared_ptr<NThreading::TExecutionStack> CoroutineStack_;
 
     TExceptionSafeContext CallerContext_;
 

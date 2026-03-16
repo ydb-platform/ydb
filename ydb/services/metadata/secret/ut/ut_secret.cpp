@@ -285,13 +285,13 @@ Y_UNIT_TEST_SUITE(Secret) {
             lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`", false);
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`");
             lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`");
-            lHelper.StartSchemaRequest("CREATE OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
-            lHelper.StartSchemaRequest("CREATE OBJECT `secret2:test@test1` (TYPE SECRET_ACCESS)", false);
-            lHelper.StartSchemaRequest("CREATE OBJECT IF NOT EXISTS `secret1:test@test1` (TYPE SECRET_ACCESS)");
+            lHelper.StartSchemaRequest("CREATE OBJECT `secret1:test@builtin` (TYPE SECRET_ACCESS)");
+            lHelper.StartSchemaRequest("CREATE OBJECT `secret2:test@builtin` (TYPE SECRET_ACCESS)", false);
+            lHelper.StartSchemaRequest("CREATE OBJECT IF NOT EXISTS `secret1:test@builtin` (TYPE SECRET_ACCESS)");
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)", false);
             lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/secrets/values`", false);
 
-            lHelper.SetAuthToken("test@test1");
+            lHelper.SetAuthToken("test@builtin");
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`", false);
             lHelper.StartSchemaRequest("UPSERT OBJECT secret1 (TYPE SECRET) WITH value = `100`", false);
             lHelper.StartSchemaRequest("CREATE OBJECT secret2 (TYPE SECRET) WITH value = `100`");

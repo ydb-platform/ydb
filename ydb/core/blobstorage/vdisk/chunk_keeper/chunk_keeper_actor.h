@@ -11,6 +11,6 @@ namespace NKikimr {
 // Contract is described in chunk_keeper_events.h
 
 IActor* CreateChunkKeeperActor(const TIntrusivePtr<TVDiskLogContext>& logCtx,
-        std::unique_ptr<TChunkKeeperData>&& data);
+        std::unique_ptr<TChunkKeeperData>&& data, bool isActive, bool dropChunks);
 
 } // namespace NKikimr

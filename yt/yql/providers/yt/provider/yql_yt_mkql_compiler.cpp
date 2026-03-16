@@ -356,9 +356,7 @@ TRuntimeNode BuildDqYtInputCall(
             if (!sysColumns.IsUndefined()) {
                 specNode[YqlSysColumnPrefix] = sysColumns;
             }
-            if (pathInfo.Table->IsTemp) {
-                UpdateNativeYtTypeFlags(specNode, nativeTypeCompat);
-            }
+            UpdateNativeYtTypeFlags(specNode, nativeTypeCompat);
             TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
             auto res = uniqSpecs.emplace(NYT::NodeToCanonicalYsonString(specNode), refName);
             if (res.second) {

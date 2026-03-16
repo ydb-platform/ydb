@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: jaraco.text
-Version: 4.1.0
+Version: 4.2.0
 Summary: Module for text manipulation
 Author-email: "Jason R. Coombs" <jaraco@jaraco.com>
 License-Expression: MIT
@@ -12,10 +12,10 @@ Classifier: Programming Language :: Python :: 3 :: Only
 Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE
-Requires-Dist: jaraco.functools
 Requires-Dist: jaraco.context>=4.1
-Requires-Dist: autocommand
+Requires-Dist: jaraco.functools
 Requires-Dist: more_itertools
+Requires-Dist: typer-slim
 Provides-Extra: test
 Requires-Dist: pytest!=8.1.*,>=6; extra == "test"
 Requires-Dist: pathlib2; python_version < "3.10" and extra == "test"

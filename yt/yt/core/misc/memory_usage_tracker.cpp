@@ -78,7 +78,120 @@ IMemoryUsageTrackerPtr GetNullMemoryUsageTracker()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMemoryUsageTrackerGuard::TMemoryUsageTrackerGuard(TMemoryUsageTrackerGuard&& other)
+class TScopedMemoryUsageTracker
+    : public IScopedMemoryUsageTracker
+{
+public:
+    explicit TScopedMemoryUsageTracker(IMemoryUsageTrackerPtr underlying)
+        : Underlying_(std::move(underlying))
+    { }
+
+    bool Acquire(i64 size) override
+    {
+        Used_.fetch_add(size, std::memory_order::relaxed);
+        UpdatePeakUsage();
+        return Underlying_->Acquire(size);
+    }
+
+    void Release(i64 size) override
+    {
+        Used_.fetch_sub(size, std::memory_order::relaxed);
+        Underlying_->Release(size);
+    }
+
+    TSharedRef Track(TSharedRef /*reference*/, bool /*keepExistingTracking*/) override
+    {
+        YT_ABORT();
+    }
+
+    TError TryAcquire(i64 size) override
+    {
+        auto error = Underlying_->TryAcquire(size);
+        if (error.IsOK()) {
+            Used_.fetch_add(size, std::memory_order::relaxed);
+            UpdatePeakUsage();
+        }
+        return error;
+    }
+
+    TError TryChange(i64 /*size*/) override
+    {
+        YT_ABORT();
+    }
+
+    void SetLimit(i64 /*size*/) override
+    {
+        YT_ABORT();
+    }
+
+    void AdjustLimit(i64 /*adjustedLimit*/) override
+    {
+        YT_ABORT();
+    }
+
+    i64 GetLimit() const override
+    {
+        return Underlying_->GetLimit();
+    }
+
+    i64 GetUsed() const override
+    {
+        return Underlying_->GetUsed();
+    }
+
+    i64 GetFree() const override
+    {
+        return Underlying_->GetFree();
+    }
+
+    bool IsExceeded() const override
+    {
+        return Underlying_->IsExceeded();
+    }
+
+    TErrorOr<TSharedRef> TryTrack(
+        TSharedRef /*reference*/,
+        bool /*keepHolder*/) override
+    {
+        YT_ABORT();
+    }
+
+    i64 GetSelfUsed() const override
+    {
+        return Used_.load(std::memory_order::relaxed);
+    }
+
+    i64 GetSelfPeakUsed() const override
+    {
+        return PeakUsed_.load(std::memory_order::relaxed);
+    }
+
+private:
+    IMemoryUsageTrackerPtr Underlying_;
+
+    std::atomic<i64> Used_ = 0;
+    std::atomic<i64> PeakUsed_ = 0;
+
+    void UpdatePeakUsage()
+    {
+        auto used = Used_.load(std::memory_order::relaxed);
+        auto peakUsed = PeakUsed_.load(std::memory_order::relaxed);
+        while (used > peakUsed && !PeakUsed_.compare_exchange_weak(
+            peakUsed,
+            used,
+            std::memory_order::relaxed))
+        { }
+    }
+};
+
+IScopedMemoryUsageTrackerPtr CreateScopedMemoryTracker(IMemoryUsageTrackerPtr underlying)
+{
+    return New<TScopedMemoryUsageTracker>(std::move(underlying));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TMemoryUsageTrackerGuard::TMemoryUsageTrackerGuard(TMemoryUsageTrackerGuard&& other) noexcept
 {
     MoveFrom(std::move(other));
 }
@@ -88,7 +201,7 @@ TMemoryUsageTrackerGuard::~TMemoryUsageTrackerGuard()
     Release();
 }
 
-TMemoryUsageTrackerGuard& TMemoryUsageTrackerGuard::operator=(TMemoryUsageTrackerGuard&& other)
+TMemoryUsageTrackerGuard& TMemoryUsageTrackerGuard::operator=(TMemoryUsageTrackerGuard&& other) noexcept
 {
     if (this != &other) {
         Release();
@@ -97,7 +210,7 @@ TMemoryUsageTrackerGuard& TMemoryUsageTrackerGuard::operator=(TMemoryUsageTracke
     return *this;
 }
 
-void TMemoryUsageTrackerGuard::MoveFrom(TMemoryUsageTrackerGuard&& other)
+void TMemoryUsageTrackerGuard::MoveFrom(TMemoryUsageTrackerGuard&& other) noexcept
 {
     Tracker_ = other.Tracker_;
     Size_ = other.Size_;
@@ -169,7 +282,7 @@ TErrorOr<TMemoryUsageTrackerGuard> TMemoryUsageTrackerGuard::TryAcquire(
     return guard;
 }
 
-void TMemoryUsageTrackerGuard::Release()
+void TMemoryUsageTrackerGuard::Release() noexcept
 {
     if (Tracker_) {
         if (AcquiredSize_) {
@@ -180,7 +293,7 @@ void TMemoryUsageTrackerGuard::Release()
     }
 }
 
-void TMemoryUsageTrackerGuard::ReleaseNoReclaim()
+void TMemoryUsageTrackerGuard::ReleaseNoReclaim() noexcept
 {
     Tracker_.Reset();
     Size_ = 0;

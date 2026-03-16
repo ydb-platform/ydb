@@ -882,7 +882,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(tableContent.Settings().MutableRef(), ctx)) {
+        if (!EnsureTuple(*tableContent.MutableRef().Child(TYtTableContent::idx_Settings), ctx)) {
             return TStatus::Error;
         }
 
@@ -917,7 +917,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(tableContent.Settings().MutableRef(), ctx)) {
+        if (!EnsureTuple(*tableContent.MutableRef().Child(TYtBlockTableContent::idx_Settings), ctx)) {
             return TStatus::Error;
         }
 

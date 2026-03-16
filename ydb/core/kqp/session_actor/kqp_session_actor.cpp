@@ -372,7 +372,8 @@ public:
             SessionId,
             QueryState->UserRequestContext->PoolId,
             QueryState->UserToken,
-            QueryState->GetQuery()
+            QueryState->GetQuery(),
+            QueryState->RequestEv->GetWmSessionUpdater()
         ), IEventHandle::FlagTrackDelivery);
 
         QueryState->PoolHandlerActor = MakeKqpWorkloadServiceId(SelfId().NodeId());
@@ -995,7 +996,7 @@ public:
                 }
 
                 try {
-                    tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
+                    tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr);
                     // TODO: fill tasks count into result
                     // Cerr << tasksGraph.DumpToString();
                 } catch (const std::exception&) {
@@ -1265,19 +1266,6 @@ public:
             return true;
         };
 
-        if (phyQuery.HasEnableOltpSink()) {
-            if (!QueryState->TxCtx->EnableOltpSink) {
-                QueryState->TxCtx->EnableOltpSink = phyQuery.GetEnableOltpSink();
-            }
-            if (QueryState->TxCtx->EnableOltpSink != phyQuery.GetEnableOltpSink()) {
-                ReplyQueryError(Ydb::StatusIds::ABORTED,
-                                "Transaction execution settings have been changed (EnableOltpSink).");
-                return false;
-            }
-        } else {
-            AFL_ENSURE(checkSchemeTx());
-        }
-
         if (phyQuery.HasEnableOlapSink()) {
             if (!QueryState->TxCtx->EnableOlapSink) {
                 QueryState->TxCtx->EnableOlapSink = phyQuery.GetEnableOlapSink();
@@ -1506,27 +1494,26 @@ public:
 
     bool CheckTransactionLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& txCtx = *QueryState->TxCtx;
-        const bool broken = txCtx.TxManager
-            ? !!txCtx.TxManager->GetLockIssue()
-            : txCtx.Locks.Broken();
+        AFL_ENSURE(txCtx.TxManager);
+        const bool broken = !!txCtx.TxManager->GetLockIssue();
 
         if (!txCtx.DeferredEffects.Empty() && broken) {
             EmitVictimTliLog(
-                txCtx.TxManager ? txCtx.TxManager->GetVictimQuerySpanId() : std::nullopt,
+                txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
-                txCtx.TxManager ? txCtx.TxManager->GetBrokenLocksCount() : txCtx.Locks.Size());
+                txCtx.TxManager->GetBrokenLocksCount());
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{txCtx.TxManager ? *txCtx.TxManager->GetLockIssue() : txCtx.Locks.GetIssue()}));
+                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
             return false;
         }
 
         if (tx && tx->GetHasEffects() && broken) {
             EmitVictimTliLog(
-                txCtx.TxManager ? txCtx.TxManager->GetVictimQuerySpanId() : std::nullopt,
+                txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
-                txCtx.TxManager ? txCtx.TxManager->GetBrokenLocksCount() : txCtx.Locks.Size());
+                txCtx.TxManager->GetBrokenLocksCount());
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{txCtx.TxManager ? *txCtx.TxManager->GetLockIssue() : txCtx.Locks.GetIssue()}));
+                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
             return false;
         }
 
@@ -1618,11 +1605,6 @@ public:
                 ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for column table writes without enabled olap sink");
                 return false;
             }
-
-            if (txCtx.HasOltpTable && !txCtx.EnableOltpSink.value_or(false)) {
-                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for row table writes without enabled oltp sink");
-                return false;
-            }
         }
 
         const auto tx = QueryState->PreparedQuery->GetPhyTx(txCount - 1);
@@ -1696,11 +1678,6 @@ public:
                 "BATCH operations are not supported at the current time.");
         }
 
-        if (!QueryState->TxCtx->EnableOltpSink.value_or(false)) {
-            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                "BATCH operations are not supported at the current time.");
-        }
-
         if (QueryState->TxCtx->HasOlapTable) {
             return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                 "BATCH operations are not supported for column tables at the current time.");
@@ -1752,7 +1729,7 @@ public:
                 (trace_id, TraceId()));
         }
 
-        request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
+        request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
         request.UseImmediateEffects = true;
         request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
 
@@ -1800,7 +1777,7 @@ public:
 
         auto& txCtx = *QueryState->TxCtx;
         bool literal = tx && tx->IsLiteralTx();
-        const bool hasLocks = txCtx.TxManager ? txCtx.TxManager->HasLocks() : txCtx.Locks.HasLocks();
+        const bool hasLocks = txCtx.TxManager->HasLocks();
 
         if (commit) {
             if (txCtx.TxHasEffects() || hasLocks || txCtx.TopicOperations.HasOperations()) {
@@ -1874,50 +1851,29 @@ public:
                 request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
             }
 
-            if (txCtx.EnableOltpSink.value_or(false)) {
-                if (txCtx.TxHasEffects() || hasLocks || txCtx.TopicOperations.HasOperations()) {
-                    request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
-                }
+            if (txCtx.TxHasEffects() || hasLocks || txCtx.TopicOperations.HasOperations()) {
+                request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
+            }
 
-                if (hasLocks || txCtx.TopicOperations.HasOperations()) {
-                    if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
-                        STLOG_D("TExecPhysicalRequest, tx has commit locks",
-                            (trace_id, TraceId()));
-                        request.LocksOp = ELocksOp::Commit;
-                    } else {
-                        STLOG_D("TExecPhysicalRequest, tx has rollback locks",
-                            (trace_id, TraceId()));
-                        request.LocksOp = ELocksOp::Rollback;
-                    }
-                } else if (txCtx.TxHasEffects()) {
-                    STLOG_D("TExecPhysicalRequest, need commit locks",
+            if (hasLocks || txCtx.TopicOperations.HasOperations()) {
+                if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
+                    STLOG_D("TExecPhysicalRequest, tx has commit locks",
                         (trace_id, TraceId()));
                     request.LocksOp = ELocksOp::Commit;
+                } else {
+                    STLOG_D("TExecPhysicalRequest, tx has rollback locks",
+                        (trace_id, TraceId()));
+                    request.LocksOp = ELocksOp::Rollback;
                 }
-            } else {
-                AFL_ENSURE(!tx || !txCtx.HasOlapTable);
-                AFL_ENSURE(txCtx.DeferredEffects.Empty() || !txCtx.HasOlapTable);
-                if (hasLocks || txCtx.TopicOperations.HasOperations()) {
-                    bool hasUncommittedEffects = false;
-                    for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
-                        auto dsLock = ExtractLock(lock.GetValueRef(txCtx.Locks.LockType));
-                        request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
-                        hasUncommittedEffects |=  dsLock.GetHasWrites();
-                    }
-                    if (!txCtx.GetSnapshot().IsValid() || (tx && txCtx.TxHasEffects()) || !txCtx.DeferredEffects.Empty() || hasUncommittedEffects || txCtx.TopicOperations.HasOperations()) {
-                        STLOG_D("TExecPhysicalRequest, tx has commit locks",
-                            (trace_id, TraceId()));
-                        request.LocksOp = ELocksOp::Commit;
-                    } else {
-                        STLOG_D("TExecPhysicalRequest, tx has rollback locks",
-                            (trace_id, TraceId()));
-                        request.LocksOp = ELocksOp::Rollback;
-                    }
-                }
+            } else if (txCtx.TxHasEffects()) {
+                STLOG_D("TExecPhysicalRequest, need commit locks",
+                    (trace_id, TraceId()));
+                request.LocksOp = ELocksOp::Commit;
             }
-            request.TopicOperations = std::move(txCtx.TopicOperations);
+
+            request.TopicOperations = std::move(txCtx.TopicOperations); // TODO: delete???
         } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || txCtx.EnableOlapSink.value_or(false))) {
-            request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
+            request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
 
             if (!txCtx.CanDeferEffects()) {
                 request.UseImmediateEffects = true;
@@ -1928,7 +1884,7 @@ public:
             QueryState->Orbit,
             QueryState->CurrentTx,
             request.Transactions.size(),
-            (txCtx.TxManager ? txCtx.TxManager->GetShardsCount() : txCtx.Locks.Size()),
+            txCtx.TxManager->GetShardsCount(),
             request.AcquireLocksTxId.Defined());
 
         SendToExecuter(QueryState->TxCtx.Get(), std::move(request));
@@ -2008,13 +1964,7 @@ public:
             (span_id_size, request.TraceId.GetSpanIdSize()),
             (trace_id, TraceId()));
 
-        if (txCtx->EnableOltpSink.value_or(false) && !txCtx->TxManager) {
-            txCtx->TxManager = CreateKqpTransactionManager();
-            txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
-        }
-
-        if (txCtx->EnableOltpSink.value_or(false)
-            && !txCtx->BufferActorId
+        if (!txCtx->BufferActorId
             && (txCtx->HasTableWrite || request.TopicOperations.GetSize() != 0)) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
             txCtx->TxManager->AddTopicsToShards();
@@ -2059,7 +2009,9 @@ public:
 
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
-        } else if (txCtx->EnableOltpSink.value_or(false) && txCtx->BufferActorId) {
+
+            txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
+        } else if (txCtx->BufferActorId) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
             txCtx->TxManager->AddTopicsToShards();
         }
@@ -2068,7 +2020,8 @@ public:
         if (QueryState && QueryState->PreparedQuery && Settings.TableService.GetEnableKqpScanQueryUseLlvm()) {
             llvmSettings = QueryState->PreparedQuery->GetLlvmSettings();
         }
-
+        
+        AFL_ENSURE(txCtx->TxManager);
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
@@ -2095,10 +2048,6 @@ public:
 
     void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request)
     {
-        if (txCtx->TxHasEffects() || txCtx->Locks.HasLocks()) {
-            request.AcquireLocksTxId = txCtx->Locks.GetLockTxId();
-        }
-
         if (!txCtx->DeferredEffects.Empty()) {
             request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
         }
@@ -2166,27 +2115,6 @@ public:
 
     template<typename T>
     void HandleNoop(T&) {
-    }
-
-    bool MergeLocksWithTxResult(const NKikimrKqp::TExecuterTxResult& result) {
-        if (result.HasLocks()) {
-            auto& txCtx = QueryState->TxCtx;
-            const auto& locks = result.GetLocks();
-            auto [success, issues] = MergeLocks(locks.GetType(), locks.GetValue(), *txCtx);
-            if (!success) {
-                if (!txCtx->GetSnapshot().IsValid() || txCtx->TxHasEffects()) {
-                    ReplyQueryError(Ydb::StatusIds::ABORTED,  "Error while locks merge",
-                        MessageFromIssues(issues));
-                    return false;
-                }
-
-                if (txCtx->GetSnapshot().IsValid()) {
-                    txCtx->Locks.MarkBroken(issues.back());
-                }
-            }
-        }
-
-        return true;
     }
 
     void InvalidateQuery() {
@@ -2505,14 +2433,9 @@ public:
         EmitBreakerLogs(ev);
         EmitDeferredBreakerLogs(ev);
 
-        if (QueryState->TxCtx->TxManager) {
-            QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
-        } else {
-            for (auto nodeId : ev->ParticipantNodes) {
-                QueryState->ParticipantNodes.emplace(nodeId);
-            }
-        }
-
+        AFL_ENSURE(QueryState->TxCtx->TxManager);
+        QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
+    
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
             const auto executionType = ev->ExecutionType;
 
@@ -2529,7 +2452,7 @@ public:
             // Invalidate query cache on scheme/internal errors
             switch (status) {
                 case Ydb::StatusIds::ABORTED: {
-                    if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
+                    if (QueryState->TxCtx->TxManager->BrokenLocks()) {
                         auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
                         // Use TxManager's broken locks count as fallback when executer stats don't
                         // carry LocksBrokenAsVictim (e.g. lock invalidation detected via AddLock
@@ -2538,14 +2461,6 @@ public:
                             ? ev->LocksBrokenAsVictim
                             : QueryState->TxCtx->TxManager->GetBrokenLocksCount();
                         EmitVictimTliLog(brokenLockQuerySpanId, ev->BrokenLockQuerySpanId, victimCount);
-                    } else if (ev->BrokenLockPathId || ev->BrokenLockShardId) {
-                        // Non-TxManager (obsolete) path: no QuerySpanId tracking
-                        YQL_ENSURE(!QueryState->TxCtx->TxManager);
-                        if (ev->BrokenLockPathId) {
-                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
-                        } else {
-                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId));
-                        }
                     }
                     break;
                 }
@@ -2589,11 +2504,7 @@ public:
         QueryState->TxCtx->AcceptIncomingSnapshot(ev->Snapshot);
 
         if (ev->LockHandle) {
-            QueryState->TxCtx->Locks.LockHandle = std::move(ev->LockHandle);
-        }
-
-        if (!QueryState->TxCtx->TxManager && !MergeLocksWithTxResult(executerResults)) {
-            return;
+            QueryState->TxCtx->LockHandle = std::move(ev->LockHandle);
         }
 
         if (!response->GetIssues().empty()){
@@ -2666,7 +2577,8 @@ public:
         } else {
             // No executer to forward to; emit victim TLI stats directly since
             // ProcessExecuterResult (which normally handles this) won't be called.
-            if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
+            AFL_ENSURE(QueryState->TxCtx->TxManager);
+            if (QueryState->TxCtx->TxManager->BrokenLocks()) {
                 auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
                 auto victimCount = QueryState->TxCtx->TxManager->GetBrokenLocksCount();
                 EmitVictimTliLog(brokenLockQuerySpanId, std::nullopt, victimCount);
@@ -3298,23 +3210,13 @@ public:
         auto request = PreparePhysicalRequest(nullptr, allocPtr);
 
         request.LocksOp = ELocksOp::Rollback;
-
-        if (!txCtx->TxManager) {
-            // Should tx with empty LocksMap be aborted?
-            for (auto& [lockId, lock] : txCtx->Locks.LocksMap) {
-                auto dsLock = ExtractLock(lock.GetValueRef(txCtx->Locks.LockType));
-                request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
-            }
-        }
-
         SendToExecuter(txCtx, std::move(request), true);
     }
 
     void ResetTxState() {
         if (QueryState->TxCtx) {
             QueryState->TxCtx->ClearDeferredEffects();
-            QueryState->TxCtx->Locks.Clear();
-            QueryState->TxCtx->TxManager.reset();
+            QueryState->TxCtx->LockHandle = NLongTxService::TLockHandle();
             QueryState->TxCtx->Finish();
         }
     }

@@ -12,9 +12,9 @@ from _common import (
     rootrel_arc_src,
     sort_uniq,
     to_yesno,
+    split_list_by_value,
 )
 from _dart_fields import create_dart_record
-
 
 if TYPE_CHECKING:
     from lib.nots.erm_json_lite import ErmJsonLite
@@ -29,6 +29,20 @@ if TYPE_CHECKING:
 ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.0  # seconds per file
 
 REQUIRED_MISSING = "~~required~~"
+
+TS_LINT_DART_FIELDS = (
+    # dart data can be merged into one. merge key is ScriptRelPath + SourceFolderPath + TestName
+    # we use df.TestName.name_from_macro_args to set different keys to prevent merging
+    # see devtools/ya/test/dartfile/__init__.py
+    df.ScriptRelPath.first_flat,  # required, used to lookup a SUITE_MAP in devtools/ya/test/explore/__init__.py
+    df.SourceFolderPath.normalized,  # required
+    df.TestName.name_from_macro_args,  # required, we use it to pass script name to runner
+    df.TestRecipes.value,  # from macro USE_RECIPE
+    df.Size.from_macro_args_and_unit,
+    df.CustomDependencies.test_depends_only,  # from macro DEPENDS
+    df.NodejsRootVarName.value,
+    df.TsCheckType.value,
+)
 
 
 class COLORS:
@@ -57,6 +71,7 @@ class TsTestType(StrEnum):
     TSC_TYPECHECK = auto()
     TS_STYLELINT = auto()
     TS_BIOME = auto()
+    TS_CHECK = auto()
 
 
 class UnitType:
@@ -1035,6 +1050,47 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
     # Code navigation
     if unit.get("TS_YNDEXING") == "yes":
         unit.on_do_ts_yndexing()
+
+
+@_with_report_configure_error
+def on_ts_check_configure(unit: NotsUnitType) -> None:
+    if not _is_tests_enabled(unit):
+        return
+
+    ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
+    if not ts_check_list:
+        return
+
+    test_files = df.TestFiles.ts_check_srcs(unit, (), {})
+    if not test_files:
+        return
+
+    pm = _create_pm(unit)
+    unit.on_setup_install_node_modules_recipe(pm.module_path)
+    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
+
+    peers = _create_pm(unit).get_local_peers_from_package_json()
+    if peers:
+        unit.ondepends(peers)
+
+    for script_name, is_medium, check_type in ts_check_list:
+        flat_args = ("ts_check",)
+        spec_args = dict(
+            NAME=[script_name],  # df.TestName.name_from_macro_args expects array
+            TS_CHECK_TYPE=check_type,
+        )
+        if is_medium == "yes":
+            spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
+
+        assert check_type in ("lint"), f"Unknown check type: {check_type}"
+        dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else None
+
+        dart_record = create_dart_record(dart_fields, unit, flat_args, spec_args)
+        dart_record[df.TestFiles.KEY] = test_files
+
+        data = ytest.dump_test(unit, dart_record)
+        if data:
+            unit.set_property(["DART_DATA", data])
 
 
 @_with_report_configure_error

@@ -345,6 +345,7 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 case EIndexType::GlobalSync:
                 case EIndexType::GlobalAsync:
                 case EIndexType::GlobalUnique:
+                case EIndexType::GlobalJson:
                     UNIT_ASSERT(std::holds_alternative<std::monostate>(indexDesc.GetIndexSettings()));
                     break;
                 case EIndexType::GlobalVectorKMeansTree: {
@@ -783,6 +784,8 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
             return NYdb::NTable::EIndexType::GlobalFulltextPlain;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            return NYdb::NTable::EIndexType::GlobalJson;
         default:
             UNIT_FAIL("No conversion to API for this index type");
             return NYdb::NTable::EIndexType::Unknown;
@@ -852,6 +855,15 @@ void TestRestoreTableWithIndex(
                 INDEX {index} GLOBAL USING fulltext_relevance
                     ON (Value)
                     WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
+                ))", "table"_a = table, "index"_a = index);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            query = fmt::format(R"(CREATE TABLE `{table}` (
+                Key Uint64,
+                Group Uint32,
+                Value Json,
+                PRIMARY KEY (Key),
+                INDEX {index} GLOBAL USING json ON (Value)
                 ))", "table"_a = table, "index"_a = index);
             break;
         default:
@@ -2669,6 +2681,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
+        appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
         TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
 
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -2837,7 +2850,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestTransferBackupRestore(const TTransferTestConfig& config = {}) {
         AssertAuthAndSecretTypes(config);
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(config.SecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
@@ -2873,6 +2885,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
             pathToBackup, config
         );
+
+        driver.Stop(true);
     }
 
 
@@ -3172,6 +3186,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalVectorKmeansTree:
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
+            case EIndexTypeGlobalJson:
                 return TestTableWithIndexBackupRestore(Value);
             case EIndexTypeInvalid:
                 break; // not applicable
@@ -3187,7 +3202,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
         server.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
         server.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_DEBUG);
@@ -3297,7 +3311,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
@@ -3710,6 +3723,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
+                    appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())).SetDatabase("/Root"))
@@ -4463,6 +4477,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalVectorKmeansTree:
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
+            case EIndexTypeGlobalJson:
                 TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeInvalid:

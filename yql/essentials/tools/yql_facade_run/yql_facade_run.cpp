@@ -434,6 +434,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         opts.AddLongOption("test-syntax-ambiguity", "Check syntax ambiguities").NoArgument().SetFlag(&TestSyntaxAmbiguities);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
         opts.AddLongOption("test-partial-typecheck", "Check partial AST typecheck").NoArgument().SetFlag(&TestPartialTypecheck);
+        opts.AddLongOption("fuzz-untyped-lambda", "Enable fuzzing by substituting untyped lambdas for callable children").NoArgument().SetFlag(&FuzzUntypedLambda);
     }
 
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([this](const TString& str) {
@@ -662,8 +663,8 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
                     return false;
                 }
 
-                constexpr bool isIdempotencyChecked = true;
-                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, isIdempotencyChecked)) {
+                constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
+                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, convergence)) {
                     auto issue = TIssue(TPosition(0, 0, fileName), "Format failed");
                     for (const auto& i : issues) {
                         issue.AddSubIssue(MakeIntrusive<TIssue>(i));
@@ -815,6 +816,10 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         program->SetEnableLineage();
     }
 
+    if (RunOptions_.FuzzUntypedLambda) {
+        program->SetFuzzUntypedLambda();
+    }
+
     program->SetOperationId(RunOptions_.OperationId);
 
     bool fail = false;
@@ -841,8 +846,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         }
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
-            constexpr bool isIdempotencyChecked = true;
-            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), program->AstRoot(), settings, issues, isIdempotencyChecked)) {
+            constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
+            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), program->AstRoot(), settings, issues, convergence)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;

@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
+REQUIREMENTS(cpu:2)
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -32,6 +33,7 @@ END()
 
 RECURSE_FOR_TESTS(
     fulltext
+    json
     prefixed_vector
     vector
 )

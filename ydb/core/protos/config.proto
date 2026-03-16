@@ -1,7 +1,7 @@
 import "google/protobuf/descriptor.proto";
 import "ydb/core/config/protos/marker.proto";
 import "ydb/core/fq/libs/config/protos/fq_config.proto";
-import "ydb/core/nbs/cloud/blockstore/config/storage.proto";
+import "ydb/core/nbs/cloud/blockstore/config/protos/storage.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/blobstorage.proto";
@@ -521,6 +521,7 @@ message TInterconnectConfig {
     optional bool RdmaChecksum = 54 [default = true];
     optional ERdmaCqMode RdmaCqMode = 55;
     optional uint32 RdmaMemPoolSizeLimitMb = 56 [default = 4096];
+    optional bool UseKernelKeepAlive = 58 [default = false];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -1824,6 +1825,13 @@ message TImmediateControlsConfig {
             MaxValue: 100000000000, // 100 GB
             DefaultValue: 10000000, // 10 MB
         }];
+
+        optional uint64 EnableChunkKeeper = 40 [(ControlOptions) = {
+            Description: "Enable internal VDisk subsystem ChunkKeeper",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {
@@ -1953,6 +1961,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 70 }];
+        optional uint64 MaxActiveCompactionsPerPDisk = 7 [(ControlOptions) = {
+            Description: "Max active compactions per disk",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 0 }];
     }
 
     message TBlobStorageControllerControls {
@@ -2682,14 +2695,14 @@ message TDataErasureConfig {
     message TTenantDataErasureConfig {
         optional double MaxRate = 1 [default = 1]; // unlimited
         optional uint64 InflightLimit = 2 [default = 10];
-        // After this interval started data erasure in shard is considered as finished
-        optional uint64 TimeoutSeconds = 3 [default = 15];
+
+        optional uint64 TimeoutSeconds = 3 [default = 15, deprecated = true]; // ignored
     }
 
     optional double MaxRate = 1 [default = 0]; // unlimited
     optional uint64 InflightLimit = 2 [default = 10];
-    // After this interval started data erasure in tenant is considered as finished
-    optional uint64 TimeoutSeconds = 3 [default = 600];
+
+    optional uint64 TimeoutSeconds = 3 [default = 600, deprecated = true]; // ignored
     // Run data erasure every week
     optional uint64 DataErasureIntervalSeconds = 4 [default = 604800];
     // Every 10 m do request to BSC

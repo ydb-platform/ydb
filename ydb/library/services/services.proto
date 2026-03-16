@@ -61,6 +61,7 @@ enum EServiceKikimr {
     BS_BRIDGE_SYNC = 2606;
     BS_PHANTOM_FLAG_STORAGE = 2607;
     BS_CHUNK_KEEPER = 2608;
+    BS_COMP_BROKER = 2609;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -1158,5 +1159,6 @@ message TActivity {
         SCHEMESHARD_FORCED_COMPACTION = 681;
         BS_LOAD_PERSISTENT_BUFFER_WRITE = 682;
         BS_LOAD_PERSISTENT_BUFFER_READ = 683;
+        BS_COMP_BROKER_ACTOR = 684;
     };
 };

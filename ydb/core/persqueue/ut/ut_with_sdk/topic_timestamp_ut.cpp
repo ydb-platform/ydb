@@ -32,9 +32,6 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
     void TimestampReadImpl(const bool topicsAreFirstClassCitizen, const bool enableSkipMessagesWithObsoleteTimestamp, const TTimestampReadOptions options, const std::span<const ETimestampFnKind> timestampKinds, const bool checkEarly, const ui32 maxHeadSkip, const bool withRestart) {
         auto createSetup = [=]() {
             NKikimrConfig::TFeatureFlags ff;
-            ff.SetEnableTopicSplitMerge(true);
-            ff.SetEnableTopicServiceTx(true);
-            ff.SetEnableTopicAutopartitioningForCDC(true);
             ff.SetEnableTopicAutopartitioningForReplication(true);
             ff.SetEnableSkipMessagesWithObsoleteTimestamp(enableSkipMessagesWithObsoleteTimestamp);
 

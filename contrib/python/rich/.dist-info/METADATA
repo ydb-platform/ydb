@@ -1,8 +1,9 @@
-Metadata-Version: 2.3
+Metadata-Version: 2.4
 Name: rich
-Version: 14.3.2
+Version: 14.3.3
 Summary: Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal
 License: MIT
+License-File: LICENSE
 Author: Will McGugan
 Author-email: willmcgugan@gmail.com
 Requires-Python: >=3.8.0

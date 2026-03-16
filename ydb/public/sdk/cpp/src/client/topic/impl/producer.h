@@ -37,6 +37,8 @@ private:
         FLUENT_SETTING(std::vector<std::uint32_t>, Children);
         FLUENT_SETTING_DEFAULT(bool, Locked, false);
         FLUENT_SETTING_DEFAULT(NThreading::TFuture<void>, Future, NThreading::MakeFuture());
+
+        std::optional<std::uint64_t> CachedMaxSeqNo;
     };
 
     struct TMessageInfo {
@@ -63,8 +65,13 @@ private:
         WriteSessionPtr Session;
         const std::uint32_t Partition;
         std::shared_ptr<TIdleSession> IdleSession = nullptr;
+        bool DirectToPartition = true;
+        bool Closed = false;
 
-        TWriteSessionWrapper(WriteSessionPtr session, std::uint32_t partition);
+        // This field is used only when DirectToPartition is false.
+        size_t NonDirectToPartitionOwnership = 1;
+
+        TWriteSessionWrapper(WriteSessionPtr session, std::uint32_t partition, bool directToPartition = true);
     };
 
     using WrappedWriteSessionPtr = std::shared_ptr<TWriteSessionWrapper>;
@@ -118,18 +125,19 @@ private:
 
     struct TSessionsWorker {
         TSessionsWorker(TProducer* producer);
+        WrappedWriteSessionPtr GetOrCreateWriteSession(std::uint32_t partition, bool directToPartition = true);
         WrappedWriteSessionPtr GetWriteSession(std::uint32_t partition, bool directToPartition = true);
         void AddIdleSession(std::uint32_t partition);
-        void RemoveIdleSession(std::uint32_t partition);
         void DoWork();
         size_t GetSessionsCount() const;
         size_t GetIdleSessionsCount() const;
+        void DestroyWriteSession(std::uint32_t partition);
+        void RemoveIdleSession(std::uint32_t partition);
     
     private:
         WrappedWriteSessionPtr CreateWriteSession(std::uint32_t partition, bool directToPartition = true);
         
         using TSessionsIndexIterator = std::unordered_map<std::uint32_t, WrappedWriteSessionPtr>::iterator;
-        void DestroyWriteSession(TSessionsIndexIterator& it, TDuration closeTimeout);
 
         std::string GetProducerId(std::uint32_t partitionId);
 
@@ -138,12 +146,11 @@ private:
         using IdlerSessionsIterator = std::set<IdleSessionPtr, TIdleSession::Comparator>::iterator;
         std::unordered_map<std::uint32_t, IdlerSessionsIterator> IdlerSessionsIndex;
         std::unordered_map<std::uint32_t, WrappedWriteSessionPtr> SessionsIndex;
-        std::deque<WrappedWriteSessionPtr> SessionsToRemove;
-
-        static constexpr TDuration SESSION_REMOVE_DELAY = TDuration::Seconds(5);
+        std::unordered_set<std::uint32_t> SessionsToRemove;
+        std::list<WrappedWriteSessionPtr> ClosedSessionsToRemove;
     };
 
-    struct TMessagesWorker {
+    struct TMessagesWorker : public std::enable_shared_from_this<TMessagesWorker> {
         TMessagesWorker(TProducer* producer);
         
         void DoWork();
@@ -160,6 +167,12 @@ private:
         void SetClosedStatusToFlushPromises(std::optional<TCloseDescription> closedDescription);
 
     private:
+        enum class EState : std::uint8_t {
+            Init = 0,
+            PendingSeqNo = 1,
+            Ready = 2,
+        };
+
         using MessageIter = std::list<TMessageInfo>::iterator;
 
         void PushInFlightMessage(std::uint32_t partition, TMessageInfo&& message);
@@ -167,6 +180,10 @@ private:
         bool SendMessage(WrappedWriteSessionPtr wrappedSession, const TMessageInfo& message);
         std::optional<TContinuationToken> GetContinuationToken(std::uint32_t partition);
         void RechoosePartitionIfNeeded(MessageIter message);
+        bool LazyInit();
+        void MoveTo(EState state);
+        void HandleReadyInitSeqNoFutures();
+        void FinishInit();
 
         TProducer* Producer;
 
@@ -177,6 +194,14 @@ private:
         std::unordered_map<std::uint32_t, std::deque<TContinuationToken>> ContinuationTokens;
         
         std::uint64_t MemoryUsage = 0;
+        std::uint64_t CurrentSeqNo = 0;
+        EState State = EState::Init;
+
+        std::vector<WrappedWriteSessionPtr> InitWriteSessions;
+        std::unordered_map<std::uint32_t, NThreading::TFuture<uint64_t>> InitGetMaxSeqNoFutures;
+
+        std::mutex InitLock;
+        std::vector<std::uint32_t> GotInitSeqNoPartitions;
 
         friend class TProducer;
     };
@@ -193,7 +218,7 @@ private:
         };
 
         void MoveTo(EState state);
-        void UpdateMaxSeqNo(uint64_t maxSeqNo);
+        void UpdateMaxSeqNo(std::uint32_t partitionId, std::uint64_t maxSeqNo);
         void LaunchGetMaxSeqNoFutures(std::unique_lock<std::mutex>& lock);
         void HandleDescribeResult();
 
@@ -212,6 +237,7 @@ private:
         std::uint64_t MaxSeqNo = 0;
         std::vector<WrappedWriteSessionPtr> WriteSessions;
         std::vector<NThreading::TFuture<uint64_t>> GetMaxSeqNoFutures;
+        std::unordered_map<std::uint32_t, std::uint64_t> CachedMaxSeqNos;
         std::mutex Lock;
         std::uint64_t NotReadyFutures = 0;
         size_t Retries = 0;
@@ -239,11 +265,11 @@ private:
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueEnd(std::uint32_t partition);
         std::optional<TContinuationToken> GetContinuationToken();
         std::optional<TSessionClosedEvent> GetSessionClosedEvent();
+        bool RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint32_t partition);
 
     private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, std::uint32_t partition);
         void HandleReadyToAcceptEvent(std::uint32_t partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
-        bool RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint32_t partition);
         bool TransferEventsToOutputQueue();
         void AddContinuationToken();
         bool AddSessionClosedIfNeeded();
@@ -338,8 +364,6 @@ private:
 
     TDuration GetCloseTimeout();
 
-    std::string GetProducerId(std::uint32_t partition);
-
     void HandleAutoPartitioning(std::uint32_t partition);
 
     bool RunSplittedPartitionWorkers();
@@ -355,6 +379,8 @@ private:
     void NextEpoch();
 
     TWriteResult WriteInternal(TContinuationToken&&, TWriteMessage&& message);
+
+    bool IsFederation(const std::string& endpoint);
 
 public:
     TProducer(const TProducerSettings& settings,

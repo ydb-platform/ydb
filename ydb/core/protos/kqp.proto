@@ -358,6 +358,10 @@ message TSessionInfo {
     optional string UserSID = 14;
     optional bool PgWire = 15 [default = false];
     optional string UserName = 16;
+    optional string WmPoolId = 17;
+    optional string WmState = 18;
+    optional int64 WmEnterTime = 19;
+    optional int64 WmExitTime = 20;
 }
 
 message TEvListSessionsRequest {
@@ -500,7 +504,7 @@ message TEvExecuterTxRequest {
 
 message TExecuterTxResult {
     reserved 3;
-    optional NKikimrMiniKQL.TResult Locks = 4;
+    reserved 4;
     reserved 5; // (deprecated) Stats
     optional NYql.NDqProto.TDqExecutionStats Stats = 6;
     reserved 7;

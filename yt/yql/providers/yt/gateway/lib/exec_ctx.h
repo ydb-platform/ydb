@@ -37,6 +37,7 @@ struct TInputInfo {
     TString Cluster;
     bool Temp = false;
     bool Dynamic = false;
+    bool RLS = false;
     bool Strict = true;
     ui64 Records = 0;
     ui64 DataSize = 0;
@@ -101,10 +102,10 @@ protected:
 
     void SetInput(NNodes::TExprBase input, bool forcePathColumns, const THashSet<TString>& extraSysColumns, const TYtSettings::TConstPtr& settings);
 
-    void SetOutput(NNodes::TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash);
+    void SetOutput(NNodes::TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& outputHash);
 
     virtual void SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
-        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash);
+        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& outputHash);
 
     void SetSingleOutput(const TYtOutTableInfo& outTable, const TYtSettings::TConstPtr& settings);
 
@@ -169,7 +170,8 @@ public:
     }
 
     virtual void SetOutput(NNodes::TYtOutSection output) {
-        TExecContextBaseSimple::SetOutput(output, Options_.Config(), Options_.OperationHash());
+        TExecContextBaseSimple::SetOutput(output, Options_.Config(), Options_.OperationHash(),
+            Options_.OutputHash());
     }
 
     void SetSingleOutput(const TYtOutTableInfo& outTable) {

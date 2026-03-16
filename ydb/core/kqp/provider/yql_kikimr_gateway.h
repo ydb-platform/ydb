@@ -89,6 +89,7 @@ struct TIndexDescription {
         GlobalFulltextRelevance = 5,
         LocalBloomFilter = 6,
         LocalBloomNgramFilter = 7,
+        GlobalJson = 8,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -144,6 +145,7 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
+            case EType::GlobalJson:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -183,6 +185,7 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
+            case EType::GlobalJson:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -218,6 +221,8 @@ struct TIndexDescription {
                 return TIndexDescription::EType::GlobalFulltextPlain;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
                 return TIndexDescription::EType::GlobalFulltextRelevance;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+                return TIndexDescription::EType::GlobalJson;
             default:
                 YQL_ENSURE(false, << NKikimr::NTableIndex::InvalidIndexType(indexType));
         }
@@ -237,6 +242,8 @@ struct TIndexDescription {
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain;
             case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance;
+            case NYql::TIndexDescription::EType::GlobalJson:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
             case NYql::TIndexDescription::EType::LocalBloomFilter:
             case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
                 YQL_ENSURE(false, << "Local bloom index type can't be converted to NKikimrSchemeOp::EIndexType");
@@ -270,6 +277,7 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
+            case EType::GlobalJson:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
                 break;
@@ -313,6 +321,7 @@ struct TIndexDescription {
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
                 return true;
+            case EType::GlobalJson:
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
                 return false;
@@ -327,6 +336,7 @@ struct TIndexDescription {
             case EType::GlobalSyncVectorKMeansTree:
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
+            case EType::GlobalJson:
                 return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
@@ -1018,6 +1028,16 @@ struct TReplicationSettingsBase {
         EFailoverMode FailoverMode;
     };
 
+    struct TMetricsSettings {
+        enum class EMetricsLevel {
+            Default = 0,
+            Database = 1,
+            Object = 2,
+            Detailed = 3,
+        };
+        EMetricsLevel Level;
+    };
+
     TMaybe<TString> ConnectionString;
     TMaybe<TString> Endpoint;
     TMaybe<TString> Database;
@@ -1026,6 +1046,7 @@ struct TReplicationSettingsBase {
     TMaybe<TIamCredentials> IamCredentials;
     TMaybe<TString> CaCert;
     TMaybe<TStateDone> StateDone;
+    TMaybe<TMetricsSettings> MetricsSettings;
     bool StatePaused = false;
     bool StateStandBy = false;
 

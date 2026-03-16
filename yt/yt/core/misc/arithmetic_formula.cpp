@@ -793,9 +793,9 @@ TArithmeticFormula::TArithmeticFormula(TIntrusivePtr<TGenericFormulaImpl> impl)
 { }
 
 TArithmeticFormula::TArithmeticFormula(const TArithmeticFormula& other) = default;
-TArithmeticFormula::TArithmeticFormula(TArithmeticFormula&& other) = default;
+TArithmeticFormula::TArithmeticFormula(TArithmeticFormula&& other) noexcept = default;
 TArithmeticFormula& TArithmeticFormula::operator=(const TArithmeticFormula& other) = default;
-TArithmeticFormula& TArithmeticFormula::operator=(TArithmeticFormula&& other) = default;
+TArithmeticFormula& TArithmeticFormula::operator=(TArithmeticFormula&& other) noexcept = default;
 TArithmeticFormula::~TArithmeticFormula() = default;
 
 bool TArithmeticFormula::operator==(const TArithmeticFormula& other) const
@@ -922,9 +922,9 @@ TBooleanFormula::TBooleanFormula(TIntrusivePtr<TGenericFormulaImpl> impl)
 { }
 
 TBooleanFormula::TBooleanFormula(const TBooleanFormula& other) = default;
-TBooleanFormula::TBooleanFormula(TBooleanFormula&& other) = default;
+TBooleanFormula::TBooleanFormula(TBooleanFormula&& other) noexcept = default;
 TBooleanFormula& TBooleanFormula::operator=(const TBooleanFormula& other) = default;
-TBooleanFormula& TBooleanFormula::operator=(TBooleanFormula&& other) = default;
+TBooleanFormula& TBooleanFormula::operator=(TBooleanFormula&& other) noexcept = default;
 TBooleanFormula::~TBooleanFormula() = default;
 
 bool TBooleanFormula::operator==(const TBooleanFormula& other) const
@@ -1044,9 +1044,9 @@ void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanForm
 
 TTimeFormula::TTimeFormula() = default;
 TTimeFormula::TTimeFormula(const TTimeFormula& other) = default;
-TTimeFormula::TTimeFormula(TTimeFormula&& other) = default;
+TTimeFormula::TTimeFormula(TTimeFormula&& other) noexcept = default;
 TTimeFormula& TTimeFormula::operator=(const TTimeFormula& other) = default;
-TTimeFormula& TTimeFormula::operator=(TTimeFormula&& other) = default;
+TTimeFormula& TTimeFormula::operator=(TTimeFormula&& other) noexcept = default;
 TTimeFormula::~TTimeFormula() = default;
 
 bool TTimeFormula::operator==(const TTimeFormula& other) const

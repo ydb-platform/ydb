@@ -91,12 +91,19 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Sets the minimum logging level for all messages in current fiber.
+//! Sets additional message tags for all messages in current fiber.
 class TFiberMessageTagGuard
     : private TMoveOnly
 {
 public:
+    enum class EMode
+    {
+        Prepend, // Default.
+        Replace,
+    };
+
     explicit TFiberMessageTagGuard(std::string messageTag);
+    TFiberMessageTagGuard(std::string messageTag, EMode mode);
 
     // For use with std::optional in tests.
     TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept;

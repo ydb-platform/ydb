@@ -494,6 +494,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TLineageStats LineageStats;
     ui64 LineageOutputLimit = 40 * 1024 * 1024; // 40 mb limit for lineage representation
     ui64 LineageMemoryLimit = 150 * 1024 * 1024; // 150 mb limit for memory allocation in lineage calculation
+    bool FuzzUntypedLambda = false;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;

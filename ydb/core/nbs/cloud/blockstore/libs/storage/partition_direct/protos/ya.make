@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/nbs/cloud/blockstore/config
+    ydb/core/nbs/cloud/blockstore/config/protos
     ydb/core/protos
 )
 

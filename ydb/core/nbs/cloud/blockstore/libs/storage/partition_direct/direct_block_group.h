@@ -11,8 +11,6 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
 
-#include <optional>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -28,42 +26,34 @@ public:
         NWilson::TTraceId traceId,
         ui32 vChunkIndex) = 0;
 
-    virtual void ReadBlocksLocalFromPersistentBuffer(
-        TExecutorPtr executor,
+    virtual NThreading::TFuture<TDBGReadBlocksResponse>
+    ReadBlocksLocalFromPersistentBuffer(
         ui32 vChunkIndex,
         ui8 persistentBufferIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
-        NThreading::TPromise<TReadBlocksLocalResponse> promise,
         ui64 lsn) = 0;
 
-    virtual void ReadBlocksLocalFromDDisk(
-        TExecutorPtr executor,
+    virtual NThreading::TFuture<TDBGReadBlocksResponse>
+    ReadBlocksLocalFromDDisk(
         ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId,
-        NThreading::TPromise<TReadBlocksLocalResponse> promise) = 0;
+        NWilson::TTraceId traceId) = 0;
 
-    virtual TVector<TPersistentBufferWriteMeta> WriteBlocksLocal(
-        TExecutorPtr executor,
+    virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksLocal(
         ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId,
-        NThreading::TPromise<TWriteBlocksLocalResponse> promise) = 0;
+        NWilson::TTraceId traceId) = 0;
 
-    virtual void SyncWithPersistentBuffer(
-        TExecutorPtr executor,
+    virtual NThreading::TFuture<TDBGSyncBlocksResponse>
+    SyncWithPersistentBuffer(
         ui32 vChunkIndex,
         ui8 persistBufferIndex,
         const TVector<TSyncRequest>& syncRequests,
         NWilson::TTraceId traceId) = 0;
-
-    virtual void ErasePersistentBuffer(
-        TExecutorPtr executor,
-        std::shared_ptr<TEraseRequestHandler> requestHandler) = 0;
 
     virtual TVector<TRestoreMeta> RestoreFromPersistentBuffers(
         TExecutorPtr executor,
@@ -128,42 +118,32 @@ public:
         NWilson::TTraceId traceId,
         ui32 vChunkIndex) override;
 
-    void ReadBlocksLocalFromPersistentBuffer(
-        TExecutorPtr executor,
+    NThreading::TFuture<TDBGReadBlocksResponse>
+    ReadBlocksLocalFromPersistentBuffer(
         ui32 vChunkIndex,
         ui8 persistentBufferIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId,
-        NThreading::TPromise<TReadBlocksLocalResponse> promise,
         ui64 lsn) override;
 
-    void ReadBlocksLocalFromDDisk(
-        TExecutorPtr executor,
+    NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksLocalFromDDisk(
         ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId,
-        NThreading::TPromise<TReadBlocksLocalResponse> promise) override;
+        NWilson::TTraceId traceId) override;
 
-    TVector<TPersistentBufferWriteMeta> WriteBlocksLocal(
-        TExecutorPtr executor,
+    NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksLocal(
         ui32 vChunkIndex,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId,
-        NThreading::TPromise<TWriteBlocksLocalResponse> promise) override;
+        NWilson::TTraceId traceId) override;
 
-    void SyncWithPersistentBuffer(
-        TExecutorPtr executor,
+    NThreading::TFuture<TDBGSyncBlocksResponse> SyncWithPersistentBuffer(
         ui32 vChunkIndex,
         ui8 persistBufferIndex,
         const TVector<TSyncRequest>& syncRequests,
         NWilson::TTraceId traceId) override;
-
-    void ErasePersistentBuffer(
-        TExecutorPtr executor,
-        std::shared_ptr<TEraseRequestHandler> requestHandler) override;
 
 private:
     void DoEstablishPersistentBufferConnection(
@@ -182,41 +162,35 @@ private:
         size_t index,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
 
-    TVector<TPersistentBufferWriteMeta> DoWriteBlocksLocal(
-        TExecutorPtr executor,
+    void DoWriteBlocksLocal(
         std::shared_ptr<TWriteRequestHandler> requestHandler);
 
-    void HandleWritePersistentBufferResult(
-        std::shared_ptr<TWriteRequestHandler> requestHandler,
-        ui64 storageRequestId,
-        const NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult&
-            result);
-
     void HandleSyncWithPersistentBufferResult(
-        TExecutorPtr executor,
-        std::shared_ptr<TSyncRequestHandler> requestHandler,
+        std::shared_ptr<TSyncAndEraseRequestHandler> requestHandler,
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult&
             result);
 
+    void ErasePersistentBuffer(
+        std::shared_ptr<TSyncAndEraseRequestHandler> requestHandler);
+
     void HandleErasePersistentBufferResult(
-        std::shared_ptr<TEraseRequestHandler> requestHandler,
+        std::shared_ptr<TSyncAndEraseRequestHandler> requestHandler,
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult&
             result);
 
     void DoReadBlocksLocalFromPersistentBuffer(
-        TExecutorPtr executor,
         std::shared_ptr<TReadRequestHandler> requestHandler,
         ui8 persistentBufferIndex,
         ui64 lsn);
 
     void DoReadBlocksLocalFromDDisk(
-        TExecutorPtr executor,
         std::shared_ptr<TReadRequestHandler> requestHandler);
 
     template <typename TEvent>
-    void HandleReadResult(
+    static void HandleReadResult(
+        NActors::TActorSystem* actorSystem,
         std::shared_ptr<TReadRequestHandler> requestHandler,
         ui64 storageRequestId,
         const TEvent& result);

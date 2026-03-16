@@ -21,7 +21,6 @@ namespace NKikimr::NDDisk {
 class TDDiskActor::TDirectIoOpBase : public NPDisk::TUringOperationBase {
 public:
     TDirectIoOpBase(const TActorId& ddiskId,
-                    std::atomic<ui32>& inFlightCount,
                     TCounters& counters,
                     const IEventHandle* ev = nullptr);
 
@@ -76,7 +75,6 @@ private:
     std::optional<TRope> Data;
 
     // shared with DDisk actor
-    std::atomic<ui32>& InFlightCount;
     TCounters& Counters;
 };
 
@@ -86,8 +84,8 @@ private:
 
 class TDDiskActor::TPersistentBufferPartIoOp final : public TDDiskActor::TDirectIoOpBase {
 public:
-    TPersistentBufferPartIoOp(const TActorId& ddiskId, std::atomic<ui32>& inFlightCount, TCounters& counters)
-        : TDirectIoOpBase(ddiskId, inFlightCount, counters)
+    TPersistentBufferPartIoOp(const TActorId& ddiskId, TCounters& counters)
+        : TDirectIoOpBase(ddiskId, counters)
     {}
 
     virtual void Reply(
@@ -101,15 +99,20 @@ public:
         IsErase = isErase;
     }
 
+    void SetIsRestore(bool isRestore) {
+        IsRestore = isRestore;
+    }
+
 private:
     ui64 PartCookie = 0;
     bool IsErase = false;
+    bool IsRestore = false;
 };
 
 class TDDiskActor::TInternalSyncWriteOp final : public TDDiskActor::TDirectIoOpBase {
 public:
-    TInternalSyncWriteOp(const TActorId& ddiskId, std::atomic<ui32>& inFlightCount, TCounters& counters)
-        : TDirectIoOpBase(ddiskId, inFlightCount, counters)
+    TInternalSyncWriteOp(const TActorId& ddiskId, TCounters& counters)
+        : TDirectIoOpBase(ddiskId, counters)
     {}
 
     virtual void Reply(

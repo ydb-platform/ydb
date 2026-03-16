@@ -156,8 +156,7 @@ TOverlappedRequestsGuardStorageWrapper::WriteBlocksLocal(
 {
     auto guard = Guard(Lock);
 
-    const auto* overlaps =
-        InflightRequests.FindFirstOverlapping(request->Range);
+    const auto overlaps = InflightRequests.FindFirstOverlapping(request->Range);
 
     if (!overlaps) {
         const ui64 requestId = ++RequestIdGenerator;
@@ -183,7 +182,7 @@ TOverlappedRequestsGuardStorageWrapper::WriteBlocksLocal(
         return result;
     }
 
-    std::unique_ptr<TInflight>& inflightPtr = overlaps->AccessValue();
+    std::unique_ptr<TInflight>& inflightPtr = overlaps->Value;
     if (!inflightPtr) {
         inflightPtr = std::make_unique<TInflight>();
     }
@@ -206,8 +205,7 @@ TOverlappedRequestsGuardStorageWrapper::ZeroBlocksLocal(
 {
     auto guard = Guard(Lock);
 
-    const auto* overlaps =
-        InflightRequests.FindFirstOverlapping(request->Range);
+    const auto overlaps = InflightRequests.FindFirstOverlapping(request->Range);
 
     if (!overlaps) {
         const ui64 requestId = ++RequestIdGenerator;
@@ -233,7 +231,7 @@ TOverlappedRequestsGuardStorageWrapper::ZeroBlocksLocal(
         return result;
     }
 
-    std::unique_ptr<TInflight>& inflightPtr = overlaps->AccessValue();
+    std::unique_ptr<TInflight>& inflightPtr = overlaps->Value;
     if (!inflightPtr) {
         inflightPtr = std::make_unique<TInflight>();
     }

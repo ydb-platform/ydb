@@ -1171,6 +1171,7 @@ public:
 
     TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+
         try {
             TSession::TPtr session = GetSession(options.SessionId());
             auto logCtx = NYql::NLog::CurrentLogContextPath();
@@ -1180,6 +1181,7 @@ public:
             TVector<TFuture<void>> waits;
             for (auto& req: options.Tables()) {
                 const auto cluster = req.Cluster();
+                const auto supportRLSTables = options.Config()->_EnableRLSTablesSupport.Get(cluster).GetOrElse(DEFAULT_ENABLE_RLS_TABLES_SUPPORT);
                 const auto table = req.Table();
                 const auto anon = req.Anonymous();
                 const auto targetPath = req.TargetPath();
@@ -1198,20 +1200,23 @@ public:
                 YQL_ENSURE(p, "Table " << table << " has no snapshot");
                 richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix));
 
-                waits.push_back(session->Queue_->Async([entry, richYPath, targetPath, logCtx] () {
+                waits.push_back(session->Queue_->Async([entry, richYPath, targetPath, logCtx, supportRLSTables] () {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
 
-                    auto reader = entry->Tx->CreateRawReader(
-                        richYPath,
-                        NYT::TFormat::YsonText(),
-                        NYT::TTableReaderOptions()
-                            .CreateTransaction(false)
-                            .ControlAttributes(
-                                NYT::TControlAttributes()
-                                    .EnableRowIndex(false)
-                                    .EnableRangeIndex(false)
-                                )
-                        );
+                    NYT::TTableReaderOptions readerOptions = NYT::TTableReaderOptions()
+                        .CreateTransaction(false)
+                        .ControlAttributes(
+                            NYT::TControlAttributes()
+                                .EnableRowIndex(false)
+                                .EnableRangeIndex(false)
+                            );
+
+                    if (supportRLSTables) {
+                        // OmitInaccessibleRows is required for RLS tables
+                        readerOptions.OmitInaccessibleRows(true);
+                    }
+
+                    auto reader = entry->Tx->CreateRawReader(richYPath, NYT::TFormat::YsonText(), readerOptions);
 
                     TOFStream out(targetPath);
                     TransferData(reader.Get(), &out);
@@ -2759,6 +2764,8 @@ private:
     {
         const auto requestOnlyRequiredAttrs = execCtx->Options_.Config()->_RequestOnlyRequiredAttrs.Get().GetOrElse(DEFAULT_REQUEST_ONLY_REQUIRED_ATTRS);
         const auto cacheSchemaBySchemaId = execCtx->Options_.Config()->_CacheSchemaBySchemaId.Get().GetOrElse(DEFAULT_CACHE_SCHEMA_BY_SCHEMA_ID);
+        const auto omitInaccessibleRows = execCtx->Options_.Config()->OmitInaccessibleRows.Get().GetOrElse(false);
+        YQL_ENSURE(!(omitInaccessibleRows && !requestOnlyRequiredAttrs), "OmitInaccessibleRows is supported only with _RequestOnlyRequiredAttrs");
 
         auto attributeFilter = TAttributeFilter()
             .AddAttribute("chunk_count")
@@ -2769,6 +2776,7 @@ private:
             .AddAttribute("dynamic")
             .AddAttribute("enable_dynamic_store_read")
             .AddAttribute("erasure_codec")
+            .AddAttribute("has_row_level_ace")
             .AddAttribute("id")
             .AddAttribute("media")
             .AddAttribute("modification_time")
@@ -2954,15 +2962,22 @@ private:
                 }
 
                 bool isDynamic = attrs.AsMap().contains("dynamic") && NYT::GetBool(attrs["dynamic"]);
-                auto rowCount = attrs[isDynamic ? "chunk_row_count" : "row_count"].AsInt64();
+                bool hasRLS = attrs.AsMap().contains("has_row_level_ace") && NYT::GetBool(attrs["has_row_level_ace"]);
+                auto rowCount = attrs[isDynamic || hasRLS ? "chunk_row_count" : "row_count"].AsInt64();
                 statInfo->RecordsCount = rowCount;
                 statInfo->DataSize = GetDataWeight(attrs).GetOrElse(0);
                 statInfo->ChunkCount = attrs["chunk_count"].AsInt64();
                 TString strModifyTime = attrs["modification_time"].AsString();
                 statInfo->ModifyTime = TInstant::ParseIso8601(strModifyTime).Seconds();
                 metaInfo->IsDynamic = isDynamic;
+                metaInfo->HasRLS = hasRLS;
                 if (statInfo->IsEmpty()) {
                     YQL_CLOG(INFO, ProviderYt) << "Empty table : " << tables[idx.first].Table() << ", modify time: " << strModifyTime << ", revision: " << statInfo->Revision;
+                }
+                if (metaInfo->HasRLS && !omitInaccessibleRows) {
+                    YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
+                        << "Table " << tables[idx.first].Table() << " on cluster " << tables[idx.first].Cluster()
+                        << " has row level security. Please enable pragma yt.OmitInaccessibleRows.";
                 }
 
                 bool schemaValid = ValidateTableSchema(
@@ -3370,6 +3385,8 @@ private:
                     TString srcTableCluster = execCtx->InputTables_[i].Cluster;
                     YQL_ENSURE(srcTableCluster);
                     const bool isDynamic = execCtx->InputTables_[i].Dynamic;
+                    const auto supportRLSTables = execCtx->Options_.Config()->_EnableRLSTablesSupport.Get(srcTableCluster).GetOrElse(DEFAULT_ENABLE_RLS_TABLES_SUPPORT);
+
                     if (!isDynamic || useNativeDyntableRead) {
                         if (const auto recordsCount = execCtx->InputTables_[i].Records; recordsCount || !isDynamic) {
                             if (!limiter.NextTable(recordsCount)) {
@@ -3391,9 +3408,9 @@ private:
                             srcTable.TransactionId_.Clear();
                         }
                         if (execCtx->YamrInput) {
-                            stop = NYql::IterateYamredRows(readTx, srcTable, i, specsCache, pullData, limiter, execCtx->Sampling);
+                            stop = NYql::IterateYamredRows(readTx, srcTable, i, specsCache, pullData, limiter, supportRLSTables, execCtx->Sampling);
                         } else {
-                            stop = NYql::IterateYsonRows(readTx, srcTable, i, specsCache, pullData, limiter, execCtx->Sampling);
+                            stop = NYql::IterateYsonRows(readTx, srcTable, i, specsCache, pullData, limiter, supportRLSTables, execCtx->Sampling);
                         }
                     }
                     if (stop || limiter.Exceed()) {
@@ -6026,6 +6043,7 @@ private:
 
                 auto deliveryMode = options.DeliveryMode();
                 TString contentTmpFolder = forceLocalTableContent ? TString() : settings->TableContentTmpFolder.Get(cluster).GetOrElse(TString());
+                const auto supportRLSTables = execCtx->Options_.Config()->_EnableRLSTablesSupport.Get(cluster).GetOrElse(DEFAULT_ENABLE_RLS_TABLES_SUPPORT);
                 if (contentTmpFolder.StartsWith("//")) {
                     contentTmpFolder = contentTmpFolder.substr(2);
                 }
@@ -6077,6 +6095,11 @@ private:
                     }
                     else {
                         NYT::TTableReaderOptions readerOptions;
+                        if (supportRLSTables) {
+                            // OmitInaccessibleRows is required for RLS tables
+                            readerOptions.OmitInaccessibleRows(true);
+                        }
+
                         readerOptions.CreateTransaction(false);
 
                         auto readerTx = tx;

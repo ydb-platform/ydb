@@ -6,6 +6,8 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
+#include <ranges>
+
 namespace NKikimr::NPQ::NMLP {
 
 namespace {
@@ -747,6 +749,9 @@ size_t TConsumerActor::RequiredToFetchMessageCount() const {
     auto& metrics = Storage->GetMetrics();
 
     auto maxMessages = Storage->HasRetentionExpiredMessages() ? Storage->MaxMessages : Storage->MinMessages;
+    if (metrics.UnprocessedMessageCount <= metrics.InflightMessageCount / 4) {
+        maxMessages = std::max<size_t>(maxMessages, metrics.InflightMessageCount + metrics.InflightMessageCount / 2);
+    }
     if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
         maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
@@ -777,6 +782,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
     if (!Config.GetKeepMessageOrder()
         && metrics.InflightMessageCount >= Storage->MinMessages
         && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2
+        && metrics.UnprocessedMessageCount >= metrics.InflightMessageCount / 4
         && !Storage->HasRetentionExpiredMessages()) {
         LOG_D("Skip fetch: there are enough messages. InflightMessageCount=" << metrics.InflightMessageCount
             << ", UnprocessedMessageCount=" << metrics.UnprocessedMessageCount
@@ -909,7 +915,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
 
     auto messages = Storage->GetDLQMessages();
     if (!messages.empty()) {
-        LOG_D("Move to DLQ: " << JoinRange(", ", messages.begin(), messages.end()));
+        LOG_D("Move to DLQ: " << JoinSeq(", ", messages));
         DLQMoverActorId = RegisterWithSameMailbox(CreateDLQMover({
             .ParentActorId = SelfId(),
             .Database = Database,
@@ -931,7 +937,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
     }
 
     auto& moved = ev->Get()->MovedMessages;
-    LOG_D("Moved to the DLQ: " << JoinRange(", ", moved.begin(), moved.end()));
+    LOG_D("Moved to the DLQ: " << JoinSeq(", ", moved | std::views::transform(AsTDLQMessage)));
 
     DLQMoverActorId = {};
     for (auto [offset, seqNo] : moved) {

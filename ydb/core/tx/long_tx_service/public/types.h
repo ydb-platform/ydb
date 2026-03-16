@@ -57,5 +57,15 @@ namespace NLongTxService {
         NKikimrLongTxService::TLongTxId ToProto() const;
     };
 
+    struct TLockInfo {
+        ui64 LockId;
+        ui32 LockNodeId;
+
+        TLockInfo(ui64 lockId, ui32 lockNodeId)
+            : LockId(lockId)
+            , LockNodeId(lockNodeId)
+        {}
+    };
+
 } // namespace NLongTxService
 } // namespace NKikimr

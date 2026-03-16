@@ -279,16 +279,6 @@ namespace NLongTxService {
         struct TEvWaitingLockAdd
             : TEventLocal<TEvWaitingLockAdd, EvWaitingLockAdd>
         {
-            struct TLockInfo {
-                ui64 LockId;
-                ui32 LockNodeId;
-
-                TLockInfo(ui64 lockId, ui32 lockNodeId)
-                    : LockId(lockId)
-                    , LockNodeId(lockNodeId)
-                {}
-            };
-
             TEvWaitingLockAdd(ui64 requestId, TLockInfo lock, TLockInfo otherLock)
                 : RequestId(requestId)
                 , Lock(lock)

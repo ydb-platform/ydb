@@ -880,7 +880,7 @@ TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
     writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
         return std::string{key};
     });
-    writeSettings.MaxBlock(TDuration::Seconds(30));
+    writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
     auto producer = client.CreateProducer(writeSettings);
     auto keyedSession = std::dynamic_pointer_cast<TProducer>(producer);

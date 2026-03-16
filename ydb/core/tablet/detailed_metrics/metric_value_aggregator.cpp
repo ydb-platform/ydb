@@ -24,7 +24,7 @@ void THistogramMetricAggregator::AggregateValue(NMonitoring::THistogramPtr sourc
         //       bucket from the TARGET histogram. The added count is the value
         //       for the current bucket from the SOURCE histogram. This allows
         //       for the two histograms to use different units for the bucket boundaries.
-        //       This works only if the two histograns have the same NUMBER of buckets.
+        //       This works only if the two histograms have the same NUMBER of buckets.
         //       This is guaranteed by the assert above.
         TargetCounter->Collect(snapshot1->UpperBound(i), snapshot2->Value(i));
     }

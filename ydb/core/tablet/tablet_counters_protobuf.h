@@ -86,7 +86,7 @@ public:
             Integral.push_back(co.GetIntegral());
 
             if constexpr (ParseSourceCounters) {
-                // Parce SourceCounters but make sure there is always at least one
+                // Parse SourceCounters but make sure there is always at least one
                 Y_ABORT_UNLESS(
                     co.SourceCountersSize() != 0,
                     "ParseSourceCounters is set, but the counter '%s' (value %d) does not define SourceCounters",

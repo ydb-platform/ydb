@@ -85,7 +85,7 @@ TString NormalizeJson(const TString& jsonString) {
 }
 
 /**
- * Send low level metrics to the Target Counters Aggregator for the given DataShard tablet.
+ * Send low level metrics to the Tablet Counters Aggregator for the given DataShard tablet.
  *
  * @param[in] runtime The test runtime
  * @param[in] aggregatorId The ID of the Tablet Counters Aggregator actor
@@ -542,7 +542,7 @@ R"json(
 
         ForceCounterRecalculation(runtime, aggregatorId, edgeActorId);
 
-        // The "ydb" counter group should contain all zero values
+        // The "ydb" counter group should contain the correct non-zero values for all metrics
         auto ydbCounters = runtime.GetAppData(0).Counters->FindSubgroup("counters", "ydb");
         UNIT_ASSERT(ydbCounters);
 

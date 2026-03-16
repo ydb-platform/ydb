@@ -29,6 +29,10 @@ using TYdbMetricsMapperPtr = TIntrusivePtr<TYdbMetricsMapper>;
  *       If source counters are not present when the counters need to be transferred,
  *       no values will be transferred and no errors will be generated. In this case,
  *       the source counters will be looked up again during the next transfer attempt.
+ *       The above statement applies only if all counters for the given source
+ *       tablet type are missing (no updates received yet). However, if some source counters
+ *       are already present and dome source counters are not (at least one update
+ *       has already been received), then the missing counters will be ignored.
  *
  *       This allows the source counters to be created asynchronously at some point
  *       in the future. Once the source counters are created, the target counters

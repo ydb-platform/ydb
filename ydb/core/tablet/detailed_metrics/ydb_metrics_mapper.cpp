@@ -347,7 +347,7 @@ private:
         //          should be - for regular counters it is the GAUGE vs RATE indicator
         //          and for histograms it is the set of boundaries. Only the code,
         //          which provides the source counter knows these parameters.
-        //          If this class creates the missing source counter/historgram,
+        //          If this class creates the missing source counter/histogram,
         //          it will use different parameters and the corresponding metric
         //          values will be distorted.
         if (!FindSourceCountersForCounterType<

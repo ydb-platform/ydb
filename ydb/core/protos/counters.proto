@@ -26,8 +26,8 @@ message TSourceCounter {
      *       is used.
      *
      *       In both cases, the parent group is looked up by the "type" label
-     *       equal to the name of the tablet, which must be set in the TabletTypeName
-     *       extension in the same .proto file.
+     *       equal to the name of the tablet, which must be set in
+     *       the SourceCountersTabletTypeName extension in the same .proto file.
      */
     optional string CounterName = 1;
 

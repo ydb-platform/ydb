@@ -25,25 +25,31 @@ Why this matters:
 
 ## Safe rollout plan
 
-1. Merge this PR.
-2. Run workflow `sync_github_runner.yaml` manually (`workflow_dispatch`).
-3. Run workflow `create_vm_image.yaml` manually (`workflow_dispatch`).
-4. Allow autoscaler to provision new `auto-provisioned` VMs.
-5. Gradually rotate old runners (natural churn or controlled batch replacement).
+1. Run workflow `sync_github_runner.yaml` manually (`workflow_dispatch`).
+2. Upgrade or drain always-on (non-ephemeral) self-hosted runner groups to `>= 2.327.1` (or temporarily pause scheduled workflows that target them).
+3. Merge this PR.
+4. Run workflow `create_vm_image.yaml` manually (`workflow_dispatch`).
+5. Allow autoscaler to provision new `auto-provisioned` VMs.
+6. Gradually rotate old runners (natural churn or controlled batch replacement).
 
 ## Rollout flow diagram
 
 ```mermaid
 flowchart TD
-    A([Merge PR]) --> B[/Manual action: run sync_github_runner.yaml/]
-    B --> C{Required runner tar.gz<br/>already in S3 mirror?}
-    C -- No --> C2[System: call GitHub API releases/latest<br/>download prebuilt actions-runner tar.gz]
-    C2 --> C3[System: upload to S3 mirror<br/>write pointer object BUCKET_PATH/latest]
-    C -- Yes --> C3
-    C3 --> D[/Manual action: run create_vm_image.yaml/]
+    A([Manual action: run sync_github_runner.yaml]) --> B([Manual action: upgrade/drain always-on runner groups])
+    B --> C([Merge PR with checkout@v5])
+    C --> D[/Manual action: run create_vm_image.yaml/]
     D --> E[System: packer publishes new image<br/>family gh-runner-ubuntu-2204]
-    E --> R([Runtime trigger: queued self-hosted job appears])
-    R --> F[Component: autoscaler gh-runner-controller<br/>creates a new VM from latest image family]
+    
+    A --> C1{Required runner tar.gz<br/>already in S3 mirror?}
+    C1 -- No --> C2[System: call GitHub API releases/latest<br/>download prebuilt actions-runner tar.gz]
+    C2 --> C3[System: upload to S3 mirror<br/>write pointer object BUCKET_PATH/latest]
+    C1 -- Yes --> C3
+    C3 --> F1([Mirror path ready for new VMs])
+    F1 --> G1([Runtime trigger: queued self-hosted job appears])
+    E --> G1
+
+    G1 --> F[Component: autoscaler gh-runner-controller<br/>creates a new VM from latest image family]
     F --> G([Runtime in new VM: install_runner.sh runs at boot])
     G --> H{Mirror reachable<br/>from this VM?}
     H -- Yes --> I[System: download runner by BUCKET_PATH/latest]
@@ -51,8 +57,12 @@ flowchart TD
     I --> K[System: config.sh registers runner in GitHub<br/>svc.sh installs/starts service]
     J --> K
     K --> L([Result: jobs execute on updated runner version])
+    
+    B --> M([Result: long-lived runners are safe for checkout@v5])
+    M --> L
 
-    B -. why .-> W1([Fastest rollout effect for new VMs])
+    A -. why .-> W1([Fastest rollout effect for new VMs])
+    B -. why .-> W5([Prevents CI breakage on always-on runners])
     D -. why .-> W2([Keeps fallback fresh if mirror is unavailable])
     F -. why .-> W3([Existing VMs are not upgraded in place])
     L -. why .-> W4([Node 24 deprecation risk is mitigated])
@@ -64,12 +74,12 @@ flowchart TD
     classDef runtime fill:#ede7f6,stroke:#5e35b1,stroke-width:2px,color:#311b92;
     classDef component fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#004d40;
 
-    class A,B,D action;
-    class C,H decision;
-    class C2,C3,E,I,J,K system;
-    class R,G runtime;
+    class A,B,C,D action;
+    class C1,H decision;
+    class C2,C3,E,F1,I,J,K system;
+    class G1,G runtime;
     class F component;
-    class L,W1,W2,W3,W4 why;
+    class L,M,W1,W2,W3,W4,W5 why;
 ```
 
 ### Step details: what happens and why it matters
@@ -83,7 +93,15 @@ flowchart TD
      - New VMs pick runner from mirror first, so this gives the fastest rollout effect.
      - Does not require waiting for a new VM image to start using a fresh runner binary.
 
-2. **Run `create_vm_image.yaml`**
+2. **Upgrade/drain always-on (non-ephemeral) runner groups**
+   - What happens:
+     - Upgrade long-lived self-hosted runners to `>= 2.327.1`, or drain/disable them temporarily.
+     - Optionally pause scheduled workflows that target these groups until upgrade completes.
+   - Why important:
+     - After merge, workflows using `actions/checkout@v5` can fail on outdated always-on runners.
+     - This removes the mixed-fleet failure window for non-ephemeral capacity.
+
+3. **Run `create_vm_image.yaml`**
    - What happens:
      - Packer rebuilds the runner VM image from `ydb/ci/gh-runner-image`.
      - The image includes bundled fallback runner under `/opt/cache/actions-runner/latest`.
@@ -95,7 +113,7 @@ flowchart TD
      - Most runs still work while mirror is healthy (primary path).
      - Risk appears when mirror is unreachable: VM falls back to bundled runner from image, which can be stale.
 
-3. **Autoscaler (`gh-runner-controller`) provisions new VMs**
+4. **Autoscaler (`gh-runner-controller`) provisions new VMs**
    - What happens:
      - Controller service (`ydb/ci/gh-runner-controller`) monitors queued self-hosted jobs and decides when extra runners are needed.
      - It resolves latest image by family and starts new `auto-provisioned` VMs.
@@ -104,12 +122,12 @@ flowchart TD
      - This is the point where infrastructure change becomes effective for real jobs.
      - Existing VMs are not upgraded in place; only newly provisioned VMs get updated components.
 
-4. **What `install_runner.sh` does (runtime on each new VM)**
+5. **What `install_runner.sh` does (runtime on each new VM)**
    - Downloads runner from mirror using `AGENT_MIRROR_URL_PREFIX/latest`; if it fails, uses bundled fallback from image.
    - Registers runner in GitHub (`config.sh --unattended --disableupdate`) and starts it as a system service (`svc.sh`).
    - This script is executed on VM boot by cloud-init; it is not executed by `create_vm_image.yaml`.
 
-5. **Rotate old runners gradually**
+6. **Rotate old runners gradually**
    - What happens:
      - Old VMs leave naturally or are replaced in controlled batches.
    - Why important:

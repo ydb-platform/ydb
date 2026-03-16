@@ -557,7 +557,9 @@ public:
 
         if (!alter.HasName() && !alter.HasPathId()) {
             errStr = "Neither topic name nor pathId in Alter";
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
         }
 
@@ -581,7 +583,9 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(),
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
         }
@@ -590,11 +594,15 @@ public:
         Y_ABORT_UNLESS(topic);
 
         if (topic->AlterVersion == 0) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, "PQGroup is not created yet");
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusMultipleModifications, "PQGroup is not created yet",
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
         }
         if (topic->AlterData) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight");
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight",
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
         }
 
@@ -604,7 +612,9 @@ public:
         TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
 
         if (!alterData) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
         }
 
@@ -620,7 +630,9 @@ public:
         if (alterData->TotalGroupCount < topic->TotalGroupCount) {
             errStr = TStringBuilder() << "Invalid total groups count specified: " << alterData->TotalGroupCount
                                       << " vs " << topic->TotalGroupCount << " (current)";
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
         }
 
@@ -640,7 +652,9 @@ public:
                 const auto reserve = indexGenerator.ReservePartitionIndex(set.GetPartition(), set.GetPartition(), !set.GetCreatePartition());
                 if (!reserve.has_value()) {
                     errStr = TStringBuilder() << "Set root partition boundaries: " << reserve.error();
-                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                        context.SS, context.PeerName,
+                        context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                     return result;
                 }
             }
@@ -649,7 +663,9 @@ public:
                     const auto reserve = indexGenerator.ReservePartitionIndex(childId, split.GetPartition(), ShouldCreateSiblingAtRootLevel(split, topic));
                     if (!reserve.has_value()) {
                         errStr = TStringBuilder() << "Split with prescribed partition ids: " << reserve.error();
-                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                        FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                            context.SS, context.PeerName,
+                            context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                         return result;
                     }
                 }
@@ -659,7 +675,9 @@ public:
                     const auto reserve = indexGenerator.ReservePartitionIndex(merge.GetChildPartitionId(), merge.GetPartition(), false);
                     if (!reserve.has_value()) {
                         errStr = TStringBuilder() << "Merge with prescribed partition id: " << reserve.error();
-                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                        FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                            context.SS, context.PeerName,
+                            context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                         return result;
                     }
                 }
@@ -668,14 +686,18 @@ public:
                 const size_t rootPartitionsCnt = std::ranges::count_if(topic->Partitions, [](const auto& pair) { return pair.second->ParentPartitionIds.empty();});
                 if (rootPartitionsCnt > alter.RootPartitionBoundariesSize()) {
                     errStr = std::format("Only {} root partitions has new bounds, required: {}",  alter.RootPartitionBoundariesSize(), rootPartitionsCnt);
-                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                        context.SS, context.PeerName,
+                        context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                     return result;
                 }
                 for (const auto& set : alter.GetRootPartitionBoundaries()) {
                     const auto partitionId = set.GetPartition();
                     if (!set.HasKeyRange() && alter.RootPartitionBoundariesSize() > 1) {
                         errStr = std::format("Partition #{} doesn't have KeyRange", partitionId);
-                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                        FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                            context.SS, context.PeerName,
+                            context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                         return result;
                     }
                     const TMaybe<TTopicTabletInfo::TKeyRange> range = !set.HasKeyRange()
@@ -688,35 +710,47 @@ public:
                         const auto partitionIdIndex = indexGenerator.GetNextReservedId(partitionId);
                         if (!partitionIdIndex.has_value()) {
                             errStr = TStringBuilder() << "Set partition bounds:  " << partitionIdIndex.error();
-                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                                context.SS, context.PeerName,
+                                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                             return result;
                         }
                         if (set.GetCreatePartition()) {
                             errStr = TStringBuilder() << "Partition already exists: " << partitionId;
-                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                                context.SS, context.PeerName,
+                                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                             return result;
                         }
                         if (!prevPart->ParentPartitionIds.empty()) {
                             errStr = TStringBuilder() << "Unable to change bounds of non-root partition: " << partitionId;
-                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                                context.SS, context.PeerName,
+                                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                             return result;
                         }
                         auto [_, unique] = alterData->KeyRangesToChange.emplace(prevPart->PqId, range);
                         if (!unique) {
                             errStr = std::format("Multiple bounds modifications for the partition {}", partitionId);
-                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                                context.SS, context.PeerName,
+                                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                             return result;
                         }
                     } else {
                         if (!set.GetCreatePartition()) {
                             errStr = TStringBuilder() << "Cannot set bounds of non-existing partition: " << partitionId;
-                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                                context.SS, context.PeerName,
+                                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                             return result;
                         }
                         const auto partitionIdIndex = indexGenerator.GetNextReservedId(partitionId);
                         if (!partitionIdIndex.has_value()) {
                             errStr = TStringBuilder() << "Create new partition with bounds:  " << partitionIdIndex.error();
-                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                                context.SS, context.PeerName,
+                                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                             return result;
                         }
                         alterData->PartitionsToAdd.emplace(partitionIdIndex.value(), partitionIdIndex.value() + 1, range);

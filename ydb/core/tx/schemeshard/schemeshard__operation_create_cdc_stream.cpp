@@ -4,6 +4,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_pq_helpers.h"
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -72,6 +73,18 @@ public:
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
+        SendTopicCloudEvent(
+            BuildCdcStreamModifyScheme(
+                TPath::Init(pathId, context.SS).PathString(),
+                NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+            NKikimrScheme::StatusSuccess,
+            TString(),
+            context.SS,
+            context.PeerName,
+            context.UserToken ? context.UserToken->GetUserSID() : TString(),
+            TString() /* maskedToken */,
+            ui64(OperationId.GetTxId()));
+
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
     }
@@ -120,6 +133,7 @@ public:
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << streamName);
 
+        const TString streamPathStr = workingDir.empty() ? streamName : workingDir + "/" + streamName;
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         const auto tablePath = TPath::Resolve(workingDir, context.SS);
@@ -141,7 +155,9 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    checks.GetStatus(), checks.GetError(), context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
         }
@@ -171,7 +187,9 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPath.PathString(), NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    checks.GetStatus(), checks.GetError(), context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 if (streamPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(streamPath.Base()->CreateTxId));
                     result->SetPathId(streamPath.Base()->PathId.LocalPathId);
@@ -189,20 +207,29 @@ public:
             break;
         case NKikimrSchemeOp::ECdcStreamModeUpdate:
             if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "DYNAMODB_STREAMS_JSON format incompatible with specified stream mode");
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    NKikimrScheme::StatusInvalidParameter,
+                    "DYNAMODB_STREAMS_JSON format incompatible with specified stream mode",
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
             if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDebeziumJson) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "DEBEZIUM_JSON format incompatible with specified stream mode");
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    NKikimrScheme::StatusInvalidParameter,
+                    "DEBEZIUM_JSON format incompatible with specified stream mode",
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
             break;
-        default:
-            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
-                << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode()));
+        default: {
+            const TString errStr = TStringBuilder() << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode());
+            FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                NKikimrScheme::StatusInvalidParameter, errStr, context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
+        }
         }
 
         switch (streamDesc.GetFormat()) {
@@ -211,27 +238,40 @@ public:
             break;
         case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
             if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "DYNAMODB_STREAMS_JSON format is not supported yet");
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    NKikimrScheme::StatusPreconditionFailed,
+                    "DYNAMODB_STREAMS_JSON format is not supported yet",
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
             if (tablePath.Base()->DocumentApiVersion < 1) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "DYNAMODB_STREAMS_JSON format incompatible with non-document table");
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    NKikimrScheme::StatusInvalidParameter,
+                    "DYNAMODB_STREAMS_JSON format incompatible with non-document table",
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
             break;
         case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson:
             if (!AppData()->FeatureFlags.GetEnableChangefeedDebeziumJsonFormat()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "DEBEZIUM_JSON format is not supported yet");
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    NKikimrScheme::StatusPreconditionFailed,
+                    "DEBEZIUM_JSON format is not supported yet",
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
             break;
-        default:
-            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
-                << "Invalid stream format: " << static_cast<ui32>(streamDesc.GetFormat()));
+        default: {
+            const TString errStr = TStringBuilder() << "Invalid stream format: " << static_cast<ui32>(streamDesc.GetFormat());
+            FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                NKikimrScheme::StatusInvalidParameter, errStr,
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
+        }
         }
 
         if (!streamDesc.GetAwsRegion().empty()) {
@@ -239,8 +279,11 @@ public:
             case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
                 break;
             default:
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "AWS_REGION option incompatible with specified stream format");
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    NKikimrScheme::StatusInvalidParameter,
+                    "AWS_REGION option incompatible with specified stream format",
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
         }
@@ -251,8 +294,11 @@ public:
             case NKikimrSchemeOp::ECdcStreamFormatJson:
                 break;
             default:
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "VIRTUAL_TIMESTAMPS incompatible with specified stream format");
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    NKikimrScheme::StatusInvalidParameter,
+                    "VIRTUAL_TIMESTAMPS incompatible with specified stream format",
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
         }
@@ -263,8 +309,11 @@ public:
             case NKikimrSchemeOp::ECdcStreamFormatJson:
                 break;
             default:
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "RESOLVED_TIMESTAMPS incompatible with specified stream format");
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    NKikimrScheme::StatusInvalidParameter,
+                    "RESOLVED_TIMESTAMPS incompatible with specified stream format",
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
         }
@@ -274,15 +323,21 @@ public:
             case NKikimrSchemeOp::ECdcStreamFormatJson:
                 break;
             default:
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "SCHEMA_CHANGES incompatible with specified stream format");
+                FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                    NKikimrScheme::StatusInvalidParameter,
+                    "SCHEMA_CHANGES incompatible with specified stream format",
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
         }
 
         TString errStr;
         if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                NKikimrScheme::StatusMultipleModifications, errStr,
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
         }
 
@@ -290,7 +345,10 @@ public:
         if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateChangefeed, streamDesc.GetUserAttributes(), errStr) ||
             !userAttrs->CheckLimits(errStr))
         {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            FinishWithError(result.Get(), BuildCdcStreamModifyScheme(streamPathStr, NKikimrSchemeOp::ESchemeOpCreateCdcStream),
+                NKikimrScheme::StatusInvalidParameter, errStr,
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
         }
 

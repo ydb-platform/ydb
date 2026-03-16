@@ -2,6 +2,7 @@
 
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_pq_helpers.h"
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -68,6 +69,16 @@ public:
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+
+        SendTopicCloudEvent(
+            BuildCdcStreamModifyScheme(TPath::Init(pathId, context.SS).PathString(), NKikimrSchemeOp::ESchemeOpDropCdcStream),
+            NKikimrScheme::StatusSuccess,
+            TString(),
+            context.SS,
+            context.PeerName,
+            context.UserToken ? context.UserToken->GetUserSID() : TString(),
+            TString() /* maskedToken */,
+            ui64(OperationId.GetTxId()));
 
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
@@ -448,6 +459,16 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Sub(1);
             context.SS->ClearDescribePathCaches(streamPath.Base());
             context.OnComplete.PublishToSchemeBoard(OperationId, streamPath.Base()->PathId);
+
+            SendTopicCloudEvent(
+                BuildCdcStreamModifyScheme(streamPath.PathString(), NKikimrSchemeOp::ESchemeOpDropCdcStream),
+                NKikimrScheme::StatusSuccess,
+                TString(),
+                context.SS,
+                context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(),
+                TString() /* maskedToken */,
+                ui64(OperationId.GetTxId()));
         }
 
         const auto txType = DropSnapshot

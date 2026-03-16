@@ -23,7 +23,22 @@ std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
     } else if (operation.HasDrop()) {
         return "DeleteTopic";
     }
+    auto type = operation.GetOperationType();
+    if (type == NKikimrSchemeOp::ESchemeOpCreateCdcStream) {
+        return "CreateTopic";
+    } else if (type == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {
+        return "AlterTopic";
+    } else if (type == NKikimrSchemeOp::ESchemeOpDropCdcStream) {
+        return "DeleteTopic";
+    }
     return "";
+}
+
+bool IsCdcStreamOperation(const NKikimrSchemeOp::TModifyScheme& operation) {
+    auto type = operation.GetOperationType();
+    return type == NKikimrSchemeOp::ESchemeOpCreateCdcStream
+        || type == NKikimrSchemeOp::ESchemeOpAlterCdcStream
+        || type == NKikimrSchemeOp::ESchemeOpDropCdcStream;
 }
 
 using namespace yandex::cloud::events::ydb::topics;
@@ -277,7 +292,7 @@ static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
 
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
 
-    if (info.Issue.empty()) {
+    if (info.OperationStatus == NKikimrScheme::StatusSuccess || info.Issue.empty()) {
         ev.set_event_status(EStatus::DONE);
     } else {
         ev.set_event_status(EStatus::ERROR);
@@ -285,9 +300,7 @@ static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
     }
 
     ev.mutable_details()->set_path(info.TopicPath);
-
-    auto* requestParams = ev.mutable_request_parameters();
-    requestParams->set_path(info.TopicPath);
+    ev.mutable_request_parameters()->set_path(info.TopicPath);
 }
 
 template<typename TEvent>
@@ -300,6 +313,13 @@ TString SerializeEvent(const TEvent& ev) {
     return json;
 }
 
+template<typename TEvent>
+TString SerializeToJson(const TCloudEventInfo& info) {
+    TEvent proto;
+    Fill(proto, info);
+    return SerializeEvent(proto);
+}
+
 }
 
 void TCloudEventsActor::Bootstrap() {
@@ -310,18 +330,22 @@ void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
     TString json;
 
     auto type = ev.Get()->Get()->Info.ModifyScheme.GetOperationType();
-    if (type == NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup) {
-        TCreateTopicEvent proto;
-        Fill(proto, ev.Get()->Get()->Info);
-        json = SerializeEvent(proto);
+    const auto& info = ev.Get()->Get()->Info;
+    if (IsCdcStreamOperation(info.ModifyScheme)) {
+        const auto opType = GetOperationType(info.ModifyScheme);
+        if (opType == "CreateTopic") {
+            json = SerializeToJson<TCreateTopicEvent>(info);
+        } else if (opType == "AlterTopic") {
+            json = SerializeToJson<TAlterTopicEvent>(info);
+        } else if (opType == "DeleteTopic") {
+            json = SerializeToJson<TDeleteTopicEvent>(info);
+        }
+    } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup) {
+        json = SerializeToJson<TCreateTopicEvent>(info);
     } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup) {
-        TAlterTopicEvent proto;
-        Fill(proto, ev.Get()->Get()->Info);
-        json = SerializeEvent(proto);
+        json = SerializeToJson<TAlterTopicEvent>(info);
     } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup) {
-        TDeleteTopicEvent proto;
-        Fill(proto, ev.Get()->Get()->Info);
-        json = SerializeEvent(proto);
+        json = SerializeToJson<TDeleteTopicEvent>(info);
     }
 
     NKikimr::NAudit::TAuditLogParts parts;

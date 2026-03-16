@@ -334,7 +334,9 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(),
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
         }
@@ -366,7 +368,9 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(),
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
@@ -378,7 +382,9 @@ public:
         TString errStr;
 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusPreconditionFailed, errStr,
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
         }
 
@@ -386,7 +392,9 @@ public:
             context, createDEscription, status, errStr);
 
         if (!pqGroup.Get()) {
-            result->SetError(status, errStr);
+            FinishWithError(result.Get(), Transaction, status, errStr,
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
         }
 
@@ -411,7 +419,9 @@ public:
                 .PQReservedStorageLimit(reserve.Storage);
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(),
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
@@ -426,8 +436,10 @@ public:
         const ui32 tabletProfileId = 0;
         TChannelsBindings tabletChannelsBinding;
         if (!context.SS->ResolvePqChannels(tabletProfileId, dstPath.GetPathIdForDomain(), tabletChannelsBinding)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Unable to construct channel binding for PQ with the storage pool");
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter,
+                "Unable to construct channel binding for PQ with the storage pool",
+                context.SS, context.PeerName,
+                context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
             return result;
         }
 
@@ -442,7 +454,9 @@ public:
                 auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]",
                                     ecps.size(),
                                     NHive::MAX_TABLET_CHANNELS);
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr,
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
 
@@ -457,8 +471,10 @@ public:
                 dstPath.GetPathIdForDomain(),
                 pqChannelsBinding);
             if (!resolved) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for PersQueue with the storage pool");
+                FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter,
+                    "Unable to construct channel binding for PersQueue with the storage pool",
+                    context.SS, context.PeerName,
+                    context.UserToken ? context.UserToken->GetUserSID() : TString(), ui64(OperationId.GetTxId()));
                 return result;
             }
 

@@ -11,6 +11,7 @@ PY3TEST()
 
     SIZE(LARGE)
     TAG(ya:fat)
+    REQUIREMENTS(cpu:2)
 
     DEPENDS(
         ydb/apps/ydb

@@ -18,7 +18,7 @@ PY_SRCS(
 )
 
 SIZE(LARGE)
-
+REQUIREMENTS(cpu:2)
 TAG(ya:fat)
 
 TIMEOUT(900)

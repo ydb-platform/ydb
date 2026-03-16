@@ -167,8 +167,8 @@ public:
     // Values which exceed the domain min/max are ignored.
     template <typename T>
     void AddElement(T val) {
-        const T domainStart = LoadFrom<T>(GetDomainRange().Start);
-        const T domainEnd = LoadFrom<T>(GetDomainRange().End);
+        const T domainStart = LoadFrom<T>(GetDomainRange().Start.data());
+        const T domainEnd = LoadFrom<T>(GetDomainRange().End.data());
         if (CmpLess<T>(val, domainStart) || CmpLess<T>(domainEnd, val)) {
             return;
         }
@@ -205,7 +205,7 @@ public:
             bucketIndex = std::min<UT>(NumBuckets_ - 1, bucketIndex);
             return static_cast<ui32>(bucketIndex);
         }
-        T bucketIndex = std::floor((val - domainStart) / LoadFrom<T>(bucketWidth.Value));
+        T bucketIndex = std::floor((val - domainStart) / LoadFrom<T>(bucketWidth.Value.data()));
         bucketIndex = std::min<T>(NumBuckets_ - 1, bucketIndex);
         return static_cast<ui32>(bucketIndex);
     }
@@ -225,12 +225,12 @@ public:
             const UT rangeLen = static_cast<UT>(end) - static_cast<UT>(start);
             // width is truncated after division.
             const UT bucketWidth = rangeLen / static_cast<UT>(NumBuckets_);
-            StoreTo<UT>(returnValue.Value, bucketWidth);
+            StoreTo<UT>(returnValue.Value.data(), bucketWidth);
             return returnValue;
         }
         const T rangeLen = end - start;
         const T bucketWidth = rangeLen / static_cast<T>(NumBuckets_);
-        StoreTo<T>(returnValue.Value, bucketWidth);
+        StoreTo<T>(returnValue.Value.data(), bucketWidth);
         return returnValue;
     }
 
@@ -241,8 +241,8 @@ public:
         Y_ENSURE(CmpLess<i64>(index, NumBuckets_));
 
         const TEqWidthHistogram::THistValue bucketWidth = GetBucketWidth<T>();
-        const T width = LoadFrom<T>(bucketWidth.Value);
-        const T domainStart = LoadFrom<T>(GetDomainRange().Start);
+        const T width = LoadFrom<T>(bucketWidth.Value.data());
+        const T domainStart = LoadFrom<T>(GetDomainRange().Start.data());
         const T border = domainStart + static_cast<T>(index) * width;
         return border;
     }
@@ -254,8 +254,8 @@ public:
         // class invariant: start < end.
         Y_ENSURE(CmpLess<T>(rangeStart, rangeEnd));
         DomainRange_ = {};
-        StoreTo<T>(DomainRange_.Start, rangeStart);
-        StoreTo<T>(DomainRange_.End, rangeEnd);
+        StoreTo<T>(DomainRange_.Start.data(), rangeStart);
+        StoreTo<T>(DomainRange_.End.data(), rangeEnd);
 
         // class invariant: bucket width is non-zero positive.
         const THistValue bucketWidth = GetBucketWidth<T>();
@@ -341,8 +341,8 @@ public:
     template <typename T>
     ui64 EstimateLessOrEqual(T val) const {
         // Due to values which exceed the domain min/max.
-        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
-        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start.data());
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End.data());
         if (CmpLess<T>(val, domainStart)) {
             return 0;
         } else if (CmpLess<T>(domainEnd, val)) {
@@ -360,8 +360,8 @@ public:
     template <typename T>
     ui64 EstimateGreaterOrEqual(T val) const {
         // Due to values which exceed the domain min/max.
-        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
-        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start.data());
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End.data());
         if (CmpLess<T>(domainEnd, val)) {
             return 0;
         } else if (CmpLess<T>(val, domainStart)) {
@@ -380,8 +380,8 @@ public:
     template <typename T>
     ui64 EstimateLess(T val) const {
         // Due to values which exceed the domain min/max.
-        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
-        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start.data());
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End.data());
         if (CmpLess<T>(val, domainStart)) {
             return 0;
         } else if (CmpLess<T>(domainEnd, val)) {
@@ -407,8 +407,8 @@ public:
     template <typename T>
     ui64 EstimateGreater(T val) const {
         // Due to values which exceed the domain min/max.
-        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
-        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start.data());
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End.data());
         if (CmpLess<T>(domainEnd, val)) {
             return 0;
         } else if (CmpLess<T>(val, domainStart)) {
@@ -520,8 +520,8 @@ public:
     // Assumes that domain is PK, otherDomain is FK (i.e. FK is a subset of PK)
     template <typename T>
     ui64 GetOverlappingCardinalityHelper(const TEqWidthHistogramEstimator& other) const {
-        const T otherDomainStart = LoadFrom<T>(other.Histogram_->GetDomainRange().Start);
-        const T otherDomainEnd = LoadFrom<T>(other.Histogram_->GetDomainRange().End);
+        const T otherDomainStart = LoadFrom<T>(other.Histogram_->GetDomainRange().Start.data());
+        const T otherDomainEnd = LoadFrom<T>(other.Histogram_->GetDomainRange().End.data());
 
         ui32 leftIndex = Histogram_->FindBucketIndex(otherDomainStart);
         ui32 rightIndex = Histogram_->FindBucketIndex(otherDomainEnd);

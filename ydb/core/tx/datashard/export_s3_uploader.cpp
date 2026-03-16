@@ -636,8 +636,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
+<<<<<<< HEAD
             Error = error.GetMessage().c_str();
             PassAway();
+=======
+            Error = TStringBuilder() << "S3 error: " << error;
+            this->PassAway();
+>>>>>>> a51bae76a1e (Add retries for uncovered HTTP response codes in s3 import/export (#35776))
         }
     }
 
@@ -659,8 +664,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         } else {
             Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
+<<<<<<< HEAD
                 << error.GetMessage();
             PassAway();
+=======
+                << error;
+            this->PassAway();
+>>>>>>> a51bae76a1e (Add retries for uncovered HTTP response codes in s3 import/export (#35776))
         }
     }
 
@@ -692,7 +702,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         if (CanRetry(error)) {
             Retry();
         } else {
-            Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+            Finish(false, TStringBuilder() << "S3 error: " << error);
         }
     }
 

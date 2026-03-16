@@ -17,8 +17,10 @@ PEERDIR(
     ydb/core/persqueue/common/proxy
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/public/write_meta
+    ydb/core/util
 )
 
+GENERATE_ENUM_SERIALIZATION(mlp_consumer.h)
 GENERATE_ENUM_SERIALIZATION(mlp_storage.h)
 
 END()

@@ -6,6 +6,9 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
+#include <util/generic/serialized_enum.h>
+#include <util/stream/format.h>
+
 #include <ranges>
 
 namespace NKikimr::NPQ::NMLP {
@@ -24,6 +27,11 @@ enum class EKvCookie {
 enum EWakeUpTag {
     Regular = 1,
     Processing = 2,
+    UpdateChildPartitions = 3,
+};
+
+enum class ESendCookie {
+    SendToPQTablet = 1,
 };
 
 void ReplyError(const TActorIdentity selfActorId, ui32 partitionId, const TActorId& sender, ui64 cookie, TString&& error) {
@@ -100,6 +108,19 @@ TString MaxWALKey(ui32 partitionId, const TString& consumerName) {
     return MakeWALKey(partitionId, consumerName, Max<ui64>());
 }
 
+static TStorage::TStorageSettings StorageSettingsFromConfig(const NKikimrPQ::TPQTabletConfig::TConsumer& config, const NKikimrPQ::TPQTabletConfig::TPartition& partitionConfig) {
+    const bool keepMessageOrder = config.GetKeepMessageOrder();
+    std::optional<ui32> parentPartitionId;
+    if (partitionConfig.ParentPartitionIdsSize() > 0) {
+        parentPartitionId = partitionConfig.GetParentPartitionIds(0);
+        Y_ASSERT(partitionConfig.ParentPartitionIdsSize() == 1 && "merge not supported");
+    }
+    return TStorage::TStorageSettings{
+        .KeepMessageOrder = keepMessageOrder,
+        .ParentPartitionId = parentPartitionId,
+    };
+}
+
 void AddReadWAL(std::unique_ptr<TEvKeyValue::TEvRequest>& request, ui32 partitionId, const TString& consumerName, ui64 fromIndex = 0) {
     auto* readWAL = request->Record.AddCmdReadRange();
     readWAL->MutableRange()->SetFrom(MakeWALKey(partitionId, consumerName, fromIndex));
@@ -109,18 +130,27 @@ void AddReadWAL(std::unique_ptr<TEvKeyValue::TEvRequest>& request, ui32 partitio
     readWAL->SetIncludeData(true);
 }
 
-TConsumerActor::TConsumerActor(const TString& database,ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
-    const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig& topicConfig, const NKikimrPQ::TPQTabletConfig_TConsumer& config,
-    std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset, NMonitoring::TDynamicCounterPtr& detailedMetricsRoot)
+TConsumerActor::TConsumerActor(
+    const TString& database,
+    ui64 tabletId,
+    const TActorId& tabletActorId,
+    ui32 partitionId,
+    const TActorId& partitionActorId,
+    ui64 partitionGeneration,
+    const NKikimrPQ::TPQTabletConfig& topicConfig,
+    const NKikimrPQ::TPQTabletConfig_TConsumer& config,
+    std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset,
+    NMonitoring::TDynamicCounterPtr& detailedMetricsRoot)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
     , Database(database)
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
+    , PartitionGeneration(partitionGeneration)
     , TopicConfig(topicConfig)
     , Config(config)
     , RetentionPeriod(retentionPeriod)
     , PartitionEndOffset(partitionEndOffset)
-    , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider()))
+    , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider(), StorageSettingsFromConfig(Config, GetPartitionConfig())))
     , DetailedMetricsRoot(detailedMetricsRoot) {
 }
 
@@ -160,6 +190,8 @@ void TConsumerActor::PassAway() {
         Send(DLQMoverActorId, new TEvents::TEvPoison());
     }
 
+    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+
     TBase::PassAway();
 }
 
@@ -192,6 +224,11 @@ void TConsumerActor::Queue(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
     PurgeRequestsQueue.push_back(std::move(ev));
 }
 
+void TConsumerActor::Queue(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev) {
+    LOG_D("Queue TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId " << ev->Get()->Record.ShortDebugString());
+    UpdateExternalLockedMessageGroupsIdRequestsQueue.push_back(std::move(ev));
+}
+
 void TConsumerActor::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
     Queue(ev);
     ScheduleProcessing();
@@ -213,6 +250,11 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev)
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
+    Queue(ev);
+    ScheduleProcessing();
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev) {
     Queue(ev);
     ScheduleProcessing();
 }
@@ -326,6 +368,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     Storage->InitMetrics();
     CommitIfNeeded();
+    UpdateLockedGroupsIdInChildPartitions(true);
 
     if (!FetchMessagesIfNeeded()) {
         LOG_D("Initialized");
@@ -365,6 +408,7 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
     Become(&TConsumerActor::StateWork);
 
     CommitIfNeeded();
+    UpdateChildPartitionsOnCommit();
 
     if (!PendingReadQueue.empty()) {
         auto msgs = std::exchange(PendingReadQueue, {});
@@ -389,11 +433,24 @@ void TConsumerActor::CommitIfNeeded() {
     }
 }
 
+void TConsumerActor::UpdateChildPartitionsOnCommit() {
+    if (LastCommittedOffset != PartitionEndOffset) {
+        return;
+    }
+    if (GetPartitionConfig().GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+        return;
+    }
+    bool update = ChildPartitionsKeepOrderManager.SetSendFullStateToAll(TChildPartitionsKeepOrderManager::ESendReasons::ParentDone);
+    if (update) {
+        UpdateLockedGroupsIdInChildPartitions(false);
+    }
+}
+
 void TConsumerActor::UpdateStorageConfig() {
     LOG_D("Update config: RetentionPeriod: " << (RetentionPeriod.has_value() ? RetentionPeriod->ToString() : "infinity")
         << " " << Config.ShortDebugString());
 
-    Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
+    AFL_ENSURE(Storage->GetKeepMessageOrder() == Config.GetKeepMessageOrder())("initial", Storage->GetKeepMessageOrder())("new", Config.GetKeepMessageOrder());
     Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
     Storage->SetRetentionPeriod(RetentionPeriod);
     if (Config.GetDeadLetterPolicyEnabled() && Config.GetDeadLetterPolicy() != NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED) {
@@ -424,6 +481,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
 
     UpdateStorageConfig();
     InitializeDetailedMetrics();
+    UpdateLockedGroupsIdInChildPartitions(false);
 }
 
 void TConsumerActor::HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
@@ -457,8 +515,15 @@ void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     Send(ev->Sender, std::move(response), 0, ev->Cookie);
 }
 
-void TConsumerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-    FirstPipeCacheRequest = true;
+void TConsumerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    if (ev->Cookie == static_cast<int>(ESendCookie::SendToPQTablet)) {
+        FirstPipeCacheRequest = true;
+    } else {
+        bool update = ChildPartitionsKeepOrderManager.SetSendFullStateByCookie(ev->Cookie, TChildPartitionsKeepOrderManager::ESendReasons::DeliveryProblem);
+        if (update) {
+            Schedule(ChildPartitionsKeepOrderManager.UpdateChildPartitionsBackoff.Next(), new TEvents::TEvWakeup(EWakeUpTag::UpdateChildPartitions));
+        }
+    }
 }
 
 STFUNC(TConsumerActor::StateInit) {
@@ -470,6 +535,7 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvPQ::TEvMLPPurgeRequest, Queue);
+        hFunc(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Queue);
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvEndOffsetChanged, HandleInit);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
@@ -494,6 +560,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         hFunc(TEvPQ::TEvMLPPurgeRequest, Handle);
+        hFunc(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvEndOffsetChanged, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
@@ -521,6 +588,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvPQ::TEvMLPPurgeRequest, Queue);
+        hFunc(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Queue);
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvEndOffsetChanged, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
@@ -558,6 +626,7 @@ void TConsumerActor::ScheduleProcessing() {
         UnlockRequestsQueue.empty() &&
         ChangeMessageDeadlineRequestsQueue.empty() &&
         PurgeRequestsQueue.empty() &&
+        UpdateExternalLockedMessageGroupsIdRequestsQueue.empty() &&
         dlqEmptyOrAlreadyProcessing &&
         Storage->IsBatchEmpty()) {
         return;
@@ -620,6 +689,13 @@ void TConsumerActor::ProcessEventQueue() {
         PendingPurgeQueue.emplace_back(ev->Sender, ev->Cookie);
     }
     PurgeRequestsQueue.clear();
+
+    for (auto& ev : UpdateExternalLockedMessageGroupsIdRequestsQueue) {
+        const NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId& record = ev->Get()->Record;
+        auto ur = Storage->UpdateExternalLockedMessageGroupsId(record.GetUpdate());
+        LOG_D("UpdateExternalLockedMessageGroupsId: " << LabeledOutput(ur.Applied, ur.Invalid, ur.ModeChanged, ur.SetChanged, ur.VersionChanged) << "; " << record.GetUpdate().ShortUtf8DebugString());
+    }
+    UpdateExternalLockedMessageGroupsIdRequestsQueue.clear();
 
     Storage->ProccessDeadlines();
     LOG_T("AfterDeadlinesDump: " << Storage->DebugString());
@@ -896,6 +972,10 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
             ProcessEventQueue();
             break;
         }
+        case EWakeUpTag::UpdateChildPartitions: {
+            UpdateLockedGroupsIdInChildPartitions(false);
+            break;
+        }
     }
 }
 
@@ -962,15 +1042,21 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
     UpdateMetrics();
     NotifyPQRB();
     Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
+    if (ev->Get()->Tag == EWakeUpTag::UpdateChildPartitions) {
+        UpdateLockedGroupsIdInChildPartitions(false);
+    }
 }
 
 void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
-    auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), TabletId, FirstPipeCacheRequest, 1);
+    auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), TabletId, FirstPipeCacheRequest, static_cast<int>(ESendCookie::SendToPQTablet));
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
     FirstPipeCacheRequest = false;
 }
 
 bool TConsumerActor::UseForReading() const {
+    if (!Storage->HasUnlockedMessageGroupsId()) {
+        return false;
+    }
     return LastTimeWithMessages > TInstant::Now() - NoMessagesTimeout || LastCommittedOffset < PartitionEndOffset;
 }
 
@@ -984,18 +1070,157 @@ void TConsumerActor::NotifyPQRB(bool force) {
     }
 }
 
+const NKikimrPQ::TPQTabletConfig::TPartition& TConsumerActor::GetPartitionConfig(ui32 partitionId) const {
+    const NKikimrPQ::TPQTabletConfig::TPartition* configPtr = nullptr;
+    for (const auto& partition : TopicConfig.GetAllPartitions()) {
+        if (partition.GetPartitionId() == partitionId) {
+            configPtr = &partition;
+            break;
+        }
+    }
+    AFL_ENSURE(configPtr != nullptr)("partitionId", partitionId)("selfPartitionId", PartitionId);
+    return *configPtr;
+}
+
+const NKikimrPQ::TPQTabletConfig::TPartition& TConsumerActor::GetPartitionConfig() const {
+    return GetPartitionConfig(PartitionId);
+}
+
+bool TConsumerActor::EnumerateChildrenPartitionsWithKeepOrder() {
+    if (!Config.GetKeepMessageOrder()) {
+        Y_ASSERT(ChildPartitionsKeepOrderManager.Empty());
+        return false;
+    }
+    const auto& partitionConfig = GetPartitionConfig();
+    for (const auto childPartitionId : partitionConfig.GetChildPartitionIds()) {
+        if (ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrder.contains(childPartitionId)) {
+            continue;
+        }
+        const auto& childPartitionConfig = GetPartitionConfig(childPartitionId);
+        const auto childTabletId = childPartitionConfig.GetTabletId();
+        ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrder[childPartitionId] = TChildPartitionsKeepOrderManager::TChildrenPartitionWithKeepOrder{
+            .TabletId = childTabletId,
+            .Cookie = ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrderCookie++,
+            .SendFullStateReasons = TChildPartitionsKeepOrderManager::ESendReasons::Initial,
+        };
+    }
+    return !ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrder.empty();
+}
+
+bool TConsumerActor::TChildPartitionsKeepOrderManager::TChildrenPartitionWithKeepOrder::NeedSendFullState() const {
+    return SendFullStateReasons != ESendReasons::None;
+}
+
+void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
+    using NKikimrPQ::ETopicPartitionStatus;
+    using NKikimrPQ::EReadWithKeepOrder;
+    if (!EnumerateChildrenPartitionsWithKeepOrder()) {
+        return;
+    }
+    const bool shouldSend = force || AnyOf(IterateValues(ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrder), &TChildPartitionsKeepOrderManager::TChildrenPartitionWithKeepOrder::NeedSendFullState);
+    if (!shouldSend) {
+        LOG_D("UpdateLockedGroupsIdInChildPartitions no send diff");
+        return;
+    }
+    ++ChildPartitionsKeepOrderManager.ConsumerStep;
+    const auto& partitionConfig = GetPartitionConfig();
+    const NKikimrPQ::ETopicPartitionStatus status = partitionConfig.GetStatus();
+    Y_ASSERT(status != ETopicPartitionStatus::Active);
+    const bool allRead = (PartitionEndOffset <= Storage->GetLastOffset()) && (Storage->GetMessageCount() == 0);
+    const EReadWithKeepOrder childMode = allRead
+        ? EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL
+        : EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLOCK_ALL;
+    for (auto& [childPartitionId, state] : ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrder) {
+        if (!(force || state.NeedSendFullState())) {
+            continue;
+        }
+        std::unique_ptr ev = std::make_unique<TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId>();
+        auto& record = ev->Record;
+        record.SetConsumer(Config.GetName());
+        record.SetPartitionId(childPartitionId);
+        auto* update = record.MutableUpdate();
+        update->SetParentPartitionId(PartitionId);
+        update->SetGeneration(PartitionGeneration);
+        update->SetConsumerGeneration(Config.GetGeneration());
+        update->SetStep(ChildPartitionsKeepOrderManager.ConsumerStep);
+        update->SetMode(childMode);
+
+        LOG_D("UpdateLockedGroupsIdInChildPartitions: updating child partition " << childPartitionId << " with " << record.ShortDebugString());
+        auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), state.TabletId, true, state.Cookie);
+        Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
+        state.SendFullStateReasons = TChildPartitionsKeepOrderManager::ESendReasons::None;
+    }
+}
+
+
+bool TConsumerActor::TChildPartitionsKeepOrderManager::Empty() const {
+    return ChildrenPartitionWithKeepOrder.empty();
+}
+
+bool TConsumerActor::TChildPartitionsKeepOrderManager::TChildrenPartitionWithKeepOrder::AddSendFullStateReason(ESendReasons reason) {
+    ESendReasons n = static_cast<ESendReasons>(static_cast<ui32>(SendFullStateReasons) | static_cast<ui32>(reason));
+    std::swap(SendFullStateReasons, n);
+    return SendFullStateReasons != n;
+}
+
+bool TConsumerActor::TChildPartitionsKeepOrderManager::SetSendFullStateToAll(ESendReasons reason) {
+    Y_ASSERT(reason != ESendReasons::None);
+    bool update = false;
+    for (auto& [_, state] : ChildrenPartitionWithKeepOrder) {
+        if (state.AddSendFullStateReason(reason)) {
+            update = true;
+        }
+    }
+    return update;
+}
+
+bool TConsumerActor::TChildPartitionsKeepOrderManager::SetSendFullStateByCookie(ui32 cookie, ESendReasons reason) {
+    bool update = false;
+    for (auto& [childPartitionId, state] : ChildrenPartitionWithKeepOrder) {
+        if (state.Cookie == cookie) {
+            state.AddSendFullStateReason(reason);
+            update = true;
+        }
+    }
+    return update;
+}
+
+TString TConsumerActor::TChildPartitionsKeepOrderManager::SendReasonsToString(const ESendReasons reasons) {
+    if (reasons == ESendReasons::None) {
+        return ToString(ESendReasons::None);
+    }
+    TStringBuilder ss;
+    ui32 uReasons = static_cast<ui32>(reasons);
+    for (const auto p : GetEnumAllValues<ESendReasons>()) {
+        const ui32 uCheck = static_cast<ui32>(p);
+        if ((uReasons & uCheck) != uCheck || uCheck == 0) {
+            continue;
+        }
+        ss << p << '|';
+        uReasons &= ~uCheck;
+    }
+    if (uReasons != 0) {
+        ss << Hex(uReasons, {});
+    }
+    if (ss.EndsWith('|')) {
+        ss.pop_back();
+    }
+    return ss;
+}
+
 NActors::IActor* CreateConsumerActor(
     const TString& database,
     ui64 tabletId,
     const NActors::TActorId& tabletActorId,
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
+    ui64 partitionGeneration,
     const NKikimrPQ::TPQTabletConfig& topicConfig,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
     const std::optional<TDuration> retention,
     ui64 partitionEndOffset,
     NMonitoring::TDynamicCounterPtr detailedMetricsRoot) {
-    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, topicConfig, config, retention, partitionEndOffset, detailedMetricsRoot);
+    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, partitionGeneration, topicConfig, config, retention, partitionEndOffset, detailedMetricsRoot);
 }
 
 }

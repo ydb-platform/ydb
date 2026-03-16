@@ -18,23 +18,24 @@ TInstant TrimToSeconds(TInstant time, bool up = true) {
 
 }
 
-TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages, size_t maxMessages)
-    : MaxMessages(maxMessages)
-    , MinMessages(minMessages)
-    , MaxFastMessages(maxMessages - maxMessages / 4)
-    , MaxSlowMessages(maxMessages / 4)
+TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, const TStorageSettings& settings)
+    : MaxMessages(settings.MaxMessages)
+    , MinMessages(settings.MinMessages)
+    , MaxFastMessages(MaxMessages - MaxMessages / 4)
+    , MaxSlowMessages(MaxMessages / 4)
     , TimeProvider(timeProvider)
+    , KeepMessageOrder(settings.KeepMessageOrder)
     , NextVacuumRun(TInstant::Zero())
     , Batch(this)
 {
+    if (KeepMessageOrder && settings.ParentPartitionId.has_value()) {
+        ParentPartitionExternalLockInfo.emplace();
+        ParentPartitionExternalLockInfo->PartitionId = settings.ParentPartitionId.value();
+    }
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
     Metrics.MessageLocks.Initialize(MLP_LOCKS_RANGES, std::size(MLP_LOCKS_RANGES), true);
     Metrics.MessageLockingDuration.Initialize(SLOW_LATENCY_RANGES, std::size(SLOW_LATENCY_RANGES), true);
     Metrics.WaitingLockingDuration.Initialize(SLOW_LATENCY_RANGES, std::size(SLOW_LATENCY_RANGES), true);
-}
-
-void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
-    KeepMessageOrder = keepMessageOrder;
 }
 
 void TStorage::SetMaxMessageProcessingCount(ui32 maxMessageProcessingCount) {
@@ -66,8 +67,26 @@ void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDe
 
 }
 
+NKikimrPQ::EReadWithKeepOrder TStorage::ReadWithKeepOrder() const {
+    NKikimrPQ::EReadWithKeepOrder result = NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL;
+    if (ParentPartitionExternalLockInfo.has_value()) {
+        result = ParentPartitionExternalLockInfo->ReadWithKeepOrder;
+    }
+    return result;
+}
+
 bool TStorage::GetKeepMessageOrder() const {
     return KeepMessageOrder;
+}
+
+bool TStorage::HasUnlockedMessageGroupsId() const {
+    if (!KeepMessageOrder) {
+        return true;
+    }
+    if (ReadWithKeepOrder() == NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLOCK_ALL) {
+        return false;
+    }
+    return LockedMessageGroupsId.size() < GetMessageCount(); // approximate
 }
 
 std::optional<ui32> TStorage::GetRetentionDeadlineDelta() const {
@@ -79,6 +98,16 @@ std::optional<ui32> TStorage::GetRetentionDeadlineDelta() const {
     }
 
     return std::nullopt;
+}
+
+bool TStorage::CanReadMessageGroupIdHash(const ui32 messageGroupIdHash) const {
+    if (!KeepMessageOrder) {
+        return true;
+    }
+    if (ReadWithKeepOrder() == NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLOCK_ALL) {
+        return false;
+    }
+    return !LockedMessageGroupsId.contains(messageGroupIdHash);
 }
 
 std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
@@ -100,7 +129,7 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
                 continue;
             }
 
-            if (KeepMessageOrder && message.HasMessageGroupId && LockedMessageGroupsId.contains(message.MessageGroupIdHash)) {
+            if (message.HasMessageGroupId && !CanReadMessageGroupIdHash(message.MessageGroupIdHash)) {
                 continue;
             }
 
@@ -119,7 +148,7 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
                 continue;
             }
 
-            if (KeepMessageOrder && message.HasMessageGroupId && LockedMessageGroupsId.contains(message.MessageGroupIdHash)) {
+            if (message.HasMessageGroupId && !CanReadMessageGroupIdHash(message.MessageGroupIdHash)) {
                 moveUnlockedOffset = false;
                 continue;
             }
@@ -202,6 +231,57 @@ bool TStorage::Purge(ui64 endOffset) {
     Batch.SetPurged();
 
     return true;
+}
+
+TStorage::TUpdateExternalLockedMessageGroupsResult TStorage::UpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId& record) {
+    return DoUpdateExternalLockedMessageGroupsId(record, false);
+}
+
+TStorage::TUpdateExternalLockedMessageGroupsResult TStorage::DoUpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId& record, bool loadState) {
+    Y_ASSERT(KeepMessageOrder && "UpdateExternalLockedMessageGroupsId called for non-fifo queue");
+    if (!ParentPartitionExternalLockInfo.has_value() || ParentPartitionExternalLockInfo->PartitionId != record.GetParentPartitionId()) {
+        Y_VERIFY_DEBUG(false, "UpdateExternalLockedMessageGroupsId for unknown partition");
+        return TUpdateExternalLockedMessageGroupsResult{
+            .Applied = false,
+            .Invalid = true,
+        };
+    }
+    const auto updateVersion = std::make_tuple(record.GetGeneration(), record.GetConsumerGeneration(), record.GetStep());
+    auto currentVersion = std::tie(ParentPartitionExternalLockInfo->TabletGeneration, ParentPartitionExternalLockInfo->ConsumerGeneration, ParentPartitionExternalLockInfo->ConsumerStep);
+    if (updateVersion < currentVersion) {
+        Y_VERIFY_DEBUG(!loadState, "%s", (TStringBuilder() << "Loading obsolete state: "
+                                                           << "(" << record.GetGeneration() << "," << record.GetConsumerGeneration() << "," << record.GetStep() << ") < "
+                                                           << "(" << ParentPartitionExternalLockInfo->TabletGeneration << "," << ParentPartitionExternalLockInfo->ConsumerGeneration << "," << ParentPartitionExternalLockInfo->ConsumerStep << ")")
+                                             .c_str());
+        return TUpdateExternalLockedMessageGroupsResult{
+            .Applied = false,
+        };
+    }
+    Y_VERIFY_DEBUG(
+        ParentPartitionExternalLockInfo->ReadWithKeepOrder <= record.GetMode(),
+        "mode: %s, newMode: %s",
+        NKikimrPQ::EReadWithKeepOrder_Name(ParentPartitionExternalLockInfo->ReadWithKeepOrder).c_str(),
+        NKikimrPQ::EReadWithKeepOrder_Name(record.GetMode()).c_str()
+    );
+    if (ParentPartitionExternalLockInfo->ReadWithKeepOrder == record.GetMode() && updateVersion == currentVersion) {
+        return TUpdateExternalLockedMessageGroupsResult{
+            .Applied = false,
+        };
+    }
+    TUpdateExternalLockedMessageGroupsResult result{
+        .Applied = true,
+    };
+    result.VersionChanged = true;
+    currentVersion = updateVersion;
+
+    result.ModeChanged = ParentPartitionExternalLockInfo->ReadWithKeepOrder < record.GetMode();
+    if (ParentPartitionExternalLockInfo->ReadWithKeepOrder <= record.GetMode()) {
+        ParentPartitionExternalLockInfo->ReadWithKeepOrder = record.GetMode();
+    }
+    if (!loadState) {
+        Batch.SetUpdateExternalLockedMessageGroupsId();
+    }
+    return result;
 }
 
 TInstant TStorage::GetMessageDeadline(ui64 messageId) {
@@ -1051,6 +1131,10 @@ void TStorage::TBatch::SetPurged() {
     Purged = true;
 }
 
+void TStorage::TBatch::SetUpdateExternalLockedMessageGroupsId() {
+    UpdateExternalLockedMessageGroupsId = true;
+}
+
 void TStorage::TBatch::Compacted(size_t count) {
     CompactedMessages += count;
 }
@@ -1069,7 +1153,8 @@ bool TStorage::TBatch::Empty() const {
         && MovedToSlowZone.empty()
         && DeletedFromSlowZone.empty()
         && CompactedMessages == 0
-        && !Purged;
+        && !Purged
+        && !UpdateExternalLockedMessageGroupsId;
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {

@@ -16,6 +16,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/persqueue/public/mlp/ut/common
+    ydb/core/persqueue/ut/common
+    library/cpp/iterator
 )
 
 END()

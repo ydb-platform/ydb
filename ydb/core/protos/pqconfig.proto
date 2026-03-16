@@ -1430,6 +1430,41 @@ message TMLPMetrics {
     optional uint64 TotalDeletedByRetentionMessageCount = 6;
 }
 
+enum EReadWithKeepOrder {
+    READ_WITH_KEEP_ORDER_UNSPECIFIED = 0;
+    READ_WITH_KEEP_ORDER_BLOCK_ALL = 1; /* из партиции нельзя читать, возвращается пустой список сообщений */
+    // READ_WITH_KEEP_ORDER_BLACKLIST = 2; /* читать можно только если message group id не входит в список запрещённых */
+    READ_WITH_KEEP_ORDER_ALLOW_ALL = 3; /* читать можно всё */
+}
+
+message TFullBlacklist {
+    repeated fixed32 ParentLockedMessageGroupsIdHash = 1 [packed = true];
+};
+
+message TBlackListDiff {
+    repeated fixed32 RemoveLockedMessageGroupsIdHash = 1 [packed = true];
+};
+
+message TExternalLockedMessageGroupsId {
+    optional uint32 ParentPartitionId = 1;
+    optional uint64 Generation = 2;
+    optional uint64 ConsumerGeneration = 3; /* увеличивается при пересоздании consumer */
+    optional uint64 Step = 4;
+
+    optional EReadWithKeepOrder Mode = 5;
+
+    oneof BlacklistUpdate {
+       TFullBlacklist FullBlacklist = 6; /* полный список запрещённых message group id */
+       TBlackListDiff BlackListDiff = 7; /* изменение списка разрешённых message group id */
+    }
+}
+
+message TEvMLPUpdateExternalLockedMessageGroupsId {
+    optional uint32 PartitionId = 1; /* child partitionId */
+    optional string Consumer = 2;
+    optional TExternalLockedMessageGroupsId Update = 3;
+}
+
 message TMLPStorageSnapshot {
     message TConfiguration {
         optional string ConsumerName = 1;
@@ -1455,6 +1490,8 @@ message TMLPStorageSnapshot {
     optional bytes Messages = 6;
     optional bytes SlowMessages = 7;
     optional bytes DLQMessages = 8;
+
+    optional TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 9;
 }
 
 message TMLPStorageWAL {
@@ -1478,6 +1515,8 @@ message TMLPStorageWAL {
 
     optional bytes AddedToDLQMessages = 14;
     optional uint64 FirstDLQSeqNo = 15;
+
+    optional TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 16;
 }
 
 message TMessageDeduplicationIdWAL {

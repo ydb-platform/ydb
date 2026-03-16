@@ -426,6 +426,10 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         }
     }
 
+    if (snapshot.HasExternalLockedMessageGroupsId()) {
+        DoUpdateExternalLockedMessageGroupsId(snapshot.GetExternalLockedMessageGroupsId(), true);
+    }
+
     return true;
 }
 
@@ -600,6 +604,10 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
         }
     }
 
+    if (wal.HasExternalLockedMessageGroupsId()) {
+        DoUpdateExternalLockedMessageGroupsId(wal.GetExternalLockedMessageGroupsId(), true);
+    }
+
     FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
     FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
 
@@ -671,6 +679,11 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
             });
         }
         snapshot.SetDLQMessages(std::move(serializer.Buffer));
+    }
+
+    if (KeepMessageOrder && ParentPartitionExternalLockInfo.has_value()) {
+        auto* msg = snapshot.MutableExternalLockedMessageGroupsId();
+        SerializeFulllExternalLockedMessageGroupsIdTo(*msg);
     }
 
     return true;
@@ -785,6 +798,23 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         }
     }
 
+    if (UpdateExternalLockedMessageGroupsId) {
+        auto* msg = wal.MutableExternalLockedMessageGroupsId();
+        Storage->SerializeFulllExternalLockedMessageGroupsIdTo(*msg);
+    }
+
+    return true;
+}
+
+bool TStorage::SerializeFulllExternalLockedMessageGroupsIdTo(NKikimrPQ::TExternalLockedMessageGroupsId& msg) {
+    if (!KeepMessageOrder || !ParentPartitionExternalLockInfo.has_value()) {
+        return false;
+    }
+    msg.SetParentPartitionId(ParentPartitionExternalLockInfo->PartitionId);
+    msg.SetGeneration(ParentPartitionExternalLockInfo->TabletGeneration);
+    msg.SetConsumerGeneration(ParentPartitionExternalLockInfo->ConsumerGeneration);
+    msg.SetStep(ParentPartitionExternalLockInfo->ConsumerStep);
+    msg.SetMode(ParentPartitionExternalLockInfo->ReadWithKeepOrder);
     return true;
 }
 

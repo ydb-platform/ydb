@@ -582,6 +582,7 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                 return;
             }
 
+            case NKikimrSchemeOp::TAuth::kIam:
             case NKikimrSchemeOp::TAuth::kNone: {
                 if (objectDescription.SecretValues.size() != 0) {
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "None auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 0");
@@ -653,6 +654,8 @@ NExternalSource::TAuth MakeAuth(const NYql::TExternalSource& metadata) {
         return NExternalSource::NAuth::MakeServiceAccount(metadata.DataSourceAuth.GetServiceAccount().GetId(), metadata.ServiceAccountIdSignature);
     case NKikimrSchemeOp::TAuth::kAws:
         return NExternalSource::NAuth::MakeAws(metadata.AwsAccessKeyId, metadata.AwsSecretAccessKey, metadata.DataSourceAuth.GetAws().GetAwsRegion());
+    case NKikimrSchemeOp::TAuth::kIam:
+        return NExternalSource::NAuth::MakeIamAuth(metadata.DataSourceAuth.GetIam().GetServiceAccountId(), metadata.DataSourceAuth.GetIam().GetResourceId());
     case NKikimrSchemeOp::TAuth::kBasic:
     case NKikimrSchemeOp::TAuth::kMdbBasic:
     case NKikimrSchemeOp::TAuth::kToken:

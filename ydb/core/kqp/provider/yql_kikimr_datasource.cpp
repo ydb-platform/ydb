@@ -86,6 +86,12 @@ TString FillAuthProperties(THashMap<TString, TString>& properties, const TExtern
             properties["tokenReference"] = externalSource.DataSourceAuth.GetToken().GetTokenSecretName();
             return {};
 
+        case NKikimrSchemeOp::TAuth::kIam:
+            properties["authMethod"] = "IAM";
+            properties["iamServiceAccountId"] = externalSource.DataSourceAuth.GetIam().GetServiceAccountId();
+            properties["iamResourceId"] = externalSource.DataSourceAuth.GetIam().GetResourceId();
+            return {};
+
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
             return {"Identity case is not specified"};
     }

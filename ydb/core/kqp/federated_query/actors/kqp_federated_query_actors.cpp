@@ -1,7 +1,10 @@
 #include "kqp_federated_query_actors.h"
 
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
+#include <ydb/core/util/backoff.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/library/actors/core/log.h>
@@ -105,6 +108,24 @@ private:
     NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Promise;
     bool AskSent = false;
 };
+
+inline auto DefaultRetryableErrors() {
+    using EStatus = NYdb::EStatus;
+    return TVector<EStatus>{
+        EStatus::ABORTED,
+        EStatus::UNAVAILABLE,
+        EStatus::OVERLOADED,
+        EStatus::TIMEOUT,
+        EStatus::BAD_SESSION,
+        EStatus::SESSION_EXPIRED,
+        EStatus::CANCELLED,
+        EStatus::UNDETERMINED,
+        EStatus::SESSION_BUSY,
+        EStatus::CLIENT_DISCOVERY_FAILED,
+        EStatus::CLIENT_LIMITS_REACHED,
+    };
+}
+
 
 IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
     return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
@@ -509,6 +530,14 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
             return DescribeSecret({tokenSecretId}, userToken, database, actorSystem);
         }
 
+        case NKikimrSchemeOp::TAuth::kIam: {
+            if (authDescription.GetIam().GetResourceId()) {
+                return NThreading::MakeFuture(TEvDescribeSecretsResponse::TDescription({}));
+            }
+            const TString& initialTokenId = authDescription.GetIam().GetInitialTokenSecretName();
+            return DescribeSecret({initialTokenId}, userToken, database, actorSystem);
+        }
+
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
             return NThreading::MakeFuture(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("identity case is not specified") }));
     }
@@ -534,6 +563,164 @@ bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString
 
 bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TString& secretName) {
     return flags.GetEnableSchemaSecrets() && secretName.StartsWith('/');
+}
+
+namespace {
+// XXX begin duplicated code from replication/util.h
+inline bool IsRetryableError(const NYdb::TStatus status, const TVector<NYdb::EStatus>& retryable) {
+    switch (status.GetStatus()) {
+    case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
+    case NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED:
+        return false;
+    case NYdb::EStatus::TRANSPORT_UNAVAILABLE:
+        for (const auto& issue : status.GetIssues()) {
+            if (issue.GetMessage().contains("Misformatted domain name") || issue.GetMessage().contains("Domain name not found")) {
+                return false;
+            }
+        }
+        return true;
+    default:
+        return status.IsTransportError() || Find(retryable, status.GetStatus()) != retryable.end();
+    }
+}
+
+inline bool IsRetryableError(const NYdb::TStatus status) {
+    static auto defaultRetryableErrors = DefaultRetryableErrors();
+    return IsRetryableError(status, defaultRetryableErrors);
+}
+// XXX end duplicated code
+
+class TDescribeResourceIdActor: public NActors::TActorBootstrapped<TDescribeResourceIdActor> {
+public:
+    using TRetryPolicy = IRetryPolicy<NYdb::TStatus>;
+
+    TDescribeResourceIdActor(
+        const TString& endpoint,
+        const TString& database,
+        bool ssl,
+        const TString& caCert,
+        const TString& token,
+        NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> promise)
+    : Endpoint(endpoint)
+    , Database(database)
+    , Ssl(ssl)
+    , CaCert(caCert)
+    , Token(token)
+    , Promise(promise) {
+    }
+
+    void Bootstrap() {
+        Request();
+    }
+
+private:
+    STRICT_STFUNC(StateWait,
+        hFunc(NActors::TEvents::TEvWakeup, Handle)
+    )
+
+    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        Request();
+    }
+
+    void Request() {
+        NYdb::NTable::TClientSettings settings;
+        settings
+            .DiscoveryEndpoint(Endpoint)
+            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+            .Database(Database)
+            .SslCredentials(NYdb::TSslCredentials(Ssl, CaCert))
+            .AuthToken(Token);
+        auto actorSystem = TlsActivationContext->ActorSystem();
+        auto selfId = SelfId();
+        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
+                "DescribeResourceId: SelfId=" << selfId << " DescribeTable " << Database << " at " << Endpoint << (Ssl ? " (Ssl)" : ""));
+        Y_ABORT_UNLESS(AppData()->YdbDriver);
+        NYdb::NTable::TTableClient tableClient(*AppData()->YdbDriver, settings);
+        tableClient.GetSession().Subscribe([promise = Promise, actorSystem, selfId, backoff = Backoff, database = Database](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
+                auto& result = future.GetValue();
+                if (!result.IsSuccess()) {
+                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " GetSession failed"
+                            << ", status# " << result.GetStatus()
+                            << ", issues# " << result.GetIssues().ToOneLineString()
+                            << ", iteration# " << backoff->GetIteration());
+                    if (IsRetryableError(result) && backoff->HasMore()) {
+                        actorSystem->Schedule(backoff->Next(),
+                                new NActors::IEventHandle(selfId, TActorId(), new TEvents::TEvWakeup()));
+                    } else {
+                        promise.SetValue(
+                                TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
+                    }
+                    return;
+                }
+                backoff->Reset();
+                result.GetSession()
+                      .DescribeTable(database, {})
+                      .Subscribe([promise, actorSystem, selfId, backoff](const NYdb::NTable::TAsyncDescribeTableResult& future) mutable {
+                        const auto& result = future.GetValue();
+                        if (!result.IsSuccess()) {
+                            LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " DescribeTable failed"
+                                << ", status# " << result.GetStatus()
+                                << ", issues# " << result.GetIssues().ToOneLineString()
+                                << ", iteration# " << backoff->GetIteration());
+
+                            if (IsRetryableError(result) && backoff->HasMore()) {
+                                actorSystem->Schedule(backoff->Next(),
+                                        new NActors::IEventHandle(selfId, TActorId(), new TEvents::TEvWakeup()));
+                            } else {
+                                promise.SetValue(
+                                        TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
+                            }
+                            return;
+                        }
+                        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
+                                "DescribeResourceId: SelfId=" << selfId << " Succeed");
+
+                        for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
+                            LOG_TRACE_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
+                                    "DescribeResourceId: SelfId=" << selfId << " key=" << k << " value=" << v);
+                            if (k == "cloud_id") {
+                                LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " Resolved ResourceId=" << v);
+                                promise.SetValue(TString{v});
+                                return;
+                            }
+                        }
+                        LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " cloud_id not found");
+                        promise.SetValue(TString(""));
+                    });
+        });
+    }
+private:
+    const TString Endpoint;
+    const TString Database;
+    const bool Ssl;
+    const TString CaCert;
+    const TString Token;
+    NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> Promise;
+    std::shared_ptr<TBackoff> Backoff = std::make_shared<TBackoff>(10, TDuration::MilliSeconds(100), TDuration::Seconds(10));
+};
+
+IActor* CreateDescribeResourceIdActor(
+        const TString& endpoint,
+        const TString& database,
+        bool ssl,
+        const TString& caCert,
+        const TString& token,
+        NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> promise) {
+    return new TDescribeResourceIdActor(endpoint, database, ssl, caCert, token, promise);
+}
+} // namespace {
+
+NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExternalDataSourceResourceId(
+    const TString& endpoint,
+    const TString& database,
+    bool ssl,
+    const TString& caCert,
+    const TString& token,
+    TActorSystem* actorSystem
+) {
+    auto promise = NThreading::NewPromise<TEvDescribeResourceIdResponse::TDescription>();
+    actorSystem->Register(CreateDescribeResourceIdActor(endpoint, database, ssl, caCert, token, promise));
+    return promise.GetFuture();
 }
 
 }  // namespace NKikimr::NKqp

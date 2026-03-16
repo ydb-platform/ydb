@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
 
         // 1. Wait for the scan request to be forwarded via pipe cache
         {
-            auto event = runtime.GrabEdgeEvent<NKikimr::TEvPipeCache::TEvForward>(TSet<NActors::TActorId>{pipeCache});
+            auto event = runtime.GrabEdgeEvent<NKikimr::TEvPipeCache::TEvForward>(TSet<NActors::TActorId>{pipeCache}, TDuration::Seconds(1));
             UNIT_ASSERT(event);
         }
 
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
 
         // 3. Simulate node disconnect
         runtime.Send(scanFetcher, runtime.AllocateEdgeActor(),
-            new TEvInterconnect::TEvNodeDisconnected(scan.NodeId()));
+            new NActors::TEvInterconnect::TEvNodeDisconnected(scan.NodeId()));
 
         // 4. Verify that fetcher sent TEvTerminateFromFetcher to compute actor
         {
@@ -62,6 +62,10 @@ Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
                 TSet<NActors::TActorId>{scan}, TDuration::Seconds(1));
             UNIT_ASSERT_C(event, "Expected TEvAbortExecution to be sent to scanner on node disconnect");
         }
+
+        // 6. Verify that the fetcher actor is dead (PassAway was called)
+        UNIT_ASSERT_C(runtime.FindActor(scanFetcher) == nullptr,
+            "Expected scan fetcher actor to be dead after node disconnect");
     }
 
     Y_UNIT_TEST(ScanDelayedRetry) {

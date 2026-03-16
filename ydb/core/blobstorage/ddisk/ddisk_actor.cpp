@@ -86,7 +86,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Bootstrap() {
-        writePersistentBufferActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor());
+        WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor());
         Become(&TThis::StateFunc);
         STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
         InitPDiskInterface();
@@ -172,14 +172,14 @@ namespace NKikimr::NDDisk {
             cFunc(TEvents::TSystem::Poison, PassAway)
 
             case TEvWritePersistentBuffers::EventType: {
-                TActivationContext::Forward(ev, writePersistentBufferActor);
+                TActivationContext::Forward(ev, WritePersistentBuffersActor);
                 break;
             }
         )
     }
 
     void TDDiskActor::PassAway() {
-        Send(writePersistentBufferActor, new NActors::TEvents::TEvPoison());
+        Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
 #if defined(__linux__)
         if (UringRouter) {
             for (int i = 0; i < 1000 && UringRouter->GetInflight() > 0; ++i) {

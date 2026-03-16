@@ -2,6 +2,8 @@ UNITTEST_FOR(ydb/core/blobstorage/groupinfo)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:4)
+
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)

@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     ydb/mvp/core
+    ydb/mvp/meta/support_links
     ydb/core/testlib/actors
 )
 

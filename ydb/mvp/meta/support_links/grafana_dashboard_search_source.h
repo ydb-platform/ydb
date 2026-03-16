@@ -28,15 +28,15 @@ public:
     {}
 
     void Bootstrap() {
-        TString token = ReadToken();
-        if (token.empty()) {
+        TString authHeaderValue = ReadAuthorizationHeaderValue();
+        if (authHeaderValue.empty()) {
             SendResultAndDie();
             return;
         }
 
         TString searchUrl = ResolveSearchUrl();
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(searchUrl);
-        httpRequest->Set("Authorization", TStringBuilder() << "Bearer " << token);
+        httpRequest->Set("Authorization", authHeaderValue);
 
         auto request = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
         request->Timeout = TDuration::Seconds(30);
@@ -45,36 +45,35 @@ public:
         Become(&TGrafanaDashboardSearchResolver::StateWork, TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
     }
 
-    TString ReadToken() {
-        const auto& grafanaConfig = GetGrafanaConfig();
-        if (grafanaConfig.SecretName.empty()) {
+    TString ReadAuthorizationHeaderValue() {
+        if (TMVP::MetaDatabaseTokenName.empty()) {
             Errors.emplace_back(TSupportError{
                 .Source = Context.SourceName,
-                .Message = "grafana.secret_name is required"
+                .Message = TStringBuilder()
+                    << "meta.meta_database_token_name is required for source="
+                    << Context.SourceName
             });
             return {};
         }
 
-        for (const auto& secret : TMVP::TokensConfig.GetSecretInfo()) {
-            if (secret.GetName() != grafanaConfig.SecretName) {
-                continue;
-            }
+        auto* appData = MVPAppData();
+        if (!appData || !appData->Tokenator) {
+            Errors.emplace_back(TSupportError{
+                .Source = Context.SourceName,
+                .Message = "Tokenator is unavailable"
+            });
+            return {};
+        }
 
-            TString token = StripString(secret.GetSecret());
-            if (token.empty()) {
-                Errors.emplace_back(TSupportError{
-                    .Source = Context.SourceName,
-                    .Message = TStringBuilder()
-                        << "Secret '" << grafanaConfig.SecretName << "' has empty value in auth token config secret_info"
-                });
-            }
-            return token;
+        TString authHeaderValue = StripString(appData->Tokenator->GetToken(TMVP::MetaDatabaseTokenName));
+        if (!authHeaderValue.empty()) {
+            return authHeaderValue;
         }
 
         Errors.emplace_back(TSupportError{
             .Source = Context.SourceName,
             .Message = TStringBuilder()
-                << "Secret '" << grafanaConfig.SecretName << "' was not found in auth token config secret_info"
+                << "IAM token '" << TMVP::MetaDatabaseTokenName << "' is not available from tokenator"
         });
         return {};
     }
@@ -245,9 +244,9 @@ inline void ValidateGrafanaDashboardSearchResolverConfig(const TResolverValidati
     {
         ythrow yexception() << "grafana.endpoint is required for relative url";
     }
-    if (context.GrafanaConfig.SecretName.empty()) {
+    if (TMVP::MetaDatabaseTokenName.empty()) {
         ythrow yexception()
-            << "grafana.secret_name is required for source="
+            << "meta.meta_database_token_name is required for source="
             << context.LinkConfig.GetSource();
     }
 }

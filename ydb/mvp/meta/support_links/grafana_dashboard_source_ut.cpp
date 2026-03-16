@@ -30,10 +30,10 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
-        clusterColumns["k8s_namespace"] = "ws";
-        clusterColumns["datasource"] = "ds";
+        clusterColumns["k8s_namespace"] = "ydb-workspace";
+        clusterColumns["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
         TVector<std::pair<TString, TString>> queryParams;
-        queryParams.emplace_back("cluster", "testing-global");
+        queryParams.emplace_back("cluster", "ydb-global");
         queryParams.emplace_back("database", "root_test");
         const NActors::TActorId parent;
         const NActors::TActorId httpProxyId;
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         UNIT_ASSERT_VALUES_EQUAL(result.Links[0].Title, "CPU");
         UNIT_ASSERT_VALUES_EQUAL(
             result.Links[0].Url,
-            "https://grafana.example.net/d/cpu?var-workspace=ws&var-ds=ds&var-cluster=testing-global&var-database=root_test"
+            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-cluster=ydb-global&var-database=root_test"
         );
         UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 0);
     }
@@ -67,9 +67,9 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
-        clusterColumns["k8s_namespace"] = "ws";
+        clusterColumns["k8s_namespace"] = "ydb-workspace";
         TVector<std::pair<TString, TString>> queryParams;
-        queryParams.emplace_back("cluster", "testing-global");
+        queryParams.emplace_back("cluster", "ydb-global");
         queryParams.emplace_back("database", "/root/test");
         const NActors::TActorId parent;
         const NActors::TActorId httpProxyId;
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(
             result.Links[0].Url,
-            "https://grafana.example.net/d/cpu?var-workspace=ws&var-cluster=testing-global&var-database=%2Froot%2Ftest"
+            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-cluster=ydb-global&var-database=%2Froot%2Ftest"
         );
         UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result.Errors[0].Source, "meta");
@@ -104,8 +104,8 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
 
         THashMap<TString, TString> clusterColumns;
-        clusterColumns["k8s_namespace"] = "ws";
-        clusterColumns["datasource"] = "ds";
+        clusterColumns["k8s_namespace"] = "ydb-workspace";
+        clusterColumns["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
         TVector<std::pair<TString, TString>> queryParams;
         queryParams.emplace_back("database", "root&x=y");
         const NActors::TActorId parent;

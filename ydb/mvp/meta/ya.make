@@ -15,6 +15,7 @@ SRCS(
 
 PEERDIR(
     ydb/mvp/core
+    ydb/mvp/meta/support_links
     ydb/mvp/meta/protos
     ydb/public/api/client/yc_private/resourcemanager
     yql/essentials/public/udf

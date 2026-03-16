@@ -8,7 +8,6 @@
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/events.h>
-#include <ydb/mvp/meta/support_links/ut/grafana_mock.h>
 #include <ydb/mvp/meta/support_links/grafana_dashboard_search_source.h>
 
 Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
@@ -108,7 +107,118 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         }
     };
 
-    Y_UNIT_TEST(ReturnsErrorWhenSecretNameIsNotConfigured) {
+    class TGrafanaMockServiceActor : public NActors::TActor<TGrafanaMockServiceActor> {
+    public:
+        using TBase = NActors::TActor<TGrafanaMockServiceActor>;
+
+        TGrafanaMockServiceActor()
+            : TBase(&TGrafanaMockServiceActor::StateWork)
+        {}
+
+        static TStringBuf DashboardsYdbCommonJson() {
+            return R"json([
+    {
+        "id": 176,
+        "uid": "ydb_cpu",
+        "orgId": 1,
+        "title": "CPU",
+        "uri": "db/cpu",
+        "url": "/d/ydb_cpu/cpu",
+        "slug": "",
+        "type": "dash-db",
+        "tags": [
+            "ydb-common"
+        ],
+        "isStarred": false
+    },
+    {
+        "id": 312,
+        "uid": "ydb_dboverview",
+        "orgId": 1,
+        "title": "DB overview",
+        "uri": "db/db-overview",
+        "url": "/d/ydb_dboverview/db-overview",
+        "slug": "",
+        "type": "dash-db",
+        "tags": [
+            "ydb-common"
+        ],
+        "isStarred": false
+    },
+    {
+        "id": 5648,
+        "uid": "bevkmtk3xlclca",
+        "orgId": 1,
+        "title": "Interconnect",
+        "uri": "db/interconnect",
+        "url": "/d/bevkmtk3xlclca/interconnect",
+        "slug": "",
+        "type": "dash-db",
+        "tags": [
+            "ydb-common"
+        ],
+        "isStarred": false
+    }
+])json";
+        }
+
+        static TString ExtractQueryParam(TStringBuf url, TStringBuf name) {
+            const size_t queryPos = url.find('?');
+            if (queryPos == TStringBuf::npos) {
+                return {};
+            }
+
+            TStringBuf query = url.SubStr(queryPos + 1);
+            size_t pos = 0;
+            while (pos <= query.size()) {
+                size_t ampPos = query.find('&', pos);
+                TStringBuf part = ampPos == TStringBuf::npos
+                    ? query.SubStr(pos)
+                    : query.SubStr(pos, ampPos - pos);
+                const size_t eqPos = part.find('=');
+                if (eqPos != TStringBuf::npos) {
+                    TStringBuf key = part.SubStr(0, eqPos);
+                    TStringBuf value = part.SubStr(eqPos + 1);
+                    if (key == name) {
+                        return TString(value);
+                    }
+                }
+                if (ampPos == TStringBuf::npos) {
+                    break;
+                }
+                pos = ampPos + 1;
+            }
+            return {};
+        }
+
+        void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event) {
+            const auto request = event->Get()->Request;
+            const TString tag = ExtractQueryParam(request->URL, "tag");
+            const TString responseBody = (tag == "ydb-common") ? TString(DashboardsYdbCommonJson()) : "[]";
+
+            NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
+            EatWholeString(
+                response,
+                TStringBuilder()
+                    << "HTTP/1.1 200 OK\r\n"
+                    << "Connection: close\r\n"
+                    << "Content-Type: application/json; charset=utf-8\r\n"
+                    << "Content-Length: " << responseBody.size() << "\r\n"
+                    << "\r\n"
+                    << responseBody
+            );
+
+            Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
+            }
+        }
+    };
+
+    Y_UNIT_TEST(ReturnsErrorWhenMetaDatabaseTokenNameIsNotConfigured) {
         TMvpGuard mvpGuard;
         TTestActorRuntime runtime;
         TAutoPtr<NActors::IEventHandle> handle;
@@ -131,7 +241,10 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Errors.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Errors[0].Source, "grafana/dashboard/search");
-        UNIT_ASSERT_VALUES_EQUAL(response->Errors[0].Message, "grafana.secret_name is required");
+        UNIT_ASSERT_VALUES_EQUAL(
+            response->Errors[0].Message,
+            "meta.meta_database_token_name is required for source=grafana/dashboard/search"
+        );
     }
 
     Y_UNIT_TEST(LoadsDashboardsFromMockServiceByTag) {
@@ -141,7 +254,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         ConfigureGrafanaSecret("grafana-secret", "test-token");
 
         auto parent = runtime.AllocateEdgeActor();
-        auto grafanaMockProxy = runtime.Register(new NMVP::NMeta::NUT::TGrafanaMockServiceActor());
+        auto grafanaMockProxy = runtime.Register(new TGrafanaMockServiceActor());
 
         NMVP::NSupportLinks::TLinkResolveContext context;
         context.Parent = parent;
@@ -152,11 +265,10 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.LinkConfig.SetTag("ydb-common");
         NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
-            .SecretName = "grafana-secret",
         };
-        context.ClusterColumns["k8s_namespace"] = "ws";
-        context.ClusterColumns["datasource"] = "ds";
-        context.QueryParams.emplace_back("cluster", "testing-global");
+        context.ClusterColumns["k8s_namespace"] = "ydb-workspace";
+        context.ClusterColumns["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
+        context.QueryParams.emplace_back("cluster", "ydb-global");
         context.QueryParams.emplace_back("database", "/root/test");
 
         runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));
@@ -166,7 +278,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         UNIT_ASSERT_VALUES_EQUAL(response->Links[0].Title, "CPU");
         UNIT_ASSERT_VALUES_EQUAL(
             response->Links[0].Url,
-            "https://grafana.nebius.dev/d/ydb_cpu/cpu?var-workspace=ws&var-ds=ds&var-cluster=testing-global&var-database=%2Froot%2Ftest"
+            "https://grafana.nebius.dev/d/ydb_cpu/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-cluster=ydb-global&var-database=%2Froot%2Ftest"
         );
         UNIT_ASSERT_VALUES_EQUAL(response->Links[2].Title, "Interconnect");
         UNIT_ASSERT_VALUES_EQUAL(response->Errors.size(), 0);
@@ -179,7 +291,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         ConfigureGrafanaSecret("grafana-secret", "test-token");
 
         auto parent = runtime.AllocateEdgeActor();
-        auto grafanaMockProxy = runtime.Register(new NMVP::NMeta::NUT::TGrafanaMockServiceActor());
+        auto grafanaMockProxy = runtime.Register(new TGrafanaMockServiceActor());
 
         NMVP::NSupportLinks::TLinkResolveContext context;
         context.Parent = parent;
@@ -190,10 +302,9 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.LinkConfig.SetTag("ydb-common");
         NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
-            .SecretName = "grafana-secret",
         };
-        context.ClusterColumns["datasource"] = "ds";
-        context.QueryParams.emplace_back("cluster", "testing-global");
+        context.ClusterColumns["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
+        context.QueryParams.emplace_back("cluster", "ydb-global");
 
         runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));
 
@@ -223,10 +334,9 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.LinkConfig.SetFolder("team-folder");
         NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
-            .SecretName = "grafana-secret",
         };
-        context.ClusterColumns["k8s_namespace"] = "ws";
-        context.ClusterColumns["datasource"] = "ds";
+        context.ClusterColumns["k8s_namespace"] = "ydb-workspace";
+        context.ClusterColumns["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
 
         runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));
 
@@ -251,7 +361,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         context.LinkConfig.SetSource("grafana/dashboard/search");
         NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
             .Endpoint = "https://grafana.nebius.dev",
-            .SecretName = "grafana-secret",
         };
 
         runtime.Register(NMVP::NSupportLinks::BuildGrafanaDashboardSearchResolver(std::move(context), NMVP::InstanceMVP->MetaSettings));

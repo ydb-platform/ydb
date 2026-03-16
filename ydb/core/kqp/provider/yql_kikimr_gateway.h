@@ -358,21 +358,7 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
     const TString& name, const TString& value, TString& error);
 
 // DEPRECATED: old syntax
-inline double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount, ui32 hashesCount) {
-    const double m = static_cast<double>(filterSizeBytes) * 8;
-    const double n = static_cast<double>(recordsCount);
-    const double k = static_cast<double>(hashesCount);
-    if (m <= 0 || n <= 0 || k <= 0) {
-        return 0.1;
-    }
-
-    const double fpp = std::pow(1.0 - std::exp(-k * n / m), k);
-    if (fpp <= 0.0 || !std::isfinite(fpp)) {
-        return 0.1;
-    }
-
-    return std::min(fpp, 1.0);
-}
+double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount, ui32 hashesCount);
 
 struct TColumnFamily {
     TString Name;

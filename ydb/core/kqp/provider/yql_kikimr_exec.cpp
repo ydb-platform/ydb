@@ -2465,7 +2465,7 @@ public:
                                 proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize);
                                 proto->set_hashes_count(localBloomNgramFilterDesc.HashesCount);
                                 proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive);
-                                // New syntax: old syntax
+                                // DEPRECATED: old syntax
                                 double fpp = (localBloomNgramFilterDesc.FilterSizeBytes && localBloomNgramFilterDesc.RecordsCount)
                                     ? ComputeFalsePositiveProbabilityFromDeprecatedParams(
                                         *localBloomNgramFilterDesc.FilterSizeBytes,

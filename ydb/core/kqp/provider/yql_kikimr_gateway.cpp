@@ -49,6 +49,23 @@ static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t ind
     createDir(basePath, parts[index], partPromise);
 }
 
+// DEPRECATED: old syntax
+double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount, ui32 hashesCount) {
+    const double m = static_cast<double>(filterSizeBytes) * 8;
+    const double n = static_cast<double>(recordsCount);
+    const double k = static_cast<double>(hashesCount);
+    if (m <= 0 || n <= 0 || k <= 0) {
+        return 0.1;
+    }
+
+    const double fpp = std::pow(1.0 - std::exp(-k * n / m), k);
+    if (fpp <= 0.0 || !std::isfinite(fpp)) {
+        return 0.1;
+    }
+
+    return std::min(fpp, std::nextafter(1.0, 0.0));
+}
+
 TKikimrPathId TKikimrPathId::Parse(const TStringBuf& str) {
     TStringBuf ownerStr;
     TStringBuf idStr;

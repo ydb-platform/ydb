@@ -13,7 +13,7 @@ namespace NKikimr {
 
     class TBlobIdQueue {
         std::deque<TLogoBlobID> Queue;
-        std::optional<TMemoryConsumerWithDropOnDestroy> Consumer;
+        std::optional<TMemoryConsumer> Consumer;
         size_t LastBytes = 0;
         ui64 WorkUnits = 0;
 
@@ -37,10 +37,37 @@ namespace NKikimr {
         using const_iterator = std::deque<TLogoBlobID>::const_iterator;
 
         TBlobIdQueue() = default;
+        TBlobIdQueue(const TBlobIdQueue&) = delete;
+        TBlobIdQueue& operator=(const TBlobIdQueue&) = delete;
+        ~TBlobIdQueue() {
+            if (Consumer && LastBytes) {
+                Consumer->Subtract(LastBytes);
+            }
+        }
 
         explicit TBlobIdQueue(TMemoryConsumer consumer)
             : Consumer(std::move(consumer))
         {}
+
+        TBlobIdQueue(TBlobIdQueue&& other) noexcept
+            : Queue(std::move(other.Queue))
+            , Consumer(std::move(other.Consumer))
+            , LastBytes(std::exchange(other.LastBytes, 0))
+            , WorkUnits(std::exchange(other.WorkUnits, 0))
+        {}
+
+        TBlobIdQueue& operator=(TBlobIdQueue&& other) noexcept {
+            if (this != &other) {
+                if (Consumer && LastBytes) {
+                    Consumer->Subtract(LastBytes);
+                }
+                Queue = std::move(other.Queue);
+                Consumer = std::move(other.Consumer);
+                LastBytes = std::exchange(other.LastBytes, 0);
+                WorkUnits = std::exchange(other.WorkUnits, 0);
+            }
+            return *this;
+        }
 
         void Push(const TLogoBlobID& id) {
             WorkUnits += id.BlobSize();
@@ -144,7 +171,7 @@ namespace NKikimr {
 
     class TUnreplicatedBlobRecords {
         TUnreplicatedBlobRecordsMap Records;
-        std::optional<TMemoryConsumerWithDropOnDestroy> Consumer;
+        std::optional<TMemoryConsumer> Consumer;
         size_t LastBytes = 0;
 
         static size_t CalcBytes(const TUnreplicatedBlobRecordsMap& records) {
@@ -172,6 +199,11 @@ namespace NKikimr {
         TUnreplicatedBlobRecords() = default;
         TUnreplicatedBlobRecords(const TUnreplicatedBlobRecords&) = delete;
         TUnreplicatedBlobRecords& operator=(const TUnreplicatedBlobRecords&) = delete;
+        ~TUnreplicatedBlobRecords() {
+            if (Consumer && LastBytes) {
+                Consumer->Subtract(LastBytes);
+            }
+        }
 
         explicit TUnreplicatedBlobRecords(TMemoryConsumer consumer)
             : Consumer(std::move(consumer))
@@ -179,22 +211,17 @@ namespace NKikimr {
 
         TUnreplicatedBlobRecords(TUnreplicatedBlobRecords&& other) noexcept
             : Records(std::move(other.Records))
+            , Consumer(std::move(other.Consumer))
             , LastBytes(std::exchange(other.LastBytes, 0))
-        {
-            if (other.Consumer) {
-                Consumer.emplace(std::move(*other.Consumer));
-                other.Consumer.reset();
-            }
-        }
+        {}
 
         TUnreplicatedBlobRecords& operator=(TUnreplicatedBlobRecords&& other) noexcept {
             if (this != &other) {
-                Records = std::move(other.Records);
-                Consumer.reset();
-                if (other.Consumer) {
-                    Consumer.emplace(std::move(*other.Consumer));
-                    other.Consumer.reset();
+                if (Consumer && LastBytes) {
+                    Consumer->Subtract(LastBytes);
                 }
+                Records = std::move(other.Records);
+                Consumer = std::move(other.Consumer);
                 LastBytes = std::exchange(other.LastBytes, 0);
             }
             return *this;

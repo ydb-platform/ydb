@@ -3,6 +3,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -36,5 +37,13 @@ void SendTopicCloudEvent(
     const TString& userSID,
     const TString& maskedToken,
     ui64 txId);
+
+void FinishWithError(
+    TProposeResponse* result,
+    const NKikimrSchemeOp::TModifyScheme& operation,
+    NKikimrScheme::EStatus status,
+    const TString& errStr,
+    const TOperationId& operationId,
+    TOperationContext& context);
 
 } // NKikimr::NSchemeShard

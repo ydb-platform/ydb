@@ -1,7 +1,28 @@
-#include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h> 
+#include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/persqueue/public/cloud_events/actor.h>
 
 namespace NKikimr::NSchemeShard {
+
+void FinishWithError(
+    TProposeResponse* result,
+    const NKikimrSchemeOp::TModifyScheme& operation,
+    NKikimrScheme::EStatus status,
+    const TString& errStr,
+    const TOperationId& operationId,
+    TOperationContext& context)
+{
+    result->SetError(status, errStr);
+    SendTopicCloudEvent(
+        operation,
+        status,
+        errStr,
+        context.SS,
+        context.PeerName,
+        context.UserToken ? context.UserToken->GetUserSID() : TString(),
+        TString() /* maskedToken */,
+        ui64(operationId.GetTxId()));
+}
 
 void SendTopicCloudEvent(
     const NKikimrSchemeOp::TModifyScheme& operation,

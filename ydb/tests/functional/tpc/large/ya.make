@@ -15,7 +15,7 @@ SIZE(LARGE)
 TAG(ya:fat)
 
 
-REQUIREMENTS(ram:16)
+REQUIREMENTS(ram:16 cpu:2)
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

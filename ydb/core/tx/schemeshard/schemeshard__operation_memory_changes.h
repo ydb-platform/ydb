@@ -79,7 +79,7 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     TStack<TStreamingQueryState> StreamingQueries;
 
     using TTestShardSetState = std::pair<TPathId, TTestShardSetInfo::TPtr>;
-    TStack<TTestShardSetState> TestShards;
+    TStack<TTestShardSetState> TestShardSets;
 
 public:
     ~TMemoryChanges() = default;

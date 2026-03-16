@@ -312,9 +312,9 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "TRUNCATE TABLE";
     // test shard set
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
-        return "CREATE TEST SHARD";
+        return "CREATE TEST SHARD SET";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
-        return "DROP TEST SHARD";
+        return "DROP TEST SHARD SET";
     }
     Y_ABORT("switch should cover all operation types");
 }

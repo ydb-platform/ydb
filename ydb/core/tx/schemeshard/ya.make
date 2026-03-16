@@ -180,7 +180,7 @@ SRCS(
     schemeshard__operation_create_subdomain.cpp
     schemeshard__operation_create_sysview.cpp
     schemeshard__operation_create_table.cpp
-    schemeshard__operation_create_test_shard.cpp
+    schemeshard__operation_create_test_shard_set.cpp
     schemeshard__operation_create_view.cpp
     schemeshard__operation_db_changes.cpp
     schemeshard__operation_drop_backup_collection.cpp
@@ -204,7 +204,7 @@ SRCS(
     schemeshard__operation_drop_streaming_query.cpp
     schemeshard__operation_drop_subdomain.cpp
     schemeshard__operation_drop_sysview.cpp
-    schemeshard__operation_drop_test_shard.cpp
+    schemeshard__operation_drop_test_shard_set.cpp
     schemeshard__operation_drop_table.cpp
     schemeshard__operation_drop_unsafe.cpp
     schemeshard__operation_drop_view.cpp

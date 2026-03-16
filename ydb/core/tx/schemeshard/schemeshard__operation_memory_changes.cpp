@@ -165,11 +165,11 @@ void TMemoryChanges::GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId)
 }
 
 void TMemoryChanges::GrabNewTestShardSet(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->TestShardSets, TestShards);
+    GrabNew(pathId, ss->TestShardSets, TestShardSets);
 }
 
 void TMemoryChanges::GrabTestShardSet(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TTestShardSetInfo>(pathId, ss->TestShardSets, TestShards);
+    Grab<TTestShardSetInfo>(pathId, ss->TestShardSets, TestShardSets);
 }
 
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
@@ -383,14 +383,14 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         StreamingQueries.pop();
     }
 
-    while (TestShards) {
-        const auto& [id, elem] = TestShards.top();
+    while (TestShardSets) {
+        const auto& [id, elem] = TestShardSets.top();
         if (elem) {
             ss->TestShardSets[id] = elem;
         } else {
             ss->TestShardSets.erase(id);
         }
-        TestShards.pop();
+        TestShardSets.pop();
     }
 }
 

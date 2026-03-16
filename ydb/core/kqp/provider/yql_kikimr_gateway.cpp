@@ -63,7 +63,7 @@ double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes,
         return 0.1;
     }
 
-    return std::min(fpp, std::nextafter(1.0, 0.0));
+    return std::min(fpp, 1 - std::numeric_limits<double>::epsilon());
 }
 
 TKikimrPathId TKikimrPathId::Parse(const TStringBuf& str) {

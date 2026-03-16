@@ -357,7 +357,6 @@ void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription
 void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterDescription& desc,
     const TString& name, const TString& value, TString& error);
 
-// DEPRECATED: old syntax
 double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount, ui32 hashesCount);
 
 struct TColumnFamily {

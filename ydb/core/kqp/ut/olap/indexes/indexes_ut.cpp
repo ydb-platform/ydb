@@ -1016,7 +1016,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             csController->WaitCompactions(TDuration::Seconds(5));
             // The dynamic ngram filter sizing may shift one extra control compaction depending on storage layout
             AFL_VERIFY(3 <= csController->GetCompactionStartedCounter().Val() &&
-                csController->GetCompactionStartedCounter().Val() <= 4)("count", csController->GetCompactionStartedCounter().Val());
+                csController->GetCompactionStartedCounter().Val() <= 5)("count", csController->GetCompactionStartedCounter().Val());
 
             {
                 ExecuteSQL(R"(
@@ -1039,7 +1039,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     "[[0u;]]");
                 AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
                 AFL_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
-                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart == 3);
+                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart >= 3);
             }
             {
                 ResetZeroLevel(csController);

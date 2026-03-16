@@ -58,7 +58,7 @@ NYdb::NScheme::TSchemeClient TYdbLocation::GetSchemeClient(const TRequest& reque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    if (TString database = GetDatabaseName(request)) {
+    if (TString database = TYdbLocation::GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
     return NYdb::NScheme::TSchemeClient(GetDriver(), clientSettings);
@@ -117,7 +117,7 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request,
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    if (TString database = GetDatabaseName(request)) {
+    if (TString database = TYdbLocation::GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
     return GetTableClient(clientSettings);
@@ -127,7 +127,16 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const NYdb::NTable::TCli
     return NYdb::NTable::TTableClient(GetDriver(), clientSettings);
 }
 
-
+TString TYdbLocation::GetDatabaseName(const TRequest& request) const {
+    TString database = request.Parameters["database"];
+    if (database) {
+        if (!database.StartsWith('/')) {
+            database.insert(database.begin(), '/');
+        }
+        database.insert(0, RootDomain);
+    }
+    return database;
+}
 
 NYdb::NScripting::TScriptingClient TYdbLocation::GetScriptingClient(const TRequest& request) const {
     NYdb::NTable::TClientSettings clientSettings;
@@ -135,9 +144,9 @@ NYdb::NScripting::TScriptingClient TYdbLocation::GetScriptingClient(const TReque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TString metaDatabasePath = GetDatabaseName(request);
-    if (metaDatabasePath) {
-        clientSettings.Database(metaDatabasePath);
+    TString database = GetDatabaseName(request);
+    if (database) {
+        clientSettings.Database(database);
     }
     return NYdb::NScripting::TScriptingClient(GetDriver(), clientSettings);
 }

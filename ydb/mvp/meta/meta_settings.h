@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstddef>
+
+#include <memory>
+
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/meta/protos/config.pb.h>
 

@@ -26,6 +26,8 @@ RE_REQ_RAM = re.compile(r"\bram\s*:\s*(\d+)\b", re.IGNORECASE)
 RE_REQ_CPU = re.compile(r"\bcpu\s*:\s*(\w+)\b", re.IGNORECASE)
 RE_SIZE = re.compile(r"^\s*SIZE\s*\(\s*(\w+)\s*\)\s*$")
 RE_SPLIT_FACTOR = re.compile(r"^\s*SPLIT_FACTOR\s*\(\s*(\d+)\s*\)\s*$")
+RE_FORK_TEST_FILES = re.compile(r"^\s*FORK_TEST_FILES\s*\(\s*\)\s*$")
+RE_TEST_SRCS_OPEN = re.compile(r"^\s*TEST_SRCS\s*\(\s*$")
 RE_IF = re.compile(r"^\s*IF\s*\((.*)\)\s*$")
 RE_ELSE = re.compile(r"^\s*ELSE\s*\(\s*\)\s*$")
 RE_ENDIF = re.compile(r"^\s*ENDIF\s*\(\s*\)\s*$")
@@ -96,15 +98,58 @@ def _parse_active_attrs(text: str, sanitizer: Optional[str]) -> dict[str, Any]:
     """
     Evaluate ya.make with IF/ELSE/ENDIF for the selected sanitizer and collect
     REQUIREMENTS + SIZE from active lines.
+    When FORK_TEST_FILES() is present, effective split = TEST_SRCS file count × SPLIT_FACTOR(N).
     """
     attrs: dict[str, Any] = {}
     # Stack frames: (parent_active, if_result, current_active, seen_else)
     stack: list[tuple[bool, bool, bool, bool]] = []
     current_active = True
+    has_fork_test_files = False
+    test_srcs_count = 0
+    inside_test_srcs = False
+    test_srcs_active = False
+    count_this_test_srcs = 0
 
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
+            continue
+
+        if inside_test_srcs:
+            if line == ")":
+                inside_test_srcs = False
+                if test_srcs_active:
+                    test_srcs_count += count_this_test_srcs
+                count_this_test_srcs = 0
+                continue
+            if line and not line.startswith(")"):
+                if test_srcs_active:
+                    count_this_test_srcs += 1
+            continue
+
+        if RE_TEST_SRCS_OPEN.match(line):
+            inside_test_srcs = True
+            test_srcs_active = current_active
+            count_this_test_srcs = 0
+            continue
+        # TEST_SRCS( with content on same line: TEST_SRCS(\n or TEST_SRCS( file.py )
+        if re.match(r"^\s*TEST_SRCS\s*\(\s*\S", line):
+            inside_test_srcs = True
+            test_srcs_active = current_active
+            count_this_test_srcs = 0
+            # count first file on same line
+            rest = re.sub(r"^\s*TEST_SRCS\s*\(\s*", "", line)
+            rest = rest.rstrip()
+            if rest.endswith(")"):
+                rest = rest[:-1].rstrip()
+                inside_test_srcs = False
+            if rest and test_srcs_active:
+                count_this_test_srcs += 1
+            if inside_test_srcs:
+                continue
+            else:
+                test_srcs_count += count_this_test_srcs
+                count_this_test_srcs = 0
             continue
 
         m_if = RE_IF.match(line)
@@ -136,6 +181,10 @@ def _parse_active_attrs(text: str, sanitizer: Optional[str]) -> dict[str, Any]:
         if not current_active:
             continue
 
+        if RE_FORK_TEST_FILES.match(line):
+            has_fork_test_files = True
+            continue
+
         m_req = RE_REQUIREMENTS_LINE.match(line)
         if m_req:
             body = m_req.group(1)
@@ -162,6 +211,14 @@ def _parse_active_attrs(text: str, sanitizer: Optional[str]) -> dict[str, Any]:
             attrs["split_factor"] = int(m_split.group(1))
             continue
 
+    if has_fork_test_files and test_srcs_count > 0:
+        attrs["test_srcs_count"] = test_srcs_count
+        if attrs.get("split_factor") is not None:
+            raw = int(attrs["split_factor"])
+            effective = test_srcs_count * raw
+            attrs["effective_split_factor"] = effective
+            attrs["split_factor_tooltip"] = f"FORK_TEST_FILES: {test_srcs_count} files × SPLIT_FACTOR({raw}) = {effective}"
+
     return attrs
 
 
@@ -169,8 +226,10 @@ def get_requirements_for_suite(repo_root: Path, suite_path: str, sanitizer: Opti
     """
     Read active REQUIREMENTS/SIZE/SPLIT_FACTOR from repo_root/suite_path/ya.make, optionally
     selecting SANITIZER_TYPE branch. Returns subset of:
-      {"ram_gb": int, "cpu_cores": int, "size": str, "split_factor": int}
-    or None if file doesn't exist or nothing relevant found.
+      {"ram_gb": int, "cpu_cores": int, "size": str, "split_factor": int,
+       "test_srcs_count": int?, "effective_split_factor": int?, "split_factor_tooltip": str?}
+    When FORK_TEST_FILES() is present, test_srcs_count is set; if SPLIT_FACTOR is also set,
+    effective_split_factor = test_srcs_count × split_factor. None if file doesn't exist or nothing relevant found.
     """
     suite_path = normalize_suite_path(suite_path)
     ya_make = repo_root / suite_path / "ya.make"

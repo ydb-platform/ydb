@@ -35,6 +35,10 @@ def _next_cpu_tier(cpu: int) -> int:
     return 16
 
 
+# When SPLIT_FACTOR is not set in ya.make, runner may pick 1..10. No need to suggest "set" if recommended is in that range.
+DEFAULT_SPLIT_FACTOR_MAX = 10
+
+
 def _size_duration_threshold_sec(size_u: str) -> int:
     if size_u == "SMALL":
         return 60
@@ -303,7 +307,11 @@ def build_cpu_recommendations(
         ya_cpu = req.get("cpu_cores")
         ya_ram = req.get("ram_gb")
         ya_size = req.get("size")
-        ya_split_factor = req.get("split_factor")
+        # When FORK_TEST_FILES(): effective = TEST_SRCS file count × SPLIT_FACTOR(N); use for comparison and display.
+        ya_effective_split = req.get("effective_split_factor")
+        ya_split_factor_raw = req.get("split_factor")
+        ya_split_factor = int(ya_effective_split) if ya_effective_split is not None else ya_split_factor_raw
+        ya_split_factor_tooltip = req.get("split_factor_tooltip")
         if not ya_size:
             ya_size = "SMALL"
         size_u_cap = str(ya_size or "").upper()
@@ -398,7 +406,21 @@ def build_cpu_recommendations(
         split_should_raise = extra_chunks > 0
         recommended_split = int(chunks_real) + int(extra_chunks) if split_should_raise else int(chunks_real)
         if ya_split_factor is None:
-            recommended_split_action = "ok" if int(recommended_split) <= 1 else "set"
+            # With FORK_TEST_FILES: default range is test_srcs_count × 1..10; if real chunks in that range → ok.
+            # Without: default range 1..10.
+            test_srcs_count = req.get("test_srcs_count")
+            if test_srcs_count is not None and test_srcs_count > 0:
+                default_max = test_srcs_count * DEFAULT_SPLIT_FACTOR_MAX
+                if test_srcs_count <= chunks_real <= default_max:
+                    recommended_split_action = "ok"
+                elif int(recommended_split) > default_max:
+                    recommended_split_action = "raise"
+                else:
+                    recommended_split_action = "ok"
+            elif int(recommended_split) <= DEFAULT_SPLIT_FACTOR_MAX:
+                recommended_split_action = "ok"
+            else:
+                recommended_split_action = "raise"
         else:
             try:
                 ya_split_i = int(ya_split_factor)
@@ -460,6 +482,7 @@ def build_cpu_recommendations(
             "heavy_tests_examples": heavy_examples[:3],
             "heavy_tests_all": heavy_tests_all,
             "ya_split_factor": ya_split_factor,
+            "ya_split_factor_tooltip": ya_split_factor_tooltip,
             "median_cores": round(median_c, 3),
             "p95_cores": round(p95_c, 3),
             "recommended_cpu": recommended_req,

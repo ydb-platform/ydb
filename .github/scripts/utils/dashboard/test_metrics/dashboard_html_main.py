@@ -1333,7 +1333,10 @@ def build_html_dashboard(
             ? '<span title="' + sizeCapHint + '" style="display:inline-flex;align-items:center;gap:2px;color:#991b1b;font-weight:600;">'
               + (s.ya_size || '') + ' <span style="color:#dc2626;font-size:1em;" aria-label="cap">↑</span></span>'
             : String(s.ya_size ?? '');
-          const yaChunksCell = s.ya_split_factor != null ? String(s.ya_split_factor) : '';
+          const yaSplitTooltip = (s.ya_split_factor_tooltip || '').replace(/"/g, '&quot;');
+          const yaChunksCell = s.ya_split_factor != null
+            ? (yaSplitTooltip ? '<span title="' + yaSplitTooltip + '">' + String(s.ya_split_factor) + '</span>' : String(s.ya_split_factor))
+            : '';
           const realChunks = s.chunks_count ?? 0;
           const chunksMismatch = s.chunks_count_mismatch;
           const chunksCell = chunksMismatch

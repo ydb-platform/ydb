@@ -38,6 +38,18 @@ except Exception:
 SCRIPT_DIR = Path(__file__).resolve().parent
 DASHBOARD_SCRIPT = SCRIPT_DIR / "tests_resource_dashboard.py"
 
+
+def _default_repo_root() -> Path:
+    """Infer YDB repo root from script location so ya.make (REQUIREMENTS/SPLIT_FACTOR) is found when run from any cwd."""
+    p = SCRIPT_DIR.resolve()
+    for _ in range(10):
+        if (p / "ydb").is_dir() and (p / ".github").is_dir():
+            return p
+        if p.parent == p:
+            break
+        p = p.parent
+    return Path.cwd()
+
 # Markdown-style: [ try_1 ](try_1/index.html) or [try_1](https://.../try_1/index.html)
 LINK_RE = re.compile(r'\]\s*\(\s*([^)\s]+)\s*\)')
 # HTML-style: <a href="try_1/"> or href='try_1/index.html'
@@ -162,7 +174,7 @@ def main() -> None:
         "--repo-root",
         type=Path,
         default=None,
-        help="Path to YDB repo root (for ya.make REQUIREMENTS / SPLIT_FACTOR). Default: current dir.",
+        help="Path to YDB repo root (for ya.make REQUIREMENTS / SPLIT_FACTOR). Default: inferred from script path.",
     )
     ap.add_argument(
         "--out-dir",
@@ -233,7 +245,7 @@ def main() -> None:
 
     base_url = url.rsplit("/", 1)[0]
 
-    repo_root = args.repo_root.resolve() if args.repo_root else Path.cwd()
+    repo_root = (args.repo_root.resolve() if args.repo_root else _default_repo_root())
     out_base = args.out_dir or (Path.home() / job_type / run_id)
     out_base = out_base.resolve()
 

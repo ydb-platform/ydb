@@ -1,0 +1,113 @@
+Metadata-Version: 2.4
+Name: Scrapy
+Version: 2.14.1
+Summary: A high-level Web Crawling and Web Scraping framework
+Project-URL: Homepage, https://scrapy.org/
+Project-URL: Documentation, https://docs.scrapy.org/
+Project-URL: Source, https://github.com/scrapy/scrapy
+Project-URL: Tracker, https://github.com/scrapy/scrapy/issues
+Project-URL: Release notes, https://docs.scrapy.org/en/latest/news.html
+Author-email: Scrapy developers <pablo@pablohoffman.com>
+Maintainer-email: Pablo Hoffman <pablo@pablohoffman.com>
+License-Expression: BSD-3-Clause
+License-File: AUTHORS
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Framework :: Scrapy
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.10
+Requires-Dist: cryptography>=37.0.0
+Requires-Dist: cssselect>=0.9.1
+Requires-Dist: defusedxml>=0.7.1
+Requires-Dist: itemadapter>=0.1.0
+Requires-Dist: itemloaders>=1.0.1
+Requires-Dist: lxml>=4.6.4
+Requires-Dist: packaging
+Requires-Dist: parsel>=1.5.0
+Requires-Dist: protego>=0.1.15
+Requires-Dist: pydispatcher>=2.0.5; platform_python_implementation == 'CPython'
+Requires-Dist: pyopenssl>=22.0.0
+Requires-Dist: pypydispatcher>=2.1.0; platform_python_implementation == 'PyPy'
+Requires-Dist: queuelib>=1.4.2
+Requires-Dist: service-identity>=18.1.0
+Requires-Dist: tldextract
+Requires-Dist: twisted<=25.5.0,>=21.7.0
+Requires-Dist: w3lib>=1.17.0
+Requires-Dist: zope-interface>=5.1.0
+Description-Content-Type: text/x-rst
+
+|logo|
+
+.. |logo| image:: https://raw.githubusercontent.com/scrapy/scrapy/master/docs/_static/logo.svg
+   :target: https://scrapy.org
+   :alt: Scrapy
+   :width: 480px
+
+|version| |python_version| |ubuntu| |macos| |windows| |coverage| |conda| |deepwiki|
+
+.. |version| image:: https://img.shields.io/pypi/v/Scrapy.svg
+   :target: https://pypi.org/pypi/Scrapy
+   :alt: PyPI Version
+
+.. |python_version| image:: https://img.shields.io/pypi/pyversions/Scrapy.svg
+   :target: https://pypi.org/pypi/Scrapy
+   :alt: Supported Python Versions
+
+.. |ubuntu| image:: https://github.com/scrapy/scrapy/workflows/Ubuntu/badge.svg
+   :target: https://github.com/scrapy/scrapy/actions?query=workflow%3AUbuntu
+   :alt: Ubuntu
+
+.. |macos| image:: https://github.com/scrapy/scrapy/workflows/macOS/badge.svg
+   :target: https://github.com/scrapy/scrapy/actions?query=workflow%3AmacOS
+   :alt: macOS
+
+.. |windows| image:: https://github.com/scrapy/scrapy/workflows/Windows/badge.svg
+   :target: https://github.com/scrapy/scrapy/actions?query=workflow%3AWindows
+   :alt: Windows
+
+.. |coverage| image:: https://img.shields.io/codecov/c/github/scrapy/scrapy/master.svg
+   :target: https://codecov.io/github/scrapy/scrapy?branch=master
+   :alt: Coverage report
+
+.. |conda| image:: https://anaconda.org/conda-forge/scrapy/badges/version.svg
+   :target: https://anaconda.org/conda-forge/scrapy
+   :alt: Conda Version
+
+.. |deepwiki| image:: https://deepwiki.com/badge.svg
+   :target: https://deepwiki.com/scrapy/scrapy
+   :alt: Ask DeepWiki
+
+Scrapy_ is a web scraping framework to extract structured data from websites.
+It is cross-platform, and requires Python 3.10+. It is maintained by Zyte_
+(formerly Scrapinghub) and `many other contributors`_.
+
+.. _many other contributors: https://github.com/scrapy/scrapy/graphs/contributors
+.. _Scrapy: https://scrapy.org/
+.. _Zyte: https://www.zyte.com/
+
+Install with:
+
+.. code:: bash
+
+    pip install scrapy
+
+And follow the documentation_ to learn how to use it.
+
+.. _documentation: https://docs.scrapy.org/en/latest/
+
+If you wish to contribute, see Contributing_.
+
+.. _Contributing: https://docs.scrapy.org/en/master/contributing.html

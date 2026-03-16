@@ -1,0 +1,3 @@
+[console_scripts]
+jsonsubschema=jsonsubschema.cli:main
+

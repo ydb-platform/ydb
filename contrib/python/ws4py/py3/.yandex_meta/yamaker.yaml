@@ -1,0 +1,3 @@
+exclude:
+  - ws4py/async_websocket.py
+  - ws4py/server/tulipserver.py

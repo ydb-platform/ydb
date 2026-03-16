@@ -1,0 +1,10 @@
+# Code table 3.25 - Type of bi-Fourier truncation
+# 0-76 Reserved
+77 77 Rectangular
+# 78-87 Reserved
+88 88 Elliptic
+# 89-98 Reserved
+99 99 Diamond
+# 100-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

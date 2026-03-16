@@ -1,0 +1,28 @@
+commit 6e341e4f0d4af2f5378d473d990713cff5cbfef8
+merge: 9648d42512b3c16edd0bcd3d1ce9773232244493 6ad8094585143f678502d5d17c43c1130aae9eef
+author: sasorokin
+date: 2019-09-12T14:22:52+03:00
+revision: 5649057
+
+    Патч яндекса для libxslt, добавляет функции работы с датами и использование переменных в матчерах темплейтов
+    
+    Яндексовый патч, эту версию использовал XScript.
+    Добавляет функции для работы с датами. В match выражениях, в темплейтах, разрешает использовать переменные.
+    Патч из svn+ssh://svn.yandex.ru/common/patches/libxslt1.1/libxslt-1.1.26-yandex.patch@594
+    Описание патча: https://doc.yandex-team.ru/libxslt-patch
+    
+    REVIEW: 926189
+
+--- a/libxslt/pattern.c	(9648d42512b3c16edd0bcd3d1ce9773232244493)
++++ b/libxslt/pattern.c	(6e341e4f0d4af2f5378d473d990713cff5cbfef8)
+@@ -2119,8 +2119,9 @@ xsltAddTemplate(xsltStylesheetPtr style, xsltTemplatePtr cur,
+     }
+ 
+     priority = cur->priority;
++    /* novar = 0 allows usage of variables in template match expressions */
+     pat = xsltCompilePatternInternal(cur->match, style->doc, cur->elem,
+-		    style, NULL, 1);
++		    style, NULL, 0);
+     if (pat == NULL)
+ 	return(-1);
+     while (pat) {

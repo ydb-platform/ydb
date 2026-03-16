@@ -1,0 +1,59 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: 'NetCDF-C '
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - name: NSF Unidata
+    website: 'https://unidata.ucar.edu'
+  - given-names: Glenn
+    family-names: Davis
+    affiliation: UCAR/Unidata
+  - given-names: Russ
+    family-names: Rew
+    affiliation: UCAR/Unidata
+  - given-names: Dennis
+    family-names: Heimbigner
+    affiliation: UCAR/Unidata
+  - given-names: Edward
+    family-names: Hartnett
+    affiliation: 'UCAR/Unidata, NOAA'
+  - given-names: Ward
+    family-names: Fisher
+    affiliation: UCAR/Unidata
+  - given-names: Many
+    family-names: Others
+    affiliation: >-
+      https://github.com/Unidata/netcdf-c/blob/main/docs/credits.md
+identifiers:
+  - type: doi
+    value: 10.5065/D6H70CW6
+    description: NetCDF-C library
+  - type: url
+    value: 'https://www.unidata.ucar.edu/software/netcdf/'
+    description: NetCDF Homepage
+repository-code: 'https://github.com/Unidata/netcdf-c'
+keywords:
+  - data
+  - netcdf
+  - netcdf-c
+  - data model
+  - software
+  - NSF
+license: BSD-3-Clause
+contact:
+  - name: Unidata
+    city: Boulder
+    region: Colorado
+    country: US
+    email: support@unidata.ucar.edu
+    tel: 303-497-8643
+    fax: 303-497-8690
+    website: 'https://www.unidata.ucar.edu'
+doi: 10.5065/D6H70CW6
+abstract: >
+    NetCDF (Network Common Data Form) is a set of software libraries and machine-independent data formats that support the creation, access, and sharing of array-oriented scientific data. It is also a community standard for sharing scientific data. The Unidata Program Center supports and maintains netCDF programming interfaces for C, C++, Java, and Fortran. Programming interfaces are also available for Python, IDL, MATLAB, R, Ruby, and Perl.

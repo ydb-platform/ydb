@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package yandex.cloud.monitoring.v3;
+
+import "yandex/cloud/monitoring/v3/link.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/monitoring/v3;monitoring";
+option java_package = "yandex.cloud.api.monitoring.v3";
+
+message LinkItem {
+    message LinkGroup {
+        string title = 1;
+        repeated LinkItem items = 2;
+    }
+
+    oneof type {
+        Link link = 1;
+        LinkGroup group = 2;
+    }
+}

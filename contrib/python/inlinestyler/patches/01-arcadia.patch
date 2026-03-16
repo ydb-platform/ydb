@@ -1,0 +1,6 @@
+--- contrib/python/inlinestyler/inlinestyler/converter.py	(index)
++++ contrib/python/inlinestyler/inlinestyler/converter.py	(working tree)
+@@ -82,1 +82,2 @@ class Conversion(object):
+-        with open(os.path.join(os.path.dirname(__file__), "css_compliance.csv")) as csv_file:
++        from importlib.resources import files
++        with (files(__package__) / "css_compliance.csv").open() as csv_file:

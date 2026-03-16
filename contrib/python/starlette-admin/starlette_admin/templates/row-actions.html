@@ -1,0 +1,69 @@
+{% macro action_data_attributes(action) -%}
+    {% if action.is_link -%}
+        href="{{ model._row_actions_handlers.get(action.name)(request, pk) }}"
+    {% else %}
+        href="#"
+        {% if action.confirmation is not none -%}
+            data-bs-toggle="modal"
+            data-bs-target="#modal-action"
+            data-confirmation="{{ action.confirmation }}"
+        {% else %}
+            data-no-confirmation-action="true"
+        {% endif %}
+        {% if action.custom_response -%}
+            data-custom-response="true"
+        {% endif %}
+        data-submit-btn-text="{{ action.submit_btn_text }}"
+        data-submit-btn-class="{{ action.submit_btn_class }}"
+        data-form="{{ action.form |forceescape }}"
+    {% endif %}
+    data-is-row-action="true"
+    data-name="{{ action.name }}"
+{% endmacro %}
+
+{% if display_type == "ICON_LIST" -%}
+    <div class="d-flex">
+        {% for action in _actions -%}
+            <a title="{{ action.text }}"
+                    {{ action_data_attributes(action) }}>
+                <span class="me-1"><i class="{{ action.icon_class }}"></i></span>
+            </a>
+        {% endfor %}
+    </div>
+{% elif display_type == "DROPDOWN" -%}
+    <div class="dropdown" id="actions-dropdown">
+        <button type="button"
+                class="btn dropdown-toggle"
+                data-bs-toggle="dropdown">
+            {{ _("Actions") }}
+        </button>
+        <div class="dropdown-menu">
+            {% for action in _actions -%}
+                <a class="dropdown-item row-action-item"
+                   type="button"
+                        {{ action_data_attributes(action) }}
+                >
+                    {% if action.icon_class -%}
+                        <i class="{{ action.icon_class }} me-2"></i>
+                    {% endif -%}
+                    {{ action.text }}
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+{% else -%}
+    {#  For detail page   #}
+    <div class="btn-list">
+        {% for action in _actions -%}
+            <a class="row-action-item btn {{ action.action_btn_class or '' }}"
+               role="button"
+                    {{ action_data_attributes(action) }}
+            >
+                {% if action.icon_class -%}
+                    <i class="{{ action.icon_class }} me-2"></i>
+                {% endif -%}
+                {{ action.text }}
+            </a>
+        {% endfor %}
+    </div>
+{% endif %}

@@ -1,0 +1,5 @@
+# FLAG TABLE 3.5, Projection Centre
+1 0 North Pole is on the projection plane
+1 1 South Pole is on the projection plane
+2 0 Only one projection centre is used
+2 1 Projection is bipolar and symmetric

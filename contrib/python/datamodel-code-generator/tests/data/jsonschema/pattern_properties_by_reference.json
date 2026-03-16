@@ -1,0 +1,54 @@
+
+{
+  "$defs": {
+    "stt": {
+      "additionalProperties": false,
+      "description": "STT properties allows to configure how the user voice is converted to text",
+      "properties": {
+        "timeout": {
+          "title": "STT Timeout",
+          "type": "number"
+        }
+      },
+      "title": "Speech to text Settings",
+      "type": "object"
+    },
+    "textResponse": {
+      "additionalProperties": false,
+      "type": "object",
+      "patternProperties": {
+        "^[a-z]{1}[0-9]{1}$": {
+          "phoneNumber": {
+            "additionalProperties": false,
+            "type": "number"
+          }
+        }
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "additionalProperties": false,
+  "description": "The root schema comprises the entire JSON document",
+  "properties": {
+    "KeyWithExplicitPatternProperties": {
+      "additionalProperties": false,
+      "type": "object",
+      "patternProperties": {
+        "^[a-z]{1}[0-9]{1}$": {
+          "phoneNumber": {
+            "additionalProperties": false,
+            "type": "number"
+          }
+        }
+      }
+    },
+    "KeyWithPatternPropertiesByReference": {
+      "$ref": "#/$defs/textResponse"
+    },
+    "SomeOtherBoringReference": {
+      "$ref": "#/$defs/stt"
+    }
+  },
+  "title": "SomeSchema Schema",
+  "type": "object"
+}

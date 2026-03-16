@@ -1,0 +1,33 @@
+Metadata-Version: 2.4
+Name: annet
+Version: 3.24.0
+Summary: annet
+Home-page: https://github.com/annetutil/annet
+License: MIT
+Requires-Python: >=3.10
+License-File: LICENSE
+License-File: AUTHORS
+Requires-Dist: colorama>=0.4.6
+Requires-Dist: tabulate>=0.9.0
+Requires-Dist: jsonpatch>=1.33
+Requires-Dist: jsonpointer>=2.4
+Requires-Dist: PyYAML>=6.0.1
+Requires-Dist: Pygments>=2.14.0
+Requires-Dist: Mako>=1.2.4
+Requires-Dist: packaging>=23.2
+Requires-Dist: contextlog>=1.1
+Requires-Dist: valkit>=0.1.4
+Requires-Dist: yarl>=1.8.2
+Requires-Dist: adaptix==3.0.0b7
+Requires-Dist: dataclass-rest==0.4
+Requires-Dist: ordered-set>=4.1.0
+Provides-Extra: netbox
+Requires-Dist: annetbox[sync]>=0.9.0; extra == "netbox"
+Requires-Dist: requests-cache>=1.2.1; extra == "netbox"
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

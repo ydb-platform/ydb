@@ -1,0 +1,3 @@
+<IMG SRC=JaVaScRiPt:alert('XSS')>
+--
+&lt;IMG SRC=JaVaScRiPt:alert('XSS')&gt;

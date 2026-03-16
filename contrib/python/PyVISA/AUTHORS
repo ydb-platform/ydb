@@ -1,0 +1,29 @@
+PyVISA was originally programmed by Torsten Bronger and Gregor Thalhammer, Innsbruck, Austria.
+It is based on earlier experiences by Thalhammer.
+
+It was maintained from March 2012 to August 2013 by Florian Bauer.
+It was maintained till 2018 by Hernan E. Grecco
+It is currently maintained by Matthieu Dartiailh <m.dartiailh@gmail.com>.
+
+Other contributors, listed alphabetically, are:
+
+* bauflo3 <bauflo3@516c0664-e049-0410-bc6e-8f9a6051a51d>
+* bkstein <Bernd.Krietenstein@rohde-schwarz.com>
+* bronger>
+* Christian Lupien <christian.lupien@usherbrooke.ca>
+* Colin Marquardt <github@marquardt-home.de>
+* crazyfermions <brain-stormer@web.de>
+* gnbl <l@eleif.net>
+* Gregor Thalhammer <gregor.thalhammer@gmail.com>
+* HummingBrid
+* kcsaff
+* Neil J. Jansen <km4yri@gmail.com>
+* Laurent P. René de Cotret <laurent.decotret@outlook.com>
+* Martin Ritter <ritter@mpp.mpg.de>
+* Matthew94 <matthewlove94@gmail.com>
+* Matthieu Dartiailh <marul@laposte.net>
+* mordoror <mordoror@gmail.com>
+* Tobias Müller <Tobias_Mueller@twam.info>
+* Yves Delley <hack@delley.net>
+
+If you think your name should be here, please let me know.

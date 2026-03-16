@@ -1,0 +1,3 @@
+[celery.result_backends]
+django-cache = django_celery_results.backends:CacheBackend
+django-db = django_celery_results.backends:DatabaseBackend

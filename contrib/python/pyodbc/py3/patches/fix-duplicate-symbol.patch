@@ -1,0 +1,40 @@
+--- a/src/pyodbcmodule.cpp	(index)
++++ b/src/pyodbcmodule.cpp	(working tree)
+@@ -68,6 +68,8 @@ static char module_doc[] =
+     "  connection is made. Use 3.8 if you are using unixodbc connection pooling and your\n"
+     "  drivers are all 3.8 compatible. The default is '3.X'.";
+ 
++inline namespace pyodbc {
++
+ PyObject* Error;
+ PyObject* Warning;
+ PyObject* InterfaceError;
+@@ -79,6 +81,8 @@ PyObject* IntegrityError;
+ PyObject* DataError;
+ PyObject* NotSupportedError;
+ 
++}
++
+ struct ExcInfo
+ {
+     const char* szName;
+--- a/src/pyodbcmodule.h	(index)
++++ b/src/pyodbcmodule.h	(working tree)
+@@ -17,6 +17,8 @@
+ // This is a custom constant that can be passed to Connection.setencoding.  Pick a value that
+ // is very different from SQL_CHAR and SQL_WCHAR and similar items.
+ 
++inline namespace pyodbc {
++
+ extern PyObject* Error;
+ extern PyObject* Warning;
+ extern PyObject* InterfaceError;
+@@ -28,6 +30,8 @@ extern PyObject* IntegrityError;
+ extern PyObject* DataError;
+ extern PyObject* NotSupportedError;
+ 
++}
++
+ /*
+   Returns the given class, specific to the current thread's interpreter.  For performance these
+   are cached for each thread.

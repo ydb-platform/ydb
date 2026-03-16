@@ -1,0 +1,100 @@
+# RDB stands for REPORT DATA BASE
+# See https://confluence.ecmwf.int/pages/viewpage.action?pageId=24316441
+unsigned[1]   rdbType : dump; 
+unsigned[1]   oldSubtype: dump;
+
+byte[13]      keyData : hidden; 
+
+meta localYear   bits(keyData,0,12) : dump,long_type,no_copy;
+meta localMonth  bits(keyData,12,4) : dump,long_type,no_copy;
+meta localDay    bits(keyData,16,6) : dump,long_type,no_copy;
+meta localHour   bits(keyData,22,5) : dump,long_type,no_copy;
+meta localMinute bits(keyData,27,6) : dump,long_type,no_copy;
+meta localSecond bits(keyData,33,6) : dump,long_type,no_copy;
+meta spare  bits(keyData,39,1) : no_copy; # 40 bits = 5 bytes
+
+alias rdb.localYear=localYear;
+alias rdb.localMonth=localMonth;
+alias rdb.localDay=localDay;
+alias rdb.localHour=localHour;
+alias rdb.localMinute=localMinute;
+alias rdb.localSecond=localSecond;
+
+meta localDate sprintf("%.4d%.2d%.2d",localYear,localMonth,localDay) : no_copy;
+meta localTime sprintf("%.2d%.2d",localHour,localMinute) : no_copy;
+meta localDateTime julian_date(localYear,localMonth,localDay,localHour,localMinute,localSecond) : no_copy;
+alias mars.date = localDate;
+alias mars.time = localTime;
+
+# isSatellite and other stuff moved to section 3
+ascii[8] keyMore : hidden; 
+byte[9]  keySat : hidden; 
+
+# 16 bytes
+unsigned[2] messageLength;
+alias rdb.messageLength=messageLength;
+
+byte[3] rdbtime;
+meta rdbtimeDay     bits(rdbtime,0,6) : dump,long_type,no_copy;
+meta rdbtimeHour    bits(rdbtime,6,5) : dump,long_type,no_copy;
+meta rdbtimeMinute  bits(rdbtime,11,6) : dump,long_type,no_copy;
+meta rdbtimeSecond  bits(rdbtime,17,6) : dump,long_type,no_copy;
+
+meta rdbtimeYear rdbtime_guess_date(typicalYear,typicalMonth,typicalDay,rdbtimeDay,1);
+meta rdbtimeMonth rdbtime_guess_date(typicalYear,typicalMonth,typicalDay,rdbtimeDay,2);
+
+meta ls.rdbtimeDate sprintf("%.4d%.2d%.2d",rdbtimeYear,rdbtimeMonth,rdbtimeDay) : no_copy;
+meta ls.rdbtimeTime sprintf("%.2d%.2d%.2d",rdbtimeHour,rdbtimeMinute,rdbtimeSecond) :dump,no_copy;
+
+meta rdbDateTime julian_date(rdbtimeYear,rdbtimeMonth,rdbtimeDay,rdbtimeHour,rdbtimeMinute,rdbtimeSecond) : no_copy;
+
+byte[3] rectime;
+meta rectimeDay     bits(rectime,0,6)  : dump,long_type,no_copy;
+meta rectimeHour    bits(rectime,6,5)  : dump,long_type,no_copy;
+meta rectimeMinute  bits(rectime,11,6) : dump,long_type,no_copy;
+meta rectimeSecond  bits(rectime,17,6) : dump,long_type,no_copy;
+meta restricted     bits(rectime,23,1) : dump,long_type,no_copy; # ECC-1136
+
+meta recDateTime julian_date(rdbtimeYear,rdbtimeMonth,rectimeDay,rectimeHour,rectimeMinute,rectimeSecond) : no_copy;
+
+byte[1] corr1Data;
+meta correction1     bits(corr1Data,0,6) : dump,long_type,no_copy;
+meta correction1Part bits(corr1Data,6,1) : dump,long_type,no_copy;
+meta spare1          bits(corr1Data,7,1) : long_type,no_copy;
+
+byte[1] corr2Data;
+meta correction2     bits(corr2Data,0,6) : dump,long_type,no_copy;
+meta correction2Part bits(corr2Data,6,1) : dump,long_type,no_copy;
+meta spare2          bits(corr2Data,7,1) : long_type,no_copy;
+
+byte[1] corr3Data;
+meta correction3     bits(corr3Data,0,6) : dump,long_type,no_copy;
+meta correction3Part bits(corr3Data,6,1) : dump,long_type,no_copy;
+meta spare3          bits(corr3Data,7,1) : long_type,no_copy;
+
+byte[1] corr4Data;
+meta correction4     bits(corr4Data,0,6) : dump,long_type,no_copy;
+meta correction4Part bits(corr4Data,6,1) : dump,long_type,no_copy;
+meta spare4          bits(corr4Data,7,1) : long_type,no_copy;
+
+unsigned[1] qualityControl : dump,long_type;
+alias qualityControl=qualityControl;
+
+unsigned[2] newSubtype = 0 : dump;
+
+if (oldSubtype < 255 ) {
+  alias rdbSubtype=oldSubtype;
+} else {
+  alias rdbSubtype=newSubtype;
+}
+
+alias ls.rdbType=rdbType;
+alias ls.rdbSubtype=rdbSubtype;
+
+alias rdb.rdbType=rdbType;
+alias rdb.rdbSubtype=rdbSubtype;
+
+alias mars.obstype = rdbSubtype;
+
+# Data assimilation loop for purpose of Continuous DA
+unsigned[1] daLoop;

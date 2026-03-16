@@ -1,0 +1,378 @@
+[
+  {
+    "bank_code": "",
+    "bic": "ALFACY2NXXX",
+    "country_code": "CY",
+    "name": "ALFA CAPITAL HOLDINGS (CYPRUS) LIMITED",
+    "primary": true,
+    "short_name": "ALFA CAPITAL HOLDINGS"
+  },
+  {
+    "bank_code": "009",
+    "bic": "ABKLCY2N",
+    "country_code": "CY",
+    "name": "ALPHA BANK CYPRUS LTD",
+    "primary": true,
+    "short_name": "ALPHA BANK CYPRUS"
+  },
+  {
+    "bank_code": "",
+    "bic": "ANCOCY2NXXX",
+    "country_code": "CY",
+    "name": "ANCORIA BANK LTD",
+    "primary": true,
+    "short_name": "ANCORIA BANK"
+  },
+  {
+    "bank_code": "",
+    "bic": "AJIBCY2IXXX",
+    "country_code": "CY",
+    "name": "ARAB JORDAN INVESTMENT BANK",
+    "primary": true,
+    "short_name": "ARAB JORDAN INVESTMENT BANK"
+  },
+  {
+    "bank_code": "008",
+    "bic": "PIRBCY2N",
+    "country_code": "CY",
+    "name": "ASTROBANK PUBLIC COMPANY LIMITED",
+    "primary": true,
+    "short_name": "ASTROBANK PUBLIC COMPANY"
+  },
+  {
+    "bank_code": "",
+    "bic": "ATONCY2NXXX",
+    "country_code": "CY",
+    "name": "ATONLINE LIMITED",
+    "primary": true,
+    "short_name": "ATONLINE"
+  },
+  {
+    "bank_code": "",
+    "bic": "BABECY2NXXX",
+    "country_code": "CY",
+    "name": "BANK OF BEIRUT S.A.L CYPRUS BRANCH",
+    "primary": true,
+    "short_name": "BANK OF BEIRUT S.A.L"
+  },
+  {
+    "bank_code": "002",
+    "bic": "BCYPCY2N",
+    "country_code": "CY",
+    "name": "BANK OF CYPRUS PUBLIC COMPANY LIMITED",
+    "primary": true,
+    "short_name": "BANK OF CYPRUS PUBLIC COMPANY"
+  },
+  {
+    "bank_code": "",
+    "bic": "EUMOCY2IXXX",
+    "country_code": "CY",
+    "name": "BANQUE BEMO SAL",
+    "primary": true,
+    "short_name": "BANQUE BEMO SAL"
+  },
+  {
+    "bank_code": "",
+    "bic": "SBAACY2IXXX",
+    "country_code": "CY",
+    "name": "BANQUE SBA - INTERNATIONAL BANKING UNIT",
+    "primary": true,
+    "short_name": "BANQUE SBA"
+  },
+  {
+    "bank_code": "",
+    "bic": "BBACCY2NXXX",
+    "country_code": "CY",
+    "name": "BBAC SAL LIMASSOL BRANCH",
+    "primary": true,
+    "short_name": "BBAC SAL LIMASSOL BRANCH"
+  },
+  {
+    "bank_code": "",
+    "bic": "BLOMCY2IXXX",
+    "country_code": "CY",
+    "name": "BLOM BANK S.A.L.",
+    "primary": true,
+    "short_name": "BLOM BANK"
+  },
+  {
+    "bank_code": "",
+    "bic": "BYBACY2IXXX",
+    "country_code": "CY",
+    "name": "BYBLOS BANK S.A.L. (IBU)",
+    "primary": true,
+    "short_name": "BYBLOS BANK"
+  },
+  {
+    "bank_code": "",
+    "bic": "CBCYCY2NXXX",
+    "country_code": "CY",
+    "name": "CENTRAL BANK OF CYPRUS",
+    "primary": true,
+    "short_name": "CENTRAL BANK OF CYPRUS"
+  },
+  {
+    "bank_code": "",
+    "bic": "CECBCY2NXXX",
+    "country_code": "CY",
+    "name": "CENTRAL COOPERATIVE BANK PLC",
+    "primary": true,
+    "short_name": "CENTRAL COOPERATIVE BANK"
+  },
+  {
+    "bank_code": "",
+    "bic": "CLIBCY2LXXX",
+    "country_code": "CY",
+    "name": "CREDIT LIBANAIS S.A.L",
+    "primary": true,
+    "short_name": "CREDIT LIBANAIS"
+  },
+  {
+    "bank_code": "",
+    "bic": "CYDBCY2NXXX",
+    "country_code": "CY",
+    "name": "CYPRUS DEVELOPMENT BANK PUBLIC COMPANY LTD",
+    "primary": true,
+    "short_name": "CYPRUS DEVELOPMENT BANK PUBLIC COMPANY"
+  },
+  {
+    "bank_code": "",
+    "bic": "XCYSCY2NXXX",
+    "country_code": "CY",
+    "name": "CYPRUS STOCK EXCHANGE",
+    "primary": true,
+    "short_name": "CYPRUS STOCK EXCHANGE"
+  },
+  {
+    "bank_code": "",
+    "bic": "ECBXCY2NXXX",
+    "country_code": "CY",
+    "name": "ECOMMBX LIMITED",
+    "primary": true,
+    "short_name": "ECOMMBX"
+  },
+  {
+    "bank_code": "018",
+    "bic": "ERBKCY2N",
+    "country_code": "CY",
+    "name": "EUROBANK CYPRUS LTD",
+    "primary": true,
+    "short_name": "EUROBANK CYPRUS"
+  },
+  {
+    "bank_code": "",
+    "bic": "FINVCY2NXXX",
+    "country_code": "CY",
+    "name": "FIRST INVESTMENT BANK CYPRUS INTERNATIONAL BANKING UNIT",
+    "primary": true,
+    "short_name": "FIRST INVESTMENT BANK CYPRUS INTERNATIONAL BANKING UNIT"
+  },
+  {
+    "bank_code": "",
+    "bic": "GPBFCY2LXXX",
+    "country_code": "CY",
+    "name": "GPB FINANCIAL SERVICES LIMITED",
+    "primary": true,
+    "short_name": "GPB FINANCIAL SERVICES"
+  },
+  {
+    "bank_code": "005",
+    "bic": "HEBACY2N",
+    "country_code": "CY",
+    "name": "HELLENIC BANK PUBLIC COMPANY LTD.",
+    "primary": true,
+    "short_name": "HELLENIC BANK PUBLIC COMPANY"
+  },
+  {
+    "bank_code": "007",
+    "bic": "HEBACY2N",
+    "country_code": "CY",
+    "name": "HELLENIC BANK PUBLIC COMPANY LTD (FORMERLY CYPRUS COOPERATIVE BANK LTD)",
+    "primary": true,
+    "short_name": "HELLENIC BANK PUBLIC COMPANY"
+  },
+  {
+    "bank_code": "",
+    "bic": "HFICCY2NXXX",
+    "country_code": "CY",
+    "name": "HOUSING FINANCE CORPORATION",
+    "primary": true,
+    "short_name": "HOUSING FINANCE CORPORATION"
+  },
+  {
+    "bank_code": "",
+    "bic": "INLECY2LXXX",
+    "country_code": "CY",
+    "name": "IBL BANK, SAL",
+    "primary": true,
+    "short_name": "IBL BANK, SAL"
+  },
+  {
+    "bank_code": "",
+    "bic": "ISEMCY22XXX",
+    "country_code": "CY",
+    "name": "ISXPAY",
+    "primary": true,
+    "short_name": "ISXPAY"
+  },
+  {
+    "bank_code": "",
+    "bic": "JCCPCY2NXXX",
+    "country_code": "CY",
+    "name": "JCC PAYMENT SYSTEMS LTD",
+    "primary": true,
+    "short_name": "JCC PAYMENT SYSTEMS"
+  },
+  {
+    "bank_code": "",
+    "bic": "JONBCY2IXXX",
+    "country_code": "CY",
+    "name": "JORDAN AHLI BANK PLC",
+    "primary": true,
+    "short_name": "JORDAN AHLI BANK"
+  },
+  {
+    "bank_code": "",
+    "bic": "JKBACY2LXXX",
+    "country_code": "CY",
+    "name": "JORDAN KUWAIT BANK PLC",
+    "primary": true,
+    "short_name": "JORDAN KUWAIT BANK"
+  },
+  {
+    "bank_code": "",
+    "bic": "LGBACY2LXXX",
+    "country_code": "CY",
+    "name": "LEBANON AND GULF BANK S.A.L. - LARNACA BRANCH",
+    "primary": true,
+    "short_name": "LGB BANK S.A.L."
+  },
+  {
+    "bank_code": "",
+    "bic": "MEIPCY22XXX",
+    "country_code": "CY",
+    "name": "MERITKAPITAL LIMITED",
+    "primary": true,
+    "short_name": "MERITKAPITAL"
+  },
+  {
+    "bank_code": "",
+    "bic": "ETHNCY2NXXX",
+    "country_code": "CY",
+    "name": "NATIONAL BANK OF GREECE (CYPRUS) LTD.",
+    "primary": true,
+    "short_name": "NATIONAL BANK OF GREECE"
+  },
+  {
+    "bank_code": "",
+    "bic": "OMFVCY2NXXX",
+    "country_code": "CY",
+    "name": "OMEGA FUNDS INVESTMENT LIMITED",
+    "primary": true,
+    "short_name": "OMEGA FUNDS INVESTMENT"
+  },
+  {
+    "bank_code": "",
+    "bic": "PBANCY2NXXX",
+    "country_code": "CY",
+    "name": "PRIVATBANK, CYPRUS BRANCH",
+    "primary": true,
+    "short_name": "PRIVATBANK"
+  },
+  {
+    "bank_code": "",
+    "bic": "RCBLCY2IXXX",
+    "country_code": "CY",
+    "name": "RCB BANK LTD",
+    "primary": true,
+    "short_name": "RCB BANK"
+  },
+  {
+    "bank_code": "",
+    "bic": "LGBACY2LXXX",
+    "country_code": "CY",
+    "name": "RENAISSANCE SECURITIES (CYPRUS) LIMITED",
+    "primary": true,
+    "short_name": "RENAISSANCE SECURITIES"
+  },
+  {
+    "bank_code": "",
+    "bic": "RNINCY2NXXX",
+    "country_code": "CY",
+    "name": "RONIN EUROPE LIMITED",
+    "primary": true,
+    "short_name": "RONIN EUROPE"
+  },
+  {
+    "bank_code": "",
+    "bic": "SEPMCY2NXXX",
+    "country_code": "CY",
+    "name": "SEPAGA E.M.I. LTD",
+    "primary": true,
+    "short_name": "SEPAGA E.M.I."
+  },
+  {
+    "bank_code": "",
+    "bic": "TDINCY2NXXX",
+    "country_code": "CY",
+    "name": "SIB (CYPRUS) LIMITED",
+    "primary": true,
+    "short_name": "SIB"
+  },
+  {
+    "bank_code": "",
+    "bic": "SKNNCYN2XXX",
+    "country_code": "CY",
+    "name": "SKANESTAS INVESTMENTS LIMITED",
+    "primary": true,
+    "short_name": "SKANESTAS INVESTMENTS"
+  },
+  {
+    "bank_code": "",
+    "bic": "SOGECY2NXXX",
+    "country_code": "CY",
+    "name": "SOCIETE GENERALE CYPRUS LIMITED",
+    "primary": true,
+    "short_name": "SOCIETE GENERALE"
+  },
+  {
+    "bank_code": "",
+    "bic": "TFIMCY2NXXX",
+    "country_code": "CY",
+    "name": "TFI MARKETS LIMITED",
+    "primary": true,
+    "short_name": "TFI MARKETS"
+  },
+  {
+    "bank_code": "",
+    "bic": "WARFCY2NXXX",
+    "country_code": "CY",
+    "name": "WARGAMING FINANCE LTD",
+    "primary": true,
+    "short_name": "WARGAMING FINANCE"
+  },
+  {
+    "bank_code": "",
+    "bic": "WWFICY2LXXX",
+    "country_code": "CY",
+    "name": "WISE WOLVES FINANCE LTD",
+    "primary": true,
+    "short_name": "WISE WOLVES FINANCE"
+  },
+  {
+    "bank_code": "",
+    "bic": "WWPICY2LXXX",
+    "country_code": "CY",
+    "name": "WISE WOLVES PAYMENT INSTITUTION LIMITED",
+    "primary": true,
+    "short_name": "WISE WOLVES PAYMENT INSTITUTION"
+  },
+  {
+    "bank_code": "029",
+    "bic": "ANCOCY2N",
+    "country_code": "CY",
+    "name": "ANCORIA BANK LTD, LIMASSOL BANKING CENTRE",
+    "primary": true,
+    "short_name": "ANCORIA BANK LTD"
+  }
+]

@@ -1,0 +1,16 @@
+Metadata-Version: 2.1
+Name: drf-ujson
+Version: 1.2
+Summary: Django Rest Framework UJSON Renderer
+Home-page: https://github.com/gizmag/drf-ujson-renderer
+Author: Gizmag
+Author-email: tech@gizmag.com
+License: UNKNOWN
+Platform: UNKNOWN
+Requires-Dist: django
+Requires-Dist: ujson
+Requires-Dist: djangorestframework
+
+UNKNOWN
+
+

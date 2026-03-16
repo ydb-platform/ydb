@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.apigateway.websocket.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/serverless/apigateway/websocket/v1/connection.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/apigateway/websocket/v1;websocket";
+option java_package = "yandex.cloud.api.serverless.apigateway.websocket.v1";
+
+// A set of methods for managing API Gateway WebSocket connections.
+service ConnectionService {
+  // Returns the specified connection info.
+  rpc Get (GetConnectionRequest) returns (Connection){
+    option (google.api.http) = {get: "/apigateways/websocket/v1/connections/{connection_id}"};
+  }
+
+  // Sends data to the specified connection.
+  rpc Send(SendToConnectionRequest) returns (SendToConnectionResponse){
+    option (google.api.http) = {post: "/apigateways/websocket/v1/connections/{connection_id}:send" body: "*"};
+  }
+
+  // Disconnects the specified connection.
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse){
+    option (google.api.http) = {delete: "/apigateways/websocket/v1/connections/{connection_id}"};
+  }
+}
+
+message GetConnectionRequest {
+  // ID of the connection to get.
+  string connection_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message SendToConnectionRequest {
+  enum DataType {
+    DATA_TYPE_UNSPECIFIED = 0;
+
+    // Binary data.
+    BINARY = 1;
+
+    // Text data.
+    TEXT = 2;
+  }
+
+  // ID of the connection to which send.
+  string connection_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Data to send.
+  bytes data = 2 [(required) = true, (length) = "<=131072"];
+
+  // Type of the sending data.
+  DataType type = 3;
+}
+
+message SendToConnectionResponse {}
+
+message DisconnectRequest {
+  // ID of the connection to disconnect.
+  string connection_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DisconnectResponse {}

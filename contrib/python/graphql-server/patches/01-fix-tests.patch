@@ -1,0 +1,5 @@
+--- contrib/python/graphql-server/tests/flask/app.py    (index)
++++ contrib/python/graphql-server/tests/flask/app.py    (working tree)
+@@ -1,1 +1,1 @@
+-from tests.flask.schema import Schema
++from .schema import Schema

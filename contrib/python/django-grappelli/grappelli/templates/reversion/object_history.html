@@ -1,0 +1,39 @@
+{% extends "admin/object_history.html" %}
+{% load i18n %}
+
+{% block content %}
+    <div class="g-d-c grp-object-history">
+        <div class="grp-rte">
+            <p>{% blocktrans %}Choose a date from the list below to revert to a previous version of this object.{% endblocktrans %}</p>
+        </div>
+        {% if action_list %}
+            <table id="grp-change-history" class="grp-table">
+                <thead>
+                    <tr>
+                        <th scope="col">{% trans 'Date/time' %}</th>
+                        <th scope="col">{% trans 'User' %}</th>
+                        <th scope="col">{% trans 'Comment' %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for action in action_list %}
+                        <tr>
+                            <th scope="grp-row"><a href="{{ action.url }}">{{ action.revision.date_created }}</a></th>
+                            <td>
+                                {% if action.revision.user %}
+                                    {{ action.revision.user.get_username }}
+                                    {% if action.revision.user.get_full_name %} ({{ action.revision.user.get_full_name }}){% endif %}
+                                {% else %}
+                                    &mdash;
+                                {% endif %}
+                            </td>
+                            <td>{{action.revision.get_comment|linebreaksbr|default:""}}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>{% trans "This object doesn't have a change history. It probably wasn't added via this admin site." %}</p>
+        {% endif %}
+    </div>
+{% endblock %}

@@ -1,0 +1,2 @@
+[console_scripts]
+mammoth = mammoth.cli:main

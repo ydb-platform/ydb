@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package temporal.api.enums.v1;
+
+option go_package = "go.temporal.io/api/enums/v1;enums";
+option java_package = "io.temporal.api.enums.v1";
+option java_multiple_files = true;
+option java_outer_classname = "UpdateProto";
+option ruby_package = "Temporalio::Api::Enums::V1";
+option csharp_namespace = "Temporalio.Api.Enums.V1";
+
+// UpdateWorkflowExecutionLifecycleStage is specified by clients invoking
+// Workflow Updates and used to indicate to the server how long the
+// client wishes to wait for a return value from the API. If any value other
+// than UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED is sent by the
+// client then the API will complete before the Update is finished and will
+// return a handle to the running Update so that it can later be polled for
+// completion.
+// If specified stage wasn't reached before server timeout, server returns
+// actual stage reached.
+enum UpdateWorkflowExecutionLifecycleStage {
+    // An unspecified value for this enum.
+    UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED = 0;
+    // The API call will not return until the Update request has been admitted
+    // by the server - it may be the case that due to a considerations like load
+    // or resource limits that an Update is made to wait before the server will
+    // indicate that it has been received and will be processed. This value
+    // does not wait for any sort of acknowledgement from a worker.
+    UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED = 1;
+    // The API call will not return until the Update has passed validation on a worker.
+    UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED = 2;
+    // The API call will not return until the Update has executed to completion
+    // on a worker and has either been rejected or returned a value or an error.
+    UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED = 3;
+}
+
+// Records why a WorkflowExecutionUpdateAdmittedEvent was written to history.
+// Note that not all admitted Updates result in this event.
+enum UpdateAdmittedEventOrigin {
+    UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED = 0;
+    // The UpdateAdmitted event was created when reapplying events during reset
+    // or replication. I.e. an accepted Update on one branch of Workflow history
+    // was converted into an admitted Update on a different branch.
+    UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY = 1;
+}

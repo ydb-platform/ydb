@@ -1,0 +1,153 @@
+MODULE nt FILES Modules/posixmodule.c PLATFORM WIN32
+
+MODULE posix FILES Modules/posixmodule.c PLATFORM UNIX
+MODULE pwd FILES Modules/pwdmodule.c PLATFORM UNIX
+
+MODULE time FILES Modules/timemodule.c
+MODULE datetime FILES Modules/datetimemodule.c Modules/timemodule.c
+
+MODULE _io FILES Modules/_io/_iomodule.c
+                 Modules/_io/bufferedio.c
+                 Modules/_io/bytesio.c
+                 Modules/_io/fileio.c
+                 Modules/_io/iobase.c
+                 Modules/_io/stringio.c
+                 Modules/_io/textio.c
+
+MODULE mmap FILES Modules/mmapmodule.c
+MODULE math FILES Modules/_math.c Modules/mathmodule.c
+MODULE cmath FILES Modules/_math.c Modules/cmathmodule.c
+
+MODULE parser FILES Modules/parsermodule.c
+
+MODULE crypt FILES Modules/cryptmodule.c LIBS crypt PLATFORM UNIX
+
+MODULE unicodedata FILES Modules/unicodedata.c
+MODULE _collections FILES Modules/_collectionsmodule.c
+MODULE audioop FILES Modules/audioop.c
+MODULE _heapq FILES Modules/_heapqmodule.c
+MODULE cPickle FILES Modules/cPickle.c
+MODULE array FILES Modules/arraymodule.c
+
+MODULE _struct FILES Modules/_struct.c
+MODULE itertools FILES Modules/itertoolsmodule.c
+
+MODULE pyexpat FILES Modules/pyexpat.c
+               FLAGS -DHAVE_EXPAT_CONFIG_H=1
+               INCLUDE ${PYTHON_SRC_DIR}/Modules/expat
+               PLATFORM UNIX
+
+MODULE _elementtree FILES Modules/_elementtree.c
+                    FLAGS -DHAVE_EXPAT_CONFIG_H=1 -DUSE_PYEXPAT_CAPI
+                    PLATFORM UNIX
+
+
+MODULE pyexpat FILES Modules/pyexpat.c
+               FLAGS -DHAVE_EXPAT_CONFIG_H=1 -DHAVE_MEMMOVE
+               INCLUDE ${PYTHON_SRC_DIR}/Modules/expat
+               PLATFORM WIN32
+
+MODULE _elementtree FILES Modules/_elementtree.c
+                    FLAGS -DHAVE_EXPAT_CONFIG_H=1 -DHAVE_MEMMOVE -DUSE_PYEXPAT_CAPI
+                    PLATFORM WIN32
+
+
+MODULE _csv FILES Modules/_csv.c
+MODULE _locale FILES Modules/_localemodule.c
+MODULE binascii FILES Modules/binascii.c
+MODULE _json FILES Modules/_json.c
+
+
+MODULE _ssl FILES Modules/_ssl.c INCLUDE contrib/libs/openssl contrib/libs/openssl/include
+                                 PEERDIR contrib/libs/openssl
+                                 PLATFORM UNIX
+
+MODULE _ssl FILES Modules/_ssl.c INCLUDE contrib/libs/openssl contrib/libs/openssl/include
+                                 PEERDIR contrib/libs/openssl
+                                 LIBS crypt32
+                                 PLATFORM WIN32
+
+MODULE _hashlib FILES Modules/_hashopenssl.c INCLUDE contrib/libs/openssl contrib/libs/openssl/include
+                                             PEERDIR contrib/libs/openssl
+
+MODULE _md5 FILES Modules/md5.c Modules/md5module.c
+MODULE _sha FILES Modules/shamodule.c
+MODULE _sha256 FILES Modules/sha256module.c
+MODULE _sha512 FILES Modules/sha512module.c
+
+MODULE cStringIO FILES Modules/cStringIO.c
+MODULE _bisect FILES Modules/_bisectmodule.c
+MODULE _random FILES Modules/_randommodule.c
+MODULE future_builtins FILES Modules/future_builtins.c
+MODULE operator FILES Modules/operator.c
+
+MODULE select FILES Modules/selectmodule.c PLATFORM UNIX
+MODULE select FILES Modules/selectmodule.c LIBS ws2_32 PLATFORM WIN32
+
+MODULE _multibytecodec FILES Modules/cjkcodecs/multibytecodec.c
+MODULE _functools FILES Modules/_functoolsmodule.c
+MODULE strop FILES Modules/stropmodule.c
+MODULE _lsprof FILES Modules/_lsprof.c Modules/rotatingtree.c
+MODULE _hotshot FILES Modules/_hotshot.c
+
+MODULE zlib FILES Modules/zlibmodule.c FLAGS -DBUILD_ZLIB
+                                       INCLUDE contrib/libs/zlib
+                                       PEERDIR contrib/libs/zlib
+
+
+MODULE fcntl FILES Modules/fcntlmodule.c PLATFORM UNIX
+MODULE grp FILES Modules/grpmodule.c PLATFORM UNIX
+
+MODULE resource FILES Modules/resource.c PLATFORM UNIX
+
+MODULE spwd FILES Modules/spwdmodule.c PLATFORM LINUX
+
+MODULE syslog FILES Modules/syslogmodule.c PLATFORM UNIX
+MODULE termios FILES Modules/termios.c PLATFORM UNIX
+
+MODULE _multiprocessing FILES Modules/_multiprocessing/multiprocessing.c
+                              Modules/_multiprocessing/socket_connection.c
+                              Modules/_multiprocessing/semaphore.c
+                        PLATFORM LINUX
+
+MODULE _multiprocessing FILES Modules/_multiprocessing/multiprocessing.c
+                              Modules/_multiprocessing/socket_connection.c
+                              Modules/_multiprocessing/semaphore.c
+                        PLATFORM FREEBSD PLATFORM_VER GREATER 7
+
+MODULE _multiprocessing FILES Modules/_multiprocessing/multiprocessing.c
+                              Modules/_multiprocessing/socket_connection.c
+                        PLATFORM FREEBSD PLATFORM_VER LESS 8
+
+MODULE _multiprocessing FILES Modules/_multiprocessing/multiprocessing.c
+                              Modules/_multiprocessing/socket_connection.c
+                        PLATFORM DARWIN
+
+MODULE _multiprocessing FILES Modules/_multiprocessing/multiprocessing.c
+                              Modules/_multiprocessing/semaphore.c
+                              Modules/_multiprocessing/socket_connection.c
+                              Modules/_multiprocessing/pipe_connection.c
+                              Modules/_multiprocessing/win32_functions.c
+                        LIBS ws2_32
+                        PLATFORM WIN32
+
+MODULE _socket FILES Modules/socketmodule.c PLATFORM UNIX
+
+MODULE _socket FILES Modules/socketmodule.c
+               FLAGS -DEAI_ADDRFAMILY=1 -DHAVE_SOCKADDR_STORAGE=1 -DHAVE_ADDRINFO=1
+               LIBS ws2_32
+               PLATFORM WIN32
+
+MODULE bz2 FILES Modules/bz2module.c INCLUDE contrib/libs/libbz2 PEERDIR contrib/libs/libbz2
+
+MODULE _sqlite3 FILES Modules/_sqlite/cache.c
+                      Modules/_sqlite/connection.c
+                      Modules/_sqlite/cursor.c
+                      Modules/_sqlite/microprotocols.c
+                      Modules/_sqlite/module.c
+                      Modules/_sqlite/prepare_protocol.c
+                      Modules/_sqlite/row.c
+                      Modules/_sqlite/statement.c
+                      Modules/_sqlite/util.c
+                INCLUDE contrib/libs/sqlite3
+                PEERDIR contrib/libs/sqlite3

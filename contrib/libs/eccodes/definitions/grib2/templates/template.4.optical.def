@@ -1,0 +1,19 @@
+# (C) Copyright 2005- ECMWF.
+
+codetable[1] typeOfWavelengthInterval ('4.91.table',masterDir,localDir) : dump;
+alias typeOfIntervalForFirstAndSecondWavelength=typeOfWavelengthInterval;
+
+# Wavelengths in metres
+signed[1] scaleFactorOfFirstWavelength : dump;
+signed[4] scaledValueOfFirstWavelength : dump;
+signed[1] scaleFactorOfSecondWavelength = missing(): can_be_missing,dump;
+signed[4] scaledValueOfSecondWavelength = missing(): can_be_missing,dump;
+
+meta firstWavelength  from_scale_factor_scaled_value(scaleFactorOfFirstWavelength, scaledValueOfFirstWavelength);
+meta secondWavelength from_scale_factor_scaled_value(scaleFactorOfSecondWavelength, scaledValueOfSecondWavelength);
+alias firstWavelengthInMetres = firstWavelength;
+alias secondWavelengthInMetres = secondWavelength;
+
+constant billion = 1000000000 : hidden;
+meta firstWavelengthInNanometres  multdouble(firstWavelength, billion) : read_only;
+meta secondWavelengthInNanometres multdouble(secondWavelength, billion) : read_only;

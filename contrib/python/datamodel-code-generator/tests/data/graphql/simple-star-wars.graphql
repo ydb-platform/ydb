@@ -1,0 +1,142 @@
+type Person {
+    id: ID!
+    name: String!
+    height: Int
+    mass: Int
+    hair_color: String
+    skin_color: String
+    eye_color: String
+    birth_year: String
+    gender: String
+
+    # Relationships
+    homeworld_id: ID
+    homeworld: Planet
+    species: [Species!]!
+    species_ids: [ID!]!
+    films: [Film!]!
+    films_ids: [ID!]!
+    starships: [Starship!]!
+    starships_ids: [ID!]!
+    vehicles: [Vehicle!]!
+    vehicles_ids: [ID!]!
+}
+
+type Planet {
+    id: ID!
+    name: String!
+    rotation_period: String
+    orbital_period: String
+    diameter: String
+    climate: String
+    gravity: String
+    terrain: String
+    surface_water: String
+    population: String
+
+    # Relationships
+    residents: [Person!]!
+    residents_ids: [ID!]!
+    films: [Film!]!
+    films_ids: [ID!]!
+}
+
+type Species {
+    id: ID!
+    name: String!
+    classification: String
+    designation: String
+    average_height: String
+    skin_colors: String
+    hair_colors: String
+    eye_colors: String
+    average_lifespan: String
+    language: String
+
+    # Relationships
+    people: [Person!]!
+    people_ids: [ID!]!
+    films: [Film!]!
+    films_ids: [ID!]!
+}
+
+type Vehicle {
+    id: ID!
+    name: String!
+    model: String
+    manufacturer: String
+    cost_in_credits: String
+    length: String
+    max_atmosphering_speed: String
+    crew: String
+    passengers: String
+    cargo_capacity: String
+    consumables: String
+    vehicle_class: String
+
+    # Relationships
+    pilots: [Person!]!
+    pilots_ids: [ID!]!
+    films: [Film!]!
+    films_ids: [ID!]!
+}
+
+type Starship {
+    id: ID!
+    name: String!
+    model: String
+    manufacturer: String
+    cost_in_credits: String
+    length: String
+    max_atmosphering_speed: String
+    crew: String
+    passengers: String
+    cargo_capacity: String
+    consumables: String
+    hyperdrive_rating: String
+    MGLT: String
+    starship_class: String
+
+    # Relationships
+    pilots: [Person!]!
+    pilots_ids: [ID!]!
+    films: [Film!]!
+    films_ids: [ID!]!
+}
+
+type Film {
+  id: ID!
+  title: String!
+  episode_id: Int!
+  opening_crawl: String!
+  director: String!
+  producer: String
+  release_date: String!
+
+  # Relationships
+  characters: [Person!]!
+  characters_ids: [ID!]!
+  planets: [Planet!]!
+  planets_ids: [ID!]!
+  starships: [Starship!]!
+  starships_ids: [ID!]!
+  vehicles: [Vehicle!]!
+  vehicles_ids: [ID!]!
+  species: [Species!]!
+  species_ids: [ID!]!
+}
+
+type Query {
+  planet(id: ID!): Planet
+  listPlanets(page: Int): [Planet!]!
+  person(id: ID!): Person
+  listPeople(page: Int): [Person!]!
+  species(id: ID!): Species
+  listSpecies(page: Int): [Species!]!
+  film(id: ID!): Film
+  listFilms(page: Int): [Film!]!
+  starship(id: ID!): Starship
+  listStarships(page: Int): [Starship!]!
+  vehicle(id: ID!): Vehicle
+  listVehicles(page: Int): [Vehicle!]!
+}

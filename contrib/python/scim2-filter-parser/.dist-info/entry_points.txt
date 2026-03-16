@@ -1,0 +1,6 @@
+[console_scripts]
+sfp-lexer=scim2_filter_parser.lexer:main
+sfp-parser=scim2_filter_parser.parser:main
+sfp-query=scim2_filter_parser.queries.sql:main
+sfp-transpiler=scim2_filter_parser.transpilers.sql:main
+

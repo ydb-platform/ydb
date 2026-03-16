@@ -1,0 +1,13 @@
+# Product discipline 4 - Space weather products, parameter category 8: imagery
+0 0 X-ray radiance (W sr-1 m-2)
+1 1 EUV radiance (W sr-1 m-2)
+2 2 H-alpha radiance (W sr-1 m-2)
+3 3 White light radiance (W sr-1 m-2)
+4 4 CaII-K radiance (W sr-1 m-2)
+5 5 White light coronagraph radiance (W sr-1 m-2)
+6 6 Heliospheric radiance (W sr-1 m-2)
+7 7 Thematic mask (Numeric)
+8 8 Solar induced chlorophyll fluorescence (W m-2 sr-1 m-1)
+# 9-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

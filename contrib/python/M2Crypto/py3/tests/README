@@ -1,0 +1,62 @@
+This directory contains unit tests for M2Crypto.
+
+To run all tests, make sure you have installed setuptools and then issue the
+following command from the M2Crypto root directory:
+
+python -munittest discover -v tests
+
+To run tests in a single file, for example test_ssl.py, do this:
+
+python -munittest -v tests.test_ssl
+
+
+Look also in the demo directory for other samples.
+
+
+To create new test certificates:
+
+mkdir certs
+cd certs
+
+Making the CA. You may want to use a locally edited openssl.cnf to
+make sure that X509v3 Basic Constraints CA:TRUE gets set (by default
+it may be false). By default duration may only be just one year; should
+set this for at least 3 years.
+
+CA.sh -newca
+cp demoCA/cacert.pem ../ca.pem
+
+Making the server certificate and private key. make sure commonName
+field is localhost.
+
+CA.sh -newreq
+CA.sh -signreq
+cp newcert.pem ../server.pem
+openssl rsa <newkey.pem >>../server.pem
+
+Making the x509 certificate and key.
+
+CA.sh -newreq
+CA.sh -signreq
+cp newcert.pem ../x509.pem
+openssl rsa <newkey.pem >>../x509.pem
+openssl x509 -in ../x509.pem -out ../x509.der -outform DER
+
+Making the signer certificate. Make sure the email address is 
+signer@example.com.
+
+CA.sh -newreq
+CA.sh -signreq
+cp newcert.pem ../signer.pem
+openssl rsa <newkey.pem >../signer_key.pem
+
+Making the recipient certificate. Make sure the email address is 
+recipient@example.com.
+
+CA.sh -newreq
+CA.sh -signreq
+cp newcert.pem ../recipient.pem
+openssl rsa <newkey.pem >../recipient_key.pem
+
+
+Finally run the tests and edit for new values.

@@ -1,0 +1,132 @@
+# (C) Copyright 2005- ECMWF.
+
+# SECTION 3, GRID DEFINITION SECTION
+
+# For grib2 -> 1
+constant gridDescriptionSectionPresent = 1;
+position offsetSection3;
+
+section_length[4] section3Length ;
+meta section3Pointer section_pointer(offsetSection3,section3Length,3);
+
+unsigned[1] numberOfSection = 3 :read_only;
+
+# Source of grid definition
+codetable[1] sourceOfGridDefinition ('3.0.table',masterDir,localDir) ;
+
+# Number of data points
+unsigned[4] numberOfDataPoints : dump;
+alias numberOfPoints=numberOfDataPoints;
+
+# Number of octets for optional list of numbers defining number of points
+unsigned[1] numberOfOctectsForNumberOfPoints;
+
+# Interpretation of list of numbers defining number of points
+codetable[1] interpretationOfNumberOfPoints ('3.11.table',masterDir,localDir) : dump;
+
+if(numberOfOctectsForNumberOfPoints  == 0){
+  transient PLPresent = 0 ;
+}else{
+  transient PLPresent = 1 ;
+}
+
+codetable[2] gridDefinitionTemplateNumber ('3.1.table',masterDir,localDir) =0 : dump,edition_specific;
+meta gridDefinitionDescription codetable_title(gridDefinitionTemplateNumber);
+
+alias isRotatedGrid = false;
+
+if (gridDefinitionTemplateNumber >= 32768) {
+  template gridDefinitionSection "grib2/local/[centreForLocal]/template.3.[gridDefinitionTemplateNumber:l].def";
+} else {
+  template gridDefinitionSection "grib2/templates/template.3.[gridDefinitionTemplateNumber:l].def";
+}
+
+if(PLPresent){
+  if(numberOfOctectsForNumberOfPoints == 1){
+   unsigned[1] pl[Nj] : dump;
+  }
+  if(numberOfOctectsForNumberOfPoints == 2){
+   unsigned[2] pl[Nj] : dump;
+  }
+  if(numberOfOctectsForNumberOfPoints == 3){
+   unsigned[3] pl[Nj] : dump;
+  }
+  alias geography.pl=pl;
+}
+
+when (PLPresent == 0) {
+  set numberOfOctectsForNumberOfPoints = 0;
+  set interpretationOfNumberOfPoints = 0;
+}
+
+section_padding section3Padding : read_only;
+
+concept gridType {
+ "regular_ll"            = { gridDefinitionTemplateNumber=0;  PLPresent=0; }
+ "reduced_ll"            = { gridDefinitionTemplateNumber=0;  PLPresent=1; }
+ "rotated_ll"            = { gridDefinitionTemplateNumber=1;  PLPresent=0; }
+ "stretched_ll"          = { gridDefinitionTemplateNumber=2;  PLPresent=0; }
+ "stretched_rotated_ll"  = { gridDefinitionTemplateNumber=3;  PLPresent=0; }
+ "mercator"              = { gridDefinitionTemplateNumber=10; PLPresent=0; }
+ "transverse_mercator"   = { gridDefinitionTemplateNumber=12; PLPresent=0; }
+ "polar_stereographic"   = { gridDefinitionTemplateNumber=20; PLPresent=0; }
+ "lambert"               = { gridDefinitionTemplateNumber=30; PLPresent=0; }
+ "albers"                = { gridDefinitionTemplateNumber=31; PLPresent=0; }
+
+ "regular_gg"            = { gridDefinitionTemplateNumber=40; PLPresent=0; }
+ "reduced_gg"            = { gridDefinitionTemplateNumber=40; PLPresent=1; numberOfOctectsForNumberOfPoints=2;iDirectionIncrementGiven=0;numberOfPointsAlongAParallel = missing(); }
+
+ "rotated_gg"            = { gridDefinitionTemplateNumber=41; PLPresent=0; }
+ "reduced_rotated_gg"    = { gridDefinitionTemplateNumber=41; PLPresent=1; numberOfOctectsForNumberOfPoints=2;iDirectionIncrementGiven=0;numberOfPointsAlongAParallel = missing(); }
+
+ "stretched_gg"          = { gridDefinitionTemplateNumber=42; PLPresent=0; }
+ "reduced_stretched_gg"  = { gridDefinitionTemplateNumber=42; PLPresent=1; numberOfOctectsForNumberOfPoints=2;iDirectionIncrementGiven=0;numberOfPointsAlongAParallel = missing(); }
+
+ "stretched_rotated_gg"  = { gridDefinitionTemplateNumber=43; PLPresent=0; }
+ "reduced_stretched_rotated_gg" = { gridDefinitionTemplateNumber=43; PLPresent=1; numberOfOctectsForNumberOfPoints=2;iDirectionIncrementGiven=0;numberOfPointsAlongAParallel = missing(); }
+
+# For consistency add the prefix regular_
+"regular_rotated_gg"           = { gridDefinitionTemplateNumber=41; PLPresent=0; } # = rotated_gg
+"regular_stretched_gg"         = { gridDefinitionTemplateNumber=42; PLPresent=0; } # = stretched_gg
+"regular_stretched_rotated_gg" = { gridDefinitionTemplateNumber=43; PLPresent=0; } # = stretched_rotated_gg
+
+ "sh"                    = { gridDefinitionTemplateNumber=50; PLPresent=0;}
+ "rotated_sh"            = { gridDefinitionTemplateNumber=51; PLPresent=0;}
+ "stretched_sh"          = { gridDefinitionTemplateNumber=52; PLPresent=0;}
+ "stretched_rotated_sh"  = { gridDefinitionTemplateNumber=53; PLPresent=0;}
+ "space_view"            = { gridDefinitionTemplateNumber=90; PLPresent=0;}
+ "triangular_grid"       = { gridDefinitionTemplateNumber=100;PLPresent=0;}
+ "unstructured_grid"     = { gridDefinitionTemplateNumber=101;PLPresent=0;}
+ "equatorial_azimuthal_equidistant" = { gridDefinitionTemplateNumber=110; PLPresent=0;}
+ "azimuth_range"         = { gridDefinitionTemplateNumber=120;PLPresent=0; }
+ "irregular_latlon"      = { gridDefinitionTemplateNumber=130;PLPresent=0; }
+ "lambert_azimuthal_equal_area"= { gridDefinitionTemplateNumber=140;PLPresent=0; }
+ "cross_section"         = { gridDefinitionTemplateNumber=1000;PLPresent=0; }
+ "Hovmoller"             = { gridDefinitionTemplateNumber=1100;PLPresent=0; }
+ "time_section"          = { gridDefinitionTemplateNumber=1200;PLPresent=0; }
+ "lambert_lam"             = { gridDefinitionTemplateNumber=33; PLPresent=0; }
+ "mercator_lam"            = { gridDefinitionTemplateNumber=13; PLPresent=0; }
+ "polar_stereographic_lam" = { gridDefinitionTemplateNumber=23; PLPresent=0; }
+ "lambert_bf"              = { gridDefinitionTemplateNumber=63; PLPresent=0; }
+ "mercator_bf"             = { gridDefinitionTemplateNumber=61; PLPresent=0; }
+ "polar_stereographic_bf"  = { gridDefinitionTemplateNumber=62; PLPresent=0; }
+ "healpix"                 = { gridDefinitionTemplateNumber=150; PLPresent=0; }
+
+ "ncep_32769" = { centre=7; gridDefinitionTemplateNumber=32769; PLPresent=0; }
+
+ "unknown"               = {PLPresent=0;}
+ "unknown_PLPresent"     = {PLPresent=1;}
+} : dump;
+
+alias ls.gridType=gridType;
+alias geography.gridType=gridType;
+alias typeOfGrid=gridType;
+
+meta md5Section3 md5(offsetSection3,section3Length);
+alias md5GridSection = md5Section3;
+
+meta  projSourceString proj_string(gridType, 0): hidden;
+meta  projTargetString proj_string(gridType, 1): hidden;
+alias projString = projTargetString : hidden;
+
+constant isSpectral = !isGridded : constraint;

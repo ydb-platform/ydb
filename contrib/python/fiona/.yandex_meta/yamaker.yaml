@@ -1,0 +1,9 @@
+requirements:
+  - contrib/libs/gdal
+mark_as_cython_c:
+  - fiona/_geometry.pyx
+  - fiona/crs.pyx
+cython_directive:
+  - language_level=3
+exclude:
+  - fiona/_crs.pyx

@@ -1,0 +1,291 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-11-27 16:59+0400\n"
+"PO-Revision-Date: 2017-08-07 16:49+0300\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: ru_RU\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || "
+"(n%100>=11 && n%100<=14)? 2 : 3);\n"
+"X-Generator: Poedit 1.8.11\n"
+
+#: post_office/admin.py:131
+msgid "To"
+msgstr "Кому"
+
+#: post_office/admin.py:151 post_office/admin.py:188 post_office/models.py:52
+#: post_office/models.py:277
+msgid "Subject"
+msgstr "Тема"
+
+#: post_office/admin.py:157
+#, fuzzy
+#| msgid "Email Template"
+msgid "Use Template"
+msgstr "Шаблон письма"
+
+#: post_office/admin.py:176
+#, fuzzy
+#| msgctxt "Email address"
+#| msgid "Email"
+msgid "HTML Email"
+msgstr "Письмо"
+
+#: post_office/admin.py:178 post_office/admin.py:180
+#, fuzzy
+#| msgctxt "Email address"
+#| msgid "Email"
+msgid "Text Email"
+msgstr "Письмо"
+
+#: post_office/admin.py:195
+msgid "Mail Body"
+msgstr "Текст письма"
+
+#: post_office/admin.py:206
+msgid "HTML Body"
+msgstr "HTML содержимое"
+
+#: post_office/admin.py:243
+#, python-brace-format
+msgid "Duplicate template for language '{language}'."
+msgstr "Дубликат шаблона для языка '{language}'."
+
+#: post_office/admin.py:253 post_office/models.py:283
+msgid "Language"
+msgstr "Язык"
+
+#: post_office/admin.py:254 post_office/models.py:284
+msgid "Render template in alternative language"
+msgstr "Отправить письмо на другом языке"
+
+#: post_office/admin.py:286
+msgid "Default Content"
+msgstr "Содержимое по умолчанию"
+
+#: post_office/admin.py:297 post_office/models.py:273
+msgid "Description"
+msgstr "Описание"
+
+#: post_office/admin.py:304
+msgid "Languages"
+msgstr "Языки"
+
+#: post_office/apps.py:7
+msgid "Post Office"
+msgstr "Менеджер почты"
+
+#: post_office/fields.py:9
+msgid "Comma-separated emails"
+msgstr "Список адресов, разделенных запятыми"
+
+#: post_office/fields.py:18
+msgid "Only comma separated emails are allowed."
+msgstr "Разрешен только разделенный запятыми список адресов."
+
+#: post_office/models.py:36
+msgid "low"
+msgstr "низкий"
+
+#: post_office/models.py:37
+msgid "medium"
+msgstr "средний"
+
+#: post_office/models.py:38
+msgid "high"
+msgstr "высокий"
+
+#: post_office/models.py:39
+msgid "now"
+msgstr "сейчас"
+
+#: post_office/models.py:42 post_office/models.py:243
+msgid "sent"
+msgstr "отправлен"
+
+#: post_office/models.py:43 post_office/models.py:243
+msgid "failed"
+msgstr "ошибка"
+
+#: post_office/models.py:44
+msgid "queued"
+msgstr "в очереди"
+
+#: post_office/models.py:45
+#, fuzzy
+#| msgid "queued"
+msgid "requeued"
+msgstr "в очереди"
+
+#: post_office/models.py:48
+msgid "Email From"
+msgstr "Отправитель"
+
+#: post_office/models.py:49
+msgid "Email To"
+msgstr "Получатель"
+
+#: post_office/models.py:50
+msgid "Cc"
+msgstr "Копия"
+
+#: post_office/models.py:51
+msgid "Bcc"
+msgstr "Скрытая копия"
+
+#: post_office/models.py:53 post_office/models.py:251
+msgid "Message"
+msgstr "Сообщение"
+
+#: post_office/models.py:54
+msgid "HTML Message"
+msgstr "HTML-сообщение"
+
+#: post_office/models.py:60 post_office/models.py:249
+msgid "Status"
+msgstr "Статус"
+
+#: post_office/models.py:61
+msgid "Priority"
+msgstr "Приоритет"
+
+#: post_office/models.py:65
+#, fuzzy
+#| msgid "The scheduled sending time"
+msgid "Scheduled Time"
+msgstr "Запланированное время"
+
+#: post_office/models.py:65
+msgid "The scheduled sending time"
+msgstr "Запланированное время отправки"
+
+#: post_office/models.py:68
+msgid "Expires"
+msgstr "Истекает"
+
+#: post_office/models.py:68
+msgid "Email won't be sent after this timestamp"
+msgstr "Письмо не будет отправлено после этой даты"
+
+#: post_office/models.py:72 post_office/models.py:341
+msgid "Headers"
+msgstr "Заголовки"
+
+#: post_office/models.py:74
+msgid "Email template"
+msgstr "Шаблон письма"
+
+#: post_office/models.py:76
+msgid "Context"
+msgstr "Контекст"
+
+#: post_office/models.py:77
+msgid "Backend alias"
+msgstr "Имя бекенда"
+
+#: post_office/models.py:81
+msgctxt "Email address"
+msgid "Email"
+msgstr "Письмо"
+
+#: post_office/models.py:82
+msgctxt "Email addresses"
+msgid "Emails"
+msgstr "Письма"
+
+#: post_office/models.py:231
+msgid "The scheduled time may not be later than the expires time."
+msgstr "Запланированное время не может быть позже времени истечения срока."
+
+#: post_office/models.py:246
+msgid "Email address"
+msgstr "Email-адрес"
+
+#: post_office/models.py:250
+msgid "Exception type"
+msgstr "Тип исключения"
+
+#: post_office/models.py:255
+msgid "Log"
+msgstr "Лог"
+
+#: post_office/models.py:256
+msgid "Logs"
+msgstr "Логи"
+
+#: post_office/models.py:272 post_office/models.py:338
+msgid "Name"
+msgstr "Имя"
+
+#: post_office/models.py:272
+msgid "e.g: 'welcome_email'"
+msgstr "например: 'welcome_email'"
+
+#: post_office/models.py:273
+msgid "Description of this template."
+msgstr "Описание шаблона."
+
+#: post_office/models.py:279
+msgid "Content"
+msgstr "Содержимое"
+
+#: post_office/models.py:280
+msgid "HTML content"
+msgstr "HTML-содержимое"
+
+#: post_office/models.py:293
+msgid "Default template"
+msgstr "Шаблон по умолчанию"
+
+#: post_office/models.py:302
+msgid "Email Template"
+msgstr "Шаблон письма"
+
+#: post_office/models.py:303
+msgid "Email Templates"
+msgstr "Шаблоны писем"
+
+#: post_office/models.py:337
+msgid "File"
+msgstr "Файл"
+
+#: post_office/models.py:338
+msgid "The original filename"
+msgstr "Исходное имя файла"
+
+#: post_office/models.py:339
+#, fuzzy
+#| msgctxt "Email addresses"
+#| msgid "Emails"
+msgid "Emails"
+msgstr "Письма"
+
+#: post_office/models.py:345
+msgid "Attachment"
+msgstr "Вложение"
+
+#: post_office/models.py:346
+msgid "Attachments"
+msgstr "Вложения"
+
+#: post_office/sanitizer.py:8
+msgid "Install 'bleach' to render HTML properly."
+msgstr "Установите 'bleach' для корректного отображения HTML."
+
+#: post_office/templates/admin/post_office/email/change_form.html:4
+msgid "Resend"
+msgstr "Отправить повторно"
+
+#~ msgid "Email addresses"
+#~ msgstr "Email адреса"

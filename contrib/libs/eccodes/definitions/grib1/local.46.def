@@ -1,0 +1,6 @@
+# (C) Copyright 2005- ECMWF.
+
+label "CPTEC local definition";
+# Same as NCEP
+include "grib1/local.7.def";
+section_padding local_padding;

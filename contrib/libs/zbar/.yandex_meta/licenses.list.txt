@@ -1,0 +1,94 @@
+====================BSD-3-Clause====================
+  Portions (C) Xiph.Org Foundation 1994-2008, BSD-style license.*/
+
+
+====================COPYRIGHT====================
+  Original implementation (C) Henry Minsky (hqm@ua.com, hqm@ai.mit.edu),
+   Universal Access 1991-1995.
+  Updates by Timothy B. Terriberry (C) 2008-2009:
+   - Properly reject codes when error-locator polynomial has repeated roots or
+      non-trivial irreducible factors.
+
+
+====================COPYRIGHT====================
+  Portions (C) Xiph.Org Foundation 1994-2008, BSD-style license.*/
+struct qr_pack_buf{
+  const unsigned char *buf;
+
+
+====================COPYRIGHT====================
+ *  Copyright 2007-2009 (c) Jeff Brown <spadix@users.sourceforge.net>
+
+
+====================COPYRIGHT====================
+ *  Copyright 2009 (c) Jeff Brown <spadix@users.sourceforge.net>
+
+
+====================COPYRIGHT====================
+/*Copyright (C) 1991-1995  Henry Minsky (hqm@ua.com, hqm@ai.mit.edu)
+  Copyright (C) 2008-2009  Timothy B. Terriberry (tterribe@xiph.org)
+  You can redistribute this library and/or modify it under the terms of the
+   GNU Lesser General Public License as published by the Free Software
+   Foundation; either version 2.1 of the License, or (at your option) any later
+   version.*/
+
+
+====================COPYRIGHT====================
+/*Copyright (C) 2008-2009  Timothy B. Terriberry (tterribe@xiph.org)
+  You can redistribute this library and/or modify it under the terms of the
+   GNU Lesser General Public License as published by the Free Software
+   Foundation; either version 2.1 of the License, or (at your option) any later
+   version.*/
+
+
+====================COPYRIGHT====================
+//  Copyright 2008-2009 (c) Jeff Brown <spadix@users.sourceforge.net>
+
+
+====================LGPL-2.1-or-later====================
+ *  The ZBar Bar Code Reader is free software; you can redistribute it
+ *  and/or modify it under the terms of the GNU Lesser Public License as
+ *  published by the Free Software Foundation; either version 2.1 of
+ *  the License, or (at your option) any later version.
+ *
+ *  The ZBar Bar Code Reader is distributed in the hope that it will be
+ *  useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+ *  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser Public License
+ *  along with the ZBar Bar Code Reader; if not, write to the Free
+ *  Software Foundation, Inc., 51 Franklin St, Fifth Floor,
+ *  Boston, MA  02110-1301  USA
+
+
+====================LGPL-2.1-or-later====================
+//  The ZBar Bar Code Reader is free software; you can redistribute it
+//  and/or modify it under the terms of the GNU Lesser Public License as
+//  published by the Free Software Foundation; either version 2.1 of
+//  the License, or (at your option) any later version.
+//
+//  The ZBar Bar Code Reader is distributed in the hope that it will be
+//  useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+//  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU Lesser Public License for more details.
+//
+//  You should have received a copy of the GNU Lesser Public License
+//  along with the ZBar Bar Code Reader; if not, write to the Free
+//  Software Foundation, Inc., 51 Franklin St, Fifth Floor,
+//  Boston, MA  02110-1301  USA
+
+
+====================LGPL-2.1-or-later AND LGPL-2.1-or-later====================
+  You can redistribute this library and/or modify it under the terms of the
+   GNU Lesser General Public License as published by the Free Software
+   Foundation; either version 2.1 of the License, or (at your option) any later
+   version.*/
+
+
+====================Public-Domain====================
+  Based on the public domain implementation by Robert J. Jenkins Jr.*/
+
+
+====================Public-Domain====================
+/*Written by Timothy B. Terriberry (tterribe@xiph.org) 1999-2009 public domain.

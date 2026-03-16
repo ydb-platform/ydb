@@ -1,0 +1,279 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/compute/v1/hardware_generation.proto";
+import "yandex/cloud/compute/v1/snapshot.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// A set of methods for managing Snapshot resources.
+service SnapshotService {
+  // Returns the specified Snapshot resource.
+  //
+  // To get the list of available Snapshot resources, make a [List] request.
+  rpc Get(GetSnapshotRequest) returns (Snapshot) {
+    option (google.api.http) = {get: "/compute/v1/snapshots/{snapshot_id}"};
+  }
+
+  // Retrieves the list of Snapshot resources in the specified folder.
+  rpc List(ListSnapshotsRequest) returns (ListSnapshotsResponse) {
+    option (google.api.http) = {get: "/compute/v1/snapshots"};
+  }
+
+  // Creates a snapshot of the specified disk.
+  rpc Create(CreateSnapshotRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/snapshots"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateSnapshotMetadata"
+      response: "Snapshot"
+    };
+  }
+
+  // Updates the specified snapshot.
+  //
+  // Values of omitted parameters are not changed.
+  rpc Update(UpdateSnapshotRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/compute/v1/snapshots/{snapshot_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSnapshotMetadata"
+      response: "Snapshot"
+    };
+  }
+
+  // Deletes the specified snapshot.
+  //
+  // Deleting a snapshot removes its data permanently and is irreversible.
+  rpc Delete(DeleteSnapshotRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/compute/v1/snapshots/{snapshot_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteSnapshotMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified snapshot.
+  rpc ListOperations(ListSnapshotOperationsRequest) returns (ListSnapshotOperationsResponse) {
+    option (google.api.http) = {get: "/compute/v1/snapshots/{snapshot_id}/operations"};
+  }
+
+  // access
+
+  // Lists access bindings for the snapshot.
+  rpc ListAccessBindings(access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = {get: "/compute/v1/snapshots/{resource_id}:listAccessBindings"};
+  }
+
+  // Sets access bindings for the snapshot.
+  rpc SetAccessBindings(access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/snapshots/{resource_id}:setAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Updates access bindings for the snapshot.
+  rpc UpdateAccessBindings(access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/snapshots/{resource_id}:updateAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+}
+
+message GetSnapshotRequest {
+  // ID of the Snapshot resource to return.
+  // To get the snapshot ID, use a [SnapshotService.List] request.
+  string snapshot_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListSnapshotsRequest {
+  // ID of the folder to list snapshots in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListSnapshotsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListSnapshotsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression consists of one or more conditions united by `AND` operator: `<condition1> [AND <condition2> [<...> AND <conditionN>]]`.
+  //
+  // Each condition has the form `<field> <operator> <value>`, where:
+  // 1. `<field>` is the field name. Currently you can use filtering only on the limited number of fields.
+  // 2. `<operator>` is a logical operator, one of `=`, `!=`, `IN`, `NOT IN`.
+  // 3. `<value>` represents a value.
+  // String values should be written in double (`"`) or single (`'`) quotes. C-style escape sequences are supported (`\"` turns to `"`, `\'` to `'`, `\\` to backslash).
+  string filter = 4 [(length) = "<=1000"];
+
+  // By which column the listing should be ordered and in which direction,
+  // format is "createdAt desc". "id asc" if omitted.
+  // The default sorting order is ascending
+  string order_by = 5 [(length) = "<=100"];
+}
+
+message ListSnapshotsResponse {
+  // List of snapshots.
+  repeated Snapshot snapshots = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListSnapshotsRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListSnapshotsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateSnapshotRequest {
+  reserved 5;
+  // ID of the folder to create a snapshot in.
+  // To get the folder ID use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the disk to create the snapshot from.
+  // To get the disk ID use a [yandex.cloud.compute.v1.DiskService.List] request.
+  string disk_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the snapshot.
+  string name = 3 [(pattern) = "|[a-z]([-_a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the snapshot.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 6 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // Specify the overrides to hardware_generation of a source disk, image or snapshot,
+  // or to the default values if the source does not define it.
+  HardwareGeneration hardware_generation = 7;
+}
+
+message CreateSnapshotMetadata {
+  // ID of the snapshot that is being created.
+  string snapshot_id = 1;
+
+  // ID of the source disk used to create this snapshot.
+  string disk_id = 2;
+}
+
+message UpdateSnapshotRequest {
+  // ID of the Snapshot resource to update.
+  // To get the snapshot ID use a [SnapshotService.List] request.
+  string snapshot_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which fields of the Snapshot resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the snapshot.
+  string name = 3 [(pattern) = "|[a-z]([-_a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the snapshot.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  //
+  // Existing set of `labels` is completely replaced by the provided set.
+  map<string, string> labels = 5 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+}
+
+message UpdateSnapshotMetadata {
+  // ID of the Snapshot resource that is being updated.
+  string snapshot_id = 1;
+}
+
+message DeleteSnapshotRequest {
+  // ID of the snapshot to delete.
+  // To get the snapshot ID, use a [SnapshotService.List] request.
+  string snapshot_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteSnapshotMetadata {
+  // ID of the snapshot that is being deleted.
+  string snapshot_id = 1;
+}
+
+message ListSnapshotOperationsRequest {
+  // ID of the Snapshot resource to list operations for.
+  string snapshot_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListSnapshotOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListSnapshotOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListSnapshotOperationsResponse {
+  // List of operations for the specified snapshot.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListSnapshotOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListSnapshotOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

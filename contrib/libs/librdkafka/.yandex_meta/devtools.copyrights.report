@@ -1,0 +1,758 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 01c9f4eba5372ad288c8ec50e5f3c30f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2020-2022, Magnus Edenhill
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdfnv1a.h [4:5]
+        src/rdkafka_assignment.h [4:5]
+        src/rdkafka_error.c [4:5]
+        src/rdkafka_error.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 04fa3a6fca4b508600284077cfab60f0
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012 Marcus Geelnard
+        Copyright (c) 2013-2014 Evan Nemerson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/tinycthread.c [2:3]
+        src/tinycthread.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0675310fe8d1bdabc838a46ac5639e9c
+BELONGS ya.make
+    License text:
+         * Copyright 2005 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/snappy.c [10:10]
+        src/snappy_compat.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 14ae6db9944e69cc3449254506c95196
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012,2022, Magnus Edenhill
+         *               2023 Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_broker.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 15765a06ff5e16072029e456607694e4
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016-2022, Magnus Edenhill
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_event.c [4:6]
+        src/rdkafka_event.h [4:6]
+        src/rdkafka_feature.c [4:6]
+        src/rdstring.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 16ed76d63a9c46131af23245e9ca696b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1991, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.queue [3:4]
+        LICENSES.txt [464:465]
+        src/queue.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1923fbfbe4b8aa504a80eeb1195549f1
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012-2022, Magnus Edenhill
+         * Copyright (c) 2012-2022, Andreas Öman
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdsysqueue.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 19ad85eae0ae4b1ac34adbb3fc51d7da
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2002 Todd C. Miller <Todd.Miller@courtesan.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.wingetopt [4:4]
+        LICENSES.txt [578:578]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ae36ab32ae9ec8bac3311331f92b166
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2013 Mark Adler
+         * Version 1.1  1 Aug 2013  Mark Adler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.crc32c [5:6]
+        LICENSES.txt [63:64]
+        src/crc32c.c [14:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 26e69f0f599e3a3f8af78688e2898717
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017-2022, Magnus Edenhill
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_msgset.h [4:6]
+        src/rdkafka_msgset_reader.c [4:6]
+        src/rdkafka_msgset_writer.c [4:6]
+        src/rdkafka_sasl_scram.c [4:6]
+        src/rdstring.h [4:6]
+        src/rdunittest.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29980e43ca6e27f7a587bc4ba436e91f
+BELONGS ya.make
+    License text:
+        Copyright (c) 2011 Petteri Aimonen <jpa at nanopb.mail.kapsi.fi>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.nanopb [3:3]
+        LICENSES.txt [205:205]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2c07515ae550ac58ab98eaaad4f450b6
+BELONGS ya.make
+    License text:
+        Copyright (c) 2006-2012, Thomas Pircher <tehpeh@gmx.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.pycrc [5:5]
+        LICENSES.txt [439:439]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d18cb32e4004acabdb78a1a394fee7e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2020-2022, Magnus Edenhill
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_mock_cgrp.c [4:6]
+        src/rdkafka_protocol.h [4:6]
+        src/rdkafka_sticky_assignor.c [4:6]
+        src/rdmap.c [4:6]
+        src/rdmap.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d58a24981218cfd22643a9f9f215939
+BELONGS src-cpp/ya.make
+    License text:
+         * Copyright (c) 2014-2022, Magnus Edenhill
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src-cpp/HandleImpl.cpp [4:6]
+        src-cpp/rdkafkacpp.h [4:6]
+        src-cpp/rdkafkacpp_int.h [4:6]
+        src/rdkafka_conf.h [4:6]
+    Belongs difference:
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 300374ec7ce0fa96dce1c972056b9924
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016-2022, Magnus Edenhill,
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_queue.c [4:6]
+        src/rdkafka_queue.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 36571e37f295460a118214e8589fb3a8
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012-2022, Magnus Edenhill,
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_msg.c [4:6]
+        src/rdlist.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4735e9683910acec3290cdbb48b629dc
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019-2022, Magnus Edenhill
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_cert.c [4:5]
+        src/rdkafka_cert.h [4:5]
+        src/rdkafka_coord.c [4:5]
+        src/rdkafka_coord.h [4:5]
+        src/rdkafka_msgbatch.h [4:5]
+        src/rdkafka_sasl_oauthbearer.h [4:5]
+        src/rdkafka_ssl.h [4:5]
+        src/rdkafka_txnmgr.c [4:5]
+        src/rdkafka_txnmgr.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4a4e7f4bea1e5af7f386ea84922fceba
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022, Magnus Edenhill
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_fetcher.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 504182059dd97786c2612d8bbab70511
+BELONGS ya.make
+    License text:
+        \### License and copyright
+        When contributing with code, you agree to put your changes and new code under
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        CONTRIBUTING.md [9:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 63aab68ac013d7f38da81cc4c34742d1
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2000 The NetBSD Foundation, Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.wingetopt [23:24]
+        LICENSES.txt [597:598]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6528e74ffe0534bb3044fcda5ef28586
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017-2022, Magnus Edenhill
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/crc32c.h [4:5]
+        src/rdbuf.c [4:5]
+        src/rdbuf.h [4:5]
+        src/rddl.c [4:5]
+        src/rddl.h [4:5]
+        src/rdkafka_header.c [4:5]
+        src/rdkafka_header.h [4:5]
+        src/rdkafka_interceptor.c [4:5]
+        src/rdkafka_interceptor.h [4:5]
+        src/rdkafka_lz4.c [4:5]
+        src/rdkafka_lz4.h [4:5]
+        src/rdkafka_plugin.c [4:5]
+        src/rdkafka_plugin.h [4:5]
+        src/rdkafka_sasl_plain.c [4:5]
+        src/rdunittest.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 68bd3e72429ed8f686c4f9ece2a760be
+BELONGS src-cpp/ya.make ya.make
+    License text:
+         * Copyright (c) 2015-2022, Magnus Edenhill
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src-cpp/KafkaConsumerImpl.cpp [4:5]
+        src-cpp/TopicPartitionImpl.cpp [4:5]
+        src/rdkafka_pattern.c [4:5]
+        src/rdkafka_pattern.h [4:5]
+        src/rdkafka_roundrobin_assignor.c [4:5]
+        src/rdkafka_sasl.h [4:5]
+        src/rdkafka_sasl_int.h [4:5]
+        src/rdkafka_transport.h [4:5]
+        src/rdkafka_transport_int.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6f6cfd8a21797320580a614f31e8cb44
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2023 Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdbase64.c [4:5]
+        src/rdbase64.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 875065a64eaa0753f08daefe58fd2f7d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_telemetry.c [4:5]
+        src/rdkafka_telemetry.h [4:5]
+        src/rdkafka_telemetry_decode.c [4:5]
+        src/rdkafka_telemetry_decode.h [4:5]
+        src/rdkafka_telemetry_encode.c [4:5]
+        src/rdkafka_telemetry_encode.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9954b451971b61fb22ceea0ef2f2b433
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012-2022, Magnus Edenhill
+                      2023, Confluent Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3:5]
+        LICENSES.txt [5:7]
+        src/rd.h [4:6]
+        src/rdkafka.c [4:6]
+        src/rdkafka.h [4:6]
+        src/rdkafka_buf.c [4:6]
+        src/rdkafka_cgrp.h [4:6]
+        src/rdkafka_int.h [4:6]
+        src/rdkafka_metadata.c [4:6]
+        src/rdkafka_metadata.h [4:6]
+        src/rdkafka_metadata_cache.c [4:6]
+        src/rdkafka_offset.c [4:6]
+        src/rdkafka_offset.h [4:6]
+        src/rdkafka_op.c [4:6]
+        src/rdkafka_op.h [4:6]
+        src/rdkafka_proto.h [4:5]
+        src/rdkafka_request.c [4:6]
+        src/rdkafka_request.h [4:6]
+        src/rdkafka_topic.c [4:6]
+        src/rdkafka_topic.h [4:6]
+        src/rdlist.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a520e511afae497d9daefa48e1c32dba
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012-2022, Magnus Edenhill
+         *               2023 Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_broker.c [4:6]
+        src/rdkafka_buf.h [4:6]
+        src/rdkafka_cgrp.c [4:6]
+        src/rdkafka_conf.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a5712d21405aa465eeb6a87726862eee
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012-2022, [Magnus Edenhill](http://www.edenhill.se/).
+                      2023 [Confluent Inc.](https://www.confluent.io/).
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a5e4bef422baedc5cf59be69a6f705b1
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016-2022, Magnus Edenhill
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_feature.h [4:5]
+        src/rdports.c [4:5]
+        src/rdports.h [4:5]
+        src/rdregex.c [4:5]
+        src/rdregex.h [4:5]
+        src/rdvarint.c [4:5]
+        src/rdvarint.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab609ce9bf9a8d5732fbd4234e5cc07d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019-2022, Magnus Edenhill,
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_mock_handlers.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b01cbb678bd9d6466a70d8a0f189d839
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015-2022, Magnus Edenhill
+         *               2023 Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_assignor.c [4:6]
+        src/rdkafka_assignor.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b33494011f5f14bc1095190a762f02b6
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2020-2022, Magnus Edenhill
+         *               2023 Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_assignment.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b699db1b3bbd9737fa1a83533ad2c410
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022, Magnus Edenhill
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_fetcher.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bdcf211d81a69c0f282fb7543c1a24a7
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009-2017 Dave Gamble and cJSON contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.cjson [3:3]
+        LICENSES.txt [35:35]
+        src/cJSON.c [2:2]
+        src/cJSON.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL be0b71995fc52eada97aaf94d158baf0
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015-2022, Magnus Edenhill,
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_partition.c [4:6]
+        src/rdkafka_partition.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c2b476eba1c3c8d31a7842e2454fbefe
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019-2022, Magnus Edenhill
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_mock.c [4:6]
+        src/rdkafka_mock.h [4:6]
+        src/rdkafka_mock_int.h [4:6]
+        src/rdkafka_sasl_oauthbearer.c [4:6]
+        src/rdkafka_ssl.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c68f8f1b9cd9f12bd18e8d61cdf303c6
+BELONGS src-cpp/ya.make ya.make
+    License text:
+         * Copyright (c) 2014-2022, Magnus Edenhill
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src-cpp/ConfImpl.cpp [4:5]
+        src-cpp/ConsumerImpl.cpp [4:5]
+        src-cpp/HeadersImpl.cpp [4:5]
+        src-cpp/MessageImpl.cpp [4:5]
+        src-cpp/MetadataImpl.cpp [4:5]
+        src-cpp/ProducerImpl.cpp [4:5]
+        src-cpp/QueueImpl.cpp [4:5]
+        src-cpp/RdKafka.cpp [4:5]
+        src-cpp/TopicImpl.cpp [4:5]
+        src/rdatomic.h [4:5]
+        src/rdkafka_confval.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d581471dc912e81c8a8018ea9baeada0
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018-2022, Magnus Edenhill
+         *               2023 Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdinterval.h [4:6]
+        src/rdkafka_aux.c [4:6]
+        src/rdkafka_aux.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d7aacaaec7f9c11de27db680606b7a14
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015-2022, Magnus Edenhill
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_range_assignor.c [4:6]
+        src/rdkafka_sasl.c [4:6]
+        src/rdkafka_sasl_cyrus.c [4:6]
+        src/rdkafka_transport.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d914136bc4eefda1badf02d2c57fae44
+BELONGS ya.make
+    License text:
+        Copyright (c) 2011-2020, Yann Collet
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.lz4 [4:5]
+        LICENSES.txt [147:148]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e8f29ba2fe27bc4774557be217f52bc1
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018-2022, Magnus Edenhill
+         *               2023, Confluent Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdkafka_admin.c [4:6]
+        src/rdkafka_admin.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eb87c71f69120db4d7a03e5564bf7aad
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012 Marcus Geelnard
+        Copyright (c) 2013-2014 Evan Nemerson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/tinycthread.c [2:3]
+        src/tinycthread.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4d2a1f381be6cf062f03c3b8285fc79
+BELONGS ya.make
+    License text:
+        Copyright (c) 2014 Coda Hale
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.hdrhistogram [9:9]
+        LICENSES.txt [121:121]
+        src/rdhdrhistogram.c [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f9daf3f2576440cd5d989da943fe0cd9
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012 Marcus Geelnard
+                      2013-2014 Evan Nemerson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.tinycthread [6:7]
+        LICENSES.txt [550:551]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fa36f3517a87e29953466d37caf6c485
+BELONGS ya.make
+    License text:
+        Copyright 2011 Intel Corporation All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.snappy [9:9]
+        LICENSES.txt [513:513]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fcb09a86f76e1362ffffae7017ba1c79
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018-2022, Magnus Edenhill
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdavg.h [4:5]
+        src/rdcrc32.c [4:5]
+        src/rdcrc32.h [4:5]
+        src/rdhdrhistogram.c [34:35]
+        src/rdhdrhistogram.h [4:5]
+        src/rdkafka_background.c [4:5]
+        src/rdkafka_idempotence.c [4:5]
+        src/rdkafka_idempotence.h [4:5]
+        src/rdkafka_zstd.c [4:5]
+        src/rdkafka_zstd.h [4:5]
+        src/rdmurmur2.h [4:5]
+        src/snappy.h [4:5]
+        src/tinycthread_extra.c [4:5]
+        src/tinycthread_extra.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fdca3d961c89cc92b09a2a00b57f0621
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012-2022, Magnus Edenhill
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdaddr.c [4:5]
+        src/rdaddr.h [4:5]
+        src/rdavl.c [4:5]
+        src/rdavl.h [4:5]
+        src/rdendian.h [4:5]
+        src/rdfloat.h [4:5]
+        src/rdfnv1a.c [4:5]
+        src/rdgz.c [4:5]
+        src/rdgz.h [4:5]
+        src/rdkafka_msg.h [4:5]
+        src/rdkafka_subscription.c [4:5]
+        src/rdkafka_timer.c [4:5]
+        src/rdkafka_timer.h [4:5]
+        src/rdlog.c [4:5]
+        src/rdlog.h [4:5]
+        src/rdmurmur2.c [4:5]
+        src/rdposix.h [4:5]
+        src/rdrand.c [4:5]
+        src/rdrand.h [4:5]
+        src/rdsysqueue.h [4:6]
+        src/rdtime.h [4:5]
+        src/rdtypes.h [4:5]
+        src/rdwin32.h [4:5]
+        src/win32_config.h [4:5]

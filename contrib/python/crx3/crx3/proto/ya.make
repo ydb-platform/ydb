@@ -1,0 +1,17 @@
+PROTO_LIBRARY()
+
+WITHOUT_LICENSE_TEXTS()
+
+VERSION(0.0.4)
+
+LICENSE(Apache-2.0)
+
+PROTO_NAMESPACE(contrib/python/crx3/crx3)
+
+PY_NAMESPACE(crx3)
+
+SRCS(
+    crx3.proto
+)
+
+END()

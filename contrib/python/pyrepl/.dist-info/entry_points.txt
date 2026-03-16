@@ -1,0 +1,3 @@
+[console_scripts]
+pythoni = pyrepl.pythoni:main
+pythoni1 = pyrepl.python1:main

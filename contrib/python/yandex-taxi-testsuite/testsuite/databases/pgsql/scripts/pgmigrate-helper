@@ -1,0 +1,10 @@
+#!/bin/sh
+
+PGMIGRATE=$(which pgmigrate)
+if [ "x$PGMIGRATE" = "x" ]; then
+    echo "No pgmigrate found. Run 'sudo apt install
+python3-yandex-pgmigrate'" >&2
+    exit 1
+fi
+
+exec "$PGMIGRATE" "$@"

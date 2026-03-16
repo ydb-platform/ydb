@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package yandex.cloud.apploadbalancer.v1;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/apploadbalancer/v1;apploadbalancer";
+option java_package = "yandex.cloud.api.apploadbalancer.v1";
+
+// RateLimit is a set of settings for global rate limiting.
+message RateLimit {
+    // Limit is a rate limit value settings.
+    message Limit {
+      oneof rate {
+        option (exactly_one) = true;
+        // PerSecond is a limit value specified with per second time unit.
+        int64 per_second = 1 [(value) = ">0"];
+        // PerMinute is a limit value specified with per minute time unit.
+        int64 per_minute = 2 [(value) = ">0"];
+      }
+    }
+  
+    // AllRequests is a rate limit configuration applied to all incoming requests.
+    Limit all_requests = 3;
+    // RequestsPerIp is a rate limit configuration applied separately for each set of requests
+    // grouped by client IP address.
+    Limit requests_per_ip = 4;
+  }

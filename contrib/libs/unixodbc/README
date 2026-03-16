@@ -1,0 +1,56 @@
++-------------------------------------------------------------+
+| unixODBC                                                    |
++-------------------------------------------------------------+
+
+README
+---------------------------------------------------------------
+
+Description:
+
+	unixODBC is an Open Source ODBC sub-system and an ODBC SDK
+	for Linux, Mac OSX, and UNIX. 
+	
+License:
+	
+	All libraries are LGPL Version 2.1
+	
+	All programs are GPL Version 2.0.
+
+Parts:
+	unixODBC includes the following;
+	
+	- Driver Manager
+	- Installer Library and command line tool
+	- Command Line Tools to help install a driver and work with SQL
+	
+
+How To Start:
+
+	Look for and read README files with extensions of interest. Then
+	read the INSTALL file.
+	
+	You can also jump into the doc directory and browse information 
+	there. And do not forget the online stuff.
+	
+	Some documentation may be a bit out of date the vast majority of
+	it should be ok.
+	
+Config Files:
+
+	The ODBC Installer Library is responsible for reading and writing
+	the unixODBC config files. 
+	
+	The savvy can look at;
+	 
+	_odbcinst_SystemINI.c
+	_odbcinst_UserINI.c
+	
+	In any case; you can override where unixODBC looks for its system
+	config files by setting the ODBCSYSINI environment variable during 
+	the use of unixODBC.
+      
+Resources:
+
+        https://sourceforge.net/projects/unixodbc/
+        https://github.com/lurcher/unixODBC/
+        https://www.unixodbc.org/

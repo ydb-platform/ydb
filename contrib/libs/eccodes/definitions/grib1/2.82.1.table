@@ -1,0 +1,180 @@
+1 pres PRES Pressure Pa
+2 msl MSL Pressure reduced to MSL Pa
+3 ptend PTEND Pressure tendency Pa/s
+4 pv PV Potential vorticity K*m2 / kg / s
+5 icaht ICAHT ICAO Standard Atmosphere reference height m
+6 z Z Geopotential m2/s2
+7 gh GH Geopotential height Gpm
+8 h H Geometric height m
+9 hstdv HSTDV Standard deviation of height m
+10 tco3 TCO3 Total ozone Dobson
+11 t T Temperature K
+12 vtmp VTMP Virtual temperature K
+13 pt PT Potential temperature K
+14 papt PAPT Pseudo-adiabatic potential temperature K
+15 tmax TMAX Maximum temperature K
+16 tmin TMIN Minimum temperature K
+17 dpt DPT Dew point temperature K
+18 depr DEPR Dew point depression (or deficit) K
+19 lapr LAPR Lapse rate K/m
+20 vis VIS Visibility m
+21 rdsp1 RDSP1 Radar Spectra (1) -
+22 rdsp2 RDSP2 Radar Spectra (2) -
+23 rdsp3 RDSP3 Radar Spectra (3) -
+24 pli PLI Parcel lifted index (to 500 hPa) K
+25 ta TA Temperature anomaly K
+26 pa PA Pressure anomaly Pa
+27 gpa GPA Geopotential height anomaly Gpm
+28 wvsp1 WVSP1 Wave Spectra (1) -
+29 wvsp2 WVSP2 Wave Spectra (2) -
+30 wvsp3 WVSP3 Wave Spectra (3) -
+31 wdir WDIR Wind direction Deg. true
+32 wins WINS Wind speed m/s
+33 u U u-component of wind m/s
+34 v V v-component of wind m/s
+35 strf STRF Stream function m2/s
+36 vp VP Velocity potential m2/s
+37 mntsf MNTSF Montgomery stream function m2/s2
+38 sigma SIGMA Sigma coord. vertical velocity 1/s
+39 omega OMEGA Pressure Vertical velocity Pa/s
+40 w W Geometric Vertical velocity m/s
+41 absv ABSV Absolute vorticity 1/s
+42 absd ABSD Absolute divergence 1/s
+43 vo VO Relative vorticity 1/s
+44 d D Relative divergence 1/s
+45 vusch VUSCH Vertical u-component shear 1/s
+46 vvsch VVSCH Vertical v-component shear 1/s
+47 dirc DIRC Direction of current Deg. true
+48 spc SPC Speed of current m/s
+49 ucurr UCURR u-component of current m/s
+50 vcurr VCURR v-component of current m/s
+51 q Q Specific humidity kg/kg
+52 r R Relative humidity %
+53 mixr MIXR Humidity mixing ratio kg/kg
+54 pwat PWAT Precipitable water kg/m2
+55 vp VP Vapour pressure Pa
+56 satd SATD Saturation deficit Pa
+57 e E Evaporation m of water equivalent
+58 cice CICE Cloud Ice kg/m2
+59 prate PRATE Precipitation rate kg/m2/s
+60 tstm TSTM Thunderstorm probability %
+61 tp TP Total precipitation kg/m2
+62 lsp LSP Large scale precipitation kg/m2
+63 acpcp ACPCP Convective precipitation kg/m2
+64 srweq SRWEQ Snowfall rate water equivalent kg/m2/s
+65 sdwe SDWE Water equiv. of accum. snow depth kg/m2
+66 sd SD Snow depth m
+67 mld MLD Mixed layer depth m
+68 tthdp TTHDP Transient thermocline depth m
+69 mthd MTHD Main thermocline depth m
+70 mtha MTHA Main thermocline anomaly m
+71 tcc TCC Total cloud cover %
+72 ccc CCC Convective cloud cover %
+73 lcc LCC Low cloud cover %
+74 mcc MCC Medium cloud cover %
+75 hcc HCC High cloud cover %
+76 cwat CWAT Cloud water kg/m2
+77 bli BLI Best lifted index (to 500 hPa) K
+78 snoc SNOC Convective snow kg/m2
+79 snol SNOL Large scale snow kg/m2
+80 wtmp WTMP Water Temperature K
+81 lsm LSM Land-sea mask  (1=land 0=sea) (see note) Fraction
+82 dslm DSLM Deviation of sea level from mean m
+83 sr SR Surface roughness m
+84 al AL Albedo %
+85 st ST Soil temperature K
+86 ssw SSW Soil moisture content kg/m2
+87 veg VEG Vegetation %
+88 s S Salinity kg/kg
+89 den DEN Density kg/m3
+90 watr WATR Water run off kg/m2
+91 icec ICEC Ice cover (ice=1 no ice=0)(see note) Fraction
+92 icetk ICETK Ice thickness m
+93 diced DICED Direction of ice drift deg. true
+94 siced SICED Speed of ice drift m/s
+95 uice UICE u-component of ice drift m/s
+96 vice VICE v-component of ice drift m/s
+97 iceg ICEG Ice growth rate m/s
+98 iced ICED Ice divergence /s
+99 snom SNOM Snow melt kg/m2
+100 swh SWH Significant height of combined wind waves and swell m
+101 wvdir WVDIR Direction of wind waves deg. true
+102 shww SHWW Significant height of wind waves m
+103 mpww MPWW Mean period of wind waves s
+104 swdir SWDIR Direction of swell waves deg. true
+105 swell SWELL Significant height of swell waves m
+106 swper SWPER Mean period of swell waves s
+107 prwd PRWD Primary wave direction deg. true
+108 perpw PERPW Primary wave mean period s
+109 dirsw DIRSW Secondary wave direction deg. true
+110 persw PERSW Secondary wave mean period s
+111 nswrs NSWRS Net short-wave radiation flux (surface) W/m2
+112 nlwrs NLWRS Net long wave radiation flux (surface) W/m2
+113 nswrt NSWRT Net short-wave radiation flux (top of atmos.) W/m2
+114 nlwrt NLWRT Net long wave radiation flux (top of atmos.) W/m2
+115 lwavr LWAVR Long wave radiation flux W/m2
+116 swavr SWAVR Short wave radiation flux W/m2
+117 grad GRAD Global radiation flux W/m2
+118 btmp BTMP Brightness temperature K
+119 lwrad LWRAD Radiance (with respect to wave number) W/m/sr
+120 swrad SWRAD Radiance (with respect to wave length) W/m3/sr
+121 lhtfl LHTFL Latent heat net flux W/m2
+122 shtfl SHTFL Sensible heat net flux W/m2
+123 bld BLD Boundary layer dissipation W/m2
+124 uflx UFLX Momentum flux, u component N/m2
+125 vflx VFLX Momentum flux, v component N/m2
+126 wmixe WMIXE Wind mixing energy J
+127 imgd IMGD Image data -
+128 mofl MOFL Momentum flux Pa
+129 qten QTEN Humidity tendencies ?
+130 radtop RADTOP Radiation at top of atmosphere ?
+131 ctt CTT Cloud top temperature, infrared K
+132 wvbt WVBT Water vapor brightness temperature K
+133 wvbt_corr WVBT_CORR Water vapor brightness temperature, correction K
+134 cwref CWREF Cloud water reflectivity Fraction
+135 maxgust MAXGUST Maximum wind m/s
+136 mingust MINGUST Minimum wind m/s
+137 icc ICC Integrated cloud condensate kg/m2
+138 sd SD Snow depth m
+139 sdol SDOL Open land snow depth m
+140 tland TLAND Temperature over land K
+141 qland QLAND Specific humidity over land kg/kg
+142 rhland RHLAND Relative humidity over land Fraction
+143 dptland DPTLAND Dew point over land K
+160 slfr SLFR Slope fraction Fraction
+161 shfr SHFR Shadow fraction Fraction
+162 rsha RSHA Shadow parameter RSHA -
+163 rshb RSHB Shadow parameter RSHB -
+164 movegro MOVEGRO Momentum vegetation roughness m
+165 susl SUSL Surface slope -
+166 skwf SKWF Sky wiew factor Fraction
+167 frasp FRASP Fraction of aspect -
+168 hero HERO Heat roughness m
+169 al_scorr AL_SCORR Albedo with solar angle correction Fraction
+189 swi SWI Soil wetness index -
+190 asn ASN Snow albedo Fraction
+191 dsn DSN Snow density -
+192 watcn WATCN Water on canopy level kg/m2
+193 ssi SSI Surface soil ice m3/m3
+194 frst FRST Fraction of surface type Fraction
+195 st ST Soil type code
+196 fol FOL Fraction of lake Fraction
+197 fof FOF Fraction of forest Fraction
+198 fool FOOL Fraction of open land Fraction
+199 vgtyp VGTYP Vegetation type (Olsson land use) -
+200 tke TKE Turbulent Kinetic Energy J/kg
+204 sdor SDOR Standard deviation of mesoscale orography gpm
+205 amo AMO Anisotrophic mesoscale orography -
+206 anmo ANMO X-angle of mesoscale orography rad
+208 mssso MSSSO Maximum slope of smallest scale orography rad
+209 sdsso SDSSO Standard deviation of smallest scale orography gpm
+210 iceex ICEEX Ice existence -
+222 lcl LCL Lifting condensation level m
+223 lnbuo LNBUO Level of neutral buoyancy m
+224 ci CI Convective inhibation J/kg
+225 cape CAPE CAPE J/kg
+226 ptype PTYPE Precipitation type code
+227 fricv FRICV Friction velocity m/s
+228 gust GUST Wind gust m/s
+250 anpr3 ANPR3 Analysed 3-hour precipitation (-3h/0h) kg/m2
+251 anpr12 ANPR12 Analysed 12-hour precipitation (-12h/0h) kg/m2

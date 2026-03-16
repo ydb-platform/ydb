@@ -1,0 +1,428 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           1a41e81d94ce5510f6ecc33a2b7d14dd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [31:231]
+
+KEEP     MIT                  2496df921b73cd46ba949c4fcf8bad1b
+BELONGS ya.make
+    License text:
+        distributed under the MIT license as described below
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [236:236]
+
+KEEP     Apache-2.0           3ea5060c4f08f5769674fbf0c0fb3992
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/ceres/internal/fixed_array.h [3:13]
+        include/ceres/internal/memory.h [3:13]
+
+KEEP     BSD-3-Clause         4a73ed32a8a88af62f98b2edbe52a87c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [5:27]
+
+KEEP     Apache-2.0           6a0063a5eab5f37aabe1e2f75c555d12
+BELONGS ya.make
+    License text:
+        license: Apache-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CITATION.cff [13:13]
+
+KEEP     BSD-3-Clause         73fee237517d41d6188a6ae8356fa0df
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/ceres/c_api.h [5:27]
+
+KEEP     BSD-3-Clause         799c86fd58e44e9544b56e659eb4ee0e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/ceres/autodiff_cost_function.h [5:27]
+        include/ceres/autodiff_first_order_function.h [5:27]
+        include/ceres/autodiff_manifold.h [5:27]
+        include/ceres/ceres.h [5:27]
+        include/ceres/conditioned_cost_function.h [5:27]
+        include/ceres/constants.h [5:27]
+        include/ceres/context.h [5:27]
+        include/ceres/cost_function.h [5:27]
+        include/ceres/cost_function_to_functor.h [5:27]
+        include/ceres/covariance.h [5:27]
+        include/ceres/crs_matrix.h [5:27]
+        include/ceres/cubic_interpolation.h [5:27]
+        include/ceres/dynamic_autodiff_cost_function.h [5:27]
+        include/ceres/dynamic_cost_function.h [5:27]
+        include/ceres/dynamic_cost_function_to_functor.h [5:27]
+        include/ceres/dynamic_numeric_diff_cost_function.h [5:27]
+        include/ceres/evaluation_callback.h [5:27]
+        include/ceres/first_order_function.h [5:27]
+        include/ceres/gradient_checker.h [5:27]
+        include/ceres/gradient_problem.h [5:27]
+        include/ceres/gradient_problem_solver.h [5:27]
+        include/ceres/internal/array_selector.h [5:27]
+        include/ceres/internal/autodiff.h [5:27]
+        include/ceres/internal/config.h [5:27]
+        include/ceres/internal/disable_warnings.h [5:27]
+        include/ceres/internal/eigen.h [5:27]
+        include/ceres/internal/euler_angles.h [5:27]
+        include/ceres/internal/householder_vector.h [5:27]
+        include/ceres/internal/integer_sequence_algorithm.h [5:27]
+        include/ceres/internal/jet_traits.h [5:27]
+        include/ceres/internal/line_parameterization.h [5:27]
+        include/ceres/internal/numeric_diff.h [5:27]
+        include/ceres/internal/parameter_dims.h [5:27]
+        include/ceres/internal/port.h [5:27]
+        include/ceres/internal/reenable_warnings.h [5:27]
+        include/ceres/internal/sphere_manifold_functions.h [5:27]
+        include/ceres/internal/variadic_evaluate.h [5:27]
+        include/ceres/iteration_callback.h [5:27]
+        include/ceres/jet.h [5:27]
+        include/ceres/jet_fwd.h [5:27]
+        include/ceres/line_manifold.h [5:27]
+        include/ceres/loss_function.h [5:27]
+        include/ceres/manifold.h [5:27]
+        include/ceres/manifold_test_utils.h [5:27]
+        include/ceres/normal_prior.h [5:27]
+        include/ceres/numeric_diff_cost_function.h [5:27]
+        include/ceres/numeric_diff_first_order_function.h [5:27]
+        include/ceres/numeric_diff_options.h [5:27]
+        include/ceres/ordered_groups.h [5:27]
+        include/ceres/problem.h [5:27]
+        include/ceres/product_manifold.h [5:27]
+        include/ceres/rotation.h [5:27]
+        include/ceres/sized_cost_function.h [5:27]
+        include/ceres/solver.h [5:27]
+        include/ceres/sphere_manifold.h [5:27]
+        include/ceres/tiny_solver.h [5:27]
+        include/ceres/tiny_solver_autodiff_function.h [5:27]
+        include/ceres/tiny_solver_cost_function_adapter.h [5:27]
+        include/ceres/types.h [5:27]
+        include/ceres/version.h [5:27]
+        internal/ceres/accelerate_sparse.cc [5:27]
+        internal/ceres/accelerate_sparse.h [5:27]
+        internal/ceres/array_utils.cc [5:27]
+        internal/ceres/array_utils.h [5:27]
+        internal/ceres/block_evaluate_preparer.cc [5:27]
+        internal/ceres/block_evaluate_preparer.h [5:27]
+        internal/ceres/block_jacobi_preconditioner.cc [5:27]
+        internal/ceres/block_jacobi_preconditioner.h [5:27]
+        internal/ceres/block_jacobian_writer.cc [5:27]
+        internal/ceres/block_jacobian_writer.h [5:27]
+        internal/ceres/block_random_access_dense_matrix.cc [5:27]
+        internal/ceres/block_random_access_dense_matrix.h [5:27]
+        internal/ceres/block_random_access_diagonal_matrix.cc [5:27]
+        internal/ceres/block_random_access_diagonal_matrix.h [5:27]
+        internal/ceres/block_random_access_matrix.cc [5:27]
+        internal/ceres/block_random_access_matrix.h [5:27]
+        internal/ceres/block_random_access_sparse_matrix.cc [5:27]
+        internal/ceres/block_random_access_sparse_matrix.h [5:27]
+        internal/ceres/block_sparse_matrix.cc [5:27]
+        internal/ceres/block_sparse_matrix.h [5:27]
+        internal/ceres/block_structure.cc [5:27]
+        internal/ceres/block_structure.h [5:27]
+        internal/ceres/c_api.cc [5:27]
+        internal/ceres/callbacks.cc [5:27]
+        internal/ceres/callbacks.h [5:27]
+        internal/ceres/canonical_views_clustering.cc [5:27]
+        internal/ceres/canonical_views_clustering.h [5:27]
+        internal/ceres/casts.h [5:27]
+        internal/ceres/cgnr_solver.cc [5:27]
+        internal/ceres/cgnr_solver.h [5:27]
+        internal/ceres/compressed_col_sparse_matrix_utils.cc [5:27]
+        internal/ceres/compressed_col_sparse_matrix_utils.h [5:27]
+        internal/ceres/compressed_row_jacobian_writer.cc [5:27]
+        internal/ceres/compressed_row_jacobian_writer.h [5:27]
+        internal/ceres/compressed_row_sparse_matrix.cc [5:27]
+        internal/ceres/compressed_row_sparse_matrix.h [5:27]
+        internal/ceres/concurrent_queue.h [5:27]
+        internal/ceres/conditioned_cost_function.cc [5:27]
+        internal/ceres/conjugate_gradients_solver.h [5:27]
+        internal/ceres/context.cc [5:27]
+        internal/ceres/context_impl.cc [5:27]
+        internal/ceres/context_impl.h [5:27]
+        internal/ceres/coordinate_descent_minimizer.cc [5:27]
+        internal/ceres/coordinate_descent_minimizer.h [5:27]
+        internal/ceres/corrector.cc [5:27]
+        internal/ceres/corrector.h [5:27]
+        internal/ceres/cost_function.cc [5:27]
+        internal/ceres/covariance.cc [5:27]
+        internal/ceres/covariance_impl.cc [5:27]
+        internal/ceres/covariance_impl.h [5:27]
+        internal/ceres/cuda_block_sparse_crs_view.cc [5:27]
+        internal/ceres/cuda_block_sparse_crs_view.h [5:27]
+        internal/ceres/cuda_block_structure.cc [5:27]
+        internal/ceres/cuda_block_structure.h [5:27]
+        internal/ceres/cuda_buffer.h [5:27]
+        internal/ceres/cuda_kernels_bsm_to_crs.h [5:27]
+        internal/ceres/cuda_kernels_utils.h [5:27]
+        internal/ceres/cuda_kernels_vector_ops.h [5:27]
+        internal/ceres/cuda_partitioned_block_sparse_crs_view.cc [5:27]
+        internal/ceres/cuda_partitioned_block_sparse_crs_view.h [5:27]
+        internal/ceres/cuda_sparse_matrix.cc [5:27]
+        internal/ceres/cuda_sparse_matrix.h [5:27]
+        internal/ceres/cuda_streamed_buffer.h [5:27]
+        internal/ceres/cuda_vector.cc [5:27]
+        internal/ceres/cuda_vector.h [5:27]
+        internal/ceres/dense_cholesky.cc [5:27]
+        internal/ceres/dense_cholesky.h [5:27]
+        internal/ceres/dense_jacobian_writer.h [5:27]
+        internal/ceres/dense_normal_cholesky_solver.cc [5:27]
+        internal/ceres/dense_normal_cholesky_solver.h [5:27]
+        internal/ceres/dense_qr.cc [5:27]
+        internal/ceres/dense_qr.h [5:27]
+        internal/ceres/dense_qr_solver.cc [5:27]
+        internal/ceres/dense_qr_solver.h [5:27]
+        internal/ceres/dense_sparse_matrix.cc [5:27]
+        internal/ceres/dense_sparse_matrix.h [5:27]
+        internal/ceres/detect_structure.cc [5:27]
+        internal/ceres/detect_structure.h [5:27]
+        internal/ceres/dogleg_strategy.cc [5:27]
+        internal/ceres/dogleg_strategy.h [5:27]
+        internal/ceres/dynamic_compressed_row_finalizer.h [5:27]
+        internal/ceres/dynamic_compressed_row_jacobian_writer.cc [5:27]
+        internal/ceres/dynamic_compressed_row_jacobian_writer.h [5:27]
+        internal/ceres/dynamic_compressed_row_sparse_matrix.cc [5:27]
+        internal/ceres/dynamic_compressed_row_sparse_matrix.h [5:27]
+        internal/ceres/dynamic_sparse_normal_cholesky_solver.cc [5:27]
+        internal/ceres/dynamic_sparse_normal_cholesky_solver.h [5:27]
+        internal/ceres/eigen_vector_ops.h [5:27]
+        internal/ceres/eigensparse.cc [5:27]
+        internal/ceres/eigensparse.h [5:27]
+        internal/ceres/evaluation_callback.cc [5:27]
+        internal/ceres/evaluator.cc [5:27]
+        internal/ceres/evaluator.h [5:27]
+        internal/ceres/execution_summary.h [5:27]
+        internal/ceres/fake_bundle_adjustment_jacobian.cc [5:27]
+        internal/ceres/fake_bundle_adjustment_jacobian.h [6:28]
+        internal/ceres/file.cc [5:27]
+        internal/ceres/file.h [5:27]
+        internal/ceres/first_order_function.cc [5:27]
+        internal/ceres/float_suitesparse.cc [5:27]
+        internal/ceres/float_suitesparse.h [5:27]
+        internal/ceres/function_sample.cc [5:27]
+        internal/ceres/function_sample.h [5:27]
+        internal/ceres/generated/partitioned_matrix_view_d_d_d.cc [5:27]
+        internal/ceres/generated/schur_eliminator_d_d_d.cc [5:27]
+        internal/ceres/gradient_checker.cc [5:27]
+        internal/ceres/gradient_checking_cost_function.cc [5:27]
+        internal/ceres/gradient_checking_cost_function.h [5:27]
+        internal/ceres/gradient_problem.cc [5:27]
+        internal/ceres/gradient_problem_evaluator.h [5:27]
+        internal/ceres/gradient_problem_solver.cc [5:27]
+        internal/ceres/graph.h [5:27]
+        internal/ceres/graph_algorithms.h [5:27]
+        internal/ceres/implicit_schur_complement.cc [5:27]
+        internal/ceres/implicit_schur_complement.h [5:27]
+        internal/ceres/inner_product_computer.cc [5:27]
+        internal/ceres/inner_product_computer.h [5:27]
+        internal/ceres/invert_psd_matrix.h [5:27]
+        internal/ceres/is_close.cc [5:27]
+        internal/ceres/is_close.h [5:27]
+        internal/ceres/iteration_callback.cc [5:27]
+        internal/ceres/iterative_refiner.cc [5:27]
+        internal/ceres/iterative_refiner.h [5:27]
+        internal/ceres/iterative_schur_complement_solver.cc [5:27]
+        internal/ceres/iterative_schur_complement_solver.h [5:27]
+        internal/ceres/levenberg_marquardt_strategy.cc [5:27]
+        internal/ceres/levenberg_marquardt_strategy.h [5:27]
+        internal/ceres/line_search.cc [5:27]
+        internal/ceres/line_search.h [5:27]
+        internal/ceres/line_search_direction.cc [5:27]
+        internal/ceres/line_search_direction.h [5:27]
+        internal/ceres/line_search_minimizer.cc [5:27]
+        internal/ceres/line_search_minimizer.h [5:27]
+        internal/ceres/line_search_preprocessor.cc [5:27]
+        internal/ceres/line_search_preprocessor.h [5:27]
+        internal/ceres/linear_least_squares_problems.cc [5:27]
+        internal/ceres/linear_least_squares_problems.h [5:27]
+        internal/ceres/linear_operator.cc [5:27]
+        internal/ceres/linear_operator.h [5:27]
+        internal/ceres/linear_solver.cc [5:27]
+        internal/ceres/linear_solver.h [5:27]
+        internal/ceres/loss_function.cc [5:27]
+        internal/ceres/low_rank_inverse_hessian.cc [5:27]
+        internal/ceres/low_rank_inverse_hessian.h [5:27]
+        internal/ceres/map_util.h [5:27]
+        internal/ceres/minimizer.cc [5:27]
+        internal/ceres/minimizer.h [5:27]
+        internal/ceres/normal_prior.cc [5:27]
+        internal/ceres/pair_hash.h [5:27]
+        internal/ceres/parallel_for.h [5:27]
+        internal/ceres/parallel_invoke.cc [5:27]
+        internal/ceres/parallel_invoke.h [5:27]
+        internal/ceres/parallel_utils.cc [5:27]
+        internal/ceres/parallel_utils.h [5:27]
+        internal/ceres/parallel_vector_ops.cc [5:27]
+        internal/ceres/parallel_vector_ops.h [5:27]
+        internal/ceres/parameter_block.h [5:27]
+        internal/ceres/parameter_block_ordering.cc [5:27]
+        internal/ceres/parameter_block_ordering.h [5:27]
+        internal/ceres/partition_range_for_parallel_for.h [5:27]
+        internal/ceres/partitioned_matrix_view.cc [5:27]
+        internal/ceres/partitioned_matrix_view.h [5:27]
+        internal/ceres/partitioned_matrix_view_impl.h [5:27]
+        internal/ceres/polynomial.cc [5:27]
+        internal/ceres/polynomial.h [5:27]
+        internal/ceres/power_series_expansion_preconditioner.cc [5:27]
+        internal/ceres/power_series_expansion_preconditioner.h [5:27]
+        internal/ceres/preconditioner.cc [5:27]
+        internal/ceres/preconditioner.h [5:27]
+        internal/ceres/preprocessor.cc [5:27]
+        internal/ceres/preprocessor.h [5:27]
+        internal/ceres/problem.cc [5:27]
+        internal/ceres/problem_impl.cc [5:27]
+        internal/ceres/problem_impl.h [5:27]
+        internal/ceres/program.cc [5:27]
+        internal/ceres/program.h [5:27]
+        internal/ceres/program_evaluator.h [5:27]
+        internal/ceres/reorder_program.cc [5:27]
+        internal/ceres/reorder_program.h [5:27]
+        internal/ceres/residual_block.cc [5:27]
+        internal/ceres/residual_block.h [5:27]
+        internal/ceres/residual_block_utils.cc [5:27]
+        internal/ceres/residual_block_utils.h [5:27]
+        internal/ceres/schur_complement_solver.cc [5:27]
+        internal/ceres/schur_complement_solver.h [5:27]
+        internal/ceres/schur_eliminator.cc [5:27]
+        internal/ceres/schur_eliminator.h [5:27]
+        internal/ceres/schur_eliminator_impl.h [5:27]
+        internal/ceres/schur_jacobi_preconditioner.cc [5:27]
+        internal/ceres/schur_jacobi_preconditioner.h [5:27]
+        internal/ceres/schur_templates.cc [5:27]
+        internal/ceres/schur_templates.h [5:27]
+        internal/ceres/scoped_thread_token.h [5:27]
+        internal/ceres/scratch_evaluate_preparer.cc [5:27]
+        internal/ceres/scratch_evaluate_preparer.h [5:27]
+        internal/ceres/single_linkage_clustering.cc [5:27]
+        internal/ceres/single_linkage_clustering.h [5:27]
+        internal/ceres/small_blas.h [5:27]
+        internal/ceres/small_blas_generic.h [5:27]
+        internal/ceres/solver.cc [5:27]
+        internal/ceres/solver_utils.cc [5:27]
+        internal/ceres/solver_utils.h [5:27]
+        internal/ceres/sparse_cholesky.cc [5:27]
+        internal/ceres/sparse_cholesky.h [5:27]
+        internal/ceres/sparse_matrix.cc [5:27]
+        internal/ceres/sparse_matrix.h [5:27]
+        internal/ceres/sparse_normal_cholesky_solver.cc [5:27]
+        internal/ceres/sparse_normal_cholesky_solver.h [5:27]
+        internal/ceres/stl_util.h [5:27]
+        internal/ceres/stringprintf.cc [5:27]
+        internal/ceres/stringprintf.h [5:27]
+        internal/ceres/subset_preconditioner.cc [5:27]
+        internal/ceres/subset_preconditioner.h [5:27]
+        internal/ceres/suitesparse.cc [5:27]
+        internal/ceres/suitesparse.h [5:27]
+        internal/ceres/thread_pool.cc [5:27]
+        internal/ceres/thread_pool.h [5:27]
+        internal/ceres/thread_token_provider.cc [5:27]
+        internal/ceres/thread_token_provider.h [5:27]
+        internal/ceres/triplet_sparse_matrix.cc [5:27]
+        internal/ceres/triplet_sparse_matrix.h [5:27]
+        internal/ceres/trust_region_minimizer.cc [5:27]
+        internal/ceres/trust_region_minimizer.h [5:27]
+        internal/ceres/trust_region_preprocessor.cc [5:27]
+        internal/ceres/trust_region_preprocessor.h [5:27]
+        internal/ceres/trust_region_step_evaluator.cc [5:27]
+        internal/ceres/trust_region_step_evaluator.h [5:27]
+        internal/ceres/trust_region_strategy.cc [5:27]
+        internal/ceres/trust_region_strategy.h [5:27]
+        internal/ceres/types.cc [5:27]
+        internal/ceres/visibility.cc [5:27]
+        internal/ceres/visibility.h [5:27]
+        internal/ceres/visibility_based_preconditioner.cc [5:27]
+        internal/ceres/visibility_based_preconditioner.h [5:27]
+        internal/ceres/wall_time.cc [5:27]
+        internal/ceres/wall_time.h [5:27]
+
+KEEP     MIT                  c1ae65a6c5a56a096cf05b85f3067dc8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [241:257]
+
+KEEP     LGPL-2.0-or-later    cf8adf5a91e1c172da10cdb33da55d99
+BELONGS ya.make
+    License text:
+        // If defined, use the LGPL code in Eigen.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        include/ceres/internal/config.h [44:44]

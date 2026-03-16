@@ -1,0 +1,22 @@
+# Code table 4.102 - Statistical processing of reference period
+0 0 Average
+1 1 Accumulation
+2 2 Maximum
+3 3 Minimum
+4 4 Median
+# 5-19 Reserved
+20 20 Model Climate
+21 21 Index based on normal distribution
+22 22 Index based on log-normal distribution
+23 23 Index based on generalised log-normal distribution
+24 24 Index based on gamma distribution
+25 25 Index based on logistic distribution
+26 26 Index based on log-logistic distribution
+27 27 Index based on generalised logistic distribution
+28 28 Index based on Weibull distribution
+29 29 Index based on generalised extreme value distribution
+30 30 Index based on Pearson III distribution
+31 31 Index based on empirical distribution
+# 32-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

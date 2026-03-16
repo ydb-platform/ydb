@@ -1,0 +1,15 @@
+# Code table 4.2 - Parameter number by product discipline and parameter category
+0 0 Ice cover (Proportion)
+1 1 Ice thickness (m)
+2 2 Direction of ice drift (degree true)
+3 3 Speed of ice drift (m/s)
+4 4 u-component of ice drift (m/s)
+5 5 v-component of ice drift (m/s)
+6 6 Ice growth rate (m/s)
+7 7 Ice divergence (/s)
+8 8 Ice temperature (K)
+9 9 Module of ice internal pressure (Pa m)
+10 10 Zonal vector component of vertically integrated ice internal pressure (Pa m)
+11 11 Meridional vector component of vertically integrated ice internal pressure (Pa m)
+12 12 Compressive ice strength (N/m)
+255 255 Missing

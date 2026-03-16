@@ -1,0 +1,28 @@
+Do not use __declspec(dllimport).
+Provide GetTempPathA.
+
+--- a/include/gflags/gflags_declare.h
++++ b/include/gflags/gflags_declare.h
+@@ -53,3 +53,4 @@
++#define GFLAGS_IS_A_DLL 0
+ #ifndef GFLAGS_IS_A_DLL
+ #  define GFLAGS_IS_A_DLL 1
+ #endif
+@@ -55,3 +55,4 @@
++#define GFLAGS_DLL_DECL 
+ #ifndef GFLAGS_DLL_DECL
+ #  if GFLAGS_IS_A_DLL && defined(_MSC_VER)
+ #    define GFLAGS_DLL_DECL __declspec(dllimport)
+@@ -66,3 +67,4 @@
++#define GFLAGS_DLL_DECLARE_FLAG 
+ #ifndef GFLAGS_DLL_DECLARE_FLAG
+ #  if GFLAGS_IS_A_DLL && defined(_MSC_VER)
+ #    define GFLAGS_DLL_DECLARE_FLAG __declspec(dllimport)
+--- a/src/util.h
++++ b/src/util.h
+@@ -247,4 +247,5 @@ inline void MakeTmpdir(std::string* path) {
+ #elif defined(_MSC_VER)
+ #include <direct.h>
++#include <fileapi.h>
+ inline void MakeTmpdir(std::string* path) {
+   if (!path->empty()) {

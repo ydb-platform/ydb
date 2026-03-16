@@ -1,0 +1,8 @@
+[annet.connectors]
+storage = annet.adapters.netbox.provider:NetboxProvider
+
+[annet.connectors.storage]
+file = annet.adapters.file.provider:Provider
+
+[console_scripts]
+annet = annet.annet:main

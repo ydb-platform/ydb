@@ -1,0 +1,16 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.83, Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval with source/sink
+
+# It is recommended not to use this template. Product definition template 4.84 should be used instead because it contains an additional octet to specify the type of generating process
+transient template_is_deprecated = 1 : hidden;
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.aerosol.def"
+include "grib2/templates/template.4.source.def"
+include "grib2/templates/template.4.aerosol_size.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.horizontal.def"
+include "grib2/templates/template.4.eps.def"
+include "grib2/templates/template.4.statistical.def"

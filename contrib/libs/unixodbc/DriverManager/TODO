@@ -1,0 +1,22 @@
+Add explicit descriptor allocation and release.
+
+Keep track of bound columns to check if SQLGetData is valid. (may not be 
+posible).
+
+Pass any connect and env attr onto driver when connected.
+
+Handle Env attrs (Set/Get EnvAttr).
+
+GetDescField needs finishing.
+
+Manage file DSN's.
+
+Interface to Cursor and Translator libs.
+
+Clear errors at the start of each function.
+
+Handle SQLCopyDesc where the source and destination is on different connections.
+
+SQLBulkoperations needs some conditions testing.
+
+SQLBrowseConnect needs some conditions testing.

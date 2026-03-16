@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v1;datasphere";
+option java_package = "yandex.cloud.api.datasphere.v1";
+
+// A Project resource.
+message Project {
+    message Settings {
+
+        // ID of the service account, on whose behalf all operations with clusters will be performed.
+        string service_account_id = 1;
+
+        // ID of the subnet where the DataProc cluster resides.
+        // Currently only subnets created in the availability zone ru-central1-a are supported.
+        string subnet_id = 2;
+
+        // ID of the DataProc cluster.
+        string data_proc_cluster_id = 3;
+
+        // Network interfaces security groups.
+        repeated string security_group_ids = 5;
+
+        reserved 4;
+    }
+
+    message Limits {
+        // The number of units that can be spent per hour.
+        google.protobuf.Int64Value max_units_per_hour = 2;
+        // The number of units that can be spent on the one execution.
+        google.protobuf.Int64Value max_units_per_execution = 3;
+    }
+
+    // ID of the project.
+    string id = 1;
+
+    // ID of the folder that the project belongs to.
+    string folder_id = 2;
+    google.protobuf.Timestamp created_at = 3;
+
+    // Name of the project. 1-63 characters long.
+    string name = 4;
+
+    // Description of the project. 0-256 characters long.
+    string description = 5;
+
+    // Settings of the project.
+    Settings settings = 6;
+
+    // Limits of the project.
+    Limits limits = 7;
+}

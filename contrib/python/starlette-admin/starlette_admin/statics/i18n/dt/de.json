@@ -1,0 +1,172 @@
+{
+	"aria": {
+		"sortAscending": ": aktivieren, um Spalte aufsteigend zu sortieren",
+		"sortDescending": ": aktivieren, um Spalte absteigend zu sortieren"
+	},
+	"buttons": {
+		"collection": "Aktionen <span class=\"ui-button-icon-primary ui-icon ui-icon-triangle-1-s\"></span>",
+		"colvis": "Spaltensichtbarkeit",
+		"colvisRestore": "Sichtbarkeit wiederherstellen",
+		"copy": "Kopieren",
+		"copyKeys": "Drücken Sie die Taste <i>STRG</i> oder <i>⌘</i> + <i>C</i> um die Tabelle<br />in den Zwischenspeicher zu kopieren.<br /><br />Um den Vorgang abzubrechen, klicken Sie die Nachricht an oder drücken Sie die Escape-Taste.",
+		"copySuccess": {
+			"1": "1 Zeile kopiert",
+			"_": "%d Zeilen kopiert"
+		},
+		"copyTitle": "In Zwischenablage kopieren",
+		"createState": "Ansicht erstellen",
+		"csv": "CSV",
+		"excel": "Excel",
+		"pageLength": {
+			"-1": "Alle Zeilen anzeigen",
+			"1": "Zeige 1 Zeile",
+			"_": "Zeige %d Zeilen"
+		},
+		"pdf": "PDF",
+		"print": "Drucken",
+		"removeAllStates": "Alle Ansichten entfernen",
+		"removeState": "Entfernen",
+		"renameState": "Umbenennen",
+		"savedStates": "Gespeicherte Ansicht",
+		"stateRestore": "Ansicht %d",
+		"updateState": "Aktualisieren"
+	},
+	"datetime": {
+		"hours": "Stunden",
+		"minutes": "Minuten",
+		"months": [
+			"Januar",
+			"Februar",
+			"März",
+			"April",
+			"Mai",
+			"Juni",
+			"Juli",
+			"August",
+			"September",
+			"Oktober",
+			"November",
+			"Dezember"
+		],
+		"next": "Nachher",
+		"previous": "Vorher",
+		"seconds": "Sekunden",
+		"unknown": "Unbekannt",
+		"weekdays": [
+			"Sonntag",
+			"Montag",
+			"Dienstag",
+			"Mittwoch",
+			"Donnerstag",
+			"Freitag",
+			"Samstag"
+		]
+	},
+	"decimal": ",",
+	"emptyTable": "Keine Daten in der Tabelle vorhanden",
+	"info": "_START_ bis _END_ von _TOTAL_ Einträgen",
+	"infoEmpty": "Keine Daten vorhanden",
+	"infoFiltered": "(gefiltert von _MAX_ Einträgen)",
+	"infoThousands": ".",
+	"lengthMenu": "_MENU_ Zeilen anzeigen",
+	"loadingRecords": "Wird geladen ..",
+	"paginate": {
+		"first": "Erste",
+		"last": "Letzte",
+		"next": "Nächste",
+		"previous": "Vorherige"
+	},
+	"processing": "Bitte warten ..",
+	"search": "Suche:",
+	"searchBuilder": {
+		"add": "Bedingung hinzufügen",
+		"button": {
+			"0": "<i class=\"fa-solid fa-filter\"></i> Such-Baukasten",
+			"_": "<i class=\"fa-solid fa-filter\"></i> Such-Baukasten (%d)"
+		},
+		"clearAll": "Alle entfernen",
+		"condition": "Bedingung",
+		"conditions": {
+			"array": {
+				"contains": "enthält",
+				"empty": "ist leer",
+				"equals": "ist gleich",
+				"not": "ist ungleich",
+				"notEmpty": "ist nicht leer",
+				"without": "aber nicht"
+			},
+			"date": {
+				"after": "Nach",
+				"before": "Vor",
+				"between": "Zwischen",
+				"empty": "Leer",
+				"equals": "Gleich",
+				"not": "Nicht",
+				"notBetween": "Nicht zwischen",
+				"notEmpty": "Nicht leer"
+			},
+			"number": {
+				"between": "Zwischen",
+				"empty": "Leer",
+				"equals": "Entspricht",
+				"gt": "Größer als",
+				"gte": "Größer als oder gleich",
+				"lt": "Kleiner als",
+				"lte": "Kleiner als oder gleich",
+				"not": "Nicht",
+				"notBetween": "Nicht zwischen",
+				"notEmpty": "Nicht leer"
+			},
+			"string": {
+				"contains": "Beinhaltet",
+				"empty": "Leer",
+				"endsWith": "Endet mit",
+				"equals": "Entspricht",
+				"not": "Nicht",
+				"notContains": "enthält nicht",
+				"notEmpty": "Nicht leer",
+				"notEndsWith": "endet nicht mit",
+				"notStartsWith": "startet nicht mit",
+				"startsWith": "Startet mit"
+			}
+		},
+		"data": "Daten",
+		"deleteTitle": "Filterregel entfernen",
+		"leftTitle": "Äußere Kriterien",
+		"logicAnd": "Und",
+		"logicOr": "Oder",
+		"rightTitle": "Innere Kriterien",
+		"title": {
+			"0": "Such-Baukasten",
+			"_": "Such-Baukasten (%d)"
+		},
+		"value": "Wert"
+	},
+	"select": {
+		"cells": {
+			"1": "1 Zelle ausgewählt",
+			"_": "%d Zellen ausgewählt"
+		},
+		"columns": {
+			"1": "1 Spalte ausgewählt",
+			"_": "%d Spalten ausgewählt"
+		},
+		"rows": {
+			"1": "1 Zeile ausgewählt",
+			"_": "%d Zeilen ausgewählt"
+		}
+	},
+	"starlette-admin": {
+		"buttons": {
+			"export": "Exportieren"
+		},
+		"conditions": {
+			"empty": "Leer",
+			"false": "Falsch",
+			"notEmpty": "Nicht leer",
+			"true": "Wahr"
+		}
+	},
+	"thousands": ".",
+	"zeroRecords": "Keine übereinstimmenden Datensätze gefunden"
+}

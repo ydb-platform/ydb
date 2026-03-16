@@ -1,0 +1,946 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              0132d75613458f9cc6d801c57f08c847
+BELONGS ya.make
+    License text:
+          * Change the license from the Apache License Version 2.0 to the
+            Boost Software License, Version 1.0.(#386)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        CHANGELOG.md [170:171]
+
+KEEP     BSL-1.0              2835e331aa3449aef001bf68ecb39fb9
+BELONGS ya.make
+    License text:
+        \#  * Distributed under the Boost Software License, Version 1.0. (See
+        \#  * accompanying file LICENSE_1_0.txt or copy at
+        \#  * http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/msgpack/preprocessor/control/while.hpp [5:7]
+        include/msgpack/preprocessor/tuple/eat.hpp [5:7]
+        include/msgpack/preprocessor/tuple/elem.hpp [5:7]
+        include/msgpack/preprocessor/tuple/reverse.hpp [5:7]
+        include/msgpack/preprocessor/tuple/to_list.hpp [5:7]
+
+KEEP     BSL-1.0              2857dc1521b66de6a0858153e4ae75e0
+BELONGS ya.make
+    License text:
+        License
+        -------
+        `msgpack-c` is licensed under the Boost Software License, Version 1.0. See
+        the [`LICENSE_1_0.txt`](./LICENSE_1_0.txt) file for details.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 66.67
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [185:189]
+
+KEEP     BSL-1.0              2a6244f3b117cc3d35a30b3f4a13592b
+BELONGS ya.make
+    License text:
+           Distributed under the Boost Software License, Version 1.0.
+           (See accompanying file LICENSE_1_0.txt or copy at
+           http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        COPYING [3:5]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE [1:23]
+
+KEEP     BSL-1.0              3483ad6500a5ec5c1eed3d256900b057
+BELONGS ya.make
+    License text:
+        //    Distributed under the Boost Software License, Version 1.0.
+        //    (See accompanying file LICENSE_1_0.txt or copy at
+        //    http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/msgpack.hpp [6:8]
+        include/msgpack/adaptor/adaptor_base.hpp [6:8]
+        include/msgpack/adaptor/adaptor_base_decl.hpp [6:8]
+        include/msgpack/adaptor/array_ref.hpp [6:8]
+        include/msgpack/adaptor/array_ref_decl.hpp [6:8]
+        include/msgpack/adaptor/bool.hpp [6:8]
+        include/msgpack/adaptor/boost/fusion.hpp [6:8]
+        include/msgpack/adaptor/boost/msgpack_variant.hpp [6:8]
+        include/msgpack/adaptor/boost/msgpack_variant_decl.hpp [6:8]
+        include/msgpack/adaptor/boost/optional.hpp [6:8]
+        include/msgpack/adaptor/boost/string_ref.hpp [6:8]
+        include/msgpack/adaptor/boost/string_view.hpp [6:8]
+        include/msgpack/adaptor/carray.hpp [6:8]
+        include/msgpack/adaptor/char_ptr.hpp [6:8]
+        include/msgpack/adaptor/check_container_size.hpp [6:8]
+        include/msgpack/adaptor/check_container_size_decl.hpp [6:8]
+        include/msgpack/adaptor/cpp11/array.hpp [6:8]
+        include/msgpack/adaptor/cpp11/array_char.hpp [6:8]
+        include/msgpack/adaptor/cpp11/array_unsigned_char.hpp [6:8]
+        include/msgpack/adaptor/cpp11/forward_list.hpp [6:8]
+        include/msgpack/adaptor/cpp11/reference_wrapper.hpp [6:8]
+        include/msgpack/adaptor/cpp11/shared_ptr.hpp [6:8]
+        include/msgpack/adaptor/cpp11/tuple.hpp [6:8]
+        include/msgpack/adaptor/cpp11/unique_ptr.hpp [6:8]
+        include/msgpack/adaptor/cpp11/unordered_map.hpp [6:8]
+        include/msgpack/adaptor/cpp11/unordered_set.hpp [6:8]
+        include/msgpack/adaptor/cpp17/optional.hpp [6:8]
+        include/msgpack/adaptor/cpp17/string_view.hpp [6:8]
+        include/msgpack/adaptor/define.hpp [6:8]
+        include/msgpack/adaptor/define_decl.hpp [6:8]
+        include/msgpack/adaptor/deque.hpp [6:8]
+        include/msgpack/adaptor/ext.hpp [6:8]
+        include/msgpack/adaptor/ext_decl.hpp [6:8]
+        include/msgpack/adaptor/fixint.hpp [6:8]
+        include/msgpack/adaptor/fixint_decl.hpp [6:8]
+        include/msgpack/adaptor/float.hpp [6:8]
+        include/msgpack/adaptor/int.hpp [6:8]
+        include/msgpack/adaptor/int_decl.hpp [6:8]
+        include/msgpack/adaptor/list.hpp [6:8]
+        include/msgpack/adaptor/map.hpp [6:8]
+        include/msgpack/adaptor/map_decl.hpp [6:8]
+        include/msgpack/adaptor/msgpack_tuple.hpp [6:8]
+        include/msgpack/adaptor/msgpack_tuple_decl.hpp [6:8]
+        include/msgpack/adaptor/nil.hpp [6:8]
+        include/msgpack/adaptor/nil_decl.hpp [6:8]
+        include/msgpack/adaptor/pair.hpp [6:8]
+        include/msgpack/adaptor/raw.hpp [6:8]
+        include/msgpack/adaptor/raw_decl.hpp [6:8]
+        include/msgpack/adaptor/set.hpp [6:8]
+        include/msgpack/adaptor/size_equal_only.hpp [6:8]
+        include/msgpack/adaptor/size_equal_only_decl.hpp [6:8]
+        include/msgpack/adaptor/string.hpp [6:8]
+        include/msgpack/adaptor/tr1/unordered_map.hpp [6:8]
+        include/msgpack/adaptor/tr1/unordered_set.hpp [6:8]
+        include/msgpack/adaptor/v4raw.hpp [6:8]
+        include/msgpack/adaptor/v4raw_decl.hpp [6:8]
+        include/msgpack/adaptor/vector.hpp [6:8]
+        include/msgpack/adaptor/vector_bool.hpp [6:8]
+        include/msgpack/adaptor/vector_char.hpp [6:8]
+        include/msgpack/adaptor/vector_unsigned_char.hpp [6:8]
+        include/msgpack/cpp_config.hpp [6:8]
+        include/msgpack/cpp_config_decl.hpp [6:8]
+        include/msgpack/create_object_visitor.hpp [6:8]
+        include/msgpack/create_object_visitor_decl.hpp [6:8]
+        include/msgpack/fbuffer.hpp [6:8]
+        include/msgpack/fbuffer_decl.hpp [6:8]
+        include/msgpack/gcc_atomic.hpp [6:8]
+        include/msgpack/iterator.hpp [6:8]
+        include/msgpack/iterator_decl.hpp [6:8]
+        include/msgpack/meta.hpp [6:8]
+        include/msgpack/meta_decl.hpp [6:8]
+        include/msgpack/null_visitor.hpp [6:8]
+        include/msgpack/null_visitor_decl.hpp [6:8]
+        include/msgpack/object.hpp [6:8]
+        include/msgpack/object_decl.hpp [6:8]
+        include/msgpack/object_fwd.hpp [6:8]
+        include/msgpack/object_fwd_decl.hpp [6:8]
+        include/msgpack/pack.hpp [6:8]
+        include/msgpack/pack_decl.hpp [6:8]
+        include/msgpack/parse.hpp [6:8]
+        include/msgpack/parse_decl.hpp [6:8]
+        include/msgpack/parse_return.hpp [6:8]
+        include/msgpack/sbuffer.hpp [6:8]
+        include/msgpack/sbuffer_decl.hpp [6:8]
+        include/msgpack/unpack.hpp [6:8]
+        include/msgpack/unpack_decl.hpp [6:8]
+        include/msgpack/unpack_exception.hpp [6:8]
+        include/msgpack/v1/adaptor/adaptor_base.hpp [6:8]
+        include/msgpack/v1/adaptor/adaptor_base_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/array_ref.hpp [6:8]
+        include/msgpack/v1/adaptor/array_ref_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/bool.hpp [6:8]
+        include/msgpack/v1/adaptor/boost/fusion.hpp [6:8]
+        include/msgpack/v1/adaptor/boost/msgpack_variant.hpp [6:8]
+        include/msgpack/v1/adaptor/boost/msgpack_variant_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/boost/optional.hpp [6:8]
+        include/msgpack/v1/adaptor/boost/string_ref.hpp [6:8]
+        include/msgpack/v1/adaptor/boost/string_view.hpp [6:8]
+        include/msgpack/v1/adaptor/carray.hpp [6:8]
+        include/msgpack/v1/adaptor/char_ptr.hpp [6:8]
+        include/msgpack/v1/adaptor/check_container_size.hpp [6:8]
+        include/msgpack/v1/adaptor/check_container_size_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp11/array.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp11/array_char.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp11/array_unsigned_char.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp11/forward_list.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp11/reference_wrapper.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp11/shared_ptr.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp11/tuple.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp11/unique_ptr.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp11/unordered_map.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp11/unordered_set.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp17/optional.hpp [6:8]
+        include/msgpack/v1/adaptor/cpp17/string_view.hpp [6:8]
+        include/msgpack/v1/adaptor/define.hpp [6:8]
+        include/msgpack/v1/adaptor/define_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/deque.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp11_convert_helper.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp11_define_array.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp11_define_array_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp11_define_map.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp11_define_map_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp11_msgpack_tuple.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp11_msgpack_tuple_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/ext.hpp [6:8]
+        include/msgpack/v1/adaptor/ext_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/fixint.hpp [6:8]
+        include/msgpack/v1/adaptor/fixint_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/float.hpp [6:8]
+        include/msgpack/v1/adaptor/int.hpp [6:8]
+        include/msgpack/v1/adaptor/int_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/list.hpp [6:8]
+        include/msgpack/v1/adaptor/map.hpp [6:8]
+        include/msgpack/v1/adaptor/map_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/msgpack_tuple.hpp [6:8]
+        include/msgpack/v1/adaptor/msgpack_tuple_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/nil.hpp [6:8]
+        include/msgpack/v1/adaptor/nil_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/pair.hpp [6:8]
+        include/msgpack/v1/adaptor/raw.hpp [6:8]
+        include/msgpack/v1/adaptor/raw_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/set.hpp [6:8]
+        include/msgpack/v1/adaptor/size_equal_only.hpp [6:8]
+        include/msgpack/v1/adaptor/size_equal_only_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/string.hpp [6:8]
+        include/msgpack/v1/adaptor/tr1/unordered_map.hpp [6:8]
+        include/msgpack/v1/adaptor/tr1/unordered_set.hpp [6:8]
+        include/msgpack/v1/adaptor/v4raw.hpp [6:8]
+        include/msgpack/v1/adaptor/v4raw_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/vector.hpp [6:8]
+        include/msgpack/v1/adaptor/vector_bool.hpp [6:8]
+        include/msgpack/v1/adaptor/vector_char.hpp [6:8]
+        include/msgpack/v1/adaptor/vector_unsigned_char.hpp [6:8]
+        include/msgpack/v1/cpp_config.hpp [6:8]
+        include/msgpack/v1/cpp_config_decl.hpp [6:8]
+        include/msgpack/v1/detail/cpp03_zone.hpp [6:8]
+        include/msgpack/v1/detail/cpp03_zone_decl.hpp [6:8]
+        include/msgpack/v1/detail/cpp11_zone.hpp [6:8]
+        include/msgpack/v1/detail/cpp11_zone_decl.hpp [6:8]
+        include/msgpack/v1/fbuffer.hpp [6:8]
+        include/msgpack/v1/fbuffer_decl.hpp [6:8]
+        include/msgpack/v1/iterator.hpp [6:8]
+        include/msgpack/v1/iterator_decl.hpp [6:8]
+        include/msgpack/v1/meta.hpp [6:8]
+        include/msgpack/v1/meta_decl.hpp [6:8]
+        include/msgpack/v1/object.hpp [6:8]
+        include/msgpack/v1/object_decl.hpp [6:8]
+        include/msgpack/v1/object_fwd.hpp [6:8]
+        include/msgpack/v1/object_fwd_decl.hpp [6:8]
+        include/msgpack/v1/pack.hpp [6:8]
+        include/msgpack/v1/pack_decl.hpp [6:8]
+        include/msgpack/v1/parse_return.hpp [6:8]
+        include/msgpack/v1/sbuffer.hpp [6:8]
+        include/msgpack/v1/sbuffer_decl.hpp [6:8]
+        include/msgpack/v1/unpack.hpp [6:8]
+        include/msgpack/v1/unpack_decl.hpp [6:8]
+        include/msgpack/v1/unpack_exception.hpp [6:8]
+        include/msgpack/v1/vrefbuffer.hpp [6:8]
+        include/msgpack/v1/vrefbuffer_decl.hpp [6:8]
+        include/msgpack/v1/zbuffer.hpp [6:8]
+        include/msgpack/v1/zbuffer_decl.hpp [6:8]
+        include/msgpack/v1/zone.hpp [6:8]
+        include/msgpack/v1/zone_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/adaptor_base.hpp [6:8]
+        include/msgpack/v2/adaptor/adaptor_base_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/array_ref_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/boost/msgpack_variant_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/check_container_size_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/define_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/detail/cpp03_define_array_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/detail/cpp03_define_map_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/detail/cpp03_msgpack_tuple_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/detail/cpp11_define_array_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/detail/cpp11_define_map_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/detail/cpp11_msgpack_tuple_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/ext_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/fixint_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/int_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/map_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/msgpack_tuple_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/nil_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/raw_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/size_equal_only_decl.hpp [6:8]
+        include/msgpack/v2/adaptor/v4raw_decl.hpp [6:8]
+        include/msgpack/v2/cpp_config_decl.hpp [6:8]
+        include/msgpack/v2/create_object_visitor.hpp [6:8]
+        include/msgpack/v2/create_object_visitor_decl.hpp [6:8]
+        include/msgpack/v2/detail/cpp03_zone_decl.hpp [6:8]
+        include/msgpack/v2/detail/cpp11_zone_decl.hpp [6:8]
+        include/msgpack/v2/fbuffer_decl.hpp [6:8]
+        include/msgpack/v2/iterator_decl.hpp [6:8]
+        include/msgpack/v2/meta_decl.hpp [6:8]
+        include/msgpack/v2/null_visitor.hpp [6:8]
+        include/msgpack/v2/null_visitor_decl.hpp [6:8]
+        include/msgpack/v2/object.hpp [6:8]
+        include/msgpack/v2/object_decl.hpp [6:8]
+        include/msgpack/v2/object_fwd.hpp [6:8]
+        include/msgpack/v2/object_fwd_decl.hpp [6:8]
+        include/msgpack/v2/pack_decl.hpp [6:8]
+        include/msgpack/v2/parse.hpp [6:8]
+        include/msgpack/v2/parse_decl.hpp [6:8]
+        include/msgpack/v2/parse_return.hpp [6:8]
+        include/msgpack/v2/sbuffer_decl.hpp [6:8]
+        include/msgpack/v2/unpack.hpp [6:8]
+        include/msgpack/v2/unpack_decl.hpp [6:8]
+        include/msgpack/v2/vrefbuffer_decl.hpp [6:8]
+        include/msgpack/v2/x3_parse.hpp [6:8]
+        include/msgpack/v2/x3_parse_decl.hpp [6:8]
+        include/msgpack/v2/x3_unpack.hpp [6:8]
+        include/msgpack/v2/x3_unpack_decl.hpp [6:8]
+        include/msgpack/v2/zbuffer_decl.hpp [6:8]
+        include/msgpack/v2/zone_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/adaptor_base.hpp [6:8]
+        include/msgpack/v3/adaptor/adaptor_base_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/array_ref_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/boost/msgpack_variant_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/check_container_size_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/define_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/detail/cpp03_define_array_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/detail/cpp03_define_map_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/detail/cpp03_msgpack_tuple_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/detail/cpp11_define_array_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/detail/cpp11_define_map_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/detail/cpp11_msgpack_tuple_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/ext_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/fixint_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/int_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/map_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/msgpack_tuple_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/nil_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/raw_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/size_equal_only_decl.hpp [6:8]
+        include/msgpack/v3/adaptor/v4raw_decl.hpp [6:8]
+        include/msgpack/v3/cpp_config_decl.hpp [6:8]
+        include/msgpack/v3/create_object_visitor_decl.hpp [6:8]
+        include/msgpack/v3/detail/cpp03_zone_decl.hpp [6:8]
+        include/msgpack/v3/detail/cpp11_zone_decl.hpp [6:8]
+        include/msgpack/v3/fbuffer_decl.hpp [6:8]
+        include/msgpack/v3/iterator_decl.hpp [6:8]
+        include/msgpack/v3/meta_decl.hpp [6:8]
+        include/msgpack/v3/null_visitor_decl.hpp [6:8]
+        include/msgpack/v3/object_decl.hpp [6:8]
+        include/msgpack/v3/object_fwd.hpp [6:8]
+        include/msgpack/v3/object_fwd_decl.hpp [6:8]
+        include/msgpack/v3/pack_decl.hpp [6:8]
+        include/msgpack/v3/parse.hpp [6:8]
+        include/msgpack/v3/parse_decl.hpp [6:8]
+        include/msgpack/v3/parse_return.hpp [6:8]
+        include/msgpack/v3/sbuffer_decl.hpp [6:8]
+        include/msgpack/v3/unpack.hpp [6:8]
+        include/msgpack/v3/unpack_decl.hpp [6:8]
+        include/msgpack/v3/vrefbuffer_decl.hpp [6:8]
+        include/msgpack/v3/x3_parse_decl.hpp [6:8]
+        include/msgpack/v3/x3_unpack.hpp [6:8]
+        include/msgpack/v3/x3_unpack_decl.hpp [6:8]
+        include/msgpack/v3/zbuffer_decl.hpp [6:8]
+        include/msgpack/v3/zone_decl.hpp [6:8]
+        include/msgpack/vrefbuffer.hpp [6:8]
+        include/msgpack/vrefbuffer_decl.hpp [6:8]
+        include/msgpack/x3_parse.hpp [6:8]
+        include/msgpack/x3_parse_decl.hpp [6:8]
+        include/msgpack/x3_unpack.hpp [6:8]
+        include/msgpack/x3_unpack_decl.hpp [6:8]
+        include/msgpack/zbuffer.hpp [6:8]
+        include/msgpack/zbuffer_decl.hpp [6:8]
+        include/msgpack/zone.hpp [6:8]
+        include/msgpack/zone_decl.hpp [6:8]
+
+KEEP     BSL-1.0              404eab58c25acc8dfd092b77ad46f2fd
+BELONGS ya.make
+    License text:
+        //    Distributed under the Boost Software License, Version 1.0.
+        //    (See accompanying file LICENSE_1_0.txt or copy at
+        //    http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/msgpack/v1/adaptor/detail/cpp03_define_array.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp03_define_array_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp03_define_map.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp03_define_map_decl.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp03_msgpack_tuple.hpp [6:8]
+        include/msgpack/v1/adaptor/detail/cpp03_msgpack_tuple_decl.hpp [6:8]
+
+KEEP     Apache-2.0           53c316281472ca59340bf4985c3b032f
+BELONGS ya.make
+    License text:
+          * Change the license from the Apache License Version 2.0 to the
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CHANGELOG.md [170:170]
+
+KEEP     BSL-1.0              5441d5621bc00e9e901c5b220a3040c4
+BELONGS ya.make
+    License text:
+        \#  *     Distributed under the Boost Software License, Version 1.0. (See
+        \#  *     accompanying file LICENSE_1_0.txt or copy at
+        \#  *     http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/msgpack/preprocessor/array/data.hpp [4:6]
+        include/msgpack/preprocessor/array/elem.hpp [4:6]
+        include/msgpack/preprocessor/array/pop_back.hpp [4:6]
+        include/msgpack/preprocessor/array/pop_front.hpp [4:6]
+        include/msgpack/preprocessor/array/push_back.hpp [5:7]
+        include/msgpack/preprocessor/array/push_front.hpp [5:7]
+        include/msgpack/preprocessor/array/remove.hpp [4:6]
+        include/msgpack/preprocessor/array/replace.hpp [4:6]
+        include/msgpack/preprocessor/array/reverse.hpp [4:6]
+        include/msgpack/preprocessor/array/size.hpp [4:6]
+        include/msgpack/preprocessor/assert_msg.hpp [4:6]
+        include/msgpack/preprocessor/comma.hpp [4:6]
+        include/msgpack/preprocessor/comma_if.hpp [4:6]
+        include/msgpack/preprocessor/control.hpp [4:6]
+        include/msgpack/preprocessor/control/deduce_d.hpp [4:6]
+        include/msgpack/preprocessor/control/expr_iif.hpp [4:6]
+        include/msgpack/preprocessor/control/iif.hpp [4:6]
+        include/msgpack/preprocessor/debug.hpp [4:6]
+        include/msgpack/preprocessor/debug/error.hpp [4:6]
+        include/msgpack/preprocessor/debug/line.hpp [4:6]
+        include/msgpack/preprocessor/dec.hpp [4:6]
+        include/msgpack/preprocessor/detail/auto_rec.hpp [4:6]
+        include/msgpack/preprocessor/detail/check.hpp [4:6]
+        include/msgpack/preprocessor/detail/dmc/auto_rec.hpp [4:6]
+        include/msgpack/preprocessor/detail/is_binary.hpp [4:6]
+        include/msgpack/preprocessor/detail/is_nullary.hpp [4:6]
+        include/msgpack/preprocessor/detail/is_unary.hpp [4:6]
+        include/msgpack/preprocessor/detail/null.hpp [4:6]
+        include/msgpack/preprocessor/detail/split.hpp [4:6]
+        include/msgpack/preprocessor/empty.hpp [4:6]
+        include/msgpack/preprocessor/enum.hpp [4:6]
+        include/msgpack/preprocessor/enum_params.hpp [4:6]
+        include/msgpack/preprocessor/enum_params_with_a_default.hpp [4:6]
+        include/msgpack/preprocessor/enum_params_with_defaults.hpp [4:6]
+        include/msgpack/preprocessor/enum_shifted.hpp [4:6]
+        include/msgpack/preprocessor/enum_shifted_params.hpp [4:6]
+        include/msgpack/preprocessor/expand.hpp [4:6]
+        include/msgpack/preprocessor/expr_if.hpp [4:6]
+        include/msgpack/preprocessor/facilities/apply.hpp [4:6]
+        include/msgpack/preprocessor/facilities/detail/is_empty.hpp [4:6]
+        include/msgpack/preprocessor/facilities/intercept.hpp [4:6]
+        include/msgpack/preprocessor/facilities/is_1.hpp [4:6]
+        include/msgpack/preprocessor/facilities/is_empty.hpp [5:7]
+        include/msgpack/preprocessor/facilities/is_empty_or_1.hpp [4:6]
+        include/msgpack/preprocessor/facilities/is_empty_variadic.hpp [4:6]
+        include/msgpack/preprocessor/for.hpp [4:6]
+        include/msgpack/preprocessor/identity.hpp [4:6]
+        include/msgpack/preprocessor/if.hpp [4:6]
+        include/msgpack/preprocessor/inc.hpp [4:6]
+        include/msgpack/preprocessor/iterate.hpp [4:6]
+        include/msgpack/preprocessor/iteration.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/bounds/lower1.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/bounds/lower2.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/bounds/lower3.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/bounds/lower4.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/bounds/lower5.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/bounds/upper1.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/bounds/upper2.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/bounds/upper3.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/bounds/upper4.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/bounds/upper5.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/finish.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/iter/forward1.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/iter/forward2.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/iter/forward3.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/iter/forward4.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/iter/forward5.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/iter/reverse1.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/iter/reverse2.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/iter/reverse3.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/iter/reverse4.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/iter/reverse5.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/local.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/rlocal.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/self.hpp [4:6]
+        include/msgpack/preprocessor/iteration/detail/start.hpp [4:6]
+        include/msgpack/preprocessor/iteration/iterate.hpp [4:6]
+        include/msgpack/preprocessor/iteration/local.hpp [4:6]
+        include/msgpack/preprocessor/iteration/self.hpp [4:6]
+        include/msgpack/preprocessor/limits.hpp [4:6]
+        include/msgpack/preprocessor/list/to_seq.hpp [4:6]
+        include/msgpack/preprocessor/logical/bitand.hpp [4:6]
+        include/msgpack/preprocessor/logical/bitnor.hpp [4:6]
+        include/msgpack/preprocessor/logical/bitor.hpp [4:6]
+        include/msgpack/preprocessor/logical/bitxor.hpp [4:6]
+        include/msgpack/preprocessor/logical/compl.hpp [4:6]
+        include/msgpack/preprocessor/max.hpp [4:6]
+        include/msgpack/preprocessor/min.hpp [4:6]
+        include/msgpack/preprocessor/punctuation.hpp [4:6]
+        include/msgpack/preprocessor/punctuation/detail/is_begin_parens.hpp [4:6]
+        include/msgpack/preprocessor/punctuation/is_begin_parens.hpp [4:6]
+        include/msgpack/preprocessor/punctuation/paren.hpp [4:6]
+        include/msgpack/preprocessor/punctuation/paren_if.hpp [4:6]
+        include/msgpack/preprocessor/punctuation/remove_parens.hpp [4:6]
+        include/msgpack/preprocessor/repeat.hpp [4:6]
+        include/msgpack/preprocessor/repeat_2nd.hpp [4:6]
+        include/msgpack/preprocessor/repeat_3rd.hpp [4:6]
+        include/msgpack/preprocessor/repeat_from_to.hpp [4:6]
+        include/msgpack/preprocessor/repeat_from_to_2nd.hpp [4:6]
+        include/msgpack/preprocessor/repeat_from_to_3rd.hpp [4:6]
+        include/msgpack/preprocessor/repetition.hpp [4:6]
+        include/msgpack/preprocessor/repetition/deduce_r.hpp [4:6]
+        include/msgpack/preprocessor/repetition/deduce_z.hpp [4:6]
+        include/msgpack/preprocessor/repetition/enum_binary_params.hpp [4:6]
+        include/msgpack/preprocessor/repetition/enum_trailing.hpp [4:6]
+        include/msgpack/preprocessor/repetition/enum_trailing_binary_params.hpp [4:6]
+        include/msgpack/preprocessor/repetition/enum_trailing_params.hpp [4:6]
+        include/msgpack/preprocessor/selection.hpp [4:6]
+        include/msgpack/preprocessor/seq/cat.hpp [4:6]
+        include/msgpack/preprocessor/seq/detail/is_empty.hpp [4:6]
+        include/msgpack/preprocessor/seq/detail/split.hpp [4:6]
+        include/msgpack/preprocessor/seq/elem.hpp [4:6]
+        include/msgpack/preprocessor/seq/enum.hpp [4:6]
+        include/msgpack/preprocessor/seq/filter.hpp [4:6]
+        include/msgpack/preprocessor/seq/first_n.hpp [4:6]
+        include/msgpack/preprocessor/seq/fold_left.hpp [4:6]
+        include/msgpack/preprocessor/seq/fold_right.hpp [4:6]
+        include/msgpack/preprocessor/seq/for_each.hpp [4:6]
+        include/msgpack/preprocessor/seq/for_each_i.hpp [4:6]
+        include/msgpack/preprocessor/seq/for_each_product.hpp [4:6]
+        include/msgpack/preprocessor/seq/insert.hpp [4:6]
+        include/msgpack/preprocessor/seq/pop_back.hpp [4:6]
+        include/msgpack/preprocessor/seq/pop_front.hpp [4:6]
+        include/msgpack/preprocessor/seq/push_back.hpp [4:6]
+        include/msgpack/preprocessor/seq/push_front.hpp [4:6]
+        include/msgpack/preprocessor/seq/remove.hpp [4:6]
+        include/msgpack/preprocessor/seq/replace.hpp [4:6]
+        include/msgpack/preprocessor/seq/rest_n.hpp [4:6]
+        include/msgpack/preprocessor/seq/reverse.hpp [4:6]
+        include/msgpack/preprocessor/seq/seq.hpp [4:6]
+        include/msgpack/preprocessor/seq/size.hpp [4:6]
+        include/msgpack/preprocessor/seq/subseq.hpp [4:6]
+        include/msgpack/preprocessor/seq/to_array.hpp [4:6]
+        include/msgpack/preprocessor/seq/to_tuple.hpp [4:6]
+        include/msgpack/preprocessor/seq/transform.hpp [4:6]
+        include/msgpack/preprocessor/slot.hpp [4:6]
+        include/msgpack/preprocessor/slot/detail/def.hpp [4:6]
+        include/msgpack/preprocessor/slot/detail/shared.hpp [4:6]
+        include/msgpack/preprocessor/slot/slot.hpp [4:6]
+        include/msgpack/preprocessor/tuple/insert.hpp [4:6]
+        include/msgpack/preprocessor/tuple/pop_back.hpp [4:6]
+        include/msgpack/preprocessor/tuple/pop_front.hpp [4:6]
+        include/msgpack/preprocessor/tuple/push_back.hpp [4:6]
+        include/msgpack/preprocessor/tuple/push_front.hpp [4:6]
+        include/msgpack/preprocessor/tuple/remove.hpp [4:6]
+        include/msgpack/preprocessor/tuple/replace.hpp [4:6]
+        include/msgpack/preprocessor/while.hpp [4:6]
+        include/msgpack/preprocessor/wstringize.hpp [4:6]
+
+KEEP     BSL-1.0              83983ab12387ac726323fdd935c91222
+BELONGS ya.make
+    License text:
+        `msgpack-c` is licensed under the Boost Software License, Version 1.0. See
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [188:188]
+
+KEEP     BSL-1.0              8cff6babbb6f0996f11c8e41aea364b2
+BELONGS ya.make
+    License text:
+        \#  * Distributed under the Boost Software License, Version 1.0. (See
+        \#  * accompanying file LICENSE_1_0.txt or copy at
+        \#  * http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/msgpack/preprocessor.hpp [5:7]
+        include/msgpack/preprocessor/arithmetic.hpp [5:7]
+        include/msgpack/preprocessor/arithmetic/add.hpp [5:7]
+        include/msgpack/preprocessor/arithmetic/dec.hpp [5:7]
+        include/msgpack/preprocessor/arithmetic/detail/div_base.hpp [5:7]
+        include/msgpack/preprocessor/arithmetic/div.hpp [5:7]
+        include/msgpack/preprocessor/arithmetic/inc.hpp [5:7]
+        include/msgpack/preprocessor/arithmetic/mod.hpp [5:7]
+        include/msgpack/preprocessor/arithmetic/mul.hpp [5:7]
+        include/msgpack/preprocessor/arithmetic/sub.hpp [5:7]
+        include/msgpack/preprocessor/cat.hpp [5:7]
+        include/msgpack/preprocessor/comparison.hpp [5:7]
+        include/msgpack/preprocessor/comparison/equal.hpp [5:7]
+        include/msgpack/preprocessor/comparison/greater.hpp [5:7]
+        include/msgpack/preprocessor/comparison/greater_equal.hpp [5:7]
+        include/msgpack/preprocessor/comparison/less.hpp [5:7]
+        include/msgpack/preprocessor/comparison/less_equal.hpp [5:7]
+        include/msgpack/preprocessor/comparison/not_equal.hpp [5:7]
+        include/msgpack/preprocessor/config/limits.hpp [5:7]
+        include/msgpack/preprocessor/control/detail/dmc/while.hpp [5:7]
+        include/msgpack/preprocessor/control/detail/edg/while.hpp [5:7]
+        include/msgpack/preprocessor/control/detail/msvc/while.hpp [5:7]
+        include/msgpack/preprocessor/control/detail/while.hpp [5:7]
+        include/msgpack/preprocessor/control/expr_if.hpp [5:7]
+        include/msgpack/preprocessor/control/if.hpp [5:7]
+        include/msgpack/preprocessor/debug/assert.hpp [5:7]
+        include/msgpack/preprocessor/facilities/empty.hpp [5:7]
+        include/msgpack/preprocessor/facilities/expand.hpp [5:7]
+        include/msgpack/preprocessor/facilities/identity.hpp [5:7]
+        include/msgpack/preprocessor/list.hpp [5:7]
+        include/msgpack/preprocessor/list/adt.hpp [5:7]
+        include/msgpack/preprocessor/list/append.hpp [5:7]
+        include/msgpack/preprocessor/list/at.hpp [5:7]
+        include/msgpack/preprocessor/list/cat.hpp [5:7]
+        include/msgpack/preprocessor/list/detail/dmc/fold_left.hpp [5:7]
+        include/msgpack/preprocessor/list/detail/edg/fold_left.hpp [5:7]
+        include/msgpack/preprocessor/list/detail/edg/fold_right.hpp [5:7]
+        include/msgpack/preprocessor/list/detail/fold_left.hpp [5:7]
+        include/msgpack/preprocessor/list/detail/fold_right.hpp [5:7]
+        include/msgpack/preprocessor/list/enum.hpp [5:7]
+        include/msgpack/preprocessor/list/filter.hpp [5:7]
+        include/msgpack/preprocessor/list/first_n.hpp [5:7]
+        include/msgpack/preprocessor/list/fold_left.hpp [5:7]
+        include/msgpack/preprocessor/list/fold_right.hpp [5:7]
+        include/msgpack/preprocessor/list/for_each.hpp [5:7]
+        include/msgpack/preprocessor/list/for_each_i.hpp [5:7]
+        include/msgpack/preprocessor/list/for_each_product.hpp [5:7]
+        include/msgpack/preprocessor/list/rest_n.hpp [5:7]
+        include/msgpack/preprocessor/list/reverse.hpp [5:7]
+        include/msgpack/preprocessor/list/size.hpp [5:7]
+        include/msgpack/preprocessor/list/to_tuple.hpp [5:7]
+        include/msgpack/preprocessor/list/transform.hpp [5:7]
+        include/msgpack/preprocessor/logical.hpp [5:7]
+        include/msgpack/preprocessor/logical/and.hpp [5:7]
+        include/msgpack/preprocessor/logical/bool.hpp [5:7]
+        include/msgpack/preprocessor/logical/nor.hpp [5:7]
+        include/msgpack/preprocessor/logical/not.hpp [5:7]
+        include/msgpack/preprocessor/logical/or.hpp [5:7]
+        include/msgpack/preprocessor/logical/xor.hpp [5:7]
+        include/msgpack/preprocessor/punctuation/comma.hpp [5:7]
+        include/msgpack/preprocessor/punctuation/comma_if.hpp [5:7]
+        include/msgpack/preprocessor/repetition/detail/dmc/for.hpp [5:7]
+        include/msgpack/preprocessor/repetition/detail/edg/for.hpp [5:7]
+        include/msgpack/preprocessor/repetition/detail/for.hpp [5:7]
+        include/msgpack/preprocessor/repetition/detail/msvc/for.hpp [5:7]
+        include/msgpack/preprocessor/repetition/enum.hpp [5:7]
+        include/msgpack/preprocessor/repetition/enum_params.hpp [5:7]
+        include/msgpack/preprocessor/repetition/enum_params_with_a_default.hpp [5:7]
+        include/msgpack/preprocessor/repetition/enum_params_with_defaults.hpp [5:7]
+        include/msgpack/preprocessor/repetition/enum_shifted.hpp [5:7]
+        include/msgpack/preprocessor/repetition/enum_shifted_params.hpp [5:7]
+        include/msgpack/preprocessor/repetition/for.hpp [5:7]
+        include/msgpack/preprocessor/repetition/repeat.hpp [5:7]
+        include/msgpack/preprocessor/repetition/repeat_from_to.hpp [5:7]
+        include/msgpack/preprocessor/selection/max.hpp [5:7]
+        include/msgpack/preprocessor/selection/min.hpp [5:7]
+        include/msgpack/preprocessor/stringize.hpp [5:7]
+        include/msgpack/preprocessor/tuple.hpp [5:7]
+        include/msgpack/v1/preprocessor.hpp [5:7]
+
+KEEP     BSL-1.0              996aeb007415a6ef8ea5b321bc17500c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/msgpack/preprocessor/array.hpp [5:7]
+        include/msgpack/preprocessor/array/detail/get_data.hpp [4:6]
+        include/msgpack/preprocessor/array/enum.hpp [5:7]
+        include/msgpack/preprocessor/array/to_list.hpp [5:7]
+        include/msgpack/preprocessor/array/to_seq.hpp [5:7]
+        include/msgpack/preprocessor/array/to_tuple.hpp [5:7]
+        include/msgpack/preprocessor/facilities.hpp [5:7]
+        include/msgpack/preprocessor/facilities/overload.hpp [5:7]
+        include/msgpack/preprocessor/library.hpp [5:7]
+        include/msgpack/preprocessor/repetition/enum_shifted_binary_params.hpp [4:6]
+        include/msgpack/preprocessor/seq.hpp [5:7]
+        include/msgpack/preprocessor/seq/detail/binary_transform.hpp [4:6]
+        include/msgpack/preprocessor/seq/to_list.hpp [5:7]
+        include/msgpack/preprocessor/seq/variadic_seq_to_seq.hpp [4:6]
+        include/msgpack/preprocessor/slot/counter.hpp [4:6]
+        include/msgpack/preprocessor/tuple/detail/is_single_return.hpp [4:6]
+        include/msgpack/preprocessor/tuple/enum.hpp [5:7]
+        include/msgpack/preprocessor/tuple/size.hpp [5:7]
+        include/msgpack/preprocessor/tuple/to_array.hpp [5:7]
+        include/msgpack/preprocessor/variadic.hpp [5:7]
+        include/msgpack/preprocessor/variadic/detail/is_single_return.hpp [4:6]
+        include/msgpack/preprocessor/variadic/to_array.hpp [5:7]
+        include/msgpack/preprocessor/variadic/to_list.hpp [5:7]
+        include/msgpack/preprocessor/variadic/to_seq.hpp [5:7]
+        include/msgpack/preprocessor/variadic/to_tuple.hpp [5:7]
+
+KEEP     BSL-1.0              b057fb663f90e3d81c396da228ff46a1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/msgpack/preprocessor/config/config.hpp [5:7]
+        include/msgpack/preprocessor/slot/detail/counter.hpp [4:6]
+        include/msgpack/preprocessor/tuple/rem.hpp [5:7]
+        include/msgpack/preprocessor/tuple/to_seq.hpp [5:7]
+        include/msgpack/preprocessor/variadic/elem.hpp [5:7]
+        include/msgpack/preprocessor/variadic/size.hpp [5:7]
+
+KEEP     BSL-1.0              c91ac62eaa0324e39010493f644405e7
+BELONGS ya.make
+    License text:
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+        http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/msgpack/predef.h [3:5]
+        include/msgpack/predef/architecture.h [3:5]
+        include/msgpack/predef/architecture/alpha.h [3:5]
+        include/msgpack/predef/architecture/arm.h [5:7]
+        include/msgpack/predef/architecture/blackfin.h [3:5]
+        include/msgpack/predef/architecture/convex.h [3:5]
+        include/msgpack/predef/architecture/ia64.h [3:5]
+        include/msgpack/predef/architecture/m68k.h [3:5]
+        include/msgpack/predef/architecture/mips.h [3:5]
+        include/msgpack/predef/architecture/parisc.h [3:5]
+        include/msgpack/predef/architecture/ppc.h [3:5]
+        include/msgpack/predef/architecture/pyramid.h [3:5]
+        include/msgpack/predef/architecture/rs6k.h [3:5]
+        include/msgpack/predef/architecture/sparc.h [3:5]
+        include/msgpack/predef/architecture/superh.h [3:5]
+        include/msgpack/predef/architecture/sys370.h [3:5]
+        include/msgpack/predef/architecture/sys390.h [3:5]
+        include/msgpack/predef/architecture/x86.h [3:5]
+        include/msgpack/predef/architecture/x86/32.h [3:5]
+        include/msgpack/predef/architecture/x86/64.h [3:5]
+        include/msgpack/predef/architecture/z.h [3:5]
+        include/msgpack/predef/compiler.h [3:5]
+        include/msgpack/predef/compiler/borland.h [3:5]
+        include/msgpack/predef/compiler/clang.h [3:5]
+        include/msgpack/predef/compiler/comeau.h [3:5]
+        include/msgpack/predef/compiler/compaq.h [3:5]
+        include/msgpack/predef/compiler/diab.h [3:5]
+        include/msgpack/predef/compiler/digitalmars.h [3:5]
+        include/msgpack/predef/compiler/dignus.h [3:5]
+        include/msgpack/predef/compiler/edg.h [3:5]
+        include/msgpack/predef/compiler/ekopath.h [3:5]
+        include/msgpack/predef/compiler/gcc.h [3:5]
+        include/msgpack/predef/compiler/gcc_xml.h [3:5]
+        include/msgpack/predef/compiler/greenhills.h [3:5]
+        include/msgpack/predef/compiler/hp_acc.h [3:5]
+        include/msgpack/predef/compiler/iar.h [3:5]
+        include/msgpack/predef/compiler/ibm.h [3:5]
+        include/msgpack/predef/compiler/intel.h [3:5]
+        include/msgpack/predef/compiler/kai.h [3:5]
+        include/msgpack/predef/compiler/llvm.h [3:5]
+        include/msgpack/predef/compiler/metaware.h [3:5]
+        include/msgpack/predef/compiler/metrowerks.h [3:5]
+        include/msgpack/predef/compiler/microtec.h [3:5]
+        include/msgpack/predef/compiler/mpw.h [3:5]
+        include/msgpack/predef/compiler/palm.h [3:5]
+        include/msgpack/predef/compiler/pgi.h [3:5]
+        include/msgpack/predef/compiler/sgi_mipspro.h [3:5]
+        include/msgpack/predef/compiler/sunpro.h [3:5]
+        include/msgpack/predef/compiler/tendra.h [3:5]
+        include/msgpack/predef/compiler/visualc.h [3:5]
+        include/msgpack/predef/compiler/watcom.h [3:5]
+        include/msgpack/predef/detail/_cassert.h [3:5]
+        include/msgpack/predef/detail/_exception.h [3:5]
+        include/msgpack/predef/detail/comp_detected.h [3:5]
+        include/msgpack/predef/detail/endian_compat.h [3:5]
+        include/msgpack/predef/detail/os_detected.h [3:5]
+        include/msgpack/predef/detail/platform_detected.h [3:5]
+        include/msgpack/predef/detail/test.h [3:5]
+        include/msgpack/predef/detail/test_def.h [3:5]
+        include/msgpack/predef/hardware.h [4:6]
+        include/msgpack/predef/hardware/simd.h [4:6]
+        include/msgpack/predef/hardware/simd/arm.h [4:6]
+        include/msgpack/predef/hardware/simd/arm/versions.h [4:6]
+        include/msgpack/predef/hardware/simd/ppc.h [4:6]
+        include/msgpack/predef/hardware/simd/ppc/versions.h [4:6]
+        include/msgpack/predef/hardware/simd/x86.h [4:6]
+        include/msgpack/predef/hardware/simd/x86/versions.h [4:6]
+        include/msgpack/predef/hardware/simd/x86_amd.h [4:6]
+        include/msgpack/predef/hardware/simd/x86_amd/versions.h [4:6]
+        include/msgpack/predef/language.h [3:5]
+        include/msgpack/predef/language/objc.h [3:5]
+        include/msgpack/predef/language/stdc.h [3:5]
+        include/msgpack/predef/language/stdcpp.h [3:5]
+        include/msgpack/predef/library.h [3:5]
+        include/msgpack/predef/library/c.h [3:5]
+        include/msgpack/predef/library/c/_prefix.h [3:5]
+        include/msgpack/predef/library/c/gnu.h [3:5]
+        include/msgpack/predef/library/c/uc.h [3:5]
+        include/msgpack/predef/library/c/vms.h [3:5]
+        include/msgpack/predef/library/c/zos.h [3:5]
+        include/msgpack/predef/library/std.h [3:5]
+        include/msgpack/predef/library/std/_prefix.h [3:5]
+        include/msgpack/predef/library/std/cxx.h [3:5]
+        include/msgpack/predef/library/std/dinkumware.h [3:5]
+        include/msgpack/predef/library/std/libcomo.h [3:5]
+        include/msgpack/predef/library/std/modena.h [3:5]
+        include/msgpack/predef/library/std/msl.h [3:5]
+        include/msgpack/predef/library/std/roguewave.h [3:5]
+        include/msgpack/predef/library/std/sgi.h [3:5]
+        include/msgpack/predef/library/std/stdcpp3.h [3:5]
+        include/msgpack/predef/library/std/stlport.h [3:5]
+        include/msgpack/predef/library/std/vacpp.h [3:5]
+        include/msgpack/predef/make.h [3:5]
+        include/msgpack/predef/os.h [4:6]
+        include/msgpack/predef/os/aix.h [3:5]
+        include/msgpack/predef/os/amigaos.h [3:5]
+        include/msgpack/predef/os/android.h [3:5]
+        include/msgpack/predef/os/beos.h [3:5]
+        include/msgpack/predef/os/bsd.h [3:5]
+        include/msgpack/predef/os/bsd/bsdi.h [3:5]
+        include/msgpack/predef/os/bsd/dragonfly.h [3:5]
+        include/msgpack/predef/os/bsd/free.h [3:5]
+        include/msgpack/predef/os/bsd/net.h [3:5]
+        include/msgpack/predef/os/bsd/open.h [3:5]
+        include/msgpack/predef/os/cygwin.h [3:5]
+        include/msgpack/predef/os/haiku.h [4:6]
+        include/msgpack/predef/os/hpux.h [3:5]
+        include/msgpack/predef/os/ios.h [4:6]
+        include/msgpack/predef/os/irix.h [3:5]
+        include/msgpack/predef/os/linux.h [3:5]
+        include/msgpack/predef/os/macos.h [4:6]
+        include/msgpack/predef/os/os400.h [3:5]
+        include/msgpack/predef/os/qnxnto.h [3:5]
+        include/msgpack/predef/os/solaris.h [3:5]
+        include/msgpack/predef/os/unix.h [3:5]
+        include/msgpack/predef/os/vms.h [3:5]
+        include/msgpack/predef/os/windows.h [3:5]
+        include/msgpack/predef/other.h [3:5]
+        include/msgpack/predef/other/endian.h [3:5]
+        include/msgpack/predef/platform.h [4:6]
+        include/msgpack/predef/platform/mingw.h [3:5]
+        include/msgpack/predef/platform/windows_desktop.h [4:6]
+        include/msgpack/predef/platform/windows_phone.h [4:6]
+        include/msgpack/predef/platform/windows_runtime.h [4:6]
+        include/msgpack/predef/platform/windows_store.h [4:6]
+        include/msgpack/predef/version.h [3:5]
+        include/msgpack/predef/version_number.h [3:5]
+
+KEEP     BSL-1.0              dde9acabf5742901105539d5f17431bd
+BELONGS ya.make
+    License text:
+        \#  *     Distributed under the Boost Software License, Version 1.0. (See
+        \#  *     accompanying file LICENSE_1_0.txt or copy at
+        \#  *     http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/msgpack/preprocessor/array/insert.hpp [4:6]
+        include/msgpack/preprocessor/list/to_array.hpp [5:7]
+        include/msgpack/preprocessor/slot/detail/slot1.hpp [4:6]
+        include/msgpack/preprocessor/slot/detail/slot2.hpp [4:6]
+        include/msgpack/preprocessor/slot/detail/slot3.hpp [4:6]
+        include/msgpack/preprocessor/slot/detail/slot4.hpp [4:6]
+        include/msgpack/preprocessor/slot/detail/slot5.hpp [4:6]
+
+KEEP     BSL-1.0              e44802492524d2ff0f6e67f303c44c89
+BELONGS ya.make
+    License text:
+         *    Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+         *    http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/msgpack.h [6:8]
+        include/msgpack/fbuffer.h [6:8]
+        include/msgpack/gcc_atomic.h [2:4]
+        include/msgpack/object.h [6:8]
+        include/msgpack/pack.h [6:8]
+        include/msgpack/pack_define.h [6:8]
+        include/msgpack/pack_template.h [6:8]
+        include/msgpack/sbuffer.h [6:8]
+        include/msgpack/sysdep.h [6:8]
+        include/msgpack/unpack.h [6:8]
+        include/msgpack/unpack_define.h [6:8]
+        include/msgpack/unpack_template.h [6:8]
+        include/msgpack/util.h [6:8]
+        include/msgpack/v1/version.hpp [6:8]
+        include/msgpack/v1/versioning.hpp [6:8]
+        include/msgpack/version.h [6:8]
+        include/msgpack/version.hpp [6:8]
+        include/msgpack/versioning.hpp [6:8]
+        include/msgpack/vrefbuffer.h [6:8]
+        include/msgpack/zbuffer.h [6:8]
+        include/msgpack/zone.h [6:8]
+        src/objectc.c [6:8]
+        src/unpack.c [6:8]
+        src/vrefbuffer.c [6:8]
+        src/zone.c [6:8]

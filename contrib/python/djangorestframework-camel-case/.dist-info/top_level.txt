@@ -1,0 +1,1 @@
+djangorestframework_camel_case

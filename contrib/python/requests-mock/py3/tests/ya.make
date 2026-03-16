@@ -1,7 +1,5 @@
 PY3TEST()
 
-SUBSCRIBER(g:python-contrib)
-
 PEERDIR(
     contrib/python/mock
     contrib/python/requests-futures

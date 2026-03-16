@@ -1,0 +1,97 @@
+Metadata-Version: 2.1
+Name: WTForms
+Version: 2.3.3
+Summary: A flexible forms validation and rendering library for Python web development.
+Home-page: https://wtforms.readthedocs.io/
+Maintainer: WTForms
+Maintainer-email: davidism@gmail.com
+License: BSD-3-Clause
+Project-URL: Documentation, https://wtforms.readthedocs.io/
+Project-URL: Code, https://github.com/wtforms/wtforms
+Project-URL: Issue Tracker, https://github.com/wtforms/wtforms/issues
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Description-Content-Type: text/x-rst
+Requires-Dist: MarkupSafe
+Provides-Extra: email
+Requires-Dist: email-validator ; extra == 'email'
+Provides-Extra: ipaddress
+Requires-Dist: ipaddress ; (python_version < "3.3") and extra == 'ipaddress'
+Provides-Extra: locale
+Requires-Dist: Babel (>=1.3) ; extra == 'locale'
+
+WTForms
+=======
+
+WTForms is a flexible forms validation and rendering library for Python
+web development. It can work with whatever web framework and template
+engine you choose. It supports data validation, CSRF protection,
+internationalization (I18N), and more. There are various community
+libraries that provide closer integration with popular frameworks.
+
+
+Installation
+------------
+
+Install and update using pip:
+
+.. code-block:: text
+
+    pip install -U WTForms
+
+
+Third-Party Library Integrations
+--------------------------------
+
+WTForms is designed to work with any web framework and template engine.
+There are a number of community-provided libraries that make integrating
+with frameworks even better.
+
+-   `Flask-WTF`_ integrates with the Flask framework. It can
+    automatically load data from the request, uses Flask-Babel to
+    translate based on user-selected locale, provides full-application
+    CSRF, and more.
+-   `WTForms-Alchemy`_ provides rich support for generating forms from
+    SQLAlchemy models, including an expanded set of fields and
+    validators.
+-   `WTForms-SQLAlchemy`_ provides ORM-backed fields and form generation
+    from SQLAlchemy models.
+-   `WTForms-AppEngine`_ provides ORM-backed fields and form generation
+    from AppEnding db/ndb schema
+-   `WTForms-AppEngine`_ provides ORM-backed fields and form generation
+    from Django models, as well as integration with Django's I18N
+    support.
+
+.. _Flask-WTF: https://flask-wtf.readthedocs.io/
+.. _WTForms-Alchemy: https://wtforms-alchemy.readthedocs.io/
+.. _WTForms-SQLAlchemy: https://github.com/wtforms/wtforms-sqlalchemy
+.. _WTForms-AppEngine: https://github.com/wtforms/wtforms-appengine
+.. _WTForms-Django: https://github.com/wtforms/wtforms-django
+
+
+Links
+-----
+
+-   Documentation: https://wtforms.readthedocs.io/
+-   Releases: https://pypi.org/project/WTForms/
+-   Code: https://github.com/wtforms/wtforms
+-   Issue tracker: https://github.com/wtforms/wtforms/issues
+-   Test status: https://travis-ci.org/wtforms/wtforms
+-   Test coverage: https://coveralls.io/github/wtforms/wtforms
+-   Discord Chat: https://discord.gg/F65P7Z9
+
+

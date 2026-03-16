@@ -1,0 +1,174 @@
+--- contrib/python/hiredis/py2/src/reader.c	(index)
++++ contrib/python/hiredis/py2/src/reader.c	(working tree)
+@@ -69,8 +69,26 @@ static void *tryParentize(const redisReadTask *task, PyObject *obj) {
+     PyObject *parent;
+     if (task && task->parent) {
+         parent = (PyObject*)task->parent->obj;
+-        assert(PyList_CheckExact(parent));
+-        PyList_SET_ITEM(parent, task->idx, obj);
++        switch (task->parent->type) {
++            case REDIS_REPLY_MAP:
++                if (task->idx % 2 == 0) {
++                    /* Set a temporary item to save the object as a key. */
++                    PyDict_SetItem(parent, obj, Py_None);
++                } else {
++                    /* Pop the temporary item and set proper key and value. */
++                    PyObject *last_item = PyObject_CallMethod(parent, "popitem", NULL);
++                    PyObject *last_key = PyTuple_GetItem(last_item, 0);
++                    PyDict_SetItem(parent, last_key, obj);
++                }
++                break;
++            case REDIS_REPLY_SET:
++                assert(PyAnySet_CheckExact(parent));
++                PySet_Add(parent, obj);
++                break;
++            default:
++                assert(PyList_CheckExact(parent));
++                PyList_SET_ITEM(parent, task->idx, obj);
++        }
+     }
+     return obj;
+ }
+@@ -131,14 +145,28 @@ static void *createStringObject(const redisReadTask *task, char *str, size_t len
+             Py_INCREF(obj);
+         }
+     } else {
++        if (task->type == REDIS_REPLY_VERB) {
++            /* Skip 4 bytes of verbatim type header. */
++            memmove(str, str+4, len);
++            len -= 4;
++        }
+         obj = createDecodedString(self, str, len);
+     }
+     return tryParentize(task, obj);
+ }
+ 
+-static void *createArrayObject(const redisReadTask *task, int elements) {
++static void *createArrayObject(const redisReadTask *task, size_t elements) {
+     PyObject *obj;
+-    obj = PyList_New(elements);
++    switch (task->type) {
++        case REDIS_REPLY_MAP:
++            obj = PyDict_New();
++            break;
++        case REDIS_REPLY_SET:
++            obj = PySet_New(NULL);
++            break;
++        default:
++            obj = PyList_New(elements);
++    }
+     return tryParentize(task, obj);
+ }
+ 
+@@ -148,21 +176,35 @@ static void *createIntegerObject(const redisReadTask *task, long long value) {
+     return tryParentize(task, obj);
+ }
+ 
++static void *createDoubleObject(const redisReadTask *task, double value, char *str, size_t le) {
++    PyObject *obj;
++    obj = PyFloat_FromDouble(value);
++    return tryParentize(task, obj);
++}
++
+ static void *createNilObject(const redisReadTask *task) {
+     PyObject *obj = Py_None;
+     Py_INCREF(obj);
+     return tryParentize(task, obj);
+ }
+ 
++static void *createBoolObject(const redisReadTask *task, int bval) {
++    PyObject *obj;
++    obj = PyBool_FromLong((long)bval);
++    return tryParentize(task, obj);
++}
++
+ static void freeObject(void *obj) {
+     Py_XDECREF(obj);
+ }
+ 
+ redisReplyObjectFunctions hiredis_ObjectFunctions = {
+     createStringObject,  // void *(*createString)(const redisReadTask*, char*, size_t);
+-    createArrayObject,   // void *(*createArray)(const redisReadTask*, int);
++    createArrayObject,   // void *(*createArray)(const redisReadTask*, size_t);
+     createIntegerObject, // void *(*createInteger)(const redisReadTask*, long long);
++    createDoubleObject,  // void *(*createDoubleObject)(const redisReadTask*, double, char*, size_t);
+     createNilObject,     // void *(*createNil)(const redisReadTask*);
++    createBoolObject,    // void *(*createBoolObject)(const redisReadTask*, int);
+     freeObject           // void (*freeObject)(void*);
+ };
+ 
+@@ -172,6 +214,7 @@ static void Reader_dealloc(hiredis_ReaderObject *self) {
+     redisReaderFree(self->reader);
+     Py_XDECREF(self->protocolErrorClass);
+     Py_XDECREF(self->replyErrorClass);
++    Py_XDECREF(self->notEnoughDataObject);
+ 
+     ((PyObject *)self)->ob_type->tp_free((PyObject*)self);
+ }
+@@ -226,14 +269,15 @@ static int _Reader_set_encoding(hiredis_ReaderObject *self, char *encoding, char
+ }
+ 
+ static int Reader_init(hiredis_ReaderObject *self, PyObject *args, PyObject *kwds) {
+-    static char *kwlist[] = { "protocolError", "replyError", "encoding", "errors", NULL };
++    static char *kwlist[] = { "protocolError", "replyError", "encoding", "errors", "notEnoughData", NULL };
+     PyObject *protocolErrorClass = NULL;
+     PyObject *replyErrorClass = NULL;
++    PyObject *notEnoughData = NULL;
+     char *encoding = NULL;
+     char *errors = NULL;
+ 
+-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|OOzz", kwlist,
+-        &protocolErrorClass, &replyErrorClass, &encoding, &errors))
++    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|OOzzO", kwlist,
++        &protocolErrorClass, &replyErrorClass, &encoding, &errors, &notEnoughData))
+             return -1;
+ 
+     if (protocolErrorClass)
+@@ -244,6 +288,13 @@ static int Reader_init(hiredis_ReaderObject *self, PyObject *args, PyObject *kwd
+         if (!_Reader_set_exception(&self->replyErrorClass, replyErrorClass))
+             return -1;
+ 
++    if (notEnoughData) {
++        Py_DECREF(self->notEnoughDataObject);
++        self->notEnoughDataObject = notEnoughData;
++
++        Py_INCREF(self->notEnoughDataObject);
++    }
++
+     return _Reader_set_encoding(self, encoding, errors);
+ }
+ 
+@@ -257,11 +308,13 @@ static PyObject *Reader_new(PyTypeObject *type, PyObject *args, PyObject *kwds) 
+ 
+         self->encoding = NULL;
+         self->errors = "strict";  // default to "strict" to mimic Python
++        self->notEnoughDataObject = Py_False;
+         self->shouldDecode = 1;
+         self->protocolErrorClass = HIREDIS_STATE->HiErr_ProtocolError;
+         self->replyErrorClass = HIREDIS_STATE->HiErr_ReplyError;
+         Py_INCREF(self->protocolErrorClass);
+         Py_INCREF(self->replyErrorClass);
++        Py_INCREF(self->notEnoughDataObject);
+ 
+         self->error.ptype = NULL;
+         self->error.pvalue = NULL;
+@@ -326,7 +379,8 @@ static PyObject *Reader_gets(hiredis_ReaderObject *self, PyObject *args) {
+     }
+ 
+     if (obj == NULL) {
+-        Py_RETURN_FALSE;
++        Py_INCREF(self->notEnoughDataObject);
++        return self->notEnoughDataObject;
+     } else {
+         /* Restore error when there is one. */
+         if (self->error.ptype != NULL) {
+--- contrib/python/hiredis/py2/src/reader.h	(index)
++++ contrib/python/hiredis/py2/src/reader.h	(working tree)
+@@ -11,6 +11,7 @@ typedef struct {
+     int shouldDecode;
+     PyObject *protocolErrorClass;
+     PyObject *replyErrorClass;
++    PyObject *notEnoughDataObject;
+ 
+     /* Stores error object in between incomplete calls to #gets, in order to
+      * only set the error once a full reply has been read. Otherwise, the

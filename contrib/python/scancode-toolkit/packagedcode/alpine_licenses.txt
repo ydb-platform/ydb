@@ -1,0 +1,884 @@
+# these are using SPDX keys
+################################################################################
+agpl-3.0
+agpl-3.0+
+agpl-3.0-only
+agpl-3.0-or-later
+agpl-3.0-or-later or bsd-3-clause
+apache-2.0
+afl-2.1 or gpl-2.0+
+afl-2.1 or gpl-2.0-or-later
+apache-2.0 and bsd-2-clause
+apache-2.0 and bsd-2-clause and gpl-2.0-only
+apache-2.0 and bsd-3-clause
+apache-2.0 and lgpl-2.1-only
+apache-2.0 and lgpl-2.1-or-later
+apache-2.0 and mit
+apache-2.0 or bsd-3-clause
+apache-2.0 or gpl-3.0-only
+apache-2.0 or mit
+artistic-1.0-cl8
+artistic-1.0-perl
+artistic-1.0-perl and gpl-1.0-or-later
+artistic-1.0-perl gpl-1.0-or-later
+artistic-1.0-perl or gpl-1.0-or-later
+artistic-1.0-perl or gpl-2.0-or-later
+apsl-2.0
+bsd-2-clause
+bsd-2-clause and apache-2.0 and mpl-2.0
+bsd-2-clause and bsd-3-clause
+bsd-2-clause and (bsd-3-clause and isc and bsd-2-clause-netbsd)
+bsd-2-clause and bsd-3-clause and isc and gpl-2.0-only and gpl-2.0-or-later and gpl-3.0-only and gpl-3.0-or-later
+bsd-2-clause and gpl-2.0-or-later
+bsd-2-clause and gpl-3.0-or-later and python-2.0
+bsd-2-clause and isc
+bsd-2-clause and lgpl-2.0-or-later
+bsd-2-clause and lgpl-2.0-or-later and gfdl-1.2-only
+bsd-2-clause and mit
+bsd-2-clause and mit and x11
+bsd-2-clause-netbsd
+bsd-2-clause-patent
+bsd-2-clause or gpl-2.0-or-later
+bsd-3-clause
+bsd-3-clause and apache-2.0
+bsd-3-clause and bsd-4-clause and python-2.0 and zpl-2.1
+bsd-3-clause and bsl-1.0 and ( artistic-1.0 or gpl-2.0-or-later ) and ncsa and mit
+bsd-3-clause and gpl-2.0-only
+bsd-3-clause and gpl-2.0-or-later
+bsd-3-clause and lgpl-2.1-only
+bsd-3-clause and mit
+bsd-3-clause-attribution
+bsd-3-clause-clear
+bsd-3-clause-no-nuclear-license-2014
+bsd-3-clause or apache-2.0
+bsd-3-clause or gpl-1.0-or-later
+bsd-3-clause or gpl-2.0-only
+bsd-3-clause or gpl-2.0-or-later
+bsd-3-clause or lgpl-2.1-only
+bsd-4-clause
+bsd-4-clause and bsd-3-clause-clear
+bsd-4-clause and isc
+bzip2-1.0.6
+cc0-1.0
+cc0-1.0 or apache-2.0
+cc-by-3.0
+cc-by-4.0
+cc-by-nc-3.0
+cc-by-nc-sa-3.0
+cc-by-sa-2.5
+cc-by-sa-3.0
+cc-by-sa-3.0 and gpl-2.0-or-later and gpl-2.0-only and cc-by-3.0
+cc-by-sa-3.0 and lgpl-2.1-or-later
+cc-by-sa-4.0
+cc-by-sa-4.0 or gpl-3.0-or-later
+cddl-1.0
+cddl-1.0 or lgpl-2.1-only
+cecill-2.0
+cnri-python
+cpl-1.0
+cpl-1.0 and epl-1.0
+bsl-1.0
+efl-2.0
+epl-1.0
+epl-2.0
+epl-2.0 or gpl-2.0-or-later or lgpl-2.1-or-later and ruby
+eupl-1.2
+gfdl-1.1
+gfdl-1.3-or-later gpl-2.0-or-later with font-exception-2.0
+gpl-1.0-only
+gpl-1.0-or-later
+gpl-1.0-or-later and lgpl-2.0-or-later
+gpl-1.0-or-later or artistic-1.0-perl
+gpl-2.0
+gpl-2.0 
+gpl-2.0+
+gpl-2.0 and gpl-2.0-or-later and gpl-3.0 and mit
+gpl-2.0 and gpl-2.0-or-later and lgpl-2.0 and mit
+gpl-2.0 and lgpl-2.1-only or lgpl-3.0-only
+gpl-2.0-only
+gpl-2.0-only and bsd-3-clause
+gpl-2.0-only and bsd-3-clause and mit
+gpl-2.0-only and gfdl-1.2-only
+gpl-2.0-only and gpl-2.0-or-later and lgpl-2.0-or-later
+gpl-2.0-only and gpl-3.0-only
+gpl-2.0-only and lgpl-2.0-or-later
+gpl-2.0-only and lgpl-2.1-only
+gpl-2.0-only and lgpl-2.1-only and 0bsd and bsd-3-clause and gpl-3.0-only and lgpl-3.0-only
+gpl-2.0-only and lgpl-2.1-only and unicode-dfs-2016
+gpl-2.0-only and lgpl-2.1-or-later
+gpl-2.0-only and lgpl-2.1-or-later and unicode-dfs-2016
+gpl-2.0-only and mit and bsd-2-clause
+gpl-2.0-only and zlib
+artistic-2.0
+
+
+
+apache-2.0 and lgpl-2.0-or-later and licenseref-kde-accepted-gpl
+
+
+# these are mapped
+################################################################################
+0bsd	bsd-zero
+1.1	unknown
+2.0	unknown
+2.1	unknown
+advertising	unknown
+agpl	agpl-3.0-plus
+agpl-2.1	agpl-3.0-plus and unknown
+agpl3	agpl-3.0
+agpl3+	agpl-3.0-plus
+agplv3	agpl-3.0
+apache	apache-2.0
+apache2	apache-2.0
+apache-2	apache-2.0
+apache 2.0	apache-2.0
+apache_2_0	apache-2.0
+apache2.0	apache-2.0
+apache-2.0 bsd	apache-2.0 and bsd-new
+apache-2.0 bsd-3-clause	apache-2.0 and bsd-new
+apache-2.0 and mit ofl-1.1 gpl-3.0-or-later gpl-3.0-with-gcc-exception cc-by-sa-3.0 lgpl-3.0	apache-2.0 and mit and ofl-1.1 and gpl-3.0-plus and gpl-3.0 with gcc-exception-3.1 and cc-by-sa-3.0 and lgpl-3.0
+apache-2.0 bsd-1-clause bsd-2-clause bsd-3-clause cc0-1.0 lgpl-2.1-or-later	apache-2.0 and bsd-1-clause and bsd-simplified and bsd-new and cc0-1.0 and lgpl-2.1-plus
+apache-2.0 bsd-1-clause bsd-2-clause bsd-3-clause cc0 lgpl-2.1-or-later	apache-2.0 and bsd-1-clause and bsd-simplified and bsd-new and cc0-1.0 and lgpl-2.1-plus
+apache-2.0 bsd isc mit	apache-2.0 and bsd and isc and mit and other-permissive
+apache-2.0 cc0-1.0	apache-2.0 and cc0-1.0
+artistic-perl-1.0 or gpl-1.0-or-later	artistic-perl-1.0 or gpl-1.0-plus
+artistic-perl or gpl-1.0-or-later	artistic-perl-1.0 or gpl-1.0-plus
+apache-2.0 mit unlicense	apache-2.0 and mit and unlicense
+artistic	artistic-1.0
+artistic_1	artistic-1.0
+artistic-1.0	artistic-1.0
+artistic-1.0 gpl+	artistic-1.0 or gpl-1.0-plus
+artistic-1.0 gpl-1.0-only	artistic-1.0 or gpl-1.0
+artistic-perl-1.0 gpl+	artistic-perl-1.0 or gpl-1.0-plus
+
+
+# these are to be mapped
+################################################################################
+apache-2.0 bsd isc mit ofl-1.1 gpl-3.0-or-later gpl-3.0-with-gcc-exception cc-by-sa-3.0 lgpl-3.0
+apache-2.0 custom
+apache-2.0 gpl-2.0-or-later lgpl-2.1-or-later
+apache-2.0 gpl-3.0-or-later lgpl-3.0-or-later
+apache-2.0 lgpl-2.1
+apache-2.0 mit
+apache-2.0 psf
+apache bsd
+apache lgpl-2.1
+artistic-2
+artistic 2.0
+artistic gpl
+artistic gpl2
+artistic gpl-2
+artistic gpl-2.0
+artistic license 2.0
+as is
+as-is
+asl
+asl2
+asl 2.0
+asl-2.0
+asl-2.0 bsd
+asl-2.0 bsd isc mit
+asl-2.0 custom
+asl-2.0 lgpl-2.1
+asl 2.0 psf
+boost
+bsd
+bsd 
+bsd-0
+bsd2
+bsd-2
+bsd-2-clauase and lgpl-2.0-or-later and gfdl-1.2
+bsd-2-clause and bsd-3-clause and public-domain
+bsd-2-clause bsd-3-clause
+bsd-2-clause bsd-3-clause apache-2.0
+bsd-2-clause bsd-3-clause gpl-2.0
+bsd-2-clause bsd-3-clause gpl-2.0-or-later
+bsd-2-clause custom
+bsd-2-clause gpl-2.0-only
+bsd-2-clause gpl-2.0-or-later
+bsd-2-clause isc
+bsd-2-clause mit
+bsd-2-clause unlicense
+bsd3
+bsd-3
+bsd-3-clause and zpl-2.0 and elementtree
+bsd-3-clause bsd-3-clause-lbnl
+bsd-3-clause bsd-4-clause lgpl-2.1-or-later
+bsd-3-clause, gpl-2.0+
+bsd-3-clause gpl-2.0-or-later
+bsd-3-clause ijg zlib
+bsd-3-clause isc
+bsd-3-clause lgpl-2.1-or-later
+bsd-3-clause sendmail
+bsd-3-clause(variant)
+bsd-3-license
+bsd and lgpl-2.0-or-later
+bsd and lgpl-2.0-or-later and gpl-2.0-or-later and public-domain
+bsd and (lgpl-2.0 with exceptions or gpl-3.0 with exceptions) and gfdl
+bsd and lgplv2+
+bsd and lgplv2+ and gplv2+ and public domain
+bsd and (lgplv2 with exceptions or gplv3 with exceptions) and gfdl
+bsd and mit
+bsd/cmu
+bsd custom
+bsd gpl
+bsd/gpl
+bsd gpl2
+bsd gpl2+
+bsd gpl-2.0
+bsd gpl-2.0-or-later
+bsd / gplv2
+bsd isc
+bsd mit
+bsd with advertising
+bsd zpl
+bzip2
+cc
+cc0 1.0
+cc-3.0
+cc-by-sa
+ccby-sa3.0
+cc-by-sa-3.0 lgpl-2.1-or-later
+ccpl-attribution-sharealike-2.5
+ccpl-nc-sa-3.0
+cc-samplingplus-1.0
+cddl
+cddl-1.0 lgpl-2.1-only
+cddl lgpl custom
+clartistic
+classpath
+cmake
+cpl
+custom
+custom:altermime
+custom:bell
+custom:boost
+custom:bsd
+custom:bsd-3
+custom bsd-3-clause
+custom:chromiumos
+custom:etpan
+custom:gpl
+custom gpl2
+custom gpl-2.0
+custom:gpl/bsd
+custom:gpl-like
+custom:icu
+custom isc
+custom:isc
+custom:jasper2.0
+custom:libtom
+custom:multiple
+custom:ofl
+custom:pil
+custom:postcardware
+custom:sip
+custom:tu-berlin-2.0
+custom:xfree86
+custom:xiph lgpl gpl fdl
+custom:xmlrpc-c
+custom:zlib
+des
+domain
+eclipse 1.0
+egenix isc
+epl
+epl gpl-2.0 lgpl-2.1 custom
+epl gpl-2 lgpl-2.1 custom
+exceptions
+fdl
+fping
+ftl gpl-2.0-or-later
+gfdl
+glpl2.1
+gnu
+gnu gpl v2
+gpl
+gpl+
+gpl-1.0-only artistic-1.0-perl
+gpl-1.0-or-later artistic-1.0-perl
+gpl-1.0-or-later perlartistic
+gpl2
+gpl-2
+gpl-2+
+gpl+2
+gpl2 
+gpl2+
+gpl2.0
+gpl-2.0 and cc-by-sa and mit
+gpl-2.0+, bsd-3-clause
+gpl-2.0 and artistic
+gpl-2.0 custom
+gpl-2.0 gpl-2.0-or-later lgpl-2.0-or-later
+gpl-2.0 gpl-2.0-or-later lgpl-2.0-or-later bsd public-domain
+gpl-2.0 gpl-3.0
+gpl-2.0 gpl-3.0-or-later lgpl-2.0 bsd
+gpl-2.0 gpl-3 lgpl-2.1
+gpl-2.0 lgpl-2
+gpl-2.0 lgpl-2.0
+gpl-2.0 lgpl-2.1
+gpl-2.0 lgpl-2.1+
+gpl-2.0+, lgpl-2.1+
+gpl-2.0+, lgpl-2.1+, zlib
+gpl-2.0 mit bsd
+gpl-2.0 mpl-2.0 lgpl-2.1
+gpl-2.0-only bsd-3-clause intel-acpi
+gpl-2.0-only,gpl-2.0-or-later,gpl-3.0-only
+gpl-2.0-only lgpl-2.0-only
+gpl-2.0-only lgpl-2.1-only
+gpl-2.0-only, lgpl-2.1-only
+
+############# CONTINUE HERE #################
+gpl-2.0-only or artistic-1.0-perl
+gpl-2.0-only or bsd-2-clause
+gpl-2.0-only or bsd-3-clause or intel-acpi
+gpl-2.0-only or gpl-3.0-only
+(gpl-2.0-only or gpl-3.0-only) and gfdl-1.2-only
+(gpl-2.0-only or gpl-3.0-only) and gpl-2.0-or-later and gpl-2.0-only and lgpl-2.1-only
+(gpl-2.0-only or gpl-3.0-only) and lgpl-2.0-or-later
+(gpl-2.0-only or gpl-3.0-only) and (lgpl-2.1-only and lgpl-3.0-only)
+(gpl-2.0-only or gpl-3.0-only) and (lgpl-2.1-only or lgpl-3.0-only)
+(gpl-2.0-only or gpl-3.0-only) and lgpl-2.1-or-later
+(gpl-2.0-only or gpl-3.0-only) and lgpl-2.1-or-later and gpl-2.0-or-later and mit and lgpl-2.1-only and lgpl-2.0-or-later and (lgpl-2.1-only or lgpl-3.0-only) and lgpl-2.0-only
+gpl-2.0-only with gcc-exception-2.0
+gpl-2.0-only-with-gcc-exception-2.0
+gpl-2.0-only with openssl-exception
+gpl-2.0 or artistic
+gpl-2.0 or artistic-1.0-perl
+gpl-2.0 or cc-by-sa
+(gpl-2.0 or gpl-3.0) and mit and bsd
+gpl-2.0-or-later
+gpl-2.0-or-later and bsd-3-clause and mit
+gpl-2.0-or-later and cc-by-2.0 and cc-by-sa-2.0 and cc-by-sa-3.0
+gpl-2.0-or-later and cc-by-4.0
+gpl-2.0-or-later and cc-by-sa-3.0
+gpl-2.0-or-later and gfdl-1.1-or-later
+gpl-2.0-or-later and gfdl-1.2-only
+gpl-2.0-or-later and gfdl-1.2-only and licenseref-kde-accepted-lgpl
+gpl-2.0-or-later and gfdl-1.3-only
+gpl-2.0-or-later and gpl-1.0-or-later
+gpl-2.0-or-later and (gpl-2.0-only or gpl-3.0-only)
+gpl-2.0-or-later and (gpl-2.0-only or gpl-3.0-only) and lgpl-2.1-only
+gpl-2.0-or-later and (gpl-2.0-only or gpl-3.0-only) and (lgpl-2.1-only or lgpl-3.0-only)
+gpl-2.0-or-later and (gpl-2.0-only or gpl-3.0-only) and lgpl-2.1-or-later and gpl-2.0-only
+gpl-2.0-or-later and gpl-3.0-or-later
+gpl-2.0-or-later and lgpl-2.0-only
+gpl-2.0-or-later and lgpl-2.0-only and gfdl-1.2-only
+gpl-2.0-or-later and lgpl-2.0-or-later
+gpl-2.0-or-later and lgpl-2.0-or-later and bsd-3-clause and mit
+gpl-2.0-or-later and lgpl-2.0-or-later and gfdl-1.2-only
+gpl-2.0-or-later and lgpl-2.0-or-later and (lgpl-2.1-only or lgpl-3.0-only)
+gpl-2.0-or-later and lgpl-2.1-only
+gpl-2.0-or-later and (lgpl-2.1-only or lgpl-3.0-only) and gfdl-1.2-only
+gpl-2.0-or-later and lgpl-2.1-or-later
+gpl-2.0-or-later and lgpl-2.1-or-later and gpl-3.0-or-later
+gpl-2.0-or-later and lgpl-2.1-or-later and (lgpl-2.1-only or lgpl-3.0-only)
+gpl-2.0-or-later and lgpl-2.1-or-later and mit
+gpl-2.0-or-later and lgpl-2.1-or-later and mpl-1.1
+gpl-2.0-or-later and mit
+gpl-2.0-or-later and osl-2.1
+gpl-2.0-or-later and public domain
+gpl-2.0-or-later and public-domain
+gpl-2.0-or-later and public-domain and lgpl-2.1-or-later
+gpl-2.0-or-later apache-2.0
+gpl-2.0-or-later artistic-2.0
+gpl-2.0-or-later bsd
+gpl-2.0-or-later bsd-2-clause
+gpl-2.0-or-later bsd-3-clause
+gpl-2.0-or-later cc-by-2.0 cc-by-sa-2.0 cc-by-sa-3.0
+gpl-2.0-or-later cc-by-sa-3.0
+gpl-2.0-or-later fipl
+gpl-2.0-or-later gpl-2.0-or-later-with-sane-exception public-domain
+gpl-2.0-or-later gpl-3.0-or-later 0bsd mit
+gpl-2.0-or-later gpl-3.0-or-later lgpl-3.0-or-later
+gpl-2.0-or-later gsoap-1.3b
+gpl-2.0-or-later lgpl-2.0 bsd-3-clause mit
+gpl-2.0-or-later lgpl-2.0-only
+gpl-2.0-or-later lgpl-2.0-or-later
+gpl-2.0-or-later, lgpl-2.0-or-later
+gpl-2.0-or-later lgpl-2.0-or-later mpl-1.1
+gpl-2.0-or-later lgpl-2.1-only
+gpl-2.0-or-later (lgpl-2.1-only or lgpl-3.0-only)
+gpl-2.0-or-later lgpl-2.1-or-later
+gpl-2.0-or-later lgpl-2.1-or-later mit
+gpl-2.0-or-later lgpl-3.0-or-later
+gpl-2.0-or-later mit
+gpl-2.0-or-later mit public-domain
+gpl-2.0-or-later ofl-1.1 bsd-2-clause bsd-3-clause ecos-2.0 ibm-pibs
+gpl-2.0-or-later or apache-2.0
+gpl-2.0-or-later or artistic-1.0-perl
+(gpl-2.0-or-later or artistic-1.0-perl) and gpl-2.0-or-later and zlib
+gpl-2.0-or-later or cc-by-sa-3.0
+gpl-2.0-or-later or gpl-1.0-or-later or artistic-1.0-perl
+gpl-2.0-or-later or gpl-3.0-or-later
+gpl-2.0-or-later or lgpl-2.0-or-later
+gpl-2.0-or-later or lgpl-2.1-or-later
+gpl-2.0-or-later public-domain
+gpl-2.0-or-later with openssl exception
+gpl-2.0-or-later with openssl-exception
+gpl-2.0+ or lgpl-3.0+
+gpl-2.0 public-domain
+gpl-2.0 rsa-md5 rsa-pkcs11 des
+gpl-2.0 with classpath
+gpl-2.0-with-classpath-exception
+gpl-2.0+ with font-exception-2.0, gpl-2.0+, gfdl-1.3+
+gpl-2.0 with gcc-exception-2.0
+gpl-2.1
+gpl2.1
+gpl23
+gpl2 and artistic
+gpl2+ asl 2.0
+gpl2 bsd
+gpl2+ bsd
+gpl2 gpl2+ lgpl2+ bsd public domain
+gpl2/gpl3
+gpl-2 gpl-3 lgpl-2.1
+gpl2 gpl3+ lgpl2 bsd
+gpl-2 gsoap
+gpl-2 lgpl-2
+gpl2 lgpl2
+gpl2 lgpl-2
+gpl2 lgpl2+
+gpl2+ lgpl2+
+gpl2 lgpl2.1
+gpl2, lgpl2.1
+gpl2+ lgpl2+ mpl 1.1
+gpl2 mit bsd
+gpl2+ mit public domain
+gpl2 mpl2 lgpl2.1
+gpl-2-or-later
+gpl2 public-domain
+gpl-2 rsa-md5 rsa-pkcs11 des
+gpl2 rsa-md5 rsa-pkcs11 des
+gpl-2 with classpath
+gpl2 with classpath
+gpl2+ with openssl exception
+gpl3
+gpl_3
+gpl-3
+gpl3+
+gpl-3.0
+gpl-3.0+
+gpl-3.0+ and lgpl-2.1+ and mit
+gpl-3.0 bsd
+gpl-3.0 bsd-3-clause cc0-1.0 lgpl-2.0-only lgpl-2.1-only lgpl-3.0-or-later nokia-qt-exception-1.1 mit bsl-1.0
+gpl-3.0 lgpl
+gpl-3.0 lgpl-2.1
+gpl-3.0 lgpl-3.0
+gpl-3.0-only
+gpl-3.0-only and lgpl-2.1-only and lgpl-3.0-only and mpl-2.0
+gpl-3.0-only and qt-gpl-exception-1.0
+gpl-3.0-only mit
+gpl-3.0-only or lgpl-2.1-only
+gpl-3.0-only with qt-gpl-exception-1.0
+gpl-3.0-or-later
+gpl-3.0-or-later and bsd-3-clause
+gpl-3.0-or-later and cc-by-sa-3.0
+gpl-3.0-or-later and gfdl-1.2-only
+gpl-3.0-or-later and gpl-2.0-or-later
+gpl-3.0-or-later and gpl-2.0-or-later and gpl-2.0-only and
+gpl-3.0-or-later and (gpl-2.0-or-later or lgpl-3.0-or-later)
+gpl-3.0-or-later and lgpl-2.1-or-later
+gpl-3.0-or-later and lgpl-2.1-or-later and lgpl-3.0-or-later
+gpl-3.0-or-later and lgpl-2.1-or-later and mit
+gpl-3.0-or-later and lgpl-2.1-or-later and mpl-2.0
+gpl-3.0-or-later and lgpl-3.0-or-later
+gpl-3.0-or-later bsd
+gpl-3.0-or-later cc0-1.0
+gpl-3.0-or-later cc-3.0-by-sa
+gpl-3.0-or-later custom
+gpl-3.0-or-later gfdl-1.3-only
+gpl-3.0-or-later isc mit
+gpl-3.0-or-later lgpl-3.0-or-later
+gpl-3.0-or-later openssl
+gpl-3.0-or-later or mit
+gpl-3.0-or-later with openssl
+gpl-3.0-or-later-with-openssl-exception and gpl-3.0-or-later and mit and and apache-2.0 and cc-by-sa-4.0 and cc-by-sa-3.0
+gpl-3.0-or-later with openssl exception, gpl-3.0-or-later, mit, cc-by-sa-4.0
+gpl-3.0+ with exception
+gpl3 bsd
+gpl3+ bsd
+gpl3 lgpl
+gpl3 lgpl2.1
+gpl3 lgpl3
+gpl+ and gpl-2.0-or-later and lgpl-2.0-or-later
+gpl+ and gplv2+ and lgplv2+
+gpl apache
+gpl bsd
+gpl custom
+gpl custom:ofl
+gpl fdl
+gpl lgpl
+gpl/lgpl
+gpl lgpl2+
+gpl lgpl-2.0-or-later
+gpl lgpl custom
+gpl lgpl mit
+gpl/lgpl/mit
+gpl lgpl mpl
+gpl mit lgpl
+gpl or artistic
+gpl+ or artistic
+gpl or artistic 2
+gpl or artistic-2.0
+gpl perlartistic
+gplv2
+gpl v2
+gplv2+
+gplv2+)
+gpl-v2.0-or-later
+gplv2 and gplv2+ and gplv3 and mit
+gplv2 and gplv2+ and lgplv2 and mit
+gplv2+ and lgplv2+
+gplv2+ bsd
+gplv2 gplv2+ lgplv2+
+gplv2+ lgplv2+
+gplv2 or artistic
+gplv2 or cc-by-sa
+(gplv2 or gplv3) and mit and bsd
+gpl v2 or later
+gplv2+ with exceptions
+gplv3
+gplv3+
+gplv3+ and (gplv2+ or lgplv3+)
+gplv3 lgpl3
+gplv3 lgpl-3
+gpl zlib mit unlicense bsd apache-2.0 cddl cc0 custom
+happy
+(http://www.inmon.com/technology/sflowlicense.txt)
+icu
+ijg
+ijg and bsd-3-clause and gpl-2.0-only
+imagemagick
+imlib2
+info-zip
+ipa
+ipl-1
+ipl-1.0
+ipl-1.0 epl-2.0
+is
+isc
+isc and bsd-2-clause and bsd-3-clause
+isc bsd
+jasper-2.0
+json
+later
+lgp-2.1-only
+lgpl
+lgpl+
+lgpl2
+lgpl-2
+lgpl2+
+lgpl-2.0
+lgpl-2.0+
+lgpl-2.0 and mpl-1.1
+lgpl-2.0 gpl-2.0
+lgpl-2.0+, gpl-2.0+, mit
+lgpl-2.0 gpl-2.0 mpl-1.1
+lgpl-2.0-only
+lgpl-2.0-only and gfdl-1.2-only
+lgpl-2.0-only and gpl-2.0-or-later
+lgpl-2.0-only and lgpl-2.0-or-later
+lgpl-2.0-only and lgpl-2.1-or-later
+lgpl-2.0-only gpl-2.0-only
+lgpl-2.0-only or lgpl-3.0-only
+(lgpl-2.0-only or lgpl-3.0-only) and gpl-2.0-or-later
+lgpl-2.0-only or lgpl-3.0-only and gpl-2.0-or-later
+lgpl-2.0-only with fltk-exception
+lgpl-2.0-or-later
+lgpl-2.0-or-later and bsd-2-clause
+lgpl-2.0-or-later and bsd-3-clause
+lgpl-2.0-or-later and (gpl-2.0-only or gpl-3.0-only) and gfdl-1.2-only
+lgpl-2.0-or-later and gpl-2.0-or-later
+lgpl-2.0-or-later and gpl-2.0-or-later and mit
+lgpl-2.0-or-later and gpl-2.0-or-later or bsd
+lgpl-2.0-or-later and gpl-2.0-or-later or bsd-3-clause
+lgpl-2.0-or-later and lgpl-2.0-only and lgpl-2.1-or-later
+lgpl-2.0-or-later and (lgpl-2.0-only or lgpl-3.0-only)
+lgpl-2.0-or-later and (lgpl-2.1-only or lgpl-3.0-only)
+lgpl-2.0-or-later and (lgpl-2.1-only or lgpl-3.0-or-later)
+lgpl-2.0-or-later and lgpl-2.1-or-later
+lgpl-2.0-or-later and mpl-1.1
+lgpl-2.0-or-later bsd
+lgpl-2.0-or-later bsd-2-clause
+lgpl-2.0-or-later mit
+lgpl-2.0-or-later mpl-1.1
+lgpl-2.0-or-later or apache-2.0
+(lgpl-2.0-or-later or gpl-3.0-only or gpl-2.0-or-later) and qt-gpl-exception-1.0
+(lgpl-2.0-or-later or gpl-3.0-only or gpl-2.0-or-later) and qt-gpl-exception-1.0 and gfdl-1.3-or-later
+lgpl-2.0-or-later scowl
+lgpl-2.0-or-later vsl
+lgpl-2.0-or-later-with-linking-exception
+lgpl-2.0 with exceptions or gpl-3.0 with exceptions
+lgpl-2.0 with exceptions or gpl-3.0 with exceptions and gfdl
+lgpl 2.1
+lgpl_2_1
+lgpl-2.1
+lgpl-2.1+
+lgpl2.1
+lgpl2.1+
+lgpl-2.1+ and gpl-2.0+
+lgpl-2.1 bsd-2
+lgpl2.1 bsd-2
+lgpl-2.1+, bsd-2-clause-freebsd, gpl-3.0+
+lgpl-2.1 cc-by-sa-3.0
+lgpl2.1 ccby-sa3.0
+lgpl-2.1+, gpl-2.0+
+lgpl-2.1-only
+lgpl-2.1-only and apache-2.0
+lgpl-2.1-only and gpl-2.0-only
+lgpl-2.1-only and lgpl-2.0-or-later and gpl-2.0-only and gpl-3.0-only and cc-by-sa-1.0 and bsl-1.0 and gpl-2.0-or-later with autoconf-exception-2.0 and bsd-3-clause and mit and custom
+lgpl-2.1-only and lgpl-2.0-or-later and gpl-2.0-only and gpl-3.0-only and cc-by-sa-1.0 and bsl-1.0 and gpl-2.0 with autoconf-exception-2.0 and bsd-3-clause and mit and custom
+lgpl-2.1-only and (lgpl-2.1-only or lgpl-3.0-only)
+lgpl-2.1-only and lgpl-2.1-or-later
+lgpl-2.1-only and lgpl-2.1-or-later and (lgpl-2.1-only or lgpl-3.0-only)
+lgpl-2.1-only and lgpl-3.0-only and (gpl-2.0-only or gpl-3.0-only) and agpl-3.0-only
+lgpl-2.1-only and lgpl-3.0-only and gpl-3.0-only and qt-gpl-exception-1.0
+lgpl-2.1-only or lgpl-3.0-only
+lgpl-2.1-only or lgpl-3.0-only and gpl-2.0-only
+(lgpl-2.1-only or lgpl-3.0-only) and (gpl-2.0-only or gpl-3.0-only) and gfdl-1.2-only
+(lgpl-2.1-only or lgpl-3.0-only) and lgpl-2.0-or-later
+(lgpl-2.1-only or lgpl-3.0-only) and lgpl-2.1-only and ((lgpl-2.1-only with nokia-qt-exception-1.1) or (gpl-3.0-only with nokia-qt-exception-1.1))
+lgpl-2.1-only or mpl-1.1
+lgpl-2.1-only or mpl-2.0
+lgpl-2.1-only-with-linking-exception
+lgpl-2.1-or-later
+lgpl-2.1.-or-later
+lgpl-2.1-or-later and bsd-3-clause
+lgpl-2.1-or-later and bsd-3-clause and mit
+lgpl-2.1-or-later and cc-by-3.0 and bsd-2-clause
+lgpl-2.1-or-later and cc-by-sa-3.0
+lgpl-2.1-or-later and gpl-2.0-only
+lgpl-2.1-or-later and (gpl-2.0-only or gpl-3.0-only)
+lgpl-2.1-or-later and gpl-2.0-or-later
+lgpl-2.1-or-later and gpl-2.0-or-later and (gpl-2.0-only or gpl-3.0-only)
+lgpl-2.1-or-later and gpl-3.0-or-later
+lgpl-2.1-or-later and lgpl-2.1-only
+lgpl-2.1-or-later and (lgpl-2.1-only or lgpl-3.0-only)
+lgpl-2.1-or-later and mit
+lgpl-2.1-or-later and mit and lgpl-2.1-only and lgpl-2.0-only and (lgpl-2.1-only or lgpl-3.0-only) and (lgpl-2.0-only or lgpl-3.0-only)
+lgpl-2.1-or-later and mpl-1.1
+lgpl-2.1-or-later apache-2.0
+lgpl-2.1-or-later bsd-2-clause
+lgpl-2.1-or-later gpl-2.0-or-later
+lgpl-2.1-or-later gpl-2.0-or-later cc-by-sa-2.5
+lgpl-2.1-or-later gpl-3.0-or-later
+lgpl-2.1-or-later or bsd-2-clause
+lgpl-2.1-or-later or mpl-1.1
+lgpl-2.1-or-later or mpl-2.0 or gpl-2.0-or-later
+lgpl-2.1-or-later with custom-static-linking-exception
+lgpl-2.1-or-later-with-linking-exception
+lgpl-2.1-or-later-with-linking-exception-and-mit
+lgpl-2.1-or-later-with-ocaml-lgpl-linking-exception
+lgpl-2.1-or-later with ocaml-linking-exception
+lgpl-2.1+ or mpl-2.0+ or gpl-2.0+
+lgpl2+ bsd
+lgpl2 gpl2
+lgpl2, gpl2
+lgpl2+ mpl 1.1
+lgpl2+ mpl-1.1
+lgpl2+ mpl1.1
+lgpl2+ scowl
+lgpl3
+lgpl-3
+lgpl3+
+lgpl-3.0
+lgpl-3.0+, gpl-3.0+
+lgpl-3.0 mpl
+lgpl-3.0-only
+lgpl-3.0-only and gpl-2.0-only and gpl-3.0-only and qt-gpl-exception-1.0
+lgpl-3.0-only and (gpl-2.0-only or gpl-3.0-only)
+lgpl-3.0-only or cc-by-sa-3.0
+lgpl-3.0-or-later
+lgpl-3.0-or-later and bsd-3-clause
+lgpl-3.0-or-later apache-2.0
+lgpl-3.0-or-later bsd
+lgpl-3.0-or-later gpl-3.0-or-later apache-2.0
+lgpl-3.0-or-later mit
+lgpl-3.0-or-later or apache-2.0
+lgpl-3.0-or-later or cc-by-sa
+lgpl-3.0-or-later or cc-by-sa-3.0
+lgpl-3.0-or-later or gpl-2.0-or-later or (lgpl-3.0-or-later and gpl-2.0-or-later)
+(lgpl-3.0-or-later or gpl-3.0-only or gpl-2.0-or-later) and qt-gpl-exception-1.0
+lgpl-3.0-or-later with exceptions
+lgpl3+ bsd
+lgpl gpl
+lgpl mpl
+lgplv2
+lgplv2+
+lgplv2.1
+lgplv2+ and gplv2+ or bsd
+lgplv2 and mplv1.1
+lgplv2 gplv2 mplv1.1
+lgplv2+ mit
+lgplv2+ or asl 2.0
+lgplv2+ or mit
+lgplv2+ vsl
+lgplv2 with exceptions or gplv3 with exceptions
+lgplv2 with exceptions or gplv3 with exceptions and gfdl
+lgplv3
+lgplv3+
+lgplv3 mpl
+(lgplv3+ or bsd) and (lgplv3+ or bsd or cc-by-sa)
+lgplv3+ or cc-by-sa
+lgplv3+ or gplv2+ or (lgplv3+ and gplv2+)
+lgplv3+ with exceptions
+libpng
+libtiff
+licenseref-kde-accepted-gpl
+licenseref-kde-accepted-gpl and gfdl-1.2-only
+lpgl-2.0-or-later
+lpl-1.02
+lppl-1.0 lppl-1.1 lppl-1.2 lppl-1.3a lppl-1.3c gpl-2.0-only
+lppl-1.3
+lppl-1.3c and gpl-2.0-only with font-exception-2.0
+lsof
+miros
+mit
+mit and apache-2.0
+mit and apache-2.0 and bsd
+mit and asl 2.0 and bsd
+mit and bsd-2-clause and bsd-3-clause and bsd-4-clause and apache-2.0 and cdla-permissive-1.0
+mit and bsd-2-clause and isc and lgpl-2.1-or-later
+mit and bsd and isc
+mit and gpl-2.0-only
+mit and gpl-3.0-or-later
+mit and isc
+mit and lgpl-2.0-or-later
+mit and (lgpl-2.1-only or lgpl-3.0-only
+mit and ofl-1.1
+mit and x11
+mit apache-2.0
+mit asl-2.0
+mit bsd
+mit bsd-3-clause
+mit bsd gpl2+
+mit bsd isc
+mit bsd public-domain
+mit custom
+mit-enna
+mit-feh
+mit gpl-2.0-only
+mit gpl-3.0-only
+mit icu unicode-tou
+mit lgpl-2.0-or-later
+mit lgplv2+
+mit mpl-2.0
+mit or apache-2.0
+mit or lgpl-2.0-or-later or bsd
+mit or lgplv2+ or bsd
+mit or public-domain
+mit public-domain
+mit sgi-b-2.0 bsl-1.0
+mit ucd
+mit/x
+mit x11
+mit/x11
+mpl
+mpl 1.1
+mpl-1.1
+mpl1.1
+mpl1.1+
+mpl-1.1 gpl-2.0 lgpl-2.1
+mpl-1.1 gpl-2.0-only lgpl-2.1-only
+mpl-1.1 gpl-2.0-or-later lgpl-2.0-or-later
+mpl-1.1 gpl-2 lgpl-2.1
+mpl-1.1 gpl2 lgpl-2.1
+mpl1.1+ gplv2+ lgplv2+
+mpl2
+mpl 2.0
+mpl-2.0
+mpl2.0
+mpl 2.0 gpl2+
+mpl-2.0 gpl-2.0-or-later
+mpl-2.0 lgpl-2.1+
+mpl-2.0 lgpl-2.1-or-later
+mpl gpl
+mplv1.1
+mplv2
+ms-pl
+ncsa
+nginx
+ngpl
+nlpl
+none
+ofl
+ofl-1.1
+ofl-1.1 and apache-2.0
+oldap-2.8
+oml
+open_source
+openssl
+osf-1990(variant)
+other
+perl
+perlartistic
+perl artistic
+perl artistic gpl
+perl artistic, gpl
+perlartistic gpl
+pgpool-ii
+php
+php 3
+php-3
+php-3.0
+php-3.01
+php-3.01 bsd-3-clause lgpl-2.0-or-later mit zend-2.0
+php-3.01 bsd lgpl-2.0-or-later mit zend-2.0
+php-3.0 bsd lgpl-2.0 mit zend
+php-3 bsd lgpl2 mit zend
+postgresql
+psf
+psf-2.0
+publicdomain
+public domain
+public-domain
+public domain and mit
+public-domain and mit
+public-domain bsd
+python
+python-2.0
+python2.1.1
+qpl-1.0/gplv2
+ruby
+ruby bsd-2-clause
+ruby or perl artistic or gplv2+
+ruby psfl
+sendmail
+sgi-b-1.1 and sgi-b-2.0
+sixxs
+smail
+spencer-94
+tcl
+tfl
+t:htm:quoted perl module
+t:htm:quoted perl module (documentation)
+t:htm:scrubber perl module
+t:htm:scrubber perl module (documentation)
+t:psgi handler for htm:mason
+t:psgi handler for htm:mason (documentation)
+two-clause bsd
+t:xm:libxml based xm:simple clone
+t:xm:libxml based xm:simple clone (documentation)
+unicode-dfs-2015
+unicode-dfs-2016 and lgpl-2.0-or-later
+unknown
+unlicense
+unrestricted
+uoi-ncsa
+v2
+various
+vim
+vsl
+w3c
+wtfpl
+wtfpl-2.0
+wxwidgets
+x11
+x11 and lgpl-2.1-or-later
+zlib
+zlib gpl-2.0-or-later lgpl-2.1-or-later
+zpl
+zpl2+
+zpl 2.1
+zpl-2.1

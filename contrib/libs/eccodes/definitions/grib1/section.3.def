@@ -1,0 +1,25 @@
+# SECTION 3, Bit-map section
+position offsetSection3;
+section_length[3] section3Length ;
+meta section3Pointer section_pointer(offsetSection3,section3Length,3);
+
+# Number of unused bits at end of Section 3
+unsigned[1] numberOfUnusedBitsAtEndOfSection3 = 0: read_only;
+alias unusedBitsInBitmap=numberOfUnusedBitsAtEndOfSection3;
+
+# Table reference:
+unsigned[2] tableReference = 0 : dump;
+
+position offsetBeforeBitmap;
+meta geography.bitmap g1bitmap( tableReference,
+                    missingValue,
+                    offsetSection3,
+                    section3Length,
+                    numberOfUnusedBitsAtEndOfSection3) : read_only,dump;
+
+position offsetAfterBitmap;
+
+padtoeven padding_sec3_1(offsetSection3,section3Length);
+section_padding section3Padding;
+
+meta md5Section3 md5(offsetSection3,section3Length);

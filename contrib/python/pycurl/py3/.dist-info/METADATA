@@ -1,0 +1,125 @@
+Metadata-Version: 2.4
+Name: pycurl
+Version: 7.45.7
+Summary: PycURL -- A Python Interface To The cURL library
+Home-page: http://pycurl.io/
+Author: Kjetil Jacobsen, Markus F.X.J. Oberhumer, Oleg Pudeyev
+Author-email: kjetilja@gmail.com, markus@oberhumer.com, oleg@bsdpower.com
+Maintainer: Oleg Pudeyev
+Maintainer-email: oleg@bsdpower.com
+License: LGPL/MIT
+Keywords: curl,libcurl,urllib,wget,download,file transfer,http,www
+Platform: All
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Internet :: File Transfer Protocol (FTP)
+Classifier: Topic :: Internet :: WWW/HTTP
+Requires-Python: >=3.5
+License-File: COPYING-LGPL
+License-File: COPYING-MIT
+License-File: AUTHORS
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: maintainer-email
+Dynamic: platform
+Dynamic: requires-python
+Dynamic: summary
+
+PycURL -- A Python Interface To The cURL library
+================================================
+
+PycURL is a Python interface to `libcurl`_, the multiprotocol file
+transfer library. Similarly to the urllib_ Python module,
+PycURL can be used to fetch objects identified by a URL from a Python program.
+Beyond simple fetches however PycURL exposes most of the functionality of
+libcurl, including:
+
+- Speed - libcurl is very fast and PycURL, being a thin wrapper above
+  libcurl, is very fast as well. PycURL `was benchmarked`_ to be several
+  times faster than requests_.
+- Features including multiple protocol support, SSL, authentication and
+  proxy options. PycURL supports most of libcurl's callbacks.
+- Multi_ and share_ interfaces.
+- Sockets used for network operations, permitting integration of PycURL
+  into the application's I/O loop (e.g., using Tornado_).
+
+.. _was benchmarked: http://stackoverflow.com/questions/15461995/python-requests-vs-pycurl-performance
+.. _requests: http://python-requests.org/
+.. _Multi: https://curl.haxx.se/libcurl/c/libcurl-multi.html
+.. _share: https://curl.haxx.se/libcurl/c/libcurl-share.html
+.. _Tornado: http://www.tornadoweb.org/
+
+
+Requirements
+------------
+
+- Python 3.9-3.14.
+- libcurl 7.19.0 or better.
+
+
+Installation
+------------
+
+Download the source distribution from `PyPI`_.
+
+Please see `the installation documentation`_ for installation instructions.
+
+.. _PyPI: https://pypi.python.org/pypi/pycurl
+.. _the installation documentation: http://pycurl.io/docs/latest/install.html
+
+
+Documentation
+-------------
+
+Documentation for the most recent PycURL release is available on
+`PycURL website <http://pycurl.io/docs/latest/>`_.
+
+
+Support
+-------
+
+For support questions please use `curl-and-python mailing list`_.
+`Mailing list archives`_ are available for your perusal as well.
+
+Although not an official support venue, `Stack Overflow`_ has been
+popular with some PycURL users.
+
+Bugs can be reported `via GitHub`_. Please use GitHub only for bug
+reports and direct questions to our mailing list instead.
+
+.. _curl-and-python mailing list: https://lists.haxx.se/listinfo/curl-and-python
+.. _Stack Overflow: http://stackoverflow.com/questions/tagged/pycurl
+.. _Mailing list archives: https://curl.haxx.se/mail/list.cgi?list=curl-and-python
+.. _via GitHub: https://github.com/pycurl/pycurl/issues
+
+
+License
+-------
+
+PycURL is dual licensed under the LGPL and an MIT/X derivative license
+based on the libcurl license. The complete text of the licenses is available
+in COPYING-LGPL_ and COPYING-MIT_ files in the source distribution.
+
+.. _libcurl: https://curl.haxx.se/libcurl/
+.. _urllib: http://docs.python.org/library/urllib.html
+.. _COPYING-LGPL: https://raw.githubusercontent.com/pycurl/pycurl/master/COPYING-LGPL
+.. _COPYING-MIT: https://raw.githubusercontent.com/pycurl/pycurl/master/COPYING-MIT

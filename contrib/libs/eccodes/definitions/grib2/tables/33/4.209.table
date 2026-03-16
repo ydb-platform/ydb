@@ -1,0 +1,9 @@
+# Code table 4.209 - Planetary boundary-layer regime
+0 0 Reserved
+1 1 Stable
+2 2 Mechanically driven turbulence
+3 3 Forced convection
+4 4 Free convection
+# 5-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

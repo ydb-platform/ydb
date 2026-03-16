@@ -1,0 +1,169 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Submit-Rows{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Submit-Rows</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Submit-Rows</h1>
+    <div class="g-d-c">
+        <div class="g-d-24">
+            <div class="grp-doc-description">
+                <p>A submit-row contains options for submitting a form.</p>
+            </div>
+        </div>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Defining a submit-row</h1>
+                    <p>The element wrapping buttons for submitting a form is always a <span class="grp-doc-class">.grp-module</span> with an additional class <span class="grp-doc-class">.grp-submit-row</span>. Theses classes might be applied to any type of block-level element. The following examples of submit-rows are using a <span class="grp-doc-dom"><span>footer</span></span>. If you use a footer (or any other kind of HTML5 dom-element like article, section), make sure to insert a hidden header to let it appear in the document outlines.</p>
+                    <p>The submit-row always contains a plain <span class="grp-doc-dom"><span>ul</span></span> with <span class="grp-doc-dom"><span>li</span></span> defining the submit options. Every <span class="grp-doc-dom"><span>li</span></span> in a submit-row floats right by default. If you want a <span class="grp-doc-dom"><span>li</span></span> to float left, just add <span class="grp-doc-class">.grp-float-left</span>.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code-source">
+                    <footer class="grp-module grp-submit-row">
+                        <header style="display:none"><h1>Submit Options</h1></header>
+                        <ul>
+                            <li class="grp-float-left">
+                                Item 1 (floating left)
+                            </li>
+                            <li>
+                                Item 2 (floating right by default)
+                            </li>
+                            <li>
+                                Item 3 (floating right by default)
+                            </li>
+                        </ul>
+                    </footer>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<footer class="grp-module grp-submit-row">
+    <header style="display:none"><h1>Submit Options</h1></header>
+    <ul>
+        <li class="grp-float-left">Item 1 (floating left)</li>
+        <li>Item 2 (floating right by default)</li>
+        <li>Item 3 (floating right by default)</li>
+    </ul>
+</footer>
+{% endfilter %}</code></pre></div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <p>Each <span class="grp-doc-dom"><span>li</span></span> of a submit-row may contain buttons, inputs or links representing the submit options.</p>
+                </div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Buttons, Inputs &amp; Links</h1>
+                    <p>The options in a submit-row are represented by the following elements: <span class="grp-doc-dom"><span>button /</span></span>, <span class="grp-doc-dom"><span>a href="" /</span></span> and <span class="grp-doc-dom"><span>input /</span></span>. You have to add <span class="grp-doc-class">.grp-button</span> to each of these elements. By default these elements are visually reduced &mdash; add <span class="grp-doc-class">.grp-default</span> to elements you want to emphasize.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code-source">
+                    <footer class="grp-module grp-submit-row">
+                        <header style="display:none"><h1>Submit Options</h1></header>
+                        <ul>
+                            <li class="grp-float-left">
+                                <a href="#" class="grp-button">Link</a>
+                            </li>
+                            <li class="grp-float-left">
+                                <button class="grp-button">Button</button>
+                            </li>
+                            <li>
+                                <input type="submit" value="Input (highlighted with .grp-default)" class="grp-button grp-default" />
+                            </li>
+                        </ul>
+                    </footer>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<footer class="grp-module grp-submit-row">
+    <header style="display:none"><h1>Submit Options</h1></header>
+    <ul>
+        <li class="grp-float-left"><a href="" class="grp-button">Link</a></li>
+        <li class="grp-float-left"><button class="grp-button">Button</button></li>
+        <li><input type="submit" value="Input (highlighted with .grp-default)" class="grp-button grp-default" /></li>
+    </ul>
+</footer>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Different types of links</h1>
+                    <p>Links used in submit-rows may be further specified with adding one of the following classes: <span class="grp-doc-class">.grp-delete-link</span>, <span class="grp-doc-class">.grp-cancel-link</span> or <span class="grp-doc-class">.grp-reset-link</span>.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code-source">
+                    <footer class="grp-module grp-submit-row">
+                        <header style="display:none"><h1>Submit Options</h1></header>
+                        <ul>
+                            <li class="grp-float-left">
+                                <a href="#" class="grp-button">Link</a>
+                            </li>
+                            <li class="grp-float-left">
+                                <a href="#" class="grp-button grp-delete-link">Delete</a>
+                            </li>
+                            <li class="grp-float-left">
+                                <a href="#" class="grp-button grp-cancel-link">Cancel</a>
+                            </li>
+                            <li class="grp-float-left">
+                                <a href="#" class="grp-button grp-reset-link">Reset</a>
+                            </li>
+                        </ul>
+                    </footer>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<footer class="grp-module grp-submit-row">
+    <header style="display:none"><h1>Submit Options</h1></header>
+    <ul>
+        <li class="grp-float-left">
+            <a href="#" class="grp-button">Link</a>
+        </li>
+        <li class="grp-float-left">
+            <a href="#" class="grp-button grp-delete-link">Delete</a>
+        </li>
+        <li class="grp-float-left">
+            <a href="#" class="grp-button grp-cancel-link">Cancel</a>
+        </li>
+        <li class="grp-float-left">
+            <a href="#" class="grp-button grp-reset-link">Reset</a>
+        </li>
+    </ul>
+</footer>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Fixing a footer with a submit-row</h1>
+                    <p>To fix the footer at the bottom of the browser window you have to add <span class="grp-doc-class">.grp-fixed-footer</span> to the <span class="grp-doc-class">.grp-module.grp-submit-row</span></p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<footer class="grp-module grp-submit-row grp-fixed-footer" />
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+    </div>
+{% endblock %}
+

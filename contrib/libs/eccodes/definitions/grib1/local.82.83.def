@@ -1,0 +1,53 @@
+#!
+#!Description                    Octet   Code    Ksec1   Count
+#!-----------                    -----   ----    -----   -----
+#!
+# OCTETS 41-52 ARE DESCRIBED in local.82.0.def
+#! Supplementary search-able keys
+#Sort                            53      I1      45      -
+#TimeRepres                      54      I1      46      -
+#Landtype                        55      I1      47      -
+#AerosolBinNumber                56-57   I2      48      -
+#MolarMass                       58-59   I2      49      -
+#! Info on log transformed fields
+#LogTransform                    60      I1      50      -
+#Threshold                       61-62   S2      51      -
+#Reserved                        63      I1      52      -
+#! Info for aerosols
+#TotalAerosolBinsNumbers         64      I1      53      -
+#IntegerScaleFactor              65      S1      54      -
+#LowerRange                      66-67   I2      55      -
+#UpperRange                      68-69   I2      56      -
+#MeanSize                        70-71   I2      57      -
+#StandardDeviation               72-73   I2      58      -
+#PartDef                         74      PAD     n/a     7
+##########################################################
+#
+# author: Sebastien Villaume
+# created: 6 Oct 2011
+# modified: 20 Feb 2014
+#
+### LOCAL SECTION 83 ###
+
+constant GRIBEXSection1Problem = 80 - section1Length;
+
+# base file: contains keywords always present
+include "grib1/local.82.0.def";
+
+# extra keywords specific to local definition 83 (MATCH)
+codetable[1]    matchSort	        "grib1/localConcepts/eswi/sort.table"              : dump,long_type;
+codetable[1]	matchTimeRepres	        "grib1/localConcepts/eswi/timerepres.table"        : dump,long_type;
+codetable[1]	matchLandType	        "grib1/localConcepts/eswi/landtype.table"          : dump,long_type;
+codetable[2]	matchAerosolBinNumber	"grib1/localConcepts/eswi/aerosolbinnumber.table"  : dump,long_type;
+unsigned[2]		molarMass               : dump;
+unsigned[1]		logTransform            :dump;
+signed[2]		threshold               : dump;
+unsigned[1]		reserved                : dump;
+unsigned[1]		totalAerosolBinsNumbers	: dump;
+signed[1]		integerScaleFactor      : dump;
+unsigned[2]		lowerRange              : dump;
+unsigned[2]		upperRange              : dump;
+unsigned[2]		meanSize                : dump;
+unsigned[2]		standardDeviation       : dump;
+pad padding_local1_1(7);
+

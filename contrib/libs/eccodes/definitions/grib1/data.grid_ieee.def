@@ -1,0 +1,46 @@
+# (C) Copyright 2005- ECMWF.
+
+# moved here to allow different bitsPerValue in second order packing
+unsigned[1] bitsPerValue : dump ;
+alias numberOfBitsContainingEachPackedValue = bitsPerValue;
+
+# For grib1 -> grib2
+#constant dataRepresentationTemplateNumber = ?;
+
+# TODO
+codetable[1] precision "grib1/precision.table" = 2 : dump,edition_specific;
+concept accuracy(zero) {
+  32  = { precision = 1; }
+  64  = { precision = 2; }
+  128 = { precision = 3; }
+} : long_type, no_copy;
+
+position offsetBeforeData;
+if( bitmapPresent || !GDSPresent ) {
+  # For grib1 -> grib2
+  constant bitMapIndicator = 0;
+  meta codedValues data_raw_packing(
+                section4Length,
+                offsetBeforeData,
+                offsetSection4,
+                numberOfValues,
+                precision);
+  meta values data_apply_bitmap(codedValues,
+                bitmap,missingValue,binaryScaleFactor) : dump;
+  alias data.packedValues = codedValues;
+} else {
+  # For grib1 -> grib2
+  constant bitMapIndicator = 255;
+  meta values data_raw_packing(
+                section4Length,
+                offsetBeforeData,
+                offsetSection4,
+                numberOfCodedValues,
+                precision);
+  alias data.packedValues = values;
+}
+
+meta numberOfCodedValues number_of_values_data_raw_packing(values,precision);
+
+template statistics "common/statistics_grid.def";
+template missing_values "common/missing_values_grid.def";

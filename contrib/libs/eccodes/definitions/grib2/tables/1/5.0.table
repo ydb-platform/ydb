@@ -1,0 +1,13 @@
+0 0 Grid point data - simple packing
+1 1 Matrix value - simple packing
+2 2 Grid point data - complex packing
+3 3 Grid point data - complex packing and spatial differencing
+4 4 Grid point data - ieee packing
+40 40 JPEG2000 Packing
+41 41 PNG pacling
+50 50 Spectral data -simple packing
+51 51 Spherical harmonics data - complex packing
+61 61 Grid point data - simple packing with logarithm pre-processing
+255 255 Missing
+40000 40000 JPEG2000 Packing
+40010 40010 PNG pacling

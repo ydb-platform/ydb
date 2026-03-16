@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% import "macros/views.html" as macros with context %}
+{% if (not _is_login_path ) and is_auth_enabled %}
+    {% set current_user = (request | get_admin_user) %}
+    {% set config = (request | get_admin_config) %}
+    {% set logo_url = config.logo_url if config and config.logo_url else logo_url %}
+    {% set app_title = config.app_title if config and config.app_title else app_title %}
+{% endif %}
+{% block body %}
+    <div class="page">
+        {% block sidebar %}
+            <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+                <div class="container-fluid">
+                    <button class="navbar-toggler"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#sidebar-menu"
+                            aria-expanded="false"
+                            aria-controls="sidebar-menu">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+                    <h1 class="navbar-brand navbar-brand-autodark">
+                        <a class="brand-link" href="{{ url_for(__name__ ~ ':index') }}">
+                            {% if logo_url %}
+                                <img src="{{ logo_url }}"
+                                     class="navbar-logo"/>
+                            {% else %}
+                                <h3>{{ app_title }}</h3>
+                            {% endif %}
+                        </a>
+                    </h1>
+                    {% if current_user or i18n_config.language_switcher %}
+                        <div class="navbar-nav flex-row d-lg-none">
+                            {% if i18n_config.language_switcher %}
+                                <div class="nav-item dropdown">
+                                    <a href="#" class="nav-link" data-bs-toggle="dropdown">
+                                        <svg xmlns="http://www.w3.org/2000/svg"
+                                             class="icon icon-tabler icon-tabler-language"
+                                             width="24"
+                                             height="24"
+                                             viewBox="0 0 24 24"
+                                             stroke-width="2"
+                                             stroke="currentColor"
+                                             fill="none"
+                                             stroke-linecap="round"
+                                             stroke-linejoin="round">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                            <path d="M4 5h7"></path>
+                                            <path d="M9 3v2c0 4.418 -2.239 8 -5 8"></path>
+                                            <path d="M5 9c-.003 2.144 2.952 3.908 6.7 4"></path>
+                                            <path d="M12 20l4 -9l4 9"></path>
+                                            <path d="M19.1 18h-6.2"></path>
+                                        </svg>
+                                    </a>
+                                    <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                                        {% for lang in i18n_config.language_switcher %}
+                                            <a href="#"
+                                               class="dropdown-item language-switcher-item"
+                                               data-lang="{{ lang }}"
+                                               data-cookie-name="{{ i18n_config.language_cookie_name }}">{{ get_locale_display_name(lang) }}</a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                            {% if current_user %}
+                                <div class="nav-item dropdown ms-3">
+                                    <a href="#"
+                                       class="nav-link d-flex lh-1 text-reset p-0"
+                                       data-bs-toggle="dropdown"
+                                       aria-label="Open user menu">
+                                        <span class="avatar avatar-sm"
+                                              {% if current_user.photo_url %}style="background-image: url({{ current_user.photo_url }})"{% endif %}>
+                                            {% if not current_user.photo_url %}
+                                                <svg xmlns="http://www.w3.org/2000/svg"
+                                                     class="icon icon-tabler icon-tabler-user"
+                                                     width="24"
+                                                     height="24"
+                                                     viewBox="0 0 24 24"
+                                                     stroke-width="2"
+                                                     stroke="currentColor"
+                                                     fill="none"
+                                                     stroke-linecap="round"
+                                                     stroke-linejoin="round">
+                                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                                    <circle cx="12" cy="7" r="4"></circle>
+                                                    <path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"></path>
+                                                </svg>
+                                            {% endif %}
+                                        </span>
+                                        <div class="d-none d-xl-block ps-2">
+                                            <div>{{ current_user.username }}</div>
+                                        </div>
+                                    </a>
+                                    <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                                        <a href="{{ request.url_for(__name__ ~ ':logout') }}"
+                                           class="dropdown-item">{{ _("Logout") }}</a>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    <div class="collapse navbar-collapse" id="sidebar-menu">
+                        <ul class="navbar-nav pt-lg-3">
+                            {% for view in views if view.is_accessible(request) %}
+                                {% if (view| is_link) %}
+                                    {{ macros.extern_link(view) }}
+                                {% elif (view| is_custom_view) and view.add_to_menu %}
+                                    {{ macros.custom_link(view) }}
+                                {% elif (view| is_model) %}
+                                    {{ macros.model_link(view) }}
+                                {% elif (view | is_dropdown) %}
+                                    {{ macros.dropdown_link(view) }}
+                                {% endif %}
+                            {% endfor %}
+                            {% if is_auth_enabled and current_user is none %}
+                                <a href="{{ request.url_for(__name__ ~ ':logout') }}"
+                                   class="btn btn-light mx-1 mt-2">
+                                    <i class="fa fa-sign-out"></i>
+                                    <span class="ms-2">{{ _("Logout") }}</span>
+                                </a>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+            </aside>
+        {% endblock %}
+        {% block navbar %}
+            {% if current_user or i18n_config.language_switcher or (timezone_config and timezone_config.timezone_switcher) %}
+                <header class="navbar navbar-expand-md navbar-light d-none d-lg-flex d-print-none">
+                    <div class="container-xl">
+                        <button class="navbar-toggler"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#navbar-menu"
+                                aria-controls="navbar-menu"
+                                aria-expanded="false"
+                                aria-label="Toggle navigation">
+                            <span class="navbar-toggler-icon"></span>
+                        </button>
+                        <div class="navbar-nav flex-row order-md-last gap-2">
+                            {% if i18n_config.language_switcher %}
+                                <div class="nav-item dropdown">
+                                    <button type="button" class="btn dropdown-toggle" data-bs-toggle="dropdown">
+                                        <svg xmlns="http://www.w3.org/2000/svg"
+                                             class="icon icon-tabler icon-tabler-language"
+                                             width="24"
+                                             height="24"
+                                             viewBox="0 0 24 24"
+                                             stroke-width="2"
+                                             stroke="currentColor"
+                                             fill="none"
+                                             stroke-linecap="round"
+                                             stroke-linejoin="round">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                            <path d="M4 5h7"></path>
+                                            <path d="M9 3v2c0 4.418 -2.239 8 -5 8"></path>
+                                            <path d="M5 9c-.003 2.144 2.952 3.908 6.7 4"></path>
+                                            <path d="M12 20l4 -9l4 9"></path>
+                                            <path d="M19.1 18h-6.2"></path>
+                                        </svg>
+                                        {{ get_locale_display_name(get_locale()) }}
+                                    </button>
+                                    <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                                        {% for lang in i18n_config.language_switcher %}
+                                            <a href="#"
+                                               class="dropdown-item language-switcher-item"
+                                               data-lang="{{ lang }}"
+                                               data-cookie-name="{{ i18n_config.language_cookie_name }}">{{ get_locale_display_name(lang) }}</a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                            {% if timezone_config and timezone_config.timezone_switcher %}
+                                <div class="nav-item dropdown">
+                                    <button type="button" class="btn dropdown-toggle" data-bs-toggle="dropdown">
+                                        <svg xmlns="http://www.w3.org/2000/svg"
+                                             class="icon icon-tabler icon-tabler-world"
+                                             width="24"
+                                             height="24"
+                                             viewBox="0 0 24 24"
+                                             stroke-width="2"
+                                             stroke="currentColor"
+                                             fill="none"
+                                             stroke-linecap="round"
+                                             stroke-linejoin="round">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                            <circle cx="12" cy="12" r="9"></circle>
+                                            <line x1="3.6" y1="9" x2="20.4" y2="9"></line>
+                                            <line x1="3.6" y1="15" x2="20.4" y2="15"></line>
+                                            <path d="M11.5 3a17 17 0 0 0 0 18"></path>
+                                            <path d="M12.5 3a17 17 0 0 1 0 18"></path>
+                                        </svg>
+                                        {{ get_timezone_display_name(get_timezone()) }}
+                                    </button>
+                                    <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                                        {% for tz in timezone_config.timezone_switcher %}
+                                            <a href="#"
+                                               class="dropdown-item timezone-switcher-item"
+                                               data-tz="{{ tz }}"
+                                               data-cookie-name="{{ timezone_config.timezone_cookie_name }}">{{ get_timezone_display_name(tz, show_offset=True) }}</a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                            {% if current_user %}
+                                <div class="nav-item dropdown ms-3">
+                                    <a href="#"
+                                       class="nav-link d-flex lh-1 text-reset p-0"
+                                       data-bs-toggle="dropdown"
+                                       aria-label="Open user menu">
+                                        <span class="avatar avatar-sm"
+                                                {% if current_user.photo_url %}
+                                              style="background-image: url({{ current_user.photo_url }})"{% endif %}>
+                                            {% if not current_user.photo_url %}
+                                                <svg xmlns="http://www.w3.org/2000/svg"
+                                                     class="icon icon-tabler icon-tabler-user"
+                                                     width="24"
+                                                     height="24"
+                                                     viewBox="0 0 24 24"
+                                                     stroke-width="2"
+                                                     stroke="currentColor"
+                                                     fill="none"
+                                                     stroke-linecap="round"
+                                                     stroke-linejoin="round">
+                                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                                    <circle cx="12" cy="7" r="4"></circle>
+                                                    <path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"></path>
+                                                </svg>
+                                            {% endif %}
+                                        </span>
+                                        <div class="ps-2">
+                                            <div>{{ current_user.username }}</div>
+                                        </div>
+                                    </a>
+                                    <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+                                        <a href="{{ request.url_for(__name__ ~ ':logout') }}"
+                                           class="dropdown-item">{{ _("Logout") }}</a>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="collapse navbar-collapse" id="navbar-menu">
+                        </div>
+                    </div>
+                </header>
+            {% endif %}
+        {% endblock %}
+        <div class="page-wrapper">
+            <div class="container-fluid">
+                <div class="page-header d-print-none">
+                    {% block header %}{% endblock %}
+                </div>
+            </div>
+            <div class="page-body flex-grow-1">
+                <div class="container-fluid">
+                    <div class="row row-deck row-cards">
+                        {% block content %}{% endblock %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

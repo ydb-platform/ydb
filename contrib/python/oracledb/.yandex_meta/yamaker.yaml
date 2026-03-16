@@ -1,0 +1,6 @@
+mark_as_cython_c:
+  - oracledb/base_impl.pyx
+  - oracledb/thick_impl.pyx
+  - oracledb/thin_impl.pyx
+exclude_from_macros:
+  - oracledb/impl/*.pyx

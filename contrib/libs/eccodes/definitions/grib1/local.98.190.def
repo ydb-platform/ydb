@@ -1,0 +1,26 @@
+# (C) Copyright 2005- ECMWF.
+
+constant GRIBEXSection1Problem = 0 ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+# zeroesForCompatibilityWithMars
+pad padding_loc190_1(2);
+
+unsigned[1] numberOfLocalDefinitions  : dump;
+
+if(numberOfLocalDefinitions == 1){
+  unsigned[1] localDefNumberOne  : dump;
+  unsigned[2] numberOfBytesInLocalDefinition  : dump;
+  template subLocalDefinition1  "grib1/local.[centre:l].[localDefNumberOne:l].def";
+}
+
+if(numberOfLocalDefinitions == 2){
+  unsigned[1] localDefNumberOne  : dump;
+  unsigned[2] numberOfBytesInLocalDefinition  : dump;
+  unsigned[1] localDefNumberTwo  : dump;
+  unsigned[2] numberOfBytesInLocalDefinition  : dump;
+  template subLocalDefinition1  "grib1/local.[centre:l].[localDefNumberOne:l].def";
+  unsigned[4] spare2;
+  template subLocalDefinition2  "grib1/local.[centre:l].[localDefNumberTwo:l].def";
+}

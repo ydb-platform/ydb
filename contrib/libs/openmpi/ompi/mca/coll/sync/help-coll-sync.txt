@@ -1,0 +1,22 @@
+# -*- text -*-
+#
+# Copyright (c) 2009 Cisco Systems, Inc.  All rights reserved.
+# $COPYRIGHT$
+# 
+# Additional copyrights may follow
+# 
+# $HEADER$
+#
+# This is the US/English general help file for Open MPI's sync
+# collective component.
+#
+[missing collective]
+The sync collective component in Open MPI was activated on a
+communicator where it did not find an underlying collective operation
+defined.  This usually means that the sync collective module's
+priority was not set high enough.  Please try increasing sync's
+priority.
+
+  Local host: %s
+  Sync coll module priority: %d
+  First discovered missing collective: %s

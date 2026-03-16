@@ -1,0 +1,295 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.postgresql.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/postgresql/v1;postgresql";
+option java_package = "yandex.cloud.api.mdb.postgresql.v1";
+
+message SessionState {
+  // Time of collecting statistics on sessions (in the [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format).
+  google.protobuf.Timestamp time = 1;
+
+  // Host of the connected client.
+  string host = 2;
+
+  // Server process ID. For client connections, this is a client connection ID.
+  int64 pid = 3;
+
+  // Database ID.
+  string database = 4;
+
+  // User ID.
+  string user = 5;
+
+  // Application name on the connected client.
+  string application_name = 6;
+
+  // Time when a given process was started. For client connections, this is the time when the client connected to the server.
+  google.protobuf.Timestamp backend_start = 7;
+
+  // Time when a transaction of a given process was started. Returns [NULL] if no transaction is active.
+  //
+  // If the currently active query is the first of its transaction, the value of this parameter is equal to the value of the [query_start] parameter.
+  google.protobuf.Timestamp xact_start = 8;
+
+  // Time when the currently active query was started.
+  //
+  // If the [state] parameter does not take the value [active], the parameter returns the time when the lastest query was started.
+  google.protobuf.Timestamp query_start = 9;
+
+  // Time when the [state] parameter was last changed.
+  google.protobuf.Timestamp state_change = 10;
+
+  // Type of event for which the backend is waiting. Such an event is called a wait event. A backend refers to the process that maintains the client connection.
+  //
+  // For the list of wait events, see the [PostgreSQL documentation](https://www.postgresql.org/docs/current/monitoring-stats.html#WAIT-EVENT-TABLE). If the backend is not waiting for any event, the parameter returns [NULL].
+  string wait_event_type = 11;
+
+  // Wait event name.
+  //
+  // For the list of such names, see the [PostgreSQL documentation](https://www.postgresql.org/docs/current/monitoring-stats.html#WAIT-EVENT-ACTIVITY-TABLE). If the backend is not waiting for any event, the parameter returns [NULL].
+  string wait_event = 12;
+
+  // Current backend state. For the list of possible values, see the [PostgreSQL documentation](https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-ACTIVITY-VIEW).
+  string state = 13;
+
+  // Text of the most recent query.
+  //
+  // If the [state] parameter takes the value [active], the parameter shows the currently executing query. For the rest of the states, the parameter shows the last query that was executed. By default, the query text is truncated to 1024 bytes.
+  string query = 14;
+
+  // Current backend type. For the list of possible values, see the [PostgreSQL documentation](https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-ACTIVITY-VIEW).
+  string backend_type = 15;
+
+  // IP address of the connected client.
+  //
+  // The parameter returns [NULL] in the following cases:
+  // - The client is connected via a Unix socket on the server.
+  // - A given process is internal (for example, autovacuum).
+  string client_addr = 16;
+
+  // Host name of the connected client (relevant for IP connections).
+  string client_hostname = 17;
+
+  // TCP port number that the client is using for communication with the server.
+  //
+  // Returns [-1] if the client is connected via a Unix socket on the server. Returns [NULL] if a given process is internal (for example, autovacuum).
+  int64 client_port = 18;
+
+  // Top-level transaction ID, if any.
+  int64 backend_xid = 19;
+
+  // Current [xmin horizon].
+  int64 backend_xmin = 20;
+
+  reserved 21;
+
+  // Process IDs that are blocking a given server process ID.
+  string blocking_pids = 22;
+
+  // Query ID.
+  string query_id = 23;
+}
+
+message PrimaryKey {
+  reserved 3;
+  // Host of the connected client.
+  string host = 1;
+
+  // User ID.
+  string user = 2;
+
+  // Database ID.
+  string database = 4;
+
+  // Returns [true] if a query is executed as a top-level SQL statement or if the [pg_stat_statements.track](https://www.postgresql.org/docs/current/pgstatstatements.html#id-1.11.7.41.9) parameter is set to the value [top].
+  bool toplevel = 5;
+
+  // Query ID.
+  string query_id = 6;
+
+  // Query planning ID.
+  string plan_id = 7;
+}
+
+message QueryStats {
+  // Time of collecting statistics on planning and execution of queries.
+  google.protobuf.Timestamp time = 1;
+
+  // Statement text.
+  string query = 2;
+
+  // Normalized query plan.
+  string normalized_plan = 3;
+
+  // Example of a query execution plan (without normalization).
+  string example_plan = 4;
+
+  // Number of times that a query was planned.
+  //
+  // The parameter returns a non-zero value if the [pg_stat_statements.track_planning](https://www.postgresql.org/docs/current/pgstatstatements.html#id-1.11.7.41.9) parameter is enabled.
+  int64 plans = 5;
+
+  // Total time taken to plan a query, in milliseconds.
+  //
+  // The parameter returns a non-zero value if the [pg_stat_statements.track_planning] parameter is enabled.
+  double total_plan_time = 6;
+
+  // Minimum time taken to plan a query, in milliseconds.
+  //
+  // The parameter returns a non-zero value if the [pg_stat_statements.track_planning] parameter is enabled.
+  double min_plan_time = 7;
+
+  // Maximum time taken to plan a query, in milliseconds.
+  //
+  // The parameter returns a non-zero value if the [pg_stat_statements.track_planning] parameter is enabled.
+  double max_plan_time = 8;
+
+  // Average time taken to plan a query, in milliseconds.
+  //
+  // The parameter returns a non-zero value if the [pg_stat_statements.track_planning] parameter is enabled.
+  double mean_plan_time = 9;
+
+  // Population standard deviation of the time taken to plan a query, in milliseconds.
+  //
+  // The parameter returns a non-zero value if the [pg_stat_statements.track_planning] parameter is enabled.
+  double stddev_plan_time = 10;
+
+  // Number of times that a query was executed.
+  int64 calls = 11;
+
+  // Total time taken to execute a query, in milliseconds.
+  double total_time = 12; // total_exec_time
+
+  // Minimum time taken to execute a query, in milliseconds.
+  double min_time = 13; // min_exec_time
+
+  // Maximum time taken to execute a query, in milliseconds.
+  double max_time = 14; // max_exec_time
+
+  // Average time taken to execute a query, in milliseconds.
+  double mean_time = 15; // mean_exec_time
+
+  // Population standard deviation of the time taken to execute a query, in milliseconds.
+  double stddev_time = 16; // stddev_exec_time
+
+  // Number of retrieved or affected rows.
+  int64 rows = 17;
+
+  // Number of shared blocks that are hit from cache.
+  int64 shared_blks_hit = 18;
+
+  // Number of read shared blocks.
+  int64 shared_blks_read = 19;
+
+  // Number of 'dirtied' shared blocks.
+  int64 shared_blks_dirtied = 20;
+
+  // Number of written shared blocks.
+  int64 shared_blks_written = 21;
+
+  // Number of local blocks that are hit from cache.
+  int64 local_blks_hit = 22;
+
+  // Number of read local blocks.
+  int64 local_blks_read = 23;
+
+  // Number of 'dirtied' local blocks.
+  int64 local_blks_dirtied = 24;
+
+  // Number of written local blocks.
+  int64 local_blks_written = 25;
+
+  // Number of read temporary blocks.
+  int64 temp_blks_read = 26;
+
+  // Number of written temporary blocks.
+  int64 temp_blks_written = 27;
+
+  // Time taken to read data blocks, in milliseconds.
+  //
+  // The parameter returns a non-zero value if the [track_io_timing](https://www.postgresql.org/docs/current/runtime-config-statistics.html#GUC-TRACK-IO-TIMING) parameter is enabled.
+  double blk_read_time = 28;
+
+  // Time taken to record data blocks, in milliseconds.
+  //
+  // The parameter returns a non-zero value if the [track_io_timing] parameter is enabled.
+  double blk_write_time = 29;
+
+  // Time taken to read temporary data blocks, in milliseconds.
+  //
+  // The parameter returns a non-zero value if the [track_io_timing] parameter is enabled.
+  double temp_blk_read_time = 30;
+
+  // Time taken to record temporary data blocks, in milliseconds.
+  //
+  // The parameter returns a non-zero value if the [track_io_timing] parameter is enabled.
+  double temp_blk_write_time = 31;
+
+  // Number of WAL records generated during a given period.
+  int64 wal_records = 32;
+
+  // Number of WAL full page images generated during a given period.
+  int64 wal_fpi = 33;
+
+  // Number of WAL logs generated during a given period, in bytes.
+  int64 wal_bytes = 34;
+
+  // Number of JIT-compiled functions.
+  int64 jit_functions = 35;
+
+  // Time taken to generate JIT code, in milliseconds.
+  double jit_generation_time = 36;
+
+  // Number of times that functions have been inlined.
+  int64 jit_inlining_count = 37;
+
+  // Time taken to inline functions, in milliseconds.
+  double jit_inlining_time = 38;
+
+  // Number of times that a query was optimized.
+  int64 jit_optimization_count = 39;
+
+  // Time taken to optimize a query, in milliseconds.
+  double jit_optimization_time = 40;
+
+  // Number of times that code was emitted.
+  int64 jit_emission_count = 41;
+
+  // Time taken to emit code.
+  double jit_emission_time = 42;
+
+  // Cost of receiving a response to a query before the first row of the response is issued.
+  int64 startup_cost = 43;
+
+  // Cost of receiving a response to a query when all the rows of the response are issued.
+  int64 total_cost = 44;
+
+  // Expected number of rows that a given plan node should issue.
+  int64 plan_rows = 45;
+
+  // Expected average size of rows that a given plan node should issue.
+  int64 plan_width = 46;
+
+  // Number of bytes that the filesystem layer has read.
+  int64 reads = 47;
+
+  // Number of bytes that the filesystem layer has written.
+  int64 writes = 48;
+
+  // User CPU time used.
+  double user_time = 49;
+
+  // System CPU time used.
+  double system_time = 50;
+}
+
+message QueryStatement {
+  // Primary keys in tables with the statistics on planning and execution of queries.
+  PrimaryKey key = 1;
+
+  // Statistics on planning and execution of queries.
+  QueryStats stats = 2;
+}

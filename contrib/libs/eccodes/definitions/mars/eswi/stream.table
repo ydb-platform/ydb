@@ -1,0 +1,17 @@
+#########################
+#
+# author: Sebastien Villaume
+# created: 6 Oct 2011
+# modified: 20 Feb 2014
+#
+0 none not set, default
+1025 oper Operational deterministic model daily archive
+1043 mnth Monthly means
+1071 moda Monthly means of daily means
+1075 mdfa Monthly means of daily forecast accumulations
+4000 dame Daily Means
+4001 seme Seasonal Means
+4002 secy Seasonal Daily Cycle
+8200 expr Research Experiment
+8299 rean Reanalysis datasets
+9999 publ public data

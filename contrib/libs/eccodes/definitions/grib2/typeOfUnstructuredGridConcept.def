@@ -1,0 +1,5 @@
+'undefined' = { numberOfGridInReference = 0; }
+'T grid' = { numberOfGridInReference = 1; }
+'U grid' = { numberOfGridInReference = 2; }
+'V grid' = { numberOfGridInReference = 3; }
+'W grid' = { numberOfGridInReference = 4; }

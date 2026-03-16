@@ -1,0 +1,26 @@
+Blah blah blah <http://www.slashdot.org>
+
+* Basic list
+* Basic list 2
+
+addss
+
+ * Lazy list
+
+An [example][ref] (oops)
+
+  [ref]: http://example.com  "Title" 
+
+
+Now, let's use a footnote[^1].  Not bad, eh?
+Let's continue.
+
+  [^1]: Here is the text of the footnote
+    continued on several lines.
+    some more of the footnote, etc.
+
+    Actually, another paragraph too.
+
+And then there is a little bit of text.
+
+

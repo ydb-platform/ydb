@@ -1,0 +1,9 @@
+[
+{
+    "model": "polls.poll",
+    "pk": 1,
+    "fields": {
+        "question": "Trenler?"
+    }
+}
+]

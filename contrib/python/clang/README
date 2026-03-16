@@ -1,0 +1,3 @@
+Clang bindings wrapper to load bindings from compiler toolchain.
+
+Bindings are stored within the compiler toolchain. Toolchain path is compiled into wrapper's "compile" module. Wrapper prepends bindings directory to the sys.path list when inits.

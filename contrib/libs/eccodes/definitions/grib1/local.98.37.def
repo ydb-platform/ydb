@@ -1,0 +1,35 @@
+# (C) Copyright 2005- ECMWF.
+# Brightness temperature for long window 4Dvar system
+
+constant GRIBEXSection1Problem = 1080 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber  : dump;
+alias number = perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble : dump ;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+unsigned[1] channelNumber : dump ;
+alias mars.channel = channelNumber;
+
+unsigned[4] scalingFactorForFrequencies : dump ;
+alias integerScalingFactorAppliedToFrequencies = scalingFactorForFrequencies ;
+
+unsigned[1] numberOfFrequencies : dump ;
+alias totalNumberOfFrequencies =  numberOfFrequencies ;
+alias Nf =  numberOfFrequencies ;
+
+# spareSetToZero
+pad padding_loc37_1(3);
+
+unsigned[4] listOfScaledFrequencies[numberOfFrequencies] : dump;
+
+# Hours
+unsigned[2] offsetToEndOf4DvarWindow : dump;
+unsigned[2] lengthOf4DvarWindow : dump;
+alias anoffset=offsetToEndOf4DvarWindow;
+
+# moreSpareSetToZero
+padto padding_loc37_2(offsetSection1 + 1080);

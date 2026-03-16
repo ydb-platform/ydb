@@ -1,0 +1,55 @@
+Metadata-Version: 2.4
+Name: opentelemetry-instrumentation-django
+Version: 0.60b1
+Summary: OpenTelemetry Instrumentation for Django
+Project-URL: Homepage, https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-django
+Project-URL: Repository, https://github.com/open-telemetry/opentelemetry-python-contrib
+Author-email: OpenTelemetry Authors <cncf-opentelemetry-contributors@lists.cncf.io>
+License-Expression: Apache-2.0
+License-File: LICENSE
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.9
+Requires-Dist: opentelemetry-api~=1.12
+Requires-Dist: opentelemetry-instrumentation-wsgi==0.60b1
+Requires-Dist: opentelemetry-instrumentation==0.60b1
+Requires-Dist: opentelemetry-semantic-conventions==0.60b1
+Requires-Dist: opentelemetry-util-http==0.60b1
+Provides-Extra: asgi
+Requires-Dist: opentelemetry-instrumentation-asgi==0.60b1; extra == 'asgi'
+Provides-Extra: instruments
+Requires-Dist: django>=1.10; extra == 'instruments'
+Description-Content-Type: text/x-rst
+
+OpenTelemetry Django Tracing
+============================
+
+|pypi|
+
+.. |pypi| image:: https://badge.fury.io/py/opentelemetry-instrumentation-django.svg
+   :target: https://pypi.org/project/opentelemetry-instrumentation-django/
+
+This library allows tracing requests for Django applications.
+
+Installation
+------------
+
+::
+
+    pip install opentelemetry-instrumentation-django
+
+References
+----------
+
+* `Django <https://www.djangoproject.com/>`_
+* `OpenTelemetry Instrumentation for Django <https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/django/django.html>`_
+* `OpenTelemetry Project <https://opentelemetry.io/>`_
+* `OpenTelemetry Python Examples <https://github.com/open-telemetry/opentelemetry-python/tree/main/docs/examples>`_

@@ -1,0 +1,45 @@
+{% macro flashed_messages(messages=None, container=True, transform={
+  'critical': 'danger',
+  'error': 'danger',
+  'info': 'info',
+  'warning': 'warning',
+  'debug': 'info',
+  'notset': 'info',
+  'message': 'info',
+}, default_category=None, dismissible=False) -%}
+{% with messages = messages or get_flashed_messages(with_categories=True) -%}
+{% if messages -%} {# don't output anything if there are no messages #}
+
+{% if container -%}
+<!-- begin message block -->
+<div class="container flashed-messages">
+  <div class="row">
+    <div class="col-md-12">
+{% endif -%}
+
+{% for cat, msg in messages %}      <div class="alert alert-{{transform.get(cat.lower(), default_category or cat)}}{% if dismissible %} alert-dismissible{% endif %}" role="alert">
+{% if dismissible %}        <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>{% endif %}
+        {{msg}}
+      </div>
+{%- endfor -%}
+
+{% if container %}
+    </div>
+  </div>
+</div>
+<!-- end message block -->
+{% endif -%}
+
+{% endif -%}
+{% endwith -%}
+{% endmacro -%}
+
+
+{% macro icon(type=None, extra_classes=[]) -%}
+<span{{ ({'class': (['glyphicon', 'glyphicon-' + type] + extra_classes)|join(' ')})|xmlattr}}{{kwargs|xmlattr}}></span>
+{%- endmacro %}
+
+
+{% macro form_button(url, content, method='post', class='btn-link') -%}
+<form style="display: inline;" action='{{url}}' method='{{method}}'><button class="{{class|safe}}">{{content}}</button></form>
+{%- endmacro %}

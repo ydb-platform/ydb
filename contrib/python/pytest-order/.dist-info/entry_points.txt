@@ -1,0 +1,2 @@
+[pytest11]
+pytest_order = pytest_order.plugin

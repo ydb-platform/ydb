@@ -1,0 +1,6 @@
+0 unknown unknown
+1 IFS IFS with no ocean model
+2 IFS-NEMO IFS with NEMO ocean model
+3 IFS-FESOM IFS with FESOM ocean model
+4 ICON ICON-A with ICON-O ocean model
+65535 65535 Missing

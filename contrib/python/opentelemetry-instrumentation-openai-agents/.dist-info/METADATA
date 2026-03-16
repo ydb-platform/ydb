@@ -1,0 +1,49 @@
+Metadata-Version: 2.4
+Name: opentelemetry-instrumentation-openai-agents
+Version: 0.52.6
+Summary: OpenTelemetry OpenAI Agents instrumentation
+Project-URL: Repository, https://github.com/traceloop/openllmetry/tree/main/packages/opentelemetry-instrumentation-openai-agents
+Author-email: Gal Kleinman <gal@traceloop.com>, Nir Gazit <nir@traceloop.com>
+License-Expression: Apache-2.0
+Requires-Python: <4,>=3.10
+Requires-Dist: opentelemetry-api<2,>=1.38.0
+Requires-Dist: opentelemetry-instrumentation>=0.59b0
+Requires-Dist: opentelemetry-semantic-conventions-ai<0.5.0,>=0.4.13
+Requires-Dist: opentelemetry-semantic-conventions>=0.59b0
+Provides-Extra: instruments
+Requires-Dist: openai-agents; extra == 'instruments'
+Description-Content-Type: text/markdown
+
+# OpenTelemetry OpenAI Agents Instrumentation
+
+<a href="https://pypi.org/project/opentelemetry-instrumentation-openai-agents/">
+    <img src="https://badge.fury.io/py/opentelemetry-instrumentation-openai-agents.svg">
+</a>
+
+This library enables tracing of agentic workflows implemented using the [OpenAI Agents framework](https://github.com/openai/openai-agents-python), allowing visibility into agent reasoning, tool usage, and decision-making steps.
+
+## Installation
+
+```bash
+pip install opentelemetry-instrumentation-openai-agents
+```
+
+## Example usage
+
+```python
+from opentelemetry.instrumentation.openai_agents import OpenAIAgentsInstrumentor
+
+OpenAIAgentsInstrumentor().instrument()
+```
+
+## Privacy
+
+**By default, this instrumentation logs prompts, completions, and embeddings to span attributes**. This gives you a clear visibility into how your LLM application is working, and can make it easy to debug and evaluate the quality of the outputs.
+
+However, you may want to disable this logging for privacy reasons, as they may contain highly sensitive data from your users. You may also simply want to reduce the size of your traces.
+
+To disable logging, set the `TRACELOOP_TRACE_CONTENT` environment variable to `false`.
+
+```bash
+TRACELOOP_TRACE_CONTENT=false
+```

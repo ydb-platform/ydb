@@ -1,0 +1,5 @@
+--- contrib/python/forbiddenfruit/ya.make	(index)
++++ contrib/python/forbiddenfruit/ya.make	(working tree)
+@@ -6,1 +6,1 @@ SUBSCRIBER(g:python-contrib)
+-LICENSE(GPL-3.0-or-later AND MIT)
++LICENSE(GPL-3.0-or-later OR MIT)

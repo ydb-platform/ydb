@@ -1,0 +1,19 @@
+--- contrib/python/setproctitle/py3/ya.make	(index)
++++ contrib/python/setproctitle/py3/ya.make	(working tree)
+@@ -15,4 +15,12 @@ NO_LINT()
+-CFLAGS(
+-    -DHAVE_SYS_PRCTL_H=1
+-    -D__darwin__
+-)
++IF (OS_LINUX)
++    CFLAGS(
++        -DHAVE_SYS_PRCTL_H=1
++    )
++ELSEIF (OS_DARWIN)
++    CFLAGS(
++        -D__darwin__
++    )
++    SRC(
++        src/darwin_set_process_name.c
++    )
++ENDIF()

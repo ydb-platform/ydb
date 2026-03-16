@@ -1,0 +1,202 @@
+[
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "CBBRLV22XXX",
+    "bank_code": "CBBR",
+    "name": "BLUEORANGE BANK AS",
+    "short_name": "BLUEORANGE BANK AS"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "RIKOLV2XXXX",
+    "bank_code": "RIKO",
+    "name": "LUMINOR BANK AS",
+    "short_name": "LUMINOR BANK AS"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "NDEALV2XXXX",
+    "bank_code": "NDEA",
+    "name": "LUMINOR BANK AS",
+    "short_name": "LUMINOR BANK AS"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "LATCLV22XXX",
+    "bank_code": "LATC",
+    "name": "AS EXPOBANK",
+    "short_name": "AS EXPOBANK"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "PRTTLV22XXX",
+    "bank_code": "PRTT",
+    "name": "AS \"PRIVATBANK\"",
+    "short_name": "AS \"PRIVATBANK\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "UNLALV2XXXX",
+    "bank_code": "UNLA",
+    "name": "AS \"SEB BANKA\"",
+    "short_name": "AS \"SEB BANKA\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "MULTLV2XXXX",
+    "bank_code": "MULT",
+    "name": "AS \"INDUSTRA BANK\"",
+    "short_name": "AS \"INDUSTRA BANK\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "HABALV22XXX",
+    "bank_code": "HABA",
+    "name": "\"SWEDBANK\", AS",
+    "short_name": "\"SWEDBANK\", AS"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "LLBBLV2XXXX",
+    "bank_code": "LLBB",
+    "name": "SIGNET BANK AS",
+    "short_name": "SIGNET BANK AS"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "PARXLV22XXX",
+    "bank_code": "PARX",
+    "name": "AKCIJU SABIEDR\u012aBA \"CITADELE BANKA\"",
+    "short_name": "AKCIJU SABIEDR\u012aBA \"CITADELE BANKA\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "BLIBLV22XXX",
+    "bank_code": "BLIB",
+    "name": "AKCIJU SABIEDR\u012aBA \"BALTIC INTERNATIONAL BANK\"",
+    "short_name": "AKCIJU SABIEDR\u012aBA \"BALTIC INTERNATIONAL BANK\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "RIBRLV22XXX",
+    "bank_code": "RIBR",
+    "name": "AKCIJU SABIEDR\u012aBA \"RE\u0122ION\u0100L\u0100 INVEST\u012aCIJU BANKA\"",
+    "short_name": "AKCIJU SABIEDR\u012aBA \"RE\u0122ION\u0100L\u0100 INVEST\u012aCIJU BANKA\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "LACBLV2XXXX",
+    "bank_code": "LACB",
+    "name": "LATVIJAS BANKA",
+    "short_name": "LATVIJAS BANKA"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "LAPBLV2XXXX",
+    "bank_code": "LAPB",
+    "name": "AKCIJU SABIEDR\u012aBA \"LPB BANK\"",
+    "short_name": "AKCIJU SABIEDR\u012aBA \"LPB BANK\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "LKJFLV21XXX",
+    "bank_code": "LKJF",
+    "name": "LATVIJAS TIRDZNIEC\u012aBAS FLOTES J\u016aRNIEKU ARODBIEDR\u012aBAS KOOPERAT\u012aV\u0100 KR\u0100JAIZDEVU SABIEDR\u012aBA \"J\u016aRNIEKU FORUMS\"",
+    "short_name": "LATVIJAS TIRDZNIEC\u012aBAS FLOTES J\u016aRNIEKU ARODBIEDR\u012aBAS KOOPERAT\u012aV\u0100 KR\u0100JAIZDEVU SABIEDR\u012aBA \"J\u016aRNIEKU FORUMS\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "LATBLV22XXX",
+    "bank_code": "LATB",
+    "name": "AS \"PNB BANKA\"",
+    "short_name": "AS \"PNB BANKA\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "RTMBLV2XXXX",
+    "bank_code": "RTMB",
+    "name": "AKCIJU SABIEDR\u012aBA \"RIETUMU BANKA\"",
+    "short_name": "AKCIJU SABIEDR\u012aBA \"RIETUMU BANKA\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "RGNSLV22XXX",
+    "bank_code": "RGNS",
+    "name": "RIGENSIS BANK AS",
+    "short_name": "RIGENSIS BANK AS"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "LPNSLV21XXX",
+    "bank_code": "LPNS",
+    "name": "VALSTS AKCIJU SABIEDR\u012aBA \"LATVIJAS PASTS\"",
+    "short_name": "VALSTS AKCIJU SABIEDR\u012aBA \"LATVIJAS PASTS\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "TRELLV22XXX",
+    "bank_code": "TREL",
+    "name": "VALSTS KASE",
+    "short_name": "VALSTS KASE"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "MARALV22XXX",
+    "bank_code": "MARA",
+    "name": "DANSKE BANK A/S FILI\u0100LE LATVIJ\u0100 ",
+    "short_name": "DANSKE BANK A/S FILI\u0100LE LATVIJ\u0100 "
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "OKOYLV2XXXX",
+    "bank_code": "OKOY",
+    "name": "OP CORPORATE BANK PLC FILI\u0100LE LATVIJ\u0100",
+    "short_name": "OP CORPORATE BANK PLC FILI\u0100LE LATVIJ\u0100"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "HANDLV22XXX",
+    "bank_code": "HAND",
+    "name": "SVENSKA HANDELSBANKEN AB LATVIJAS FILI\u0100LE",
+    "short_name": "SVENSKA HANDELSBANKEN AB LATVIJAS FILI\u0100LE"
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "TRSFLV21XXX",
+    "bank_code": "TRSF",
+    "name": "SABIEDR\u012aBA AR IEROBE\u017dOTU ATBILD\u012aBU \"TRANSFERTA\"",
+    "short_name": "SABIEDR\u012aBA AR IEROBE\u017dOTU ATBILD\u012aBU \"TRANSFERTA\""
+  },
+  {
+    "country_code": "LV",
+    "primary": true,
+    "bic": "IRCALV22XXX",
+    "bank_code": "IRCA",
+    "name": "RENESOURCE CAPITAL",
+    "short_name": "RENESOURCE CAPITAL"
+  }
+]

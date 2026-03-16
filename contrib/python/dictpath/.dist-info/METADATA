@@ -1,0 +1,72 @@
+Metadata-Version: 2.1
+Name: dictpath
+Version: 0.1.3
+Summary: Object-oriented dictionary paths
+Home-page: https://github.com/p1c2u/dictpath
+Author: Artur Maciag
+Author-email: maciag.artur@gmail.com
+License: UNKNOWN
+Keywords: dict,dictionary,path
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Topic :: Software Development :: Libraries
+Requires-Python: >= 2.7, != 3.0.*, != 3.1.*, != 3.2.*, != 3.3.*, != 3.4.*
+Description-Content-Type: text/x-rst; charset=UTF-8
+
+********
+dictpath
+********
+
+
+About
+#####
+
+Object-oriented dictionary paths
+
+Key features
+************
+
+* Traverse resources like paths
+* Access resources on demand with separate accessor layer
+
+Usage
+#####
+
+.. code-block:: python
+
+   from dictpath import DictPath
+
+   d = {
+       "parts": {
+           "part1": {
+               "name": "Part One",
+           },
+           "part2": {
+               "name": "Part Two",
+           },
+       },
+   }
+
+   dp = DictPath(d)
+
+   # Concatenate paths with /
+   parts = dp / "parts"
+
+   # Stat path keys
+   "part2" in parts
+
+   # Open path dict
+   with parts.open() as parts_dict:
+       print(parts_dict)
+
+
+

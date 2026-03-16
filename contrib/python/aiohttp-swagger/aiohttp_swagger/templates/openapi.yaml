@@ -1,0 +1,22 @@
+openapi: 3.0.1
+info:
+  title: {{ title }}
+  description: {{ description }}
+  version: "{{ version }}"
+  {% if contact %}
+  contact:
+    name: {{ contact }}
+  {% endif %}
+servers:
+  - url: {{ base_path }}
+components:
+  {% if definitions %}
+  schemas:
+{{ definitions|nesteddict2yaml }}
+  {% endif %}
+  {% if security_definitions %}
+  securitySchemes:
+{{ security_definitions|nesteddict2yaml }}
+  {% endif %}
+paths:
+

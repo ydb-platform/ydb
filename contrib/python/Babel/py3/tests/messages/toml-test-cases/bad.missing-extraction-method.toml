@@ -1,0 +1,2 @@
+[[mappings]]
+pattern = ["xyz/**.py", "foo/**.py"]

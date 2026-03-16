@@ -1,0 +1,9 @@
+--- contrib/python/Flask-GraphQL/py3/flask_graphql/__init__.py	(index)
++++ contrib/python/Flask-GraphQL/py3/flask_graphql/__init__.py	(working tree)
+@@ -1,4 +1,3 @@
+-from .blueprint import GraphQL
+-from .graphqlview import GraphQLView
++from graphql_server.flask.graphqlview import GraphQLView
+ 
+-__all__ = ['GraphQL', 'GraphQLView']
++__all__ = ['GraphQLView']

@@ -1,0 +1,38 @@
+{% extends "layout.main.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li><a href="#">localshop</a> <span class="divider">/</span></li>
+    <li><a href="{% url 'accounts:team_list' %}">{% trans "teams" %}</a> <span class="divider">/</span></li>
+    {% if team.pk %}
+    <li><a href="{% url 'accounts:team_detail' pk=team.pk %}">{{ team.name }}</a> <span class="divider">/</span></li>
+    <li class="active">{% trans "edit" %}</li>
+    {% else %}
+    <li class="active">{% trans "new team" %}</li>
+    {% endif %}
+</ul>
+{% endblock %}
+
+{% block content %}
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            {% if team %}
+            Update team {{ team }}
+            {% else %}
+            Create new team
+            {% endif %}
+        </div>
+        <div class="panel-body">
+            <form method="post" action="" class="form-stacked">
+                {% include "partial/_form_fields.html" %}
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary"><span class="icon-ok icon-white"></span> Save</button>
+                    <a href="{% url 'accounts:team_list' %}" class="btn">Cancel</a>
+                </div>
+                {% csrf_token %}
+            </form>
+        </div>
+    </div>
+{% endblock %}

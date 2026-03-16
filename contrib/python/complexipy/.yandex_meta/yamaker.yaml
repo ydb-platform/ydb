@@ -1,0 +1,22 @@
+requirements:
+  - contrib/python/rich
+copy:
+  - complexipy/*
+  - src/*
+  - Cargo.lock
+  - Cargo.toml
+  - pyproject.toml
+exclude_from_macros:
+  - src/*
+  - Cargo.lock
+  - Cargo.toml
+  - pyproject.toml
+  - resources.json
+keep:
+  - complexipy/*
+  - src/*
+  - Cargo.lock
+  - Cargo.toml
+  - pyproject.toml
+  - resources.json
+repo_url: https://github.com/rohaquinlop/complexipy

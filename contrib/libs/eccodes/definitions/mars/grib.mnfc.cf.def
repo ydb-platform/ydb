@@ -1,0 +1,3 @@
+alias mars.method = methodNumber;
+alias mars.origin = centre;
+if (class is "od") { alias mars.system = systemNumber; }

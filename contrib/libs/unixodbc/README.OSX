@@ -1,0 +1,136 @@
++-------------------------------------------------------------+
+| unixODBC                                                    |
+| Mac OSX                                                     |
++-------------------------------------------------------------+
+
+README
+---------------------------------------------------------------
+
+It seems at least with 10.5 of OSX, that we can just configure as
+normal (--enable-gui=no) and build, no special instructions are
+needed.
+
+---------------------------------------------------------------
+
+Building With GNU Auto Tools (by Nick):
+
+	It looks as if Darwin (Mac OSX) doesn't support the normal
+	dlopen type process that unixODBC requires. However help is
+	at hand in the form of dlcompat-20010831.tar.gz. This file
+	contains wrappers to emulate the calls. I have put this in
+	
+	ftp://ftp.unixodbc.org/pub/beta/unixODBC/dlcompat-20010831.tar.gz
+	
+	It should be downloaded, unpacked then run make install
+	
+	This should be done before configuring unixODBC
+	
+	This file was created by Christoph Pfisterer <cp@chrisp.de> and
+	the original copy can be found at 
+	
+	    http://fink.sourceforge.net
+	
+	If you get a "ld: multiple definitions of symbol " error, 
+	then you should edit the file libtool in the unixODBC base 
+	directory and find the line
+	
+	    whole_archive_flag_spec="-all_load \$convenience"
+	
+	and replace it with
+	
+	    whole_archive_flag_spec=
+	
+	As at the time of writing, Qt is not available on OSX, its best to
+	disable the search for X libs that may fail, by configuring with
+	
+	    ./configure --enable-gui=no
+
+Problems:
+
+    There is a problem it seems with libtool on OSX that incorrectly sets 
+    the SHLIBEXT. The Driver Manager code will now report this if its used
+    in this condition. There are two solutions. Either after running configure
+    check config.h, and search for the string SHLIBEXT. It should look like this:
+
+#define SHLIBEXT ".dylib"
+
+    But may look like this:
+
+#define SHLIBEXT "test .$module = .yes && echo .so || echo .dylib"
+
+    If it does, then change it to the first definition.
+
+    The other fix is to change the configure script to find the correct value, 
+    search for the line:
+
+shrext_cmds='test .$module = .yes && echo .so || echo .dylib'
+
+    And change to 
+
+shrext_cmds=`test .$module = .yes && echo .so || echo .dylib`
+
+    Then rerun configure
+
+It also seems that Makefile.,svn needs some help, this thread seems to cover 
+it and solutions.
+
+https://stackoverflow.com/questions/15448582/installed-libtool-but-libtoolize-not-found/15448876
+
+
+Building With Qt qmake (by Peter):
+
+	Qt is now available for OSX but unixODBC may not detect your Qt
+	libs... worse yet you may not be able sort out the GNU auto-tools
+	required to build on OSX.
+	
+	If you want to build using qmake then read README.qmake.
+	
+
+Creating Install Packages:
+
+	unixODBC contains a number of directories and files to help create
+	OSX Packages. The process of doing so is not nearly as automated 
+	as creating RPM files using the GNU auto tools. Look for the
+	mac-install and mac-package directories.
+
+Cursor LIB
+
+The cursor lilb needs a manual stage build to create it as a OSX bundle
+it needs to be like that so the DM can load it at run time.
+
+To do this, after the "make" and "make install" have finished, go to the
+cur directory in the build tree. Then there issue these commands
+
+cc -bundle -flat_namespace -undefined suppress -o libodbccr.1.0.0.so *.lo
+cp libodbccr.1.0.0.so /usr/local/lib/libodbccr.1
+
+Replace /usr/local/lib/ in the above with whatever your actual unixODBC 
+lib path is.
+
+You may also have to do the same with any driver you build. You can check
+this by testing the type of the lib, for example.
+
+file /usr/local/lib/libodbcpsql.2.0.0.so
+/usr/local/lib/libodbcpsql.2.0.0.so: Mach-O dynamically linked shared library ppc
+
+This is not the correct type.
+
+So to get it as you need :-
+
+cd Drivers/Postgre7.1
+cc -bundle -flat_namespace -undefined suppress -o libodbcpsql.2.0.0.so *.lo
+cp libodbcpsql.2.0.0.so /usr/local/lib/libodbcpsql.2.0.0.so
+
+Now to check
+
+file /usr/local/lib/libodbcpsql.2.0.0.so
+/usr/local/lib/libodbcpsql.2.0.0.so: Mach-O bundle ppc
+
+Thats how it should be to work under the driver manager
+
++-------------------------------------------------------------+
+| Peter Harvey <pharvey@codebydesign.com>                     |
+| Added to by Nick Gorham <nick@lurcher.org>                  |
++-------------------------------------------------------------+
+		
+	

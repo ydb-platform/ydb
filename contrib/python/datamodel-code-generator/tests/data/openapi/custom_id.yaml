@@ -1,0 +1,12 @@
+openapi: 3.0.0
+components:
+  schemas:
+    CustomId:
+      description: My custom ID
+      type: string
+      format: uuid
+    Model:
+      type: object
+      properties:
+        custom_id:
+          $ref: "#/components/schemas/CustomId"

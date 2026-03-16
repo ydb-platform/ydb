@@ -1,0 +1,114 @@
+0 0 Ozone
+1 1 Water vapour
+2 2 Methane
+3 3 Carbon dioxide
+4 4 Carbon monoxide
+5 5 Nitrogen dioxide
+6 6 Nitrous oxide
+7 7 Formaldehyde
+8 8 Sulphur dioxide
+9 9 Ammonia
+10 10 Ammonium
+11 11 Nitrogen monoxide
+12 12 Atomic oxygen
+13 13 Nitrate radical
+14 14 Hydroperoxyl radical
+15 15 Dinitrogen pentoxide
+16 16 Nitrous acid
+17 17 Nitric acid
+18 18 Peroxynitric acid
+19 19 Hydrogen peroxide
+20 20 Molecular hydrogen
+21 21 Atomic nitrogen
+22 22 Sulphate
+23 23 Radon
+24 24 Elemental mercury
+25 25 Divalent mercury
+26 26 Atomic chlorine
+27 27 Chlorine monoxide
+28 28 Dichlorine peroxide
+29 29 Hypochlorous acid
+30 30 Chlorine nitrate
+31 31 Chlorine dioxide
+32 32 Atomic bromine
+33 33 Bromine monoxide
+34 34 Bromine chloride
+35 35 Hydrogen bromide
+36 36 Hypobromous acid
+37 37 Bromine nitrate
+10000 10000 Hydroxyl radical
+10001 10001 Methyl peroxy radical
+10002 10002 Methyl hydroperoxide
+10004 10004 Methanol
+10005 10005 Formic acid
+10006 10006 Hydrogen Cyanide
+10007 10007 Aceto nitrile
+10008 10008 Ethane
+10009 10009 Ethene (= Ethylene)
+10010 10010 Ethyne (= Acetylene)
+10011 10011 Ethanol
+10012 10012 Acetic acid
+10013 10013 Peroxyacetyl nitrate
+10014 10014 Propane
+10015 10015 Propene
+10016 10016 Butanes
+10017 10017 Isoprene
+10018 10018 Alpha pinene
+10019 10019 Beta pinene
+10020 10020 Limonene
+10021 10021 Benzene
+10022 10022 Toluene
+10023 10023 Xylene
+10500 10500 Dimethyl sulphide
+20001 20001 Hydrogen chloride
+20002 20002 CFC-11
+20003 20003 CFC-12
+20004 20004 CFC-113
+20005 20005 CFC-113a
+20006 20006 CFC-114
+20007 20007 CFC-115
+20008 20008 HCFC-22
+20009 20009 HCFC-141b
+20010 20010 HCFC-142b
+20011 20011 Halon-1202
+20012 20012 Halon-1211
+20013 20013 Halon-1301
+20014 20014 Halon-2402
+20015 20015 Methyl chloride (HCC-40)
+20016 20016 Carbon tetrachloride (HCC-10)
+20017 20017 HCC-140a
+20018 20018 Methyl bromide (HBC-40B1)
+20019 20019 Hexachlorocyclohexane (HCH)
+20020 20020 Alpha hexachlorocyclohexane
+20021 20021 Hexachlorobiphenyl (PCB-153)
+60000 60000 HOx radical (OH+HO2)
+60001 60001 Total inorganic and organic peroxy radicals (HO2 + RO2)
+60002 60002 Passive Ozone
+60003 60003 NOx expressed as nitrogen
+60004 60004 All nitrogen oxides (NOy) expressed as nitrogen
+60005 60005 Total inorganic chlorine
+60006 60006 Total inorganic bromine
+60007 60007 Total inorganic chlorine except HCl, ClONO2: ClOx
+60008 60008 Total inorganic bromine except HBr, BrONO2: BrOx
+60009 60009 Lumped Alkanes
+60010 60010 Lumped Alkenes
+60011 60011 Lumped Aromatic Compounds
+60012 60012 Lumped Terpenes
+60013 60013 Non-methane volatile organic compounds expressed as carbon
+60014 60014 Anthropogenic non-methane volatile organic compounds expressed as carbon
+60015 60015 Biogenic non-methane volatile organic compounds expressed as carbon
+60016 60016 Lumped oxygenated hydrocarbons
+62000 62000 Total aerosol
+62001 62001 Dust dry
+62002 62002 Water in ambient
+62003 62003 Ammonium dry
+62004 62004 Nitrate dry
+62005 62005 Nitric acid trihydrate
+62006 62006 Sulphate dry
+62007 62007 Mercury dry
+62008 62008 Sea salt dry
+62009 62009 Black carbon dry
+62010 62010 Particulate organic matter dry
+62011 62011 Primary particulate organic matter dry
+62012 62012 Secondary particulate organic matter dry
+65535 65535 Missing

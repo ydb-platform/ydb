@@ -1,0 +1,20 @@
+Metadata-Version: 2.1
+Name: glob2
+Version: 0.7
+Summary: Version of the glob module that can capture patterns and supports recursive wildcards
+Home-page: http://github.com/miracle2k/python-glob2/
+Author: Michael Elsdoerfer
+Author-email: michael@elsdoerfer.com
+License: BSD
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Software Development :: Libraries
+
+UNKNOWN
+
+

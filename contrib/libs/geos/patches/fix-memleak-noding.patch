@@ -1,0 +1,14 @@
+--- a/src/operation/buffer/BufferBuilder.cpp    (index)
++++ b/src/operation/buffer/BufferBuilder.cpp    (working tree)
+@@ -658,9 +658,9 @@ BufferBuilder::createSubgraphs(PlanarGraph *graph, std::vector<BufferSubgraph*>&
+     for(size_t i = 0, n = nodes.size(); i < n; i++) {
+         Node* node = nodes[i];
+         if(!node->isVisited()) {
+-            BufferSubgraph* subgraph = new BufferSubgraph();
++            auto subgraph = std::make_unique<BufferSubgraph>();
+             subgraph->create(node);
+-            subgraphList.push_back(subgraph);
++            subgraphList.push_back(subgraph.release());
+         }
+     }
+ 

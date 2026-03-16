@@ -1,0 +1,141 @@
+envTOML
+=======
+
+.. image:: https://img.shields.io/pypi/v/envtoml.svg
+    :target: https://pypi.python.org/pypi/envtoml
+    :alt: PyPI Status
+
+.. image:: https://img.shields.io/pypi/pyversions/envtoml.svg
+    :target: https://pypi.python.org/pypi/envtoml
+    :alt: Python Versions
+
+.. image:: https://img.shields.io/pypi/wheel/envtoml.svg
+    :target: https://pypi.python.org/pypi/envtoml
+    :alt: Wheel Status
+
+.. image:: https://img.shields.io/pypi/dm/envtoml.svg
+    :target: https://pypi.python.org/pypi/envtoml
+    :alt: PyPI Downloads
+
+.. image:: https://coveralls.io/repos/github/mrshu/envtoml/badge.svg?branch=master
+    :target: https://coveralls.io/github/mrshu/envtoml?branch=master
+    :alt: Code coverage Status
+
+.. image:: https://img.shields.io/pypi/l/envtoml.svg
+   :target: ./LICENSE
+   :alt: License Status
+
+``envTOML`` is an answer to a fairly simple problem: including values from
+environment variables in TOML configuration files. In this way, it is very
+similar to both `envyaml <https://github.com/thesimj/envyaml>`_ and
+`varyaml <https://github.com/abe-winter/varyaml>`_ which provide very
+similar functionality for YAML and which greatly inspired this small
+package.
+
+Under the hood it uses the standard library ``tomllib`` (and ``tomli`` as a
+fallback for Python < 3.11).
+
+Supports Python 3.10+.
+
+Example
+-------
+
+Suppose we have the following configuration saved in ``config.toml``
+
+.. code:: toml
+
+  [db]
+  host = "$DB_HOST"
+  port = "$DB_PORT"
+  username = "$DB_USERNAME"
+  password = "$DB_PASSWORD"
+  name = "my_database"
+
+with the environment variables being set to the following
+
+.. code::
+
+  DB_HOST=some-host.tld
+  DB_PORT=3306
+  DB_USERNAME=user01
+  DB_PASSWORD=veryToughPas$w0rd
+
+this config can then be parsed with ``envTOML`` in the following way:
+
+
+.. code:: python
+
+  import envtoml
+
+  cfg = envtoml.load(open('./config.toml', 'rb'))
+
+  print(cfg)
+  # {'db': {'host': 'some-host.tld',
+  #   'port': 3306,
+  #   'username': 'user01',
+  #   'password': 'veryToughPas$w0rd',
+  #   'name': 'my_database'}}
+
+You can reference multiple environment variables inside a single string:
+
+.. code:: python
+
+  cfg = envtoml.loads(
+      "db_url = 'mysql://$DB_USERNAME:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME'\\n"
+  )
+
+  print(cfg)
+  # {'db_url': 'mysql://user01:veryToughPas$w0rd@some-host.tld:3306/my_database'}
+
+Default values can be specified with ``${VAR:-default}``:
+
+.. code:: python
+
+  cfg = envtoml.loads("region = '${AWS_REGION:-us-east-1}'\\n")
+  # {'region': 'us-east-1'}
+
+Literal dollar signs can be escaped with ``$$``:
+
+.. code:: python
+
+  cfg = envtoml.loads("price = '$$19.99'\\n")
+  # {'price': '$19.99'}
+
+Lists are supported too:
+
+.. code:: python
+
+  cfg = envtoml.loads("scopes = ['$SCOPE_A', '$SCOPE_B']\\n")
+
+To fail when a referenced env var is missing, pass ``fail_on_missing=True``.
+This raises ``ValueError`` when a variable is not present or is empty:
+
+.. code:: python
+
+  # Example: fail fast if API_TOKEN is not set.
+  cfg = envtoml.loads("api_token = '$API_TOKEN'\\n", fail_on_missing=True)
+  # Raises ValueError: API_TOKEN not found in environment
+
+Tests
+-----
+
+This project uses `uv <https://github.com/astral-sh/uv>`_. After installing it,
+run the following from the project's root directory:
+
+.. code:: bash
+
+    uv sync --group dev
+    uv run pytest
+
+For coverage:
+
+.. code:: bash
+
+    uv run pytest --cov=envtoml
+
+
+License
+-------
+
+Licensed under the MIT license (see `LICENSE <./LICENSE>`_ file for more
+details).

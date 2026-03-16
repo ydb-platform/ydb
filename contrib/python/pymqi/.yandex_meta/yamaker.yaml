@@ -1,0 +1,6 @@
+exclude_from_macros:
+  - README.yandex.md
+copy:
+  - code/pymqi/*
+keep:
+  - README.yandex.md

@@ -1,0 +1,8 @@
+alias mars.number  = perturbationNumber;
+alias mars.fcmonth = marsForecastMonth;
+
+unalias mars.step;
+
+alias mars.method = methodNumber;
+
+if (class is "od") { alias mars.system = systemNumber; }

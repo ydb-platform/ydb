@@ -1,0 +1,7 @@
+# Code table 4.335 - Emission scenario origin
+1 1 ARGOS (Accident Reporting and Guiding Operational System)
+2 2 JRODOS (Java version of Real time Online Decision SuppOrt System)
+3 3 Assimilated (Scenario retrieved from measurements)
+4 4 Centre (scenario by originating centre)
+# 5-254 Reserved
+255 255 Missing value

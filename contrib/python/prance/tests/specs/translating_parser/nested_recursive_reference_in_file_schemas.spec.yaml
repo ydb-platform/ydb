@@ -1,0 +1,19 @@
+---
+$defs:
+  ComplexObject:
+    type: object
+    properties:
+      property:
+        $ref: "#/$defs/ComplexObjectProperty"
+  ComplexObjectProperty:
+    type: object
+    properties:
+      recursive:
+        $ref: "#/$defs/RecursiveObject"
+  RecursiveObject:
+    type: object
+    additionalProperties:
+      oneOf:
+        - $ref: "#/$defs/RecursiveObject"
+        - not:
+            type: object

@@ -1,0 +1,2 @@
+[console_scripts]
+icalendar = icalendar.cli:main

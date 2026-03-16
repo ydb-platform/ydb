@@ -1,0 +1,55 @@
+/* -----------------------------------------------------------------------
+
+   Grappelli Skin - Tiny MCE
+   * based on Tiny MCE http://tinymce.moxiecode.com/
+      
+   Grappelli Skin - Django Admin Interface
+   * http://code.google.com/p/django-grappelli/
+   
+   Based on Django Admin Interface
+   * http://www.djangoproject.com
+   
+   Developed for Mozilla Firefox 3.0+ / using CSS 3 Specifications
+   
+   * See README for instructions on how to use Grappelli.
+   * For credits and origins, see AUTHORS.
+   * This is a compressed file. See the sources in the 'src' directory.
+   
+   * Copyright (c) 2009, vonautomatisch werkstaetten. All rights reserved.
+     See LICENSE for more info.
+
+----------------------------------------------------------------------- */
+
+
+/* Import & Modifications of Django/Grappelli styles
+----------------------------------------------------------------------- */
+@import url('../../../../../../../stylesheets/screen.css');
+@import url('../../../../../../../stylesheets/partials/custom/tinymce.css');
+@import url('../../../../../../../stylesheets/mueller/grid/output.css');
+
+
+
+/* Generic
+----------------------------------------------------------------------- */
+body {
+    clear: both;
+    margin: 0;
+    padding: 20px 20px 0;
+    height: 100%;
+    background: #fff !important;
+}
+body.filebrowser {
+    margin: 0 !important;
+}
+/*body > *:first-child {
+    margin-top: 20px;
+}*/
+
+html {
+    height: 100%;
+}
+html, body {
+    background: transparent;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}

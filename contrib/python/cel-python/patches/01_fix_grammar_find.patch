@@ -1,0 +1,21 @@
+--- contrib/python/cel-python/celpy/celparser.py	(index)
++++ contrib/python/cel-python/celpy/celparser.py	(working tree)
+@@ -65,6 +65,7 @@ import re
+ from pathlib import Path
+ from typing import Any, List, Optional, cast
+ 
++import importlib.resources
+ import lark.visitors
+ from lark import Lark, Token, Tree  # noqa: F401
+ from lark.exceptions import LexError, ParseError, UnexpectedCharacters, UnexpectedToken
+@@ -86,7 +87,7 @@ class CELParser:
+ 
+     def __init__(self) -> None:
+         if CELParser.CEL_PARSER is None:
+-            CEL_grammar = (Path(__file__).parent / "cel.lark").read_text()
++            CEL_grammar = (importlib.resources.files(__package__) / "cel.lark").read_text()
+             CELParser.CEL_PARSER = Lark(
+                 CEL_grammar,
+                 parser="lalr",
+--- contrib/python/cel-python/patches/01_fix_grammar_find.patch	(index)
++++ contrib/python/cel-python/patches/01_fix_grammar_find.patch	(working tree)

@@ -1,0 +1,14 @@
+# Title
+
+  - *[Python in Markdown](http://example.com) by some
+    great folks* - This *does* work as expected.
+  - _[Python in Markdown](http://example.com) by some
+    great folks_ - This *does* work as expected.
+  - [_Python in Markdown_](http://example.com) by some
+    great folks - This *does* work as expected.
+  - [_Python in Markdown_](http://example.com) _by some
+    great folks_ - This *does* work as expected.
+
+_[Python in Markdown](http://example.com) by some
+great folks_ - This *does* work as expected.
+

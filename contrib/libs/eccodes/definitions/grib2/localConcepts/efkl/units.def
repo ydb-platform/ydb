@@ -1,0 +1,157 @@
+# Automatically generted. Do not edit.
+# NWP latent heat net flux
+'W m-2' = {
+    discipline = 0 ;
+    parameterCategory = 0 ;
+    parameterNumber = 193 ;
+   }
+# NWP sensible heat net flux
+'W m-2' = {
+    discipline = 0 ;
+    parameterCategory = 0 ;
+    parameterNumber = 194 ;
+   }
+# NWP Boundary layer height
+'m' = {
+    discipline = 0 ;
+    parameterCategory = 3 ;
+    parameterNumber = 192 ;
+   }
+# MO_length_inv
+'m-1' = {
+    discipline = 0 ;
+    parameterCategory = 7 ;
+    parameterNumber = 192 ;
+   }
+# mixing velocity scale "Kz_1m" at surface
+'m s-1' = {
+    discipline = 0 ;
+    parameterCategory = 7 ;
+    parameterNumber = 193 ;
+   }
+# Convective velocity scale
+'m s-1' = {
+    discipline = 0 ;
+    parameterCategory = 7 ;
+    parameterNumber = 194 ;
+   }
+# Temperature scale T_star
+'K' = {
+    discipline = 0 ;
+    parameterCategory = 7 ;
+    parameterNumber = 195 ;
+   }
+# Humidity scale h_star
+'kg m-3' = {
+    discipline = 0 ;
+    parameterCategory = 7 ;
+    parameterNumber = 196 ;
+   }
+# Scavenging coefficient
+'s-1' = {
+    discipline = 0 ;
+    parameterCategory = 7 ;
+    parameterNumber = 197 ;
+   }
+# Dry deposition number flux
+'m-2 s-1' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 192 ;
+   }
+# Dry deposition molar flux
+'mol m-2 s-1' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 193 ;
+   }
+# Dry deposition radioactive flux
+'bq m-2 s-1' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 194 ;
+   }
+# Wet deposition Number Flux
+'m-2 s-1' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 197 ;
+   }
+# Wet deposition Molar Flux
+'mol m-2 s-1' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 198 ;
+   }
+# Wet deposition Radioactive Flux
+'bq m-2 s-1' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 199 ;
+   }
+# Column integrated mass concentration
+'kg m-2' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 201 ;
+   }
+# Column integrated number concentration
+'m-2' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 202 ;
+   }
+# Column integrated molar concentration
+'mol m-2' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 203 ;
+   }
+# Column integrated radioactive concentration
+'bq m-2' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 204 ;
+   }
+# Radioactive concentration
+'bq m-3' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 210 ;
+   }
+# Ready to fly pollen
+'m-2' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 220 ;
+   }
+# Ready to fly allergen
+'m-2' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 221 ;
+   }
+# Heatsum for pollen
+'degreeday' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 222 ;
+   }
+# Pollen left fraction
+'' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 223 ;
+   }
+# Pollen total per m2
+'m-2' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 224 ;
+   }
+# Climate correction for total pollen
+'' = {
+    discipline = 0 ;
+    parameterCategory = 20 ;
+    parameterNumber = 225 ;
+   }

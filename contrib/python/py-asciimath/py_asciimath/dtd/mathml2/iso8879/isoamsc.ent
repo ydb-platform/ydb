@@ -1,0 +1,31 @@
+
+<!--
+     File isoamsc.ent produced by the XSL script characters.xsl
+     from input data in unicode.xml.
+
+     Please report any errors to David Carlisle
+     via the public W3C list www-math@w3.org.
+
+     The numeric character values assigned to each entity
+     (should) match the Unicode assignments in Unicode 4.0.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1986
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+
+-->
+
+<!ENTITY dlcorn           "&#x0231E;" ><!--/llcorner O: downward left corner -->
+<!ENTITY drcorn           "&#x0231F;" ><!--/lrcorner C: downward right corner -->
+<!ENTITY lceil            "&#x02308;" ><!--/lceil O: left ceiling -->
+<!ENTITY lfloor           "&#x0230A;" ><!--/lfloor O: left floor -->
+<!ENTITY lpargt           "&#x029A0;" ><!--/leftparengtr O: left parenthesis, gt -->
+<!ENTITY rceil            "&#x02309;" ><!--/rceil C: right ceiling -->
+<!ENTITY rfloor           "&#x0230B;" ><!--/rfloor C: right floor -->
+<!ENTITY rpargt           "&#x02994;" ><!--/rightparengtr C: right paren, gt -->
+<!ENTITY ulcorn           "&#x0231C;" ><!--/ulcorner O: upper left corner -->
+<!ENTITY urcorn           "&#x0231D;" ><!--/urcorner C: upper right corner -->

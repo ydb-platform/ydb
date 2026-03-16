@@ -1,0 +1,37 @@
+ -*- text -*-
+#
+# Copyright (c) 2010      Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2016      Los Alamos National Security, LLC. All rights
+#                         reserved.
+#
+# Copyright (c) 2016-2018 Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for OPAL PMIx base.
+#
+[pmix2-init-failed]
+PMI2_Init failed to intialize.  Return code: %d
+#
+[pmix2-init-returned-bad-values]
+PMI2_Init was intialized but negative values for job size and/or
+rank was returned.
+#
+[old-pmix]
+A version of PMIx was detected that is too old:
+
+  Version:      %s
+  Min version:  %s
+
+Please reconfigure against an updated version of PMIx.
+#
+[incorrect-pmix]
+An unexpected version of PMIx was loaded:
+
+  Detected:  %s
+  Expected:  %s
+
+Please check the library path and reconfigure if required.

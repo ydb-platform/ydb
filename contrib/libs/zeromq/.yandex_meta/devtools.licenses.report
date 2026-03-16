@@ -1,0 +1,450 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MPL-2.0              1a945154be91323cdb46cc44e415b03a
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: MPL-2.0 */
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        include/zmq.h [1:1]
+        src/address.cpp [1:1]
+        src/address.hpp [1:1]
+        src/array.hpp [1:1]
+        src/atomic_counter.hpp [1:1]
+        src/atomic_ptr.hpp [1:1]
+        src/blob.hpp [1:1]
+        src/channel.cpp [1:1]
+        src/channel.hpp [1:1]
+        src/client.cpp [1:1]
+        src/client.hpp [1:1]
+        src/clock.cpp [1:1]
+        src/clock.hpp [1:1]
+        src/command.hpp [1:1]
+        src/compat.hpp [1:1]
+        src/condition_variable.hpp [1:1]
+        src/config.hpp [1:1]
+        src/ctx.cpp [1:1]
+        src/ctx.hpp [1:1]
+        src/curve_client.cpp [1:1]
+        src/curve_client.hpp [1:1]
+        src/curve_mechanism_base.cpp [1:1]
+        src/curve_mechanism_base.hpp [1:1]
+        src/curve_server.cpp [1:1]
+        src/curve_server.hpp [1:1]
+        src/dbuffer.hpp [1:1]
+        src/dealer.cpp [1:1]
+        src/dealer.hpp [1:1]
+        src/decoder.hpp [1:1]
+        src/decoder_allocators.cpp [1:1]
+        src/decoder_allocators.hpp [1:1]
+        src/devpoll.cpp [1:1]
+        src/devpoll.hpp [1:1]
+        src/dgram.cpp [1:1]
+        src/dgram.hpp [1:1]
+        src/dish.cpp [1:1]
+        src/dish.hpp [1:1]
+        src/dist.cpp [1:1]
+        src/dist.hpp [1:1]
+        src/encoder.hpp [1:1]
+        src/endpoint.cpp [1:1]
+        src/endpoint.hpp [1:1]
+        src/epoll.cpp [1:1]
+        src/epoll.hpp [1:1]
+        src/err.cpp [1:1]
+        src/err.hpp [1:1]
+        src/fd.hpp [1:1]
+        src/fq.cpp [1:1]
+        src/fq.hpp [1:1]
+        src/gather.cpp [1:1]
+        src/gather.hpp [1:1]
+        src/generic_mtrie.hpp [1:1]
+        src/generic_mtrie_impl.hpp [1:1]
+        src/gssapi_client.hpp [1:1]
+        src/gssapi_mechanism_base.hpp [1:1]
+        src/gssapi_server.hpp [1:1]
+        src/i_decoder.hpp [1:1]
+        src/i_encoder.hpp [1:1]
+        src/i_engine.hpp [1:1]
+        src/i_mailbox.hpp [1:1]
+        src/i_poll_events.hpp [1:1]
+        src/io_object.cpp [1:1]
+        src/io_object.hpp [1:1]
+        src/io_thread.cpp [1:1]
+        src/io_thread.hpp [1:1]
+        src/ip.cpp [1:1]
+        src/ip.hpp [1:1]
+        src/ip_resolver.hpp [1:1]
+        src/ipc_address.cpp [1:1]
+        src/ipc_address.hpp [1:1]
+        src/ipc_connecter.cpp [1:1]
+        src/ipc_connecter.hpp [1:1]
+        src/ipc_listener.cpp [1:1]
+        src/ipc_listener.hpp [1:1]
+        src/kqueue.cpp [1:1]
+        src/kqueue.hpp [1:1]
+        src/lb.cpp [1:1]
+        src/lb.hpp [1:1]
+        src/likely.hpp [1:1]
+        src/mailbox.cpp [1:1]
+        src/mailbox.hpp [1:1]
+        src/mailbox_safe.cpp [1:1]
+        src/mailbox_safe.hpp [1:1]
+        src/mechanism.cpp [1:1]
+        src/mechanism.hpp [1:1]
+        src/mechanism_base.cpp [1:1]
+        src/mechanism_base.hpp [1:1]
+        src/metadata.cpp [1:1]
+        src/metadata.hpp [1:1]
+        src/msg.cpp [1:1]
+        src/msg.hpp [1:1]
+        src/mtrie.cpp [1:1]
+        src/mtrie.hpp [1:1]
+        src/mutex.hpp [1:1]
+        src/null_mechanism.cpp [1:1]
+        src/null_mechanism.hpp [1:1]
+        src/object.cpp [1:1]
+        src/object.hpp [1:1]
+        src/options.cpp [1:1]
+        src/options.hpp [1:1]
+        src/own.cpp [1:1]
+        src/own.hpp [1:1]
+        src/pair.cpp [1:1]
+        src/pair.hpp [1:1]
+        src/peer.cpp [1:1]
+        src/peer.hpp [1:1]
+        src/pgm_receiver.cpp [1:1]
+        src/pgm_receiver.hpp [1:1]
+        src/pgm_sender.cpp [1:1]
+        src/pgm_sender.hpp [1:1]
+        src/pgm_socket.cpp [1:1]
+        src/pgm_socket.hpp [1:1]
+        src/pipe.cpp [1:1]
+        src/pipe.hpp [1:1]
+        src/plain_client.cpp [1:1]
+        src/plain_client.hpp [1:1]
+        src/plain_common.hpp [1:1]
+        src/plain_server.cpp [1:1]
+        src/plain_server.hpp [1:1]
+        src/poll.cpp [1:1]
+        src/poll.hpp [1:1]
+        src/poller.hpp [1:1]
+        src/poller_base.cpp [1:1]
+        src/poller_base.hpp [1:1]
+        src/polling_util.cpp [1:1]
+        src/polling_util.hpp [1:1]
+        src/pollset.cpp [1:1]
+        src/pollset.hpp [1:1]
+        src/precompiled.cpp [1:1]
+        src/precompiled.hpp [1:1]
+        src/proxy.cpp [1:1]
+        src/proxy.hpp [1:1]
+        src/pub.cpp [1:1]
+        src/pub.hpp [1:1]
+        src/pull.cpp [1:1]
+        src/pull.hpp [1:1]
+        src/push.cpp [1:1]
+        src/push.hpp [1:1]
+        src/radio.cpp [1:1]
+        src/radio.hpp [1:1]
+        src/radix_tree.cpp [1:1]
+        src/radix_tree.hpp [1:1]
+        src/random.cpp [1:1]
+        src/random.hpp [1:1]
+        src/raw_decoder.cpp [1:1]
+        src/raw_decoder.hpp [1:1]
+        src/raw_encoder.cpp [1:1]
+        src/raw_encoder.hpp [1:1]
+        src/raw_engine.cpp [1:1]
+        src/raw_engine.hpp [1:1]
+        src/reaper.cpp [1:1]
+        src/reaper.hpp [1:1]
+        src/rep.cpp [1:1]
+        src/rep.hpp [1:1]
+        src/req.cpp [1:1]
+        src/req.hpp [1:1]
+        src/router.cpp [1:1]
+        src/router.hpp [1:1]
+        src/scatter.cpp [1:1]
+        src/scatter.hpp [1:1]
+        src/select.cpp [1:1]
+        src/select.hpp [1:1]
+        src/server.cpp [1:1]
+        src/server.hpp [1:1]
+        src/session_base.cpp [1:1]
+        src/session_base.hpp [1:1]
+        src/signaler.cpp [1:1]
+        src/signaler.hpp [1:1]
+        src/socket_base.cpp [1:1]
+        src/socket_base.hpp [1:1]
+        src/socket_poller.cpp [1:1]
+        src/socket_poller.hpp [1:1]
+        src/socks.cpp [1:1]
+        src/socks.hpp [1:1]
+        src/socks_connecter.cpp [1:1]
+        src/socks_connecter.hpp [1:1]
+        src/stdint.hpp [1:1]
+        src/stream.cpp [1:1]
+        src/stream.hpp [1:1]
+        src/stream_connecter_base.cpp [1:1]
+        src/stream_connecter_base.hpp [1:1]
+        src/stream_engine_base.cpp [1:1]
+        src/stream_engine_base.hpp [1:1]
+        src/stream_listener_base.cpp [1:1]
+        src/stream_listener_base.hpp [1:1]
+        src/sub.cpp [1:1]
+        src/sub.hpp [1:1]
+        src/tcp.cpp [1:1]
+        src/tcp.hpp [1:1]
+        src/tcp_address.cpp [1:1]
+        src/tcp_address.hpp [1:1]
+        src/tcp_connecter.cpp [1:1]
+        src/tcp_connecter.hpp [1:1]
+        src/tcp_listener.cpp [1:1]
+        src/tcp_listener.hpp [1:1]
+        src/thread.cpp [1:1]
+        src/thread.hpp [1:1]
+        src/timers.cpp [1:1]
+        src/timers.hpp [1:1]
+        src/tipc_address.cpp [1:1]
+        src/tipc_address.hpp [1:1]
+        src/tipc_connecter.cpp [1:1]
+        src/tipc_connecter.hpp [1:1]
+        src/tipc_listener.cpp [1:1]
+        src/tipc_listener.hpp [1:1]
+        src/trie.cpp [1:1]
+        src/trie.hpp [1:1]
+        src/udp_address.cpp [1:1]
+        src/udp_address.hpp [1:1]
+        src/udp_engine.cpp [1:1]
+        src/v1_decoder.cpp [1:1]
+        src/v1_decoder.hpp [1:1]
+        src/v1_encoder.cpp [1:1]
+        src/v1_encoder.hpp [1:1]
+        src/v2_decoder.cpp [1:1]
+        src/v2_decoder.hpp [1:1]
+        src/v2_encoder.cpp [1:1]
+        src/v2_encoder.hpp [1:1]
+        src/v2_protocol.hpp [1:1]
+        src/v3_1_encoder.cpp [1:1]
+        src/v3_1_encoder.hpp [1:1]
+        src/vmci_connecter.hpp [1:1]
+        src/windows.hpp [1:1]
+        src/wire.hpp [1:1]
+        src/ws_address.hpp [1:1]
+        src/ws_connecter.hpp [1:1]
+        src/ws_listener.hpp [1:1]
+        src/xpub.cpp [1:1]
+        src/xpub.hpp [1:1]
+        src/xsub.cpp [1:1]
+        src/xsub.hpp [1:1]
+        src/ypipe.hpp [1:1]
+        src/ypipe_base.hpp [2:2]
+        src/ypipe_conflate.hpp [1:1]
+        src/yqueue.hpp [1:1]
+        src/zap_client.cpp [1:1]
+        src/zap_client.hpp [1:1]
+        src/zmq.cpp [1:1]
+        src/zmq_draft.h [1:1]
+        src/zmq_utils.cpp [1:1]
+        src/zmtp_engine.cpp [1:1]
+        src/zmtp_engine.hpp [1:1]
+
+KEEP     BSD-3-Clause         1e377af7c73c70e271cc416fd3b30635
+BELONGS ya.make
+    License text:
+          included in the source tree under external/sha1/ - it is licensed
+          under BSD-3-Clause and thus it is fully compatible with libzmq's
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        NEWS [108:109]
+
+KEEP     FSFUL                246ec1770fd347b4f31deec561391551
+BELONGS ya.make
+    License text:
+        This file is free documentation; the Free Software Foundation gives
+        unlimited permission to copy, distribute and modify it.
+    Scancode info:
+        Original SPDX id: FSFUL
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.fsf.org/licensing/licenses/, https://fedoraproject.org/wiki/Licensing/FSF_Unlimited_License, https://spdx.org/licenses/FSFUL
+    Files with this license:
+        INSTALL [7:8]
+
+KEEP     MIT                  27ff9742d5186a01e266adfa77008eb6
+BELONGS ya.make
+    License text:
+          distributed under the MIT license and thus is compatible with
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        NEWS [613:613]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 36a0d91fd9a8e6d53addda0cbd5f275b
+BELONGS ya.make
+# Warranty disclaimer
+    License text:
+        /*  These functions are not documented by man pages -- use at your own risk.  */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        include/zmq.h [583:583]
+
+KEEP     MPL-2.0              81bec2692a2a04ebc459d6dca672caf4
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 363
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        LICENSE [1:373]
+
+KEEP     GPL-2.0-only         96b602b953f013ef0b57d1808e1e6396
+BELONGS ya.make
+    License text:
+        libzmq is free software; you can redistribute it and/or modify it under
+        the terms of the Mozilla Public License Version 2.0.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 83.33
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        README.md [197:198]
+
+KEEP     BSD-2-Clause AND LGPL-3.0-only 9b7bea7d282ccd478c5004b972f1d75a
+BELONGS ya.make
+    License text:
+          It is licensed under the BSD-2-Clause and thus it is compatible with LGPL-3.0.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        NEWS [452:452]
+    Scancode info:
+        Original SPDX id: LGPL-3.0-only
+        Score           : 16.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, http://www.gnu.org/licenses/lgpl-3.0.html, https://spdx.org/licenses/LGPL-3.0-only
+    Files with this license:
+        NEWS [452:452]
+
+KEEP     LGPL-3.0-or-later AND MPL-2.0 db9c9c5f86107ef846ccd1d9687d71ad
+BELONGS ya.make
+    License text:
+        * Relicensing from LGPL-3.0+ (with custom exceptions) to MPL-2.0 is now complete.
+    Scancode info:
+        Original SPDX id: LGPL-3.0-or-later
+        Score           : 16.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, https://spdx.org/licenses/LGPL-3.0-or-later
+    Files with this license:
+        NEWS [4:4]
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        NEWS [4:4]
+
+KEEP     LicenseRef-scancode-unknown-license-reference AND MPL-2.0 dbbb53c59200d26e9873be7db224085e
+BELONGS ya.make
+    License text:
+          libzmq is now distributed under the Mozilla Public License 2.0. Relicensing
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        NEWS [5:5]
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        NEWS [5:5]
+
+KEEP     BSD-3-Clause         e59eaef00967cf81c4a83933f23abc9a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 89.20
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        external/sha1/sha1.h [8:28]
+
+KEEP     BSD-3-Clause         e682f37c2a03990324452b0a9810ce56
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        external/sha1/sha1.c [5:27]
+
+KEEP     LGPL-3.0-only        ebc8bea17c35982313873abd2ec1f083
+BELONGS ya.make
+    License text:
+          libzmq's LGPL3.
+    Scancode info:
+        Original SPDX id: LGPL-3.0-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, http://www.gnu.org/licenses/lgpl-3.0.html, https://spdx.org/licenses/LGPL-3.0-only
+    Files with this license:
+        NEWS [614:614]

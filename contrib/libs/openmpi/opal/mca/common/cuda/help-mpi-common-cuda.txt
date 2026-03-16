@@ -1,0 +1,212 @@
+# -*- text -*-
+#
+# Copyright (c) 2011-2015 NVIDIA.  All rights reserved.
+# Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+[cuCtxGetCurrent failed not initialized]
+WARNING: The call to cuCtxGetCurrent() failed while attempting to register
+internal memory with the CUDA environment.  The program will continue to run,
+but the performance of GPU memory transfers may be reduced.  This failure
+indicates that the CUDA environment is not yet initialized.  To eliminate
+this warning, ensure that CUDA is initialized prior to calling MPI_Init.
+
+NOTE: You can turn off this warning by setting the MCA parameter
+      mpi_common_cuda_warning to 0.
+#
+[cuCtxGetCurrent failed]
+WARNING: The call to cuCtxGetCurrent() failed while attempting to register
+internal memory with the CUDA environment.  The program will continue to run,
+but the performance of GPU memory transfers may be reduced.
+  cuCtxGetCurrent return value:   %d
+
+NOTE: You can turn off this warning by setting the MCA parameter
+      mpi_common_cuda_warning to 0.
+#
+[cuCtxGetCurrent returned NULL]
+WARNING: The call to cuCtxGetCurrent() failed while attempting to register
+internal memory with the CUDA environment.  The program will continue to run,
+but the performance of GPU memory transfers may be reduced.  This failure
+indicates that there is no CUDA context yet.  To eliminate this warning,
+ensure that there is a CUDA context prior to calling MPI_Init.
+
+NOTE: You can turn off this warning by setting the MCA parameter
+      mpi_common_cuda_warning to 0.
+#
+[cuMemHostRegister during init failed]
+The call to cuMemHostRegister(%p, %d, 0) failed.
+  Host:  %s
+  cuMemHostRegister return value:  %d
+  Registration cache:  %s
+#
+[cuMemHostRegister failed]
+The call to cuMemHostRegister(%p, %d, 0) failed.
+  Host:  %s
+  cuMemHostRegister return value:  %d
+  Registration cache:  %s
+#
+[cuIpcGetMemHandle failed]
+The call to cuIpcGetMemHandle failed. This means the GPU RDMA protocol
+cannot be used.
+  cuIpcGetMemHandle return value:   %d
+  address: %p
+Check the cuda.h file for what the return value means. Perhaps a reboot
+of the node will clear the problem.
+#
+[cuMemGetAddressRange failed]
+The call to cuMemGetAddressRange failed. This means the GPU RDMA protocol
+cannot be used.
+  cuMemGetAddressRange return value:   %d
+  address: %p
+Check the cuda.h file for what the return value means. Perhaps a reboot
+of the node will clear the problem.
+#
+[cuMemGetAddressRange failed 2]
+The call to cuMemGetAddressRange failed during the GPU RDMA protocol.
+  Host:  %s
+  cuMemGetAddressRange return value:  %d
+  address:  %p
+Check the cuda.h file for what the return value means. This is highly
+unusual and should not happen. The program will probably abort.
+#
+[Out of cuEvent handles]
+The library has exceeded its number of outstanding event handles.
+For better performance, this number should be increased.
+  Current maximum handles:   %4d
+  Suggested new maximum:     %4d
+Rerun with --mca mpi_common_cuda_event_max %d
+#
+[cuIpcOpenMemHandle failed]
+The call to cuIpcOpenMemHandle failed. This is an unrecoverable error
+and will cause the program to abort.
+  Hostname:                         %s
+  cuIpcOpenMemHandle return value:  %d
+  address:                          %p
+Check the cuda.h file for what the return value means. A possible cause
+for this is not enough free device memory.  Try to reduce the device
+memory footprint of your application.
+#
+[cuIpcCloseMemHandle failed]
+The call to cuIpcCloseMemHandle failed. This is a warning and the program
+will continue to run.
+  cuIpcCloseMemHandle return value:   %d
+  address: %p
+Check the cuda.h file for what the return value means. Perhaps a reboot
+of the node will clear the problem.
+#
+[cuMemcpyAsync failed]
+The call to cuMemcpyAsync failed. This is a unrecoverable error and will
+cause the program to abort.
+  cuMemcpyAsync(%p, %p, %d) returned value %d
+Check the cuda.h file for what the return value means.
+#
+[cuEventCreate failed]
+The call to cuEventCreate failed. This is a unrecoverable error and will
+cause the program to abort.
+  Hostname:                     %s
+  cuEventCreate return value:   %d
+Check the cuda.h file for what the return value means.
+#
+[cuEventRecord failed]
+The call to cuEventRecord failed. This is a unrecoverable error and will
+cause the program to abort.
+  Hostname:                     %s
+  cuEventRecord return value:   %d
+Check the cuda.h file for what the return value means.
+#
+[cuEventQuery failed]
+The call to cuEventQuery failed. This is a unrecoverable error and will
+cause the program to abort.
+  cuEventQuery return value:   %d
+Check the cuda.h file for what the return value means.
+#
+[cuIpcGetEventHandle failed]
+The call to cuIpcGetEventHandle failed. This is a unrecoverable error and will
+cause the program to abort.
+  cuIpcGetEventHandle return value:   %d
+Check the cuda.h file for what the return value means.
+#
+[cuIpcOpenEventHandle failed]
+The call to cuIpcOpenEventHandle failed. This is a unrecoverable error and will
+cause the program to abort.
+  cuIpcOpenEventHandle return value:   %d
+Check the cuda.h file for what the return value means.
+#
+[cuStreamWaitEvent failed]
+The call to cuStreamWaitEvent failed. This is a unrecoverable error and will
+cause the program to abort.
+  cuStreamWaitEvent return value:   %d
+Check the cuda.h file for what the return value means.
+#
+[cuEventDestroy failed]
+The call to cuEventDestory failed. This is a unrecoverable error and will
+cause the program to abort.
+  cuEventDestory return value:   %d
+Check the cuda.h file for what the return value means.
+#
+[cuStreamCreate failed]
+The call to cuStreamCreate failed.  This is a unrecoverable error and will
+cause the program to abort.
+  Hostname:                      %s
+  cuStreamCreate return value:   %d
+Check the cuda.h file for what the return vale means.
+#
+[dlopen disabled]
+Open MPI was compiled without dynamic library support (e.g., with the
+ --disable-dlopen flag), and therefore cannot utilize CUDA support.
+
+If you need CUDA support, reconfigure Open MPI with dynamic library support enabled.
+#
+[dlopen failed]
+The library attempted to open the following supporting CUDA libraries,
+but each of them failed.  CUDA-aware support is disabled.
+%s
+If you are not interested in CUDA-aware support, then run with
+--mca opal_warn_on_missing_libcuda 0 to suppress this message.  If you are interested
+in CUDA-aware support, then try setting LD_LIBRARY_PATH to the location
+of libcuda.so.1 to get passed this issue.
+#
+[dlsym failed]
+An error occurred while trying to map in the address of a function.
+  Function Name: %s
+  Error string:  %s
+CUDA-aware support is disabled.
+#
+[bufferID failed]
+An error occurred while trying to get the BUFFER_ID of a GPU memory
+region.  This could cause incorrect results.  Turn of GPU Direct RDMA
+support by running with --mca btl_openib_cuda_want_gdr_support 0.
+  Hostname:                             %s
+  cuPointerGetAttribute return value:   %d
+Check the cuda.h file for what the return value means.
+[cuPointerSetAttribute failed]
+The call to cuPointerSetAttribute with CU_POINTER_ATTRIBUTE_SYNC_MEMOPS
+failed. This is highly unusual and should not happen.  The program will
+continue, but report this error to the Open MPI developers.
+  Hostname:                             %s
+  cuPointerSetAttribute return value:   %d
+  Address:                              %p
+Check the cuda.h file for what the return value means.
+#
+[cuStreamSynchronize failed]
+The call to cuStreamSynchronize failed. This is highly unusual and should
+not happen.  Please report this error to the Open MPI developers.
+  Hostname:                             %s
+  cuStreamSynchronize return value:     %d
+Check the cuda.h file for what the return value means.
+#
+[cuMemcpy failed]
+The call to cuMemcpy failed. This is highly unusual and should
+not happen.  Please report this error to the Open MPI developers.
+  Hostname:                  %s
+  cuMemcpy return value:     %d
+Check the cuda.h file for what the return value means.
+#
+[No memory]
+A call to allocate memory within the CUDA support failed.  This is
+an unrecoverable error and will cause the program to abort.
+  Hostname:  %s

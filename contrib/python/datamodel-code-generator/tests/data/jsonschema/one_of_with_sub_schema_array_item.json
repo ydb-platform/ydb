@@ -1,0 +1,25 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "SpatialPlan",
+  "type": "object",
+  "properties": {
+    "officialDocument": {
+      "title": "officialDocument",
+      "description": "Link to the official documents that relate to the spatial plan.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "format": "uri"
+          },
+          "uniqueItems": true
+        }
+      ]
+    }
+  }
+}

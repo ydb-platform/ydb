@@ -1,0 +1,407 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     LicenseRef-scancode-unknown-license-reference 23fb678d66d18fad83e737bb300131e7
+BELONGS ya.make
+    License text:
+        See LICENSE.txt for license information.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        include/ncexhash.h [3:3]
+        libdispatch/ddispatch.c [3:3]
+        libdispatch/dglobal.c [3:3]
+        libdispatch/ncexhash.c [3:3]
+        libdispatch/nchashmap.c [3:3]
+
+KEEP     Hdf5                 2d84545c7c9d820dd2538c97e261211f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-hdf5
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://bitbucket.hdfgroup.org/projects/HDFFV/repos/hdf5/browse/COPYING?raw, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/hdf5.LICENSE
+    Files with this license:
+        include/netcdf_filter_build.h [8:13]
+        include/netcdf_filter_hdf5_build.h [8:13]
+
+KEEP     BSD-3-Clause         320292500326ddf98ba956d04677b727
+BELONGS ya.make
+FILE_INCLUDE COPYRIGHT found in files: COPYRIGHT at line 11
+FILE_INCLUDE libncpoco/COPYRIGHT found in files: COPYRIGHT at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYRIGHT [3:11]
+
+KEEP     MIT                  3384baf96992baa9e96645826880ac27
+BELONGS ya.make
+FILE_INCLUDE COPYRIGHT found in files: libdispatch/utf8proc.c at line 19
+FILE_INCLUDE libncpoco/COPYRIGHT found in files: libdispatch/utf8proc.c at line 19
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        libdispatch/utf8proc.c [6:22]
+
+KEEP     MIT                  4372cff0d21afdacf852b4c78b18140d
+BELONGS ya.make
+FILE_INCLUDE COPYRIGHT found in files: libdispatch/utf8proc.h at line 18
+FILE_INCLUDE libncpoco/COPYRIGHT found in files: libdispatch/utf8proc.h at line 18
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        libdispatch/utf8proc.h [5:21]
+
+KEEP     LicenseRef-scancode-unknown-license-reference 4917bfe90312890fc7260f800a895062
+BELONGS ya.make
+FILE_INCLUDE COPYRIGHT found in files: libsrc/ncx.m4 at line 10
+FILE_INCLUDE libncpoco/COPYRIGHT found in files: libsrc/ncx.m4 at line 10
+    License text:
+         *  See COPYRIGHT notice in top-level directory.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 22.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        libsrc/ncx.m4 [10:10]
+
+KEEP     BSD-3-Clause         4c4a6f1e34b509503eaaa6795335cd97
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        RELEASE_NOTES.md [650:650]
+        RELEASE_NOTES.md [659:659]
+
+KEEP     Public-Domain        4f1fe8159202f044650a04f00bc590ca
+BELONGS ya.make
+    License text:
+        if SELF_TEST is defined.  You can use this free for any purpose.  It's in
+        the public domain.  It has no warranty.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 94.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        libsrc/lookup3.c [19:20]
+
+KEEP     BSD-3-Clause         6daffccbe81cc81cf1b75435c1342138
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        libdispatch/dmissing.c [131:153]
+
+KEEP     Public-Domain        6f73b312395754a90fe2614a46eb72b4
+BELONGS ya.make
+FILE_INCLUDE libsrc/lookup3.c found in files: libsrc/lookup3.c at line 3
+    License text:
+        lookup3.c, by Bob Jenkins, May 2006, Public Domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libsrc/lookup3.c [3:3]
+
+KEEP     GPL-3.0-or-later AND Bison-exception-2.2 705ef661452b55b1550628d44060da41
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        libdap2/dcetab.c [1:32]
+        oc2/dapy.c [1:32]
+    Scancode info:
+        Original SPDX id: Bison-exception-2.2
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/Bison-exception-2.2
+    Files with this license:
+        libdap2/dcetab.c [1:32]
+        oc2/dapy.c [1:32]
+
+KEEP     NetCDF               73c3ca00bba00660e5361c4110d4b4f8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NetCDF
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.unidata.ucar.edu/software/netcdf/copyright.html, https://spdx.org/licenses/NetCDF
+    Files with this license:
+        libncpoco/COPYRIGHT [8:36]
+
+KEEP     Zlib                 80da36940a8720c44bb9ca59672dd123
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        libncxml/tinyxml2.cpp [4:21]
+        libncxml/tinyxml2.h [4:21]
+
+KEEP     NetCDF               8a3fac1280b3dd357b3b1ea1697cd18b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NetCDF
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.unidata.ucar.edu/software/netcdf/copyright.html, https://spdx.org/licenses/NetCDF
+    Files with this license:
+        include/nc3dispatch.h [4:31]
+
+KEEP     BSD-3-Clause         8b44347166d53381f75f3019efcacc9b
+BELONGS ya.make
+    License text:
+        license: BSD-3-Clause
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        CITATION.cff [47:47]
+
+KEEP     Hdf5                 8cd8c735d910d80318b6c6a617b0adbf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-hdf5
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://bitbucket.hdfgroup.org/projects/HDFFV/repos/hdf5/browse/COPYING?raw, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/hdf5.LICENSE
+    Files with this license:
+        libhdf5/nc4mem.c [11:16]
+        libhdf5/nc4memcb.c [11:16]
+
+KEEP     NetCDF               9a11926cd92bfc7664e41100be010591
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NetCDF
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.unidata.ucar.edu/software/netcdf/copyright.html, https://spdx.org/licenses/NetCDF
+    Files with this license:
+        libdap2/ncd2dispatch.h [4:31]
+
+KEEP     Zlib                 aa58f308323ed48be51ebc4b5d89fdbf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        libdispatch/dcrc32.c [6:23]
+
+KEEP     BSD-3-Clause         b81b7aa97cd42e904ed6e5f81ea30d6d
+BELONGS ya.make
+FILE_INCLUDE COPYRIGHT found in files: oc2/xxdr.c at line 19, oc2/xxdr.c at line 22, oc2/xxdr.h at line 20, oc2/xxdr.h at line 23
+FILE_INCLUDE libncpoco/COPYRIGHT found in files: oc2/xxdr.c at line 19, oc2/xxdr.c at line 22, oc2/xxdr.h at line 20, oc2/xxdr.h at line 23
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        oc2/xxdr.c [8:29]
+        oc2/xxdr.h [9:30]
+
+KEEP     LicenseRef-scancode-unknown-license-reference c5ec6a4aee89192fa327d6867ac094cd
+BELONGS ya.make
+    License text:
+        szip documents for the license agreement to see how it applies to your
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        INSTALL.md [133:133]
+
+KEEP     Hdf5                 c6c4a9490b3ca15ff614253d46e0f3b4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-hdf5
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://bitbucket.hdfgroup.org/projects/HDFFV/repos/hdf5/browse/COPYING?raw, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/hdf5.LICENSE
+    Files with this license:
+        libhdf5/H5FDhttp.c [10:15]
+        libhdf5/H5FDhttp.h [10:15]
+
+KEEP     GPL-3.0-or-later AND Bison-exception-2.2 c77482e4a9af37fd1ed4ec8eb32e2c2c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        libdap2/dcetab.h [1:32]
+        oc2/dapy.h [1:32]
+    Scancode info:
+        Original SPDX id: Bison-exception-2.2
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/Bison-exception-2.2
+    Files with this license:
+        libdap2/dcetab.h [1:32]
+        oc2/dapy.h [1:32]
+
+KEEP     Zlib                 d5b94f8908ad88e2410213b0e494716d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        libdispatch/dcrc64.c [7:21]
+
+KEEP     LicenseRef-scancode-unknown-license-reference d7ea964bd3069afa7b13083a6aaaa369
+BELONGS ya.make
+    License text:
+          See LICENSE.txt for license information.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        libdispatch/ncindex.c [3:3]
+        libdispatch/ncxcache.c [3:3]
+
+KEEP     LicenseRef-scancode-free-unknown e26217fa1b7b709cdb6979bf04ccaf6e
+BELONGS ya.make
+    License text:
+         * utf8proc is a free/open-source (MIT/expat licensed) C library
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        libdispatch/utf8proc.h [28:28]
+
+KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        libdispatch/dmissing.c [67:77]
+
+KEEP     Zlib                 f105e95eefda9be95681307aa51879f0
+BELONGS ya.make
+    License text:
+         * For conditions of distribution and use, see copyright notice in zlib.h
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        libdispatch/dcrc32.c [33:33]
+        libdispatch/dcrc32.c [50:50]
+
+KEEP     BSL-1.0              f234fd730d0c8a546fe81d74fd9e6903
+BELONGS ya.make
+FILE_INCLUDE COPYRIGHT found in files: libncpoco/README.md at line 125
+FILE_INCLUDE libncpoco/COPYRIGHT found in files: libncpoco/README.md at line 125
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        libncpoco/README.md [106:128]
+
+KEEP     Hdf5                 f9412baed80b77e0c341d719dfc22af7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-hdf5
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://bitbucket.hdfgroup.org/projects/HDFFV/repos/hdf5/browse/COPYING?raw, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/hdf5.LICENSE
+    Files with this license:
+        libdispatch/daux.c [11:18]
+        libdispatch/doffsets.c [12:19]

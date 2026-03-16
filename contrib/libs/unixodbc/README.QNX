@@ -1,0 +1,70 @@
+Building unixODBC on QNX
+========================
+
+This has been tested on the QNX 6.1 x86 release.
+
+1. unpack the distribution, and cd into the distribution dir
+
+2. Add any missing files
+
+	automake --add-missing
+
+3. Configure unixODBC
+	
+	./configure --sysconfdir=/etc --enable-gui=no --prefix=/opt
+
+4. run libtooloze using the QNX version of libtool, then update aclocal.m4
+
+	libtoolize --force
+	aclocal
+
+5. We now need to alter the flags dlopen uses
+
+	cd libltdl
+	sed "s/RTLD_GLOBAL/RTLD_GROUP/" ltdl.c > ltdl.c.new
+	sed "s/RTLD_LAZY/RTLD_NOW/" ltdl.c.new > ltdl.c
+	cd ..
+
+6. Force a reconfigure
+
+	rm config.cache
+
+7. Make, then install
+
+	make
+	make install
+
+And with luck and a trailing wind, that should be that.
+
+EXTRA STUFF for QNX 6.2, if the wind is head on...
+
+If you find that it segfaults, its worth going into the libltdl
+directory, editing the Makefile, and changing the line
+
+CFLAGS = -g -O2
+
+to 
+
+CFLAGS = -g -O2 -DPIC -fPIC
+
+then touch ltdl.c to force a rebuild
+
+You may also get a error when building in the exe directory, to
+fix this, go to the exe directory, edit Makefile, and change
+
+OBJEXT = @OBJEXT@
+
+to 
+
+OBJEXT = o
+
+And
+
+EXEEXT = @EXEEXT@
+
+to
+
+EXEEXT =
+
+
+

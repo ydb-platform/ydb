@@ -1,0 +1,4 @@
+requirements:
+  - pymongo: contrib/deprecated/python/pymongo
+keep:
+  - tests/docker-compose.yml

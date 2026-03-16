@@ -1,0 +1,82 @@
+description %global
+
+
+qos profile *
+    ~ %global
+
+username * ssh-key
+username *                %logic=arista.aaa.user
+
+aaa group ~
+    ~ %global
+
+
+role *
+    ~ %global
+
+
+vrf instance *
+    ~ %global
+
+
+interface *               %logic=arista.iface.permanent
+    no switchport
+    description *
+    channel-group *
+    lacp rate *
+    service-profile *
+    ~ %global
+
+
+ip access-list standard *
+    *                       %logic=common.undo_redo
+
+ipv6 access-list standard *
+    *                       %logic=common.undo_redo
+
+ipv6 access-list *
+    *                       %logic=common.undo_redo
+
+
+# ios-like way of configuring prefix lists
+# should be kept above a eos-native one in arista.rul
+# since beginnig of commands are the same
+# if you use it keep all prefix lists in this format
+
+ip prefix-list * seq *    %logic=common.undo_redo
+ipv6 prefix-list * seq *  %logic=common.undo_redo
+
+
+# arista eos native way of configuring prefix lists
+# should be below to not collide with ios-like one
+# only one format is supported at the time for one family
+# prefer this one over the ios-like one
+
+ip prefix-list *
+    seq *                 %logic=common.undo_redo
+
+ipv6 prefix-list *
+    seq *                 %logic=common.undo_redo
+
+
+route-map * * *
+    ~ %global
+
+router bfd
+    ~ %global
+
+
+router bgp *
+    no bgp default *
+    neighbor * maximum-routes
+    ! no neighbor * shutdown
+    ~ %global
+
+ip load-sharing trident fields *              %logic=common.default_instead_undo
+
+management *
+    ~ %global
+
+
+no ~ %global
+~ %global

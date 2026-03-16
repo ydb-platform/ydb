@@ -1,0 +1,115 @@
+PY3_LIBRARY()
+
+LICENSE(MIT)
+
+VERSION(4.1.1)
+
+PY_SRCS(
+    NAMESPACE mkdocs.themes.material
+    material/__init__.py
+)
+
+RESOURCE_FILES(
+    PREFIX mkdocs_theme/
+    material.dist-info/METADATA
+    material.dist-info/entry_points.txt
+)
+
+RESOURCE_FILES(
+    PREFIX mkdocs/themes/material/
+    material/404.html
+    material/base.html
+    material/main.html
+    material/mkdocs_theme.yml
+    material/assets/fonts/font-awesome.css
+    material/assets/fonts/material-icons.css
+    material/assets/fonts/specimen/FontAwesome.ttf
+    material/assets/fonts/specimen/FontAwesome.woff
+    material/assets/fonts/specimen/FontAwesome.woff2
+    material/assets/fonts/specimen/MaterialIcons-Regular.ttf
+    material/assets/fonts/specimen/MaterialIcons-Regular.woff
+    material/assets/fonts/specimen/MaterialIcons-Regular.woff2
+    material/assets/images/favicon.png
+    material/assets/images/icons/bitbucket.1b09e088.svg
+    material/assets/images/icons/github.f0b8504a.svg
+    material/assets/images/icons/gitlab.6dd19c00.svg
+    material/assets/javascripts/application.a2d64bb6.js
+    material/assets/javascripts/modernizr.01ccdecf.js
+    material/assets/javascripts/lunr/lunr.da.js
+    material/assets/javascripts/lunr/lunr.de.js
+    material/assets/javascripts/lunr/lunr.du.js
+    material/assets/javascripts/lunr/lunr.es.js
+    material/assets/javascripts/lunr/lunr.fi.js
+    material/assets/javascripts/lunr/lunr.fr.js
+    material/assets/javascripts/lunr/lunr.hu.js
+    material/assets/javascripts/lunr/lunr.it.js
+    material/assets/javascripts/lunr/lunr.ja.js
+    material/assets/javascripts/lunr/lunr.jp.js
+    material/assets/javascripts/lunr/lunr.multi.js
+    material/assets/javascripts/lunr/lunr.nl.js
+    material/assets/javascripts/lunr/lunr.no.js
+    material/assets/javascripts/lunr/lunr.pt.js
+    material/assets/javascripts/lunr/lunr.ro.js
+    material/assets/javascripts/lunr/lunr.ru.js
+    material/assets/javascripts/lunr/lunr.stemmer.support.js
+    material/assets/javascripts/lunr/lunr.sv.js
+    material/assets/javascripts/lunr/lunr.th.js
+    material/assets/javascripts/lunr/lunr.tr.js
+    material/assets/javascripts/lunr/tinyseg.js
+    material/assets/javascripts/lunr/wordcut.js
+    material/assets/stylesheets/application-palette.224b79ff.css
+    material/assets/stylesheets/application.3020aac5.css
+    material/partials/footer.html
+    material/partials/header.html
+    material/partials/hero.html
+    material/partials/language.html
+    material/partials/nav-item.html
+    material/partials/nav.html
+    material/partials/palette.html
+    material/partials/search.html
+    material/partials/social.html
+    material/partials/source.html
+    material/partials/tabs-item.html
+    material/partials/tabs.html
+    material/partials/toc-item.html
+    material/partials/toc.html
+    material/partials/language/ar.html
+    material/partials/language/ca.html
+    material/partials/language/cs.html
+    material/partials/language/da.html
+    material/partials/language/de.html
+    material/partials/language/en.html
+    material/partials/language/es.html
+    material/partials/language/fa.html
+    material/partials/language/fi.html
+    material/partials/language/fr.html
+    material/partials/language/gl.html
+    material/partials/language/gr.html
+    material/partials/language/he.html
+    material/partials/language/hi.html
+    material/partials/language/hr.html
+    material/partials/language/hu.html
+    material/partials/language/id.html
+    material/partials/language/it.html
+    material/partials/language/ja.html
+    material/partials/language/kr.html
+    material/partials/language/nl.html
+    material/partials/language/no.html
+    material/partials/language/pl.html
+    material/partials/language/pt.html
+    material/partials/language/ru.html
+    material/partials/language/sh.html
+    material/partials/language/sk.html
+    material/partials/language/sr.html
+    material/partials/language/sv.html
+    material/partials/language/tr.html
+    material/partials/language/uk.html
+    material/partials/language/vi.html
+    material/partials/language/zh-Hant.html
+    material/partials/language/zh-TW.html
+    material/partials/language/zh.html
+)
+
+NO_LINT()
+
+END()

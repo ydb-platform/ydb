@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package temporal.api.enums.v1;
+
+option go_package = "go.temporal.io/api/enums/v1;enums";
+option java_package = "io.temporal.api.enums.v1";
+option java_multiple_files = true;
+option java_outer_classname = "BatchOperationProto";
+option ruby_package = "Temporalio::Api::Enums::V1";
+option csharp_namespace = "Temporalio.Api.Enums.V1";
+
+enum BatchOperationType {
+  BATCH_OPERATION_TYPE_UNSPECIFIED = 0;
+  BATCH_OPERATION_TYPE_TERMINATE = 1;
+  BATCH_OPERATION_TYPE_CANCEL = 2;
+  BATCH_OPERATION_TYPE_SIGNAL = 3;
+  BATCH_OPERATION_TYPE_DELETE = 4;
+  BATCH_OPERATION_TYPE_RESET = 5;
+  BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS = 6;
+  BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY = 7;
+  BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS = 8;
+  BATCH_OPERATION_TYPE_RESET_ACTIVITY = 9;
+}
+
+enum BatchOperationState {
+  BATCH_OPERATION_STATE_UNSPECIFIED = 0;
+  BATCH_OPERATION_STATE_RUNNING = 1;
+  BATCH_OPERATION_STATE_COMPLETED = 2;
+  BATCH_OPERATION_STATE_FAILED = 3;
+}

@@ -1,0 +1,7 @@
+<div class="{% if error %}{{ field.error_class }}{% endif %}">
+    <textarea id="{{ field.id }}" name="{{ field.id }}" data-bs-toggle="autosize" class="{{ field.class_ }}{% if error %} {{ field.error_class }}{% endif %}" {{ field.input_params() | safe }}>{% if data -%}{{ data }}{% endif %}</textarea>
+    {% if field.help_text -%}
+        <small class="form-hint">{{ field.help_text }}</small>
+    {% endif -%}
+</div>
+{% include "forms/_error.html" %}

@@ -1,0 +1,10 @@
+--- contrib/python/pycollada/collada/tests/test_collada.py	(index)
++++ contrib/python/pycollada/collada/tests/test_collada.py	(working tree)
+@@ -17,1 +17,1 @@ class TestCollada(unittest.TestCase):
+-        self.datadir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data")
++        self.datadir = os.path.join(os.getcwd(), "data")
+--- contrib/python/pycollada/collada/tests/test_material.py	(index)
++++ contrib/python/pycollada/collada/tests/test_material.py	(working tree)
+@@ -105,1 +105,1 @@ class TestMaterial(unittest.TestCase):
+-        data_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data")
++        data_dir = os.path.join(os.getcwd(), "data")

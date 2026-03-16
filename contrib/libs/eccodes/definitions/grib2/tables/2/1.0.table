@@ -1,0 +1,7 @@
+# Code Table 1.0: GRIB Master Tables Version Number
+0 0 Experimental
+1 1 Initial operational version number
+2 2 Previous operational version number
+3 3 Current operational version number implemented on 2 November 2005
+# 4-254 Future operational version numbers
+255 255 Missing

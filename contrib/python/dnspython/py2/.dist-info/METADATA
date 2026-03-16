@@ -1,0 +1,44 @@
+Metadata-Version: 2.0
+Name: dnspython
+Version: 1.16.0
+Summary: DNS toolkit
+Home-page: http://www.dnspython.org
+Author: Bob Halley
+Author-email: halley@dnspython.org
+License: BSD-like
+Download-URL: http://www.dnspython.org/kits/1.16.0/dnspython-1.16.0.tar.gz
+Description-Content-Type: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: Freeware
+Classifier: Operating System :: Microsoft :: Windows :: Windows 95/98/2000
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python
+Classifier: Topic :: Internet :: Name Service (DNS)
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Provides: dns
+Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*
+Provides-Extra: DNSSEC
+Requires-Dist: pycryptodome; extra == 'DNSSEC'
+Requires-Dist: ecdsa (>=0.13); extra == 'DNSSEC'
+Provides-Extra: IDNA
+Requires-Dist: idna (>=2.1); extra == 'IDNA'
+
+dnspython is a DNS toolkit for Python. It supports almost all
+record types. It can be used for queries, zone transfers, and dynamic
+updates.  It supports TSIG authenticated messages and EDNS0.
+
+dnspython provides both high and low level access to DNS. The high
+level classes perform queries for data of a given name, type, and
+class, and return an answer set.  The low level classes allow
+direct manipulation of DNS zones, messages, names, and records.
+

@@ -1,0 +1,168 @@
+syntax = "proto3";
+
+package yandex.cloud.spark.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/spark/v1;spark";
+option java_package = "yandex.cloud.api.spark.v1";
+
+// Spark job.
+message Job {
+  // Required. Unique ID of the Spark job.
+  // This ID is assigned by MDB in the process of creating Spark job.
+  string id = 1;
+
+  // Required. Unique ID of the Spark cluster.
+  string cluster_id = 2;
+
+  // The time when the Spark job was created.
+  google.protobuf.Timestamp created_at = 3;
+
+  // The time when the Spark job was started.
+  google.protobuf.Timestamp started_at = 4;
+
+  // The time when the Spark job was finished.
+  google.protobuf.Timestamp finished_at = 5;
+
+  // Name of the Spark job.
+  string name = 6;
+
+  // The id of the user who created the job
+  string created_by = 7;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Job created and is waiting to acquire.
+    PROVISIONING = 1;
+
+    // Job acquired and is waiting for execution.
+    PENDING = 2;
+
+    // Job is running.
+    RUNNING = 3;
+
+    // Job failed.
+    ERROR = 4;
+
+    // Job finished.
+    DONE = 5;
+
+    // Job cancelled.
+    CANCELLED = 6;
+
+    // Job is waiting for cancellation.
+    CANCELLING = 7;
+  }
+  // Status.
+  Status status = 8;
+
+  // Job specification.
+  oneof job_spec {
+    SparkJob spark_job = 9;
+    PysparkJob pyspark_job = 10;
+    SparkConnectJob spark_connect_job = 20;
+  }
+
+  reserved 11;
+
+  // Spark UI Url.
+  string ui_url = 12;
+
+  // Service account used to access Cloud resources.
+  string service_account_id = 13;
+
+  // Spark Connect Url.
+  string connect_url = 14;
+
+  reserved 15 to 19;
+}
+
+message SparkJob {
+  // Optional arguments to pass to the driver.
+  repeated string args = 1;
+
+  // Jar file URIs to add to the CLASSPATHs of the Spark driver and tasks.
+  repeated string jar_file_uris = 2;
+
+  // URIs of files to be copied to the working directory of Spark drivers and distributed tasks.
+  repeated string file_uris = 3;
+
+  // URIs of archives to be extracted in the working directory of Spark drivers and tasks.
+  repeated string archive_uris = 4;
+
+  // A mapping of property names to values, used to configure Spark.
+  map<string, string> properties = 5;
+
+  // URI of the jar file containing the main class.
+  string main_jar_file_uri = 6;
+
+  // The name of the driver's main class.
+  string main_class = 7;
+
+  // List of maven coordinates of jars to include on the driver and executor classpaths.
+  repeated string packages = 8;
+
+  // List of additional remote repositories to search for the maven coordinates given with --packages.
+  repeated string repositories = 9;
+
+  // List of groupId:artifactId, to exclude while resolving the dependencies provided in --packages to avoid dependency conflicts.
+  repeated string exclude_packages = 10;
+}
+
+
+message SparkConnectJob {
+  // Jar file URIs to add to the CLASSPATHs of the Spark driver and tasks.
+  repeated string jar_file_uris = 1;
+
+  // URIs of files to be copied to the working directory of Spark drivers and distributed tasks.
+  repeated string file_uris = 2;
+
+  // URIs of archives to be extracted in the working directory of Spark drivers and tasks.
+  repeated string archive_uris = 3;
+
+  // A mapping of property names to values, used to configure Spark.
+  map<string, string> properties = 4;
+
+  // List of maven coordinates of jars to include on the driver and executor classpaths.
+  repeated string packages = 5;
+
+  // List of additional remote repositories to search for the maven coordinates given with --packages.
+  repeated string repositories = 6;
+
+  // List of groupId:artifactId, to exclude while resolving the dependencies provided in --packages to avoid dependency conflicts.
+  repeated string exclude_packages = 7;
+}
+
+message PysparkJob {
+  // Optional arguments to pass to the driver.
+  repeated string args = 1;
+
+  // Jar file URIs to add to the CLASSPATHs of the Spark driver and tasks.
+  repeated string jar_file_uris = 2;
+
+  // URIs of files to be copied to the working directory of Spark drivers and distributed tasks.
+  repeated string file_uris = 3;
+
+  // URIs of archives to be extracted in the working directory of Spark drivers and tasks.
+  repeated string archive_uris = 4;
+
+  // A mapping of property names to values, used to configure Spark.
+  map<string, string> properties = 5;
+
+  // URI of the main Python file to use as the driver. Must be a .py file.
+  string main_python_file_uri = 6;
+
+  // URIs of Python files to pass to the PySpark framework.
+  repeated string python_file_uris = 7;
+
+  // List of maven coordinates of jars to include on the driver and executor classpaths.
+  repeated string packages = 8;
+
+  // List of additional remote repositories to search for the maven coordinates given with --packages.
+  repeated string repositories = 9;
+
+  // List of groupId:artifactId, to exclude while resolving the dependencies provided in --packages to avoid dependency conflicts.
+  repeated string exclude_packages = 10;
+}

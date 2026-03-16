@@ -1,0 +1,127 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Simon Charette <charette.s@gmail.com>, 2010.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2010-10-01 20:56-0400\n"
+"PO-Revision-Date: 2011-09-21 16:31-0400\n"
+"Last-Translator: Etienne Desautels <etienne.desautels@gmail.com>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: admin.py:143 templates/reversion/change_list.html:7
+#: templates/reversion/recover_form.html:10
+#: templates/reversion/recover_list.html:10
+#, python-format
+msgid "Recover deleted %(name)s"
+msgstr "Récupérer %(name)s supprimés"
+
+#: admin.py:123
+#, python-format
+msgid "Deleted %(verbose_name)s."
+msgstr "Supprimé %(verbose_name)s."
+
+#: admin.py:252
+#, python-format
+msgid "Reverted to previous version, saved on %(datetime)s"
+msgstr "Restauré depuis une version précédente, sauvée le %(datetime)s"
+
+#: admin.py:254
+#, python-format
+msgid ""
+"The %(model)s \"%(name)s\" was reverted successfully. You may edit it again "
+"below."
+msgstr ""
+"L’élément %(model)s \"%(name)s\" a été restauré avec succès. Vous pouvez "
+"l’éditer à nouveau."
+
+#: admin.py:337
+#, python-format
+msgid "Recover %(name)s"
+msgstr "Récupérer %(name)s"
+
+#: admin.py:349
+#, python-format
+msgid "Revert %(name)s"
+msgstr "Restaurer %(name)s"
+
+#: admin.py:111
+msgid "Initial version."
+msgstr "Version initiale."
+
+#: templates/reversion/object_history.html:8
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr "Choisissez une date dans la liste ci-dessous afin de restaurer "
+"une version précédente de cet élément."
+
+#: templates/reversion/object_history.html:15
+#: templates/reversion/recover_list.html:23
+msgid "Date/time"
+msgstr "Date/heure"
+
+#: templates/reversion/object_history.html:16
+msgid "User"
+msgstr "Utilisateur"
+
+#: templates/reversion/object_history.html:17
+msgid "Comment"
+msgstr "Commentaire"
+
+#: admin.py:252 templates/reversion/object_history.html:23
+#: templates/reversion/recover_list.html:30
+msgid "DATETIME_FORMAT"
+msgstr "j F Y H:i:s"
+
+#: templates/reversion/object_history.html:36
+msgid ""
+"This object doesn't have a change history. It probably wasn't added via this "
+"admin site."
+msgstr ""
+"Cet élément ne possède pas d’historique de modifications. Il n’a "
+"probablement pas été ajouté à partir de ce site d’administration."
+
+#: templates/reversion/recover_form.html:7
+#: templates/reversion/recover_list.html:7
+#: templates/reversion/revision_form.html:7
+msgid "Home"
+msgstr "Accueil"
+
+#: templates/reversion/recover_form.html:17
+msgid "Press the save button below to recover this version of the object."
+msgstr "Cliquez sur le bouton <strong>Enregistrer</strong> ci-dessous afin de "
+"récupérer cet élément."
+
+#: templates/reversion/recover_list.html:17
+msgid ""
+"Choose a date from the list below to recover a deleted version of an object."
+msgstr "Choisissez une date dans la liste ci-dessous afin de récupérer un "
+"élément supprimé."
+
+#: templates/reversion/recover_list.html:37
+msgid "There are no deleted objects to recover."
+msgstr "Il n’y a pas d’éléments supprimés à récupérer."
+
+#: templates/reversion/revision_form.html:11
+msgid "History"
+msgstr "Historique"
+
+#: templates/reversion/revision_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Restaurer %(verbose_name)s"
+
+#: templates/reversion/revision_form.html:25
+msgid "Press the save button below to revert to this version of the object."
+msgstr "Cliquez sur le bouton <strong>Enregistrer</strong> ci-dessous pour "
+"restaurer cette version de l’élément."

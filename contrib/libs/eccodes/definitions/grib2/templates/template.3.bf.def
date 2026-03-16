@@ -1,0 +1,32 @@
+label "BiFourier coefficients";
+constant biFourierCoefficients=1;
+constant isGridded = true;
+
+codetable[1]  spectralType ('3.6.table',masterDir,localDir) = 2 : no_copy;
+alias spectralDataRepresentationType=spectralType;
+
+unsigned[4] biFourierResolutionParameterN : dump;
+
+unsigned[4] biFourierResolutionParameterM : dump;
+
+codetable[1] biFourierTruncationType ('3.25.table',masterDir,localDir) : dump;
+
+#  Lx - Full domain length in X-direction. Size in metres of the domain along x-axis
+unsigned[8] Lx;
+alias geography.LxInMetres = Lx;
+# Lux - Useful domain length in X-direction. Size in metres of model forecast subdomain along x-axis
+unsigned[8] Lux;
+alias geography.LuxInMetres=Lux;
+# Lcx - Coupling domain width in X-direction. Width in metres of coupling area within forecast domain along x-axis
+unsigned[8] Lcx;
+alias geography.LcxInMetres=Lcx;
+
+#  Ly - Full domain length in Y-direction
+unsigned[8] Ly;
+alias geography.LyInMetres=Ly;
+# Luy - Useful domain length in Y-direction
+unsigned[8] Luy;
+alias geography.LuyInMetres=Luy;
+# Lcy - Coupling domain width in Y-direction
+unsigned[8] Lcy;
+alias geography.LcyInMetres=Lcy;

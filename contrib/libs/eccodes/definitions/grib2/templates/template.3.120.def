@@ -1,0 +1,47 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.120, Azimuth-range projection
+
+constant isGridded = true;
+
+# Nb - number of data bins along radials (A data bin is a data point representing the volume centred on it)
+unsigned[4] numberOfDataBinsAlongRadials;
+alias Nb =  numberOfDataBinsAlongRadials;
+
+# Nr - number of radials
+unsigned[4] numberOfRadials;
+alias Nr  = numberOfRadials;
+
+# La1 - latitude of centre point
+signed[4] latitudeOfCentrePoint;
+alias La1 =  latitudeOfCentrePoint;
+meta  geography.latitudeOfCentrePointInDegrees
+        scale(latitudeOfCentrePoint,one,grib2divider,truncateDegrees) : dump;
+alias La1InDegrees=latitudeOfCentrePointInDegrees;
+
+# Lo1 - longitude of centre point
+unsigned[4] longitudeOfCentrePoint;
+alias Lo1 =  longitudeOfCentrePoint;
+meta  geography.longitudeOfCentrePointInDegrees
+        scale(longitudeOfCentrePoint,one,grib2divider,truncateDegrees) : dump;
+alias Lo1InDegrees=longitudeOfCentrePointInDegrees;
+
+# Dx - spacing of bins along radials
+unsigned[4] spacingOfBinsAlongRadials;
+alias Dx  = spacingOfBinsAlongRadials;
+
+# Dstart - offset from origin to inner bound
+unsigned[4] offsetFromOriginToInnerBound;
+alias Dstart =  offsetFromOriginToInnerBound;
+
+include "grib2/templates/template.3.scanning_mode.def"
+
+# Octets 40-(39+4Nr) : For each of Nr radials:
+radials list(numberOfRadials){
+  # Azi - starting azimuth, degrees x 10 (degrees as north)
+  signed[2] startingAzimuth;
+  alias Azi = startingAzimuth;
+  # Adelta - azimuthal width, degrees x 100 (+ clockwise, - counterclockwise)
+  signed[2] azimuthalWidth;
+  alias Adelta = azimuthalWidth;
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "test.json",
+  "description": "test",
+  "type": "object",
+  "required": [
+    "test_id",
+    "test_ip",
+    "result"
+  ],
+  "properties": {
+    "test_id": {
+      "type": "string",
+      "description": "test ID"
+    },
+    "test_ip": {
+      "$ref": "base_test.json#/definitions/first"
+    }
+  }
+}

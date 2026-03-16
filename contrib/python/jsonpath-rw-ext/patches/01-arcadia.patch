@@ -1,0 +1,14 @@
+--- contrib/python/jsonpath-rw-ext/jsonpath_rw_ext/__init__.py	(index)
++++ contrib/python/jsonpath-rw-ext/jsonpath_rw_ext/__init__.py	(working tree)
+@@ -12,9 +12,8 @@
+ # License for the specific language governing permissions and limitations
+ # under the License.
+ 
+-import pbr.version
++import importlib.metadata
+ 
+-__version__ = pbr.version.VersionInfo(
+-    'jsonpath_rw_ext').version_string()
++__version__ = importlib.metadata.version('jsonpath_rw_ext')
+ 
+ from .parser import parse, match, match1  # noqa

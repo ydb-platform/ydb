@@ -1,0 +1,8 @@
+
+The Linux Kernel SCTP Reference Implementation release 0.5.0 is included in
+Linux 2.5 Kernel release 2.5.34 and up.
+
+From release 0.6.0 and on, we will adopt the new build and installation 
+process for lksctp users and developers.  Please check the INSTALL and 
+ROADMAP for more details.
+

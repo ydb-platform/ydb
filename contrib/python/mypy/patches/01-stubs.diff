@@ -1,0 +1,35 @@
+diff --git a/mypy/modulefinder.py b/mypy/modulefinder.py
+index ac6471d..1f43c00 100644
+--- a/mypy/modulefinder.py	(5f72b6751394db4c2e4af65761116abf95c2d431)
++++ b/mypy/modulefinder.py	(working tree)
+@@ -461,8 +461,10 @@ class FindModuleCache:
+             # stubs to avoid picking up backports (dataclasses, for
+             # example) when the library is included in stdlib.
+             candidate_base_dirs += self.find_lib_path_dirs(id, self.search_paths.typeshed_path)
++        # In Arcadia, third-party stubs have high priority
++        candidate_base_dirs += third_party_stubs_dirs
+         candidate_base_dirs += self.find_lib_path_dirs(id, python_mypy_path)
+-        candidate_base_dirs += third_party_stubs_dirs + third_party_inline_dirs
++        candidate_base_dirs += third_party_inline_dirs
+ 
+         # If we're looking for a module like 'foo.bar.baz', then candidate_base_dirs now
+         # contains just the subdirectories 'foo/bar' that actually exist under the
+@@ -478,6 +480,9 @@ class FindModuleCache:
+         near_misses = []  # Collect near misses for namespace mode (see below).
+         for base_dir, verify in candidate_base_dirs:
+             base_path = base_dir + seplast  # so e.g. '/usr/lib/python3.4/foo/bar/baz'
++            if base_dir == '':
++                # The path in binary has no separator at the beginning
++                base_path = components[-1]
+             has_init = False
+             dir_prefix = base_dir
+             for _ in range(len(components) - 1):
+@@ -839,7 +844,7 @@ def compute_search_paths(
+     return SearchPaths(
+         python_path=tuple(reversed(python_path)),
+         mypy_path=tuple(mypypath),
+-        package_path=tuple(sys_path + site_packages),
++        package_path=tuple([''] + sys_path + site_packages),
+         typeshed_path=tuple(lib_path),
+     )
+ 

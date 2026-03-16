@@ -1,0 +1,5 @@
+alias mars.iteration  = iterationNumber;
+alias mars.diagnostic = diagnosticNumber;
+alias mars.domain = globalDomain;
+
+

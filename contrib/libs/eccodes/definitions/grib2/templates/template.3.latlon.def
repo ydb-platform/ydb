@@ -1,0 +1,75 @@
+# (C) Copyright 2005- ECMWF.
+
+include "grib2/templates/template.3.grid.def"
+
+# Di - i direction increment
+unsigned[4] iDirectionIncrement : can_be_missing,edition_specific;
+alias Di = iDirectionIncrement;
+alias Dx = iDirectionIncrement;
+
+# Dj - j direction increment
+unsigned[4] jDirectionIncrement : can_be_missing,edition_specific;
+alias Dj = jDirectionIncrement;
+alias Dy = jDirectionIncrement;
+
+include "grib2/templates/template.3.scanning_mode.def"
+
+meta g2grid g2grid(
+  latitudeOfFirstGridPoint,
+  longitudeOfFirstGridPoint,
+  latitudeOfLastGridPoint,
+  longitudeOfLastGridPoint,
+  iDirectionIncrement,
+  jDirectionIncrement,
+  basicAngleOfTheInitialProductionDomain,
+  subdivisionsOfBasicAngle
+);
+
+meta geography.latitudeOfFirstGridPointInDegrees    g2latlon(g2grid,0) : dump;
+meta geography.longitudeOfFirstGridPointInDegrees   g2latlon(g2grid,1) : dump;
+meta geography.latitudeOfLastGridPointInDegrees     g2latlon(g2grid,2) : dump;
+meta geography.longitudeOfLastGridPointInDegrees    g2latlon(g2grid,3) : dump;
+
+alias xFirst=longitudeOfFirstGridPointInDegrees;
+alias yFirst=latitudeOfFirstGridPointInDegrees;
+alias xLast=longitudeOfLastGridPointInDegrees;
+alias yLast=latitudeOfLastGridPointInDegrees;
+
+meta geography.iDirectionIncrementInDegrees    g2latlon(g2grid,4,
+  iDirectionIncrementGiven) : can_be_missing,dump;
+
+meta geography.jDirectionIncrementInDegrees    g2latlon(g2grid,5,
+  jDirectionIncrementGiven) : can_be_missing,dump;
+
+alias latitudeFirstInDegrees  = latitudeOfFirstGridPointInDegrees;
+alias longitudeFirstInDegrees = longitudeOfFirstGridPointInDegrees;
+alias latitudeLastInDegrees   = latitudeOfLastGridPointInDegrees;
+alias longitudeLastInDegrees  = longitudeOfLastGridPointInDegrees;
+alias DiInDegrees = iDirectionIncrementInDegrees;
+alias DxInDegrees = iDirectionIncrementInDegrees;
+alias DjInDegrees = jDirectionIncrementInDegrees;
+alias DyInDegrees = jDirectionIncrementInDegrees;
+
+_if ( missing(Ni) && PLPresent == 1 ) {
+  iterator latlon_reduced(numberOfPoints,missingValue,values,
+      latitudeFirstInDegrees,longitudeFirstInDegrees,
+      latitudeLastInDegrees,longitudeLastInDegrees,
+      Nj,DjInDegrees,pl);
+  nearest latlon_reduced(values,radius,Nj,pl,longitudeFirstInDegrees,longitudeLastInDegrees);
+} else {
+  transient iteratorDisableUnrotate = 0 : hidden; # ECC-808
+  iterator latlon(numberOfPoints,missingValue,values,
+      longitudeFirstInDegrees,DiInDegrees  ,
+      Ni,Nj,iScansNegatively,
+      latitudeFirstInDegrees, DjInDegrees,
+      jScansPositively, jPointsAreConsecutive,
+      isRotatedGrid, angleOfRotation,
+      latitudeOfSouthernPoleInDegrees,longitudeOfSouthernPoleInDegrees);
+  nearest regular(values,radius,Ni,Nj);
+}
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);

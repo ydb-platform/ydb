@@ -1,0 +1,157 @@
+{% extends "admin/base_site.html" %}
+
+<!-- LOADING -->
+{% load static i18n l10n fb_tags fb_compat %}
+
+<!-- STYLESHEETS -->
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" type="text/css" href="{% static "admin/css/forms.css" %}" />
+    <link rel="stylesheet" type="text/css" href="{% static "filebrowser/css/filebrowser.css" %}" />
+{% endblock %}
+
+<!-- JAVASCRIPTS -->
+{% block extrahead %}
+    {{ block.super }}
+    <script type="text/javascript" src="{% static_jquery %}"></script>
+    <script type="text/javascript" src="{% static "admin/js/jquery.init.js" %}"></script>
+    <script type="text/javascript" src="{% static "admin/js/collapse.js" %}"></script>
+    <script type="text/javascript" src="../../jsi18n/"></script>
+    <script type="text/javascript" src="{% static "filebrowser/js/fileuploader.js" %}"></script>
+    <script type="text/javascript">
+    (function($){
+        $(document).ready(function() {
+            var uploader = new qq.FileUploader({
+                element: $('#file-uploader > div').get(0),
+                action: '{% url 'filebrowser:fb_do_upload' %}',
+
+                template: '<div class="qq-uploader">' +
+                    '<div class="qq-upload-drop-area"><span>{% trans "Drop files here to upload" %}</span></div>' +
+                    '<div class="qq-upload-button">{% trans "Upload a file" %}</div>' +
+                    '<div class="qq-upload-list"></div>' +
+                '</div>',
+
+                fileTemplate: '<div>' +
+                    '<span class="qq-upload-file"></span>' +
+                    '<span class="qq-upload-spinner"></span>' +
+                    '<span class="qq-upload-size"></span>' +
+                    '<a class="qq-upload-cancel" href="#">{% trans "Cancel" %}</a>' +
+                    '<span class="qq-upload-failed-text">{% trans "Failed" %}</span>' +
+                    '<span class="qq-upload-complete"></span>' +
+                    '<div class="progress-bar"><div class="content"></div></div>' +
+                '</div>',
+
+                params: { 'csrf_token': '{{ csrf_token }}',
+                          'csrf_name': 'csrfmiddlewaretoken',
+                          'csrf_xname': 'X-CSRFToken',
+                          'folder': '{{ query.dir|escapejs }}', },
+
+                allowedExtensions: {% get_file_extensions request.GET %},
+                sizeLimit: {{ settings_var.MAX_UPLOAD_SIZE|unlocalize }},
+                minSizeLimit: 0,
+                debug: false,
+                // messages
+                messages: {
+                    typeError: "{% trans "{file} has invalid extension. Only {extensions} are allowed." %}",
+                    sizeError: "{% trans "{file} is too large, maximum file size is {sizeLimit}." %}",
+                    minSizeError: "{% trans "{file} is too small, minimum file size is {minSizeLimit}." %}",
+                    emptyError: "{% trans "{file} is empty, please select files again without it." %}",
+                    onLeave: "{% trans "The files are being uploaded, if you leave now the upload will be cancelled." %}"
+                },
+
+                getItem: function(id) {
+                    var items = $(this.element).find('.qq-upload-list > div').get();
+                    var item = items.pop();
+
+                    while (typeof item != "undefined") {
+                        if (item.qqFileId == id) {
+                            return $(item);
+                        }
+                        item = items.pop();
+                    }
+                },
+                onProgress: function(id, fileName, loaded, total){
+                    var bar = this.getItem(id).find('.progress-bar .content');
+                    var new_width = '' + (loaded/total * 100) + '%';
+                    bar.css('width', new_width);
+                },
+                onComplete: function(id, fileName, resp){
+                    if (resp.success) {
+                        this.getItem(id).find('.qq-upload-file').html('<a href="' + resp.url + '">'+ resp.filename + '</a>');
+                    }
+                },
+                showMessage: function(message){ alert(message); }
+            });
+        });
+    })(django.jQuery);
+    </script>
+{% endblock %}
+
+<!-- COLTYPE/BODYCLASS -->
+{% block bodyclass %}change-form filebrowser{% if query.pop %} popup{% endif %}{% endblock %}
+{% block coltype %}colM{% endblock %}
+
+<!-- BREADCRUMBS -->
+{% block breadcrumbs %}{% include "filebrowser/include/breadcrumbs.html" %}{% endblock %}
+
+<!-- CONTENT -->
+{% block content %}
+<div id="content-main">
+    <!-- POP-UP BREADCRUMBS -->
+    {% if query.pop %}
+        {% include "filebrowser/include/breadcrumbs.html" %}
+    {% endif %}
+    <form>
+        <div>
+            <fieldset class="module aligned">
+            <div class="form-row" id="file-uploader">
+                <div class="form-col">
+                    <noscript>
+                        {% trans "Please enable Javascript to upload files." %}
+                    </noscript>
+                </div>
+            </div>
+            <div class="form-row" id="back-button">
+                {% with breadcrumbs|last as last_breadcrumb %}
+                    <a class="ui button" href="{% url 'filebrowser:fb_browse' %}{% query_string "" "q,dir,filename,p" %}&amp;dir={{ last_breadcrumb.1|urlencode }}">{% trans 'Return to uploads' %}</a>
+                {% endwith %}
+            </div>
+            </fieldset>
+            <fieldset class="module aligned">
+                <h2>{% trans "Help" %}</h2>
+                <div class="form-row">
+                    <div>
+                        <label class="required">{% trans "Allowed" %}</label>
+                        <p>
+                        {% for extension in settings_var.EXTENSIONS.items %}
+                            {% if extension.0 != 'Folder' %}
+                                <strong>{% trans extension.0|safe %}</strong> ({{ extension.1|join:", "|safe }})<br />
+                            {% endif %}
+                        {% endfor %}
+                        </p>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div>
+                        <label class="required">{% trans "Max. Filesize" %}</label>
+                        <p>{{ settings_var.MAX_UPLOAD_SIZE|filesizeformat }}</p>
+                    </div>
+                </div>
+                {% if settings_var.NORMALIZE_FILENAME or settings_var.CONVERT_FILENAME %}
+                    <div class="form-row">
+                        <div>
+                            <label class="required">{% trans "Filename" %}</label>
+                            {% if settings_var.NORMALIZE_FILENAME %}
+                                <p>{% trans "The Name will be normalized by converting or stripping all non-standard characters." %}</p>
+                            {% endif %}
+                            {% if settings_var.CONVERT_FILENAME %}
+                                <p>{% trans "The Name will be converted to lowercase. Spaces will be replaced with underscores." %}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </fieldset>
+        </div>
+    </form>
+</div>
+{% endblock %}

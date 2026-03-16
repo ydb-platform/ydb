@@ -1,0 +1,5 @@
+--- a/src/init.cc
++++ b/src/init.cc
+@@ -273 +273 @@ static ncclResult_t devCommSetup(ncclComm_t comm) {
+-#define VERSION_STRING "NCCL version " STR(NCCL_MAJOR) "." STR(NCCL_MINOR) "." STR(NCCL_PATCH) NCCL_SUFFIX "+cuda" STR(CUDA_MAJOR) "." STR(CUDA_MINOR)
++#define VERSION_STRING "NCCL version " STR(NCCL_MAJOR) "." STR(NCCL_MINOR) "." STR(NCCL_PATCH) NCCL_SUFFIX "+cuda" STR(CUDA_VERSION)

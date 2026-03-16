@@ -1,0 +1,274 @@
+Metadata-Version: 2.1
+Name: iso3166
+Version: 2.1.1
+Summary: Self-contained ISO 3166-1 country definitions.
+Home-page: http://github.com/deactivated/python-iso3166
+Author: Mike Spindel
+Author-email: mike@spindel.is
+License: MIT
+Keywords: iso 3166-1,country codes
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.6
+Description-Content-Type: text/x-rst; charset=UTF-8
+License-File: LICENSE.txt
+
+============================================================
+ python-iso3166 - Standalone ISO 3166-1 country definitions
+============================================================
+
+:Authors:
+        Mike Spindel
+:Version: 2.1.1
+
+
+ISO 3166-1 defines two-letter, three-letter, and three-digit country
+codes.  `python-iso3166` is a self-contained module that converts
+between these codes and the corresponding country name.
+
+
+Installation
+============
+
+::
+
+  $ pip install iso3166
+
+
+Usage
+=====
+
+Country details
+---------------
+
+::
+
+  >>> from iso3166 import countries
+  >>>
+  >>> countries.get('us')
+  Country(name='United States', alpha2='US', alpha3='USA', numeric='840')
+  >>> countries.get('ala')
+  Country(name='Åland Islands', alpha2='AX', alpha3='ALA', numeric='248')
+  >>> countries.get(8)
+  Country(name='Albania', alpha2='AL', alpha3='ALB', numeric='008')
+
+
+Country lists and indexes
+-------------------------
+
+::
+
+  >>> from iso3166 import countries
+
+  >>> for c in countries:
+         print(c)
+  >>> Country(name='Afghanistan', alpha2='AF', alpha3='AFG', numeric='004')
+  Country(name='Åland Islands', alpha2='AX', alpha3='ALA', numeric='248')
+  Country(name='Albania', alpha2='AL', alpha3='ALB', numeric='008')
+  Country(name='Algeria', alpha2='DZ', alpha3='DZA', numeric='012')
+
+::
+
+  >>> import iso3166
+
+  >>> iso3166.countries_by_name
+  >>> {'AFGHANISTAN': Country(name='Afghanistan', alpha2='AF', alpha3='AFG', numeric='004'),
+  'ALBANIA': Country(name='Albania', alpha2='AL', alpha3='ALB', numeric='008'),
+  'ALGERIA': Country(name='Algeria', alpha2='DZ', alpha3='DZA', numeric='012'),
+  ...
+
+  >>> iso3166.countries_by_numeric
+  >>> {'004': Country(name='Afghanistan', alpha2='AF', alpha3='AFG', numeric='004'),
+  '008': Country(name='Albania', alpha2='AL', alpha3='ALB', numeric='008'),
+  '010': Country(name='Antarctica', alpha2='AQ', alpha3='ATA', numeric='010'),
+  ...
+
+  >>> iso3166.countries_by_alpha2
+  >>> {'AD': Country(name='Andorra', alpha2='AD', alpha3='AND', numeric='020'),
+  'AE': Country(name='United Arab Emirates', alpha2='AE', alpha3='ARE', numeric='784'),
+  'AF': Country(name='Afghanistan', alpha2='AF', alpha3='AFG', numeric='004'),
+  ...
+
+  >>> iso3166.countries_by_alpha3
+  >>> {'ABW': Country(name='Aruba', alpha2='AW', alpha3='ABW', numeric='533'),
+  'AFG': Country(name='Afghanistan', alpha2='AF', alpha3='AFG', numeric='004'),
+  'AGO': Country(name='Angola', alpha2='AO', alpha3='AGO', numeric='024'),
+  ...
+
+Changes
+=======
+
+2.1.1 - July 11, 2022
+---------------------
+
+* Move install metadata from ``setup.py`` to ``setup.cfg``
+* Add py.typed to source distribution
+
+2.1.0 - July 11, 2022
+---------------------
+
+* Updated entries
+
+  - "Turkey" changed to "Türkiye"
+
+2.0.2 - Sep 20, 2021
+--------------------
+
+* Add the ``py.typed`` marker file in accordance with PEP 561
+
+2.0.1 - Sep 14, 2021
+--------------------
+
+* Add ``python_requires`` to ``setup.py``
+
+2.0.0 - Sep 14, 2021
+--------------------
+
+* Add type hints throughout codebase (thanks blokje!)
+
+* Drop support for Python versions prior to 3.6
+
+1.0.1 - Dec 13, 2019
+--------------------
+
+* Include test files in source distribution (thanks pmosetc!)
+
+* Added all Python 3 versions to tox.ini and supported list
+
+1.0 - March 19, 2018
+--------------------
+
+* Updated entries
+
+  - "Macedonia, the former Yugoslav Republic of" changed to "North
+    Macedonia" (effective 2019-03-13)
+
+  - Added numeric code 983 for Kosovo to mirror usage by the National
+    Statistical Office of Canada (thanks betaboon!)
+
+0.9 - July 21, 2018
+-------------------
+
+* Updated entries
+
+  - New entry for Kosovo (XK / XKX)
+
+  - Swaziland changed to Eswatini (effective 2018-07-16)
+
+0.8 - February 5, 2017
+-----------------------
+
+* Updated entries
+
+   - Czechia (changed 2016-09)
+
+   - United Kingdom of Great Britain and Northern Ireland (changed
+     2014-12)
+
+0.7 - February 13, 2015
+-----------------------
+
+* Added new attribute ``apolitical_name`` to Country. This field
+  reflects the ISO short name but has unnecessarily inflammatory
+  modifiers removed.
+
+  Specifically: "Taiwan, Province of China" maps to "Taiwan" and
+  "Palestine, State of" maps to "Palestine."
+
+* Updated entries
+
+   - Holy See (changed in 2014-12)
+
+* CountryLookup now raises KeyError when passed an unknown integer
+  rather than AttributeError. (thanks unsignedint!)
+
+0.6 - September 28, 2014
+------------------------
+
+* Updated entries
+   - Cabo Verde (changed in 2013-11)
+
+* Documented the dictionaries used for looking up countries by alpha2,
+  etc. (thanks brunetton!)
+
+0.5 - February 13, 2014
+-----------------------
+
+* Added ``__contains__`` to CountryLookup (thanks tomako!)
+
+* Current through ISO newsletter VI-16
+    - No changes needed
+
+0.4 - February 14, 2013
+-----------------------
+
+* Current through ISO newsletter VI-14
+
+* Updated entries
+    - Palestine
+
+0.3 - September 4, 2012
+-----------------------
+
+* Current through ISO newsletter VI-13
+
+* Fix changes from 0.2 (thanks vincentfretin!):
+
+    - Venezuela
+
+    - Saint Helena
+
+    - Bolivia
+
+0.2 - March 26, 2012
+--------------------
+
+* Current through ISO newsletter VI-12
+
+* Added missing entry for Afghanistan
+
+* Updated entries
+
+  - Bolivia (ISO Newsletter VI-6)
+
+  - Libya (VI-11)
+
+  - Saint Helena (VI-7)
+
+  - Sudan (VI-10)
+
+  - Venezuela (VI-5)
+
+* New entries:
+
+  - Bonaire, Sint Eustatius and Saba (VI-8)
+
+  - Curaçao (VI-8)
+
+  - Sint Maarten (Dutch part) (VI-8)
+
+  - South Sudan (VI-10)
+
+* Deleted entries:
+
+  - Netherlands Antilles (VI-8)
+
+
+0.1 - December 14, 2010
+-----------------------
+
+* Initial release
+
+

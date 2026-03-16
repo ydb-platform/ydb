@@ -1,0 +1,64 @@
+swagger: "2.0"
+info:
+  description: Polymorphism Test
+  version: "1.0.0"
+  title: Polymorphism Test
+  contact:
+    name: bone@alumni.brown.edu
+host: api.monetate.net
+basePath: /poly
+schemes:
+  - http
+  - https
+paths:
+  /report:
+    post:
+      operationId: report
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          description: Events
+          required: true
+          schema:
+            $ref: "#/definitions/Context"
+      responses:
+        "200":
+          description: successful operation
+definitions:
+
+  Context:
+    type: object
+    required:
+      - events
+    properties:
+      events:
+        type: array
+        items:
+          $ref: "#/definitions/Event"
+
+  Event:
+    type: object
+    required:
+      - eventType
+      - timestamp
+    properties:
+      timestamp:
+        type: integer
+        format: int64
+        description: "Timestamp expressed as milliseconds since epoch"
+      eventType:
+        type: string
+    discriminator: eventType
+
+  Impression:
+    allOf:
+    - $ref: '#/definitions/Event'
+    required:
+      - advertisementId
+    properties:
+      advertisementId:
+        type: string

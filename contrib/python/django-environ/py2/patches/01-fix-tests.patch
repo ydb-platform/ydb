@@ -1,0 +1,25 @@
+--- contrib/python/django-environ/py2/environ/test.py	(index)
++++ contrib/python/django-environ/py2/environ/test.py	(working tree)
+@@ -4,7 +4,9 @@ import sys
+ import unittest
+ import warnings
+ 
+-from .compat import (
++import yatest.common
++
++from environ.compat import (
+     json, DJANGO_POSTGRES, ImproperlyConfigured, REDIS_DRIVER, quote
+ )
+ 
+@@ -282,8 +284,9 @@ class FileEnvTests(EnvTests):
+         super(FileEnvTests, self).setUp()
+         Env.ENVIRON = {}
+         self.env = Env()
+-        file_path = Path(__file__, is_file=True)('test_env.txt')
+-        self.env.read_env(file_path, PATH_VAR=Path(__file__, is_file=True).__root__)
++        env_test_path = yatest.common.source_path('contrib/python/django-environ/py2/environ/test_env.txt')
++        file_path = Path(env_test_path, is_file=True)('test_env.txt')
++        self.env.read_env(file_path, PATH_VAR=Path(env_test_path, is_file=True).__root__)
+ 
+ class SubClassTests(EnvTests):
+ 

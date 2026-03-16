@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# lsb_release command for testing the ld module.
+# Only the -a option is supported.
+#
+# This version of the lsb_release command works without a corresponding
+# etc/lsb-release file.
+#
+
+if [[ "$@" != "-a" ]]; then
+  echo "Usage: lsb_release -a"
+  exit 2
+fi
+
+echo "No LSB modules are available."
+echo "Distributor ID:	Debian"
+echo "Description:	Debian GNU/Linux 10 (buster)"
+echo "Release:	10"
+echo "Codename:	buster"
+
+exit 0

@@ -1,0 +1,49 @@
+--- contrib/python/django/django-2.2/django/utils/six.py	(index)
++++ contrib/python/django/django-2.2/django/utils/six.py	(working tree)
+@@ -71,6 +71,11 @@ else:
+             MAXSIZE = int((1 << 63) - 1)
+         del X
+ 
++if PY34:
++    from importlib.util import spec_from_loader
++else:
++    spec_from_loader = None
++
+ 
+ def _add_doc(func, doc):
+     """Add documentation to a function."""
+@@ -186,6 +191,11 @@ class _SixMetaPathImporter(object):
+             return self
+         return None
+ 
++    def find_spec(self, fullname, path, target=None):
++        if fullname in self.known_modules:
++            return spec_from_loader(fullname, self)
++        return None
++
+     def __get_module(self, fullname):
+         try:
+             return self.known_modules[fullname]
+@@ -223,6 +233,12 @@ class _SixMetaPathImporter(object):
+         return None
+     get_source = get_code  # same as get_code
+ 
++    def create_module(self, spec):
++        return self.load_module(spec.name)
++
++    def exec_module(self, module):
++        pass
++
+ _importer = _SixMetaPathImporter(__name__)
+ 
+ 
+--- contrib/python/django/django-2.2/django/utils/version.py	(index)
++++ contrib/python/django/django-2.2/django/utils/version.py	(working tree)
+@@ -3,6 +3,7 @@ import functools
+ import os
+ import subprocess
+ import sys
++import setuptools
+ from distutils.version import LooseVersion
+ 
+ # Private, stable API for detecting the Python version. PYXY means "Python X.Y

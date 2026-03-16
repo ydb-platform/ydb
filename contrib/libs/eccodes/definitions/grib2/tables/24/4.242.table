@@ -1,0 +1,5 @@
+# Code table 4.242 - Tile classification
+0 0 Reserved
+1 1 Land use classes according to ESA-GlobCover GCV2009
+2 2 Land use classes according to European Commission-Global Land Cover Project GLC2000
+255 255 Missing value

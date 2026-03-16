@@ -1,0 +1,32 @@
+# (C) Copyright 2005- ECMWF.
+# Sensitivity data
+
+# 1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=7;
+
+constant GRIBEXSection1Problem = 54 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] iterationNumber  : dump;
+alias number=iterationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble  : dump;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+unsigned[1] sensitiveAreaDomain  : dump;
+#alias mars.domain=sensitiveAreaDomain;
+
+unsigned[1] diagnosticNumber  : dump;
+
+alias iteration = iterationNumber;
+alias diagnostic = diagnosticNumber;
+
+alias local.iterationNumber=iterationNumber;
+alias local.numberOfForecastsInEnsemble=numberOfForecastsInEnsemble;
+alias local.sensitiveAreaDomain=sensitiveAreaDomain;
+alias local.diagnosticNumber=diagnosticNumber;
+
+# spareSetToZero
+pad padding_loc7_1(1);

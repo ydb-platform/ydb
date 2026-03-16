@@ -1,0 +1,8 @@
+requirements:
+  - PyYAML
+  - decorator
+  - six
+exclude:
+  - invoke/vendor/decorator.py
+  - invoke/vendor/six.py
+  - invoke/vendor/yaml*

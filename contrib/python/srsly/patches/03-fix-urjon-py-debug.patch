@@ -1,0 +1,30 @@
+--- contrib/python/srsly/srsly/ujson/objToJSON.c        (index)
++++ contrib/python/srsly/srsly/ujson/objToJSON.c        (working tree)
+@@ -460,7 +460,6 @@ void SortedDict_iterEnd(JSOBJ obj, JSONTypeContext *tc)
+ {
+   GET_TC(tc)->itemName = NULL;
+   GET_TC(tc)->itemValue = NULL;
+-  Py_DECREF(GET_TC(tc)->newObj);
+   Py_DECREF(GET_TC(tc)->dictObj);
+   PRINTMARK();
+ }
+@@ -728,9 +727,17 @@ ISITERABLE:
+   PyErr_Clear();
+
+   objRepr = PyObject_Repr(obj);
++  if (!objRepr)
++  {
++    goto INVALID;
++  }
++
+ #if PY_MAJOR_VERSION >= 3
+-  PyObject* str = PyUnicode_AsEncodedString(objRepr, "utf-8", "~E~");
+-  PyErr_Format (PyExc_TypeError, "%s is not JSON serializable", PyString_AS_STRING(str));
++  PyObject* str = PyUnicode_AsEncodedString(objRepr, "utf-8", "strict");
++  if (str)
++  {
++    PyErr_Format (PyExc_TypeError, "%s is not JSON serializable", PyString_AS_STRING(str));
++  }
+   Py_XDECREF(str);
+ #else
+   PyErr_Format (PyExc_TypeError, "%s is not JSON serializable", PyString_AS_STRING(objRepr));

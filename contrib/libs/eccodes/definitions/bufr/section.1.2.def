@@ -1,0 +1,30 @@
+# (C) Copyright 2005- ECMWF.
+position offsetSection1;
+section_length[3] section1Length ;
+
+unsigned[1]  masterTableNumber :dump;
+
+codetable[2] bufrHeaderCentre 'common/c-1.table' : dump;
+transient bufrHeaderSubCentre = 0;
+
+unsigned[1]  updateSequenceNumber :dump;
+
+flags[1]     section1Flags 'bufr/section1_flags.table' = 128 : hidden ; # = section 2 present
+
+unsigned[1] dataCategory : dump;
+unsigned[1] dataSubCategory : dump;
+unsigned[1] masterTablesVersionNumber :dump;
+unsigned[1] localTablesVersionNumber :dump;
+
+unsigned[1] typicalYearOfCentury : dump;
+unsigned[1] typicalMonth : dump;
+unsigned[1] typicalDay : dump;
+unsigned[1] typicalHour : dump;
+unsigned[1] typicalMinute : dump;
+unsigned[1] spare; # ???
+
+alias ls.centre=bufrHeaderCentre;
+alias ls.masterTablesVersionNumber=masterTablesVersionNumber;
+alias ls.localTablesVersionNumber=localTablesVersionNumber;
+
+section_padding section1Padding;

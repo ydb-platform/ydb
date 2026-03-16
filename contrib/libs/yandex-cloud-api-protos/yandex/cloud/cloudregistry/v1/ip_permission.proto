@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package yandex.cloud.cloudregistry.v1;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cloudregistry/v1;cloudregistry";
+option java_package = "yandex.cloud.api.cloudregistry.v1";
+
+message IpPermission {
+    enum Action {
+        ACTION_UNSPECIFIED = 0;
+        PULL = 1;
+        PUSH = 2;
+    }
+    Action action = 1;
+    string ip = 2;
+}
+
+enum IpPermissionDeltaAction {
+    IP_PERMISSION_DELTA_ACTION_UNSPECIFIED = 0;
+
+    // Addition of an ip permission.
+    ADD = 1;
+
+    // Removal of an ip permission.
+    REMOVE = 2;
+}
+
+message IpPermissionDelta {
+    // The action that is being performed on an ip permission.
+    IpPermissionDeltaAction action = 1 [(required) = true];
+
+    // Ip permission.
+    IpPermission ip_permission = 2 [(required) = true];
+}

@@ -1,0 +1,122 @@
+
+<!--
+     File isocyr1.ent produced by the XSL script entities.xsl
+     from input data in unicode.xml.
+
+     Copyright 1998 - 2011 W3C.
+
+     Use and distribution of this code are permitted under the terms of
+     either of the following two licences:
+
+     1) W3C Software Notice and License.
+        http://www.w3.org/Consortium/Legal/2002/copyright-software-20021231.html
+
+
+     2) The license used for the WHATWG HTML specification,
+        which states, in full:
+            You are granted a license to use, reproduce and create derivative
+            works of this document.
+
+ 
+     Please report any errors to David Carlisle
+     via the public W3C list www-math@w3.org.
+
+     The numeric character values assigned to each entity
+     (should) match the Unicode assignments in Unicode 5.x.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1986
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+
+-->
+
+
+<!-- 
+
+       Public identifier: -//W3C//ENTITIES Russian Cyrillic//EN//XML
+       System identifier: http://www.w3.org/2003/entities/2007/isocyr1.ent
+
+     The public identifier should always be used verbatim.
+     The system identifier may be changed to suit local requirements.
+
+     Typical invocation:
+
+       <!ENTITY % isocyr1 PUBLIC
+         "-//W3C//ENTITIES Russian Cyrillic//EN//XML"
+         "http://www.w3.org/2003/entities/2007/isocyr1.ent"
+       >
+       %isocyr1;
+
+-->
+
+<!ENTITY acy              "&#x00430;" ><!--CYRILLIC SMALL LETTER A -->
+<!ENTITY Acy              "&#x00410;" ><!--CYRILLIC CAPITAL LETTER A -->
+<!ENTITY bcy              "&#x00431;" ><!--CYRILLIC SMALL LETTER BE -->
+<!ENTITY Bcy              "&#x00411;" ><!--CYRILLIC CAPITAL LETTER BE -->
+<!ENTITY chcy             "&#x00447;" ><!--CYRILLIC SMALL LETTER CHE -->
+<!ENTITY CHcy             "&#x00427;" ><!--CYRILLIC CAPITAL LETTER CHE -->
+<!ENTITY dcy              "&#x00434;" ><!--CYRILLIC SMALL LETTER DE -->
+<!ENTITY Dcy              "&#x00414;" ><!--CYRILLIC CAPITAL LETTER DE -->
+<!ENTITY ecy              "&#x0044D;" ><!--CYRILLIC SMALL LETTER E -->
+<!ENTITY Ecy              "&#x0042D;" ><!--CYRILLIC CAPITAL LETTER E -->
+<!ENTITY fcy              "&#x00444;" ><!--CYRILLIC SMALL LETTER EF -->
+<!ENTITY Fcy              "&#x00424;" ><!--CYRILLIC CAPITAL LETTER EF -->
+<!ENTITY gcy              "&#x00433;" ><!--CYRILLIC SMALL LETTER GHE -->
+<!ENTITY Gcy              "&#x00413;" ><!--CYRILLIC CAPITAL LETTER GHE -->
+<!ENTITY hardcy           "&#x0044A;" ><!--CYRILLIC SMALL LETTER HARD SIGN -->
+<!ENTITY HARDcy           "&#x0042A;" ><!--CYRILLIC CAPITAL LETTER HARD SIGN -->
+<!ENTITY icy              "&#x00438;" ><!--CYRILLIC SMALL LETTER I -->
+<!ENTITY Icy              "&#x00418;" ><!--CYRILLIC CAPITAL LETTER I -->
+<!ENTITY iecy             "&#x00435;" ><!--CYRILLIC SMALL LETTER IE -->
+<!ENTITY IEcy             "&#x00415;" ><!--CYRILLIC CAPITAL LETTER IE -->
+<!ENTITY iocy             "&#x00451;" ><!--CYRILLIC SMALL LETTER IO -->
+<!ENTITY IOcy             "&#x00401;" ><!--CYRILLIC CAPITAL LETTER IO -->
+<!ENTITY jcy              "&#x00439;" ><!--CYRILLIC SMALL LETTER SHORT I -->
+<!ENTITY Jcy              "&#x00419;" ><!--CYRILLIC CAPITAL LETTER SHORT I -->
+<!ENTITY kcy              "&#x0043A;" ><!--CYRILLIC SMALL LETTER KA -->
+<!ENTITY Kcy              "&#x0041A;" ><!--CYRILLIC CAPITAL LETTER KA -->
+<!ENTITY khcy             "&#x00445;" ><!--CYRILLIC SMALL LETTER HA -->
+<!ENTITY KHcy             "&#x00425;" ><!--CYRILLIC CAPITAL LETTER HA -->
+<!ENTITY lcy              "&#x0043B;" ><!--CYRILLIC SMALL LETTER EL -->
+<!ENTITY Lcy              "&#x0041B;" ><!--CYRILLIC CAPITAL LETTER EL -->
+<!ENTITY mcy              "&#x0043C;" ><!--CYRILLIC SMALL LETTER EM -->
+<!ENTITY Mcy              "&#x0041C;" ><!--CYRILLIC CAPITAL LETTER EM -->
+<!ENTITY ncy              "&#x0043D;" ><!--CYRILLIC SMALL LETTER EN -->
+<!ENTITY Ncy              "&#x0041D;" ><!--CYRILLIC CAPITAL LETTER EN -->
+<!ENTITY numero           "&#x02116;" ><!--NUMERO SIGN -->
+<!ENTITY ocy              "&#x0043E;" ><!--CYRILLIC SMALL LETTER O -->
+<!ENTITY Ocy              "&#x0041E;" ><!--CYRILLIC CAPITAL LETTER O -->
+<!ENTITY pcy              "&#x0043F;" ><!--CYRILLIC SMALL LETTER PE -->
+<!ENTITY Pcy              "&#x0041F;" ><!--CYRILLIC CAPITAL LETTER PE -->
+<!ENTITY rcy              "&#x00440;" ><!--CYRILLIC SMALL LETTER ER -->
+<!ENTITY Rcy              "&#x00420;" ><!--CYRILLIC CAPITAL LETTER ER -->
+<!ENTITY scy              "&#x00441;" ><!--CYRILLIC SMALL LETTER ES -->
+<!ENTITY Scy              "&#x00421;" ><!--CYRILLIC CAPITAL LETTER ES -->
+<!ENTITY shchcy           "&#x00449;" ><!--CYRILLIC SMALL LETTER SHCHA -->
+<!ENTITY SHCHcy           "&#x00429;" ><!--CYRILLIC CAPITAL LETTER SHCHA -->
+<!ENTITY shcy             "&#x00448;" ><!--CYRILLIC SMALL LETTER SHA -->
+<!ENTITY SHcy             "&#x00428;" ><!--CYRILLIC CAPITAL LETTER SHA -->
+<!ENTITY softcy           "&#x0044C;" ><!--CYRILLIC SMALL LETTER SOFT SIGN -->
+<!ENTITY SOFTcy           "&#x0042C;" ><!--CYRILLIC CAPITAL LETTER SOFT SIGN -->
+<!ENTITY tcy              "&#x00442;" ><!--CYRILLIC SMALL LETTER TE -->
+<!ENTITY Tcy              "&#x00422;" ><!--CYRILLIC CAPITAL LETTER TE -->
+<!ENTITY tscy             "&#x00446;" ><!--CYRILLIC SMALL LETTER TSE -->
+<!ENTITY TScy             "&#x00426;" ><!--CYRILLIC CAPITAL LETTER TSE -->
+<!ENTITY ucy              "&#x00443;" ><!--CYRILLIC SMALL LETTER U -->
+<!ENTITY Ucy              "&#x00423;" ><!--CYRILLIC CAPITAL LETTER U -->
+<!ENTITY vcy              "&#x00432;" ><!--CYRILLIC SMALL LETTER VE -->
+<!ENTITY Vcy              "&#x00412;" ><!--CYRILLIC CAPITAL LETTER VE -->
+<!ENTITY yacy             "&#x0044F;" ><!--CYRILLIC SMALL LETTER YA -->
+<!ENTITY YAcy             "&#x0042F;" ><!--CYRILLIC CAPITAL LETTER YA -->
+<!ENTITY ycy              "&#x0044B;" ><!--CYRILLIC SMALL LETTER YERU -->
+<!ENTITY Ycy              "&#x0042B;" ><!--CYRILLIC CAPITAL LETTER YERU -->
+<!ENTITY yucy             "&#x0044E;" ><!--CYRILLIC SMALL LETTER YU -->
+<!ENTITY YUcy             "&#x0042E;" ><!--CYRILLIC CAPITAL LETTER YU -->
+<!ENTITY zcy              "&#x00437;" ><!--CYRILLIC SMALL LETTER ZE -->
+<!ENTITY Zcy              "&#x00417;" ><!--CYRILLIC CAPITAL LETTER ZE -->
+<!ENTITY zhcy             "&#x00436;" ><!--CYRILLIC SMALL LETTER ZHE -->
+<!ENTITY ZHcy             "&#x00416;" ><!--CYRILLIC CAPITAL LETTER ZHE -->

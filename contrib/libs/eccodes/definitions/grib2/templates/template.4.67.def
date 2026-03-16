@@ -1,0 +1,11 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.67, Average, accumulation and/or extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for atmospheric chemical constituents based on a distribution function
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.chemical.def"
+include "grib2/templates/template.4.distribution.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.horizontal.def"
+include "grib2/templates/template.4.statistical.def"

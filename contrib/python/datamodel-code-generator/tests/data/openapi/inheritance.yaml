@@ -1,0 +1,28 @@
+openapi: 3.1.0
+components:
+  schemas:
+    Base:
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        version:
+          type: number
+          default: 1
+    Child:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - properties:
+            url:
+              type: string
+              format: uri
+              default: "https://example.com"
+            title:
+              type: string
+          required:
+            - title

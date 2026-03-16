@@ -1,0 +1,1806 @@
+{
+   "domain": "nbjs",
+   "locale_data": {
+      "nbjs": {
+         "": {
+            "domain": "nbjs",
+            "plural_forms": "nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);",
+            "lang": "ru_RU"
+         },
+         "Manually edit the JSON below to manipulate the metadata for this cell.": [
+            null,
+            "Отредактируйте JSON ниже вручную для управления метаданными для этой ячейки."
+         ],
+         "Manually edit the JSON below to manipulate the metadata for this notebook.": [
+            null,
+            "Отредактируйте JSON ниже вручную для управления метаданными для этого блокнота."
+         ],
+         " We recommend putting custom metadata attributes in an appropriately named substructure, so they don't conflict with those of others.": [
+            null,
+            " Мы рекомендуем поместить пользовательские атрибуты метаданных в подструктуру с соответствующим именем, чтобы они не конфликтовали с атрибутами других объектов."
+         ],
+         "Edit the metadata": [
+            null,
+            "Редактировать метаданные"
+         ],
+         "Edit Notebook Metadata": [
+            null,
+            "Редактировать метаданные блокнота"
+         ],
+         "Edit Cell Metadata": [
+            null,
+            "Редактировать метаданные ячейки"
+         ],
+         "Cancel": [
+            null,
+            "Отмена"
+         ],
+         "Edit": [
+            null,
+            "Редактировать"
+         ],
+         "OK": [
+            null,
+            "ОК"
+         ],
+         "Apply": [
+            null,
+            "Применить"
+         ],
+         "WARNING: Could not save invalid JSON.": [
+            null,
+            "ПРЕДУПРЕЖДЕНИЕ: не удалось сохранить недопустимый JSON."
+         ],
+         "There are no attachments for this cell.": [
+            null,
+            "Для этой ячейки нет никаких вложений."
+         ],
+         "Current cell attachments": [
+            null,
+            "Вложения текущей ячейки"
+         ],
+         "Attachments": [
+            null,
+            "Вложения"
+         ],
+         "Restore": [
+            null,
+            "Восстановить"
+         ],
+         "Delete": [
+            null,
+            "Удалить"
+         ],
+         "Edit attachments": [
+            null,
+            "Редактировать вложения"
+         ],
+         "Edit Notebook Attachments": [
+            null,
+            "Редактировать вложения блокнотов"
+         ],
+         "Edit Cell Attachments": [
+            null,
+            "Редактировать вложения ячейки"
+         ],
+         "Select a file to insert.": [
+            null,
+            "Выберите файл для вставки."
+         ],
+         "Select a file": [
+            null,
+            "Выберите файл"
+         ],
+         "You are using Jupyter NbClassic.": [
+            null,
+            "Вы используете блокнот Jupyter."
+         ],
+         "The version of the Jupyter server is: ": [
+            null,
+            "Версия сервера блокнотов: "
+         ],
+         "The server is running on this version of Python:": [
+            null,
+            "Сервер работает на этой версии Python:"
+         ],
+         "Waiting for kernel to be available...": [
+            null,
+            "Ожидание доступности ядра..."
+         ],
+         "Server Information:": [
+            null,
+            "Информация сервера:"
+         ],
+         "Current Kernel Information:": [
+            null,
+            "Информация о текущем ядре:"
+         ],
+         "Could not access sys_info variable for version information.": [
+            null,
+            "Невозможно получить доступ к переменной sys_info для получения информации о версии."
+         ],
+         "Cannot find sys_info!": [
+            null,
+            "Невозможно найти sys_info!"
+         ],
+         "About Jupyter NbClassic": [
+            null,
+            "О блокноте Jupyter"
+         ],
+         "unable to contact kernel": [
+            null,
+            "невозможно связаться с ядром"
+         ],
+         "toggle rtl layout": [
+            null,
+            "переключить макет rtl"
+         ],
+         "Toggle the screen directionality between left-to-right and right-to-left": [
+            null,
+            "Переключение направления экрана между слева направо и справа налево"
+         ],
+         "edit command mode keyboard shortcuts": [
+            null,
+            "редактировать сочетания клавиш командного режима"
+         ],
+         "Open a dialog to edit the command mode keyboard shortcuts": [
+            null,
+            "Откройте диалоговое окно для редактирования сочетаний клавиш командного режима"
+         ],
+         "restart kernel": [
+            null,
+            "перезапуск ядра"
+         ],
+         "restart the kernel (no confirmation dialog)": [
+            null,
+            "перезапуск ядра (диалог подтверждения отсутствует)"
+         ],
+         "confirm restart kernel": [
+            null,
+            "подтвердить перезапуск ядра"
+         ],
+         "restart the kernel (with dialog)": [
+            null,
+            "перезапуск ядра (с диалоговым окном)"
+         ],
+         "restart kernel and run all cells": [
+            null,
+            "перезапуск ядра и запуск всех ячеек"
+         ],
+         "restart the kernel, then re-run the whole notebook (no confirmation dialog)": [
+            null,
+            "перезапустить ядро, а затем перезапустить весь блокнот (диалог подтверждения отсутствует)"
+         ],
+         "confirm restart kernel and run all cells": [
+            null,
+            "подтвердить перезапуск ядра и запуск всех ячеек"
+         ],
+         "restart the kernel, then re-run the whole notebook (with dialog)": [
+            null,
+            "перезапустить ядро, а затем перезапустить весь блокнот (с диалогом подтверждения)"
+         ],
+         "restart kernel and clear output": [
+            null,
+            "перезапуск ядра и очистка вывода"
+         ],
+         "restart the kernel and clear all output (no confirmation dialog)": [
+            null,
+            "перезапустить ядро и очистить все выходные данные (диалог подтверждения отсутствует)"
+         ],
+         "confirm restart kernel and clear output": [
+            null,
+            "подтвердить перезапуск ядра и очистку вывода"
+         ],
+         "restart the kernel and clear all output (with dialog)": [
+            null,
+            "перезапустить ядро и очистить все выходные данные (с диалогом подтверждения)"
+         ],
+         "interrupt the kernel": [
+            null,
+            "прервать работу ядра"
+         ],
+         "run cell and select next": [
+            null,
+            "запустить ячейку и выбрать следующую"
+         ],
+         "run cell, select below": [
+            null,
+            "запустить ячейку, выбрать ниже"
+         ],
+         "run selected cells": [
+            null,
+            "запустить выбранные ячейки"
+         ],
+         "run cell and insert below": [
+            null,
+            "запустить ячейку и вставить ниже"
+         ],
+         "run all cells": [
+            null,
+            "запуск всех ячеек"
+         ],
+         "run all cells above": [
+            null,
+            "запуск всех ячеек выше"
+         ],
+         "run all cells below": [
+            null,
+            "запуск всех ячеек ниже"
+         ],
+         "enter command mode": [
+            null,
+            "вход в командный режим"
+         ],
+         "insert image": [
+            null,
+            "вставить изображение"
+         ],
+         "cut cell attachments": [
+            null,
+            "вырезать вложения ячейки"
+         ],
+         "copy cell attachments": [
+            null,
+            "копирование вложений ячейки"
+         ],
+         "paste cell attachments": [
+            null,
+            "вставить вложения ячейки"
+         ],
+         "split cell at cursor": [
+            null,
+            "разбить ячейку при наведении курсора"
+         ],
+         "enter edit mode": [
+            null,
+            "вход в режим редактирования"
+         ],
+         "select previous cell": [
+            null,
+            "выбрать предыдущую ячейку"
+         ],
+         "select cell above": [
+            null,
+            "выбрать ячейку выше"
+         ],
+         "select next cell": [
+            null,
+            "выбрать следующую ячейку"
+         ],
+         "select cell below": [
+            null,
+            "выбрать ячейку ниже"
+         ],
+         "extend selection above": [
+            null,
+            "расширить выбор выше"
+         ],
+         "extend selected cells above": [
+            null,
+            "расширить выделенные ячейки выше"
+         ],
+         "extend selection below": [
+            null,
+            "расширить выбор ниже"
+         ],
+         "extend selected cells below": [
+            null,
+            "расширить выделенные ячейки ниже"
+         ],
+         "cut selected cells": [
+            null,
+            "вырезать выбранные ячейки"
+         ],
+         "copy selected cells": [
+            null,
+            "копировать выбранные ячейки"
+         ],
+         "paste cells above": [
+            null,
+            "вставить ячейки выше"
+         ],
+         "paste cells below": [
+            null,
+            "вставить ячейки ниже"
+         ],
+         "insert cell above": [
+            null,
+            "вставить ячейку выше"
+         ],
+         "insert cell below": [
+            null,
+            "вставить ячейку ниже"
+         ],
+         "change cell to code": [
+            null,
+            "изменить ячейку на код"
+         ],
+         "change cell to markdown": [
+            null,
+            "изменить ячейку на markdown"
+         ],
+         "change cell to raw": [
+            null,
+            "изменить ячейку на raw"
+         ],
+         "change cell to heading 1": [
+            null,
+            "изменить ячейку на заголовок 1"
+         ],
+         "change cell to heading 2": [
+            null,
+            "изменить ячейку на заголовок 2"
+         ],
+         "change cell to heading 3": [
+            null,
+            "изменить ячейку на заголовок 3"
+         ],
+         "change cell to heading 4": [
+            null,
+            "изменить ячейку на заголовок 4"
+         ],
+         "change cell to heading 5": [
+            null,
+            "изменить ячейку на заголовок 5"
+         ],
+         "change cell to heading 6": [
+            null,
+            "изменить ячейку на заголовок 6"
+         ],
+         "toggle cell output": [
+            null,
+            "переключение вывода ячейки"
+         ],
+         "toggle output of selected cells": [
+            null,
+            "переключить вывод выбранных ячеек"
+         ],
+         "toggle cell scrolling": [
+            null,
+            "переключить прокрутку ячейки"
+         ],
+         "toggle output scrolling of selected cells": [
+            null,
+            "переключить прокрутку вывода выбранных ячеек"
+         ],
+         "clear cell output": [
+            null,
+            "очистить вывод ячейки"
+         ],
+         "clear output of selected cells": [
+            null,
+            "очистить вывод выбранных ячеек"
+         ],
+         "move cells down": [
+            null,
+            "переместить ячейки вниз"
+         ],
+         "move selected cells down": [
+            null,
+            "переместить выбранные ячейки вниз"
+         ],
+         "move cells up": [
+            null,
+            "переместить ячейки вверх"
+         ],
+         "move selected cells up": [
+            null,
+            "переместить выбранные ячейки вверх"
+         ],
+         "toggle line numbers": [
+            null,
+            "переключить номера строк"
+         ],
+         "show keyboard shortcuts": [
+            null,
+            "показать сочетания клавиш клавиатуры"
+         ],
+         "delete cells": [
+            null,
+            "удалить ячейки"
+         ],
+         "delete selected cells": [
+            null,
+            "удалить выбранные ячейки"
+         ],
+         "undo cell deletion": [
+            null,
+            "отменить удаление ячейки"
+         ],
+         "merge cell with previous cell": [
+            null,
+            "объединить ячейку с предыдущей ячейкой"
+         ],
+         "merge cell above": [
+            null,
+            "объединить ячейку выше"
+         ],
+         "merge cell with next cell": [
+            null,
+            "объединить ячейку со следующей ячейкой"
+         ],
+         "merge cell below": [
+            null,
+            "объединить ячейку ниже"
+         ],
+         "merge selected cells": [
+            null,
+            "объединить выбранные ячейки"
+         ],
+         "merge cells": [
+            null,
+            "объединить ячейки"
+         ],
+         "merge selected cells, or current cell with cell below if only one cell is selected": [
+            null,
+            "объединить выбранные ячейки или текущую с ячейкой ниже, если выбрана только одна ячейка"
+         ],
+         "show command pallette": [
+            null,
+            "показать палитру команд"
+         ],
+         "open the command palette": [
+            null,
+            "открыть палитру команд"
+         ],
+         "toggle all line numbers": [
+            null,
+            "переключение всех номеров строк"
+         ],
+         "toggles line numbers in all cells, and persist the setting": [
+            null,
+            "переключает номера строк во всех ячейках и сохраняет настройку"
+         ],
+         "show all line numbers": [
+            null,
+            "показать все номера строк"
+         ],
+         "show line numbers in all cells, and persist the setting": [
+            null,
+            "показать номера строк во всех ячейках и сохранить настройку"
+         ],
+         "hide all line numbers": [
+            null,
+            "скрыть все номера строк"
+         ],
+         "hide line numbers in all cells, and persist the setting": [
+            null,
+            "скрыть номера строк во всех ячейках и сохранить настройки"
+         ],
+         "toggle header": [
+            null,
+            "переключение заголовка"
+         ],
+         "switch between showing and hiding the header": [
+            null,
+            "переключение между отображением и скрытием заголовка"
+         ],
+         "show the header": [
+            null,
+            "показать заголовок"
+         ],
+         "hide the header": [
+            null,
+            "скрыть заголовок"
+         ],
+         "toggle toolbar": [
+            null,
+            "переключить панель инструментов"
+         ],
+         "switch between showing and hiding the toolbar": [
+            null,
+            "переключение между отображением и скрытием панели инструментов"
+         ],
+         "show the toolbar": [
+            null,
+            "показать панель инструментов"
+         ],
+         "hide the toolbar": [
+            null,
+            "скрыть всплывающую подсказку"
+         ],
+         "close the pager": [
+            null,
+            "закрыть пейджер"
+         ],
+         "ignore": [
+            null,
+            "игнорировать"
+         ],
+         "move cursor up": [
+            null,
+            "переместить курсор вверх"
+         ],
+         "move cursor down": [
+            null,
+            "переместить курсор вниз"
+         ],
+         "scroll notebook down": [
+            null,
+            "прокрутить блокнот вниз"
+         ],
+         "scroll notebook up": [
+            null,
+            "прокрутить блокнот вверх"
+         ],
+         "scroll cell center": [
+            null,
+            "прокрутить ячейку в центр"
+         ],
+         "Scroll the current cell to the center": [
+            null,
+            "Прокрутить текущую ячейку к центру"
+         ],
+         "scroll cell top": [
+            null,
+            "прокрутить ячейку вверх"
+         ],
+         "Scroll the current cell to the top": [
+            null,
+            "Прокрутить текущую ячейку к верху"
+         ],
+         "duplicate notebook": [
+            null,
+            "дублировать блокнот"
+         ],
+         "Create and open a copy of the current notebook": [
+            null,
+            "Создать и открыть копию текущего блокнота"
+         ],
+         "trust notebook": [
+            null,
+            "доверять блокноту"
+         ],
+         "Trust the current notebook": [
+            null,
+            "Доверять текущему блокноту"
+         ],
+         "rename notebook": [
+            null,
+            "переименовать блокнот"
+         ],
+         "Rename the current notebook": [
+            null,
+            "Переименовать текущий блокнот"
+         ],
+         "toggle all cells output collapsed": [
+            null,
+            "переключение сворачивания вывода всех ячеек"
+         ],
+         "Toggle the hidden state of all output areas": [
+            null,
+            "Переключить скрытое состояние всех областей вывода"
+         ],
+         "toggle all cells output scrolled": [
+            null,
+            "переключение прокрутки вывода всех ячеек"
+         ],
+         "Toggle the scrolling state of all output areas": [
+            null,
+            "Переключить состояние прокрутки всех областей вывода"
+         ],
+         "clear all cells output": [
+            null,
+            "очистить вывод всех ячеек"
+         ],
+         "Clear the content of all the outputs": [
+            null,
+            "Очистить содержимое всех выводов"
+         ],
+         "save notebook": [
+            null,
+            "сохранить блокнот"
+         ],
+         "Save and Checkpoint": [
+            null,
+            "Сохранение и контрольная точка"
+         ],
+         "Warning: accessing Cell.cm_config directly is deprecated.": [
+            null,
+            "Предупреждение: прямой доступ к Cell.cm_config устарел."
+         ],
+         "Unrecognized cell type: %s": [
+            null,
+            "Нераспознанный тип ячейки: %s"
+         ],
+         "Unrecognized cell type": [
+            null,
+            "Нераспознанный тип ячейки"
+         ],
+         "Error in cell toolbar callback %s": [
+            null,
+            "Ошибка в обратном вызове панели инструментов ячейки %s"
+         ],
+         "Clipboard types: %s": [
+            null,
+            "Типы буфера обмена: %s"
+         ],
+         "Dialog for paste from system clipboard": [
+            null,
+            "Диалоговое окно для вставки из системного буфера обмена"
+         ],
+         "Ctrl-V": [
+            null,
+            "Ctrl-V"
+         ],
+         "Cmd-V": [
+            null,
+            "Cmd-V"
+         ],
+         "Press %s again to paste": [
+            null,
+            "Нажмите %s еще раз, чтобы вставить"
+         ],
+         "Why is this needed? ": [
+            null,
+            "Зачем это нужно? "
+         ],
+         "We can't get paste events in this browser without a text box. ": [
+            null,
+            "Мы не можем получить прошлые события в этом браузере без текстового поля. "
+         ],
+         "There's an invisible text box focused in this dialog.": [
+            null,
+            "В этом диалоговом окне есть невидимое текстовое поле."
+         ],
+         "%s to paste": [
+            null,
+            "%s для вставки"
+         ],
+         "Can't execute cell since kernel is not set.": [
+            null,
+            "Невозможно выполнить ячейку, так как ядро не установлено."
+         ],
+         "In": [
+            null,
+            "Ввод"
+         ],
+         "Could not find a kernel matching %s. Please select a kernel:": [
+            null,
+            "Не удалось найти ядро, соответствующее %s. Пожалуйста, выберите ядро:"
+         ],
+         "Continue Without Kernel": [
+            null,
+            "Продолжить без ядра"
+         ],
+         "Set Kernel": [
+            null,
+            "Установить ядро"
+         ],
+         "Kernel not found": [
+            null,
+            "Ядро не найдено"
+         ],
+         "Creating Notebook Failed": [
+            null,
+            "Ошибка создания блокнота"
+         ],
+         "The error was: %s": [
+            null,
+            "Ошибка в: %s"
+         ],
+         "Run": [
+            null,
+            "Запуск"
+         ],
+         "Code": [
+            null,
+            "Код"
+         ],
+         "Markdown": [
+            null,
+            "Markdown"
+         ],
+         "Raw NBConvert": [
+            null,
+            "Необработанный NBConvert"
+         ],
+         "Heading": [
+            null,
+            "Заголовок"
+         ],
+         "unrecognized cell type:": [
+            null,
+            "нераспознанный тип ячейки:"
+         ],
+         "Failed to retrieve MathJax from '%s'": [
+            null,
+            "Не удалось получить MathJax из '%s'"
+         ],
+         "Math/LaTeX rendering will be disabled.": [
+            null,
+            "Рендеринг Math/LaTeX будет отключен."
+         ],
+         "Trusted Notebook": [
+            null,
+            "Доверенный блокнот"
+         ],
+         "Trust Notebook": [
+            null,
+            "Доверять блокноту"
+         ],
+         "None": [
+            null,
+            "Отсутствует"
+         ],
+         "No checkpoints": [
+            null,
+            "Контрольные точки отсутствуют"
+         ],
+         "Opens in a new window": [
+            null,
+            "Откроется в новом окне"
+         ],
+         "Autosave in progress, latest changes may be lost.": [
+            null,
+            "Автосохранение продолжается, последние изменения могут быть потеряны."
+         ],
+         "Unsaved changes will be lost.": [
+            null,
+            "Несохраненные изменения будут потеряны."
+         ],
+         "The Kernel is busy, outputs may be lost.": [
+            null,
+            "Ядро занято, вывод может быть потерян."
+         ],
+         "This notebook is version %1$s, but we only fully support up to %2$s.": [
+            null,
+            "Этот блокнот имеет версию %1$s, но мы полностью поддерживаем только до %2$s."
+         ],
+         "You can still work with this notebook, but cell and output types introduced in later notebook versions will not be available.": [
+            null,
+            "Вы все еще можете работать с этим блокнотом, но типы ячеек и выходных данных, представленные в более поздних версиях блокнота, будут недоступны."
+         ],
+         "Restart and Run All Cells": [
+            null,
+            "Перезапуск и запуск всех ячеек"
+         ],
+         "Restart and Clear All Outputs": [
+            null,
+            "Перезапуск и очистка всего вывода"
+         ],
+         "Restart": [
+            null,
+            "Перезапуск"
+         ],
+         "Continue Running": [
+            null,
+            "Продолжить запуск"
+         ],
+         "Reload": [
+            null,
+            "Перезагрузка"
+         ],
+         "Overwrite": [
+            null,
+            "Перезапись"
+         ],
+         "Trust": [
+            null,
+            "Доверять"
+         ],
+         "Revert": [
+            null,
+            "Откат"
+         ],
+         "Newer Notebook": [
+            null,
+            "Новый Notebook"
+         ],
+         "Use markdown headings": [
+            null,
+            "Использовать заголовки markdown"
+         ],
+         "Jupyter no longer uses special heading cells. Instead, write your headings in Markdown cells using # characters:": [
+            null,
+            "Jupyter больше не использует специальные ячейки заголовка. Вместо этого указывайте заголовки в ячейках Markdown, используя символы #:"
+         ],
+         "## This is a level 2 heading": [
+            null,
+            "## Это заголовок 2 уровня"
+         ],
+         "Restart kernel and re-run the whole notebook?": [
+            null,
+            "Перезапустить ядро и перезапустить все блокноты?"
+         ],
+         "Are you sure you want to restart the current kernel and re-execute the whole notebook?  All variables and outputs will be lost.": [
+            null,
+            "Вы уверены, что хотите перезапустить текущее ядро и повторно выполнить весь блокнот?  Все переменные и выходные данные будут потеряны."
+         ],
+         "Restart kernel and clear all output?": [
+            null,
+            "Перезапустить ядро и очистить весь вывод?"
+         ],
+         "Do you want to restart the current kernel and clear all output?  All variables and outputs will be lost.": [
+            null,
+            "Вы хотите перезапустить текущее ядро и очистить весь вывод? Все переменные и выводы будут потеряны."
+         ],
+         "Restart kernel?": [
+            null,
+            "Перезапустить ядро?"
+         ],
+         "Do you want to restart the current kernel?  All variables will be lost.": [
+            null,
+            "Вы хотите перезапустить текущее ядро? Все переменные будут потеряны."
+         ],
+         "Shutdown kernel?": [
+            null,
+            "Выключить ядро?"
+         ],
+         "Do you want to shutdown the current kernel?  All variables will be lost.": [
+            null,
+            "Вы хотите выключить текущее ядро? Все переменные будут потеряны."
+         ],
+         "Notebook changed": [
+            null,
+            "Блокнот изменен"
+         ],
+         "The notebook file has changed on disk since the last time we opened or saved it. Do you want to overwrite the file on disk with the version open here, or load the version on disk (reload the page) ?": [
+            null,
+            "Файл блокнота изменился на диске с момента его последнего открытия или сохранения. Вы хотите перезаписать файл на диске открытой здесь версией или загрузить версию с диска (перезагрузить страницу)?"
+         ],
+         "Notebook validation failed": [
+            null,
+            "Ошибка проверки блокнота"
+         ],
+         "The save operation succeeded, but the notebook does not appear to be valid. The validation error was:": [
+            null,
+            "Операция сохранения прошла успешно, но блокнот, похоже, недействителен. Ошибка проверки:"
+         ],
+         "A trusted Jupyter notebook may execute hidden malicious code when you open it. Selecting trust will immediately reload this notebook in a trusted state. For more information, see the Jupyter security documentation: ": [
+            null,
+            "Доверенный блокнот Jupyter может выполнять скрытый вредоносный код при открытии. При выборе параметра доверие этот блокнот будет немедленно перезагружен в доверенное состояние. Дополнительные сведения см. в документации по безопасности Jupiter: "
+         ],
+         "here": [
+            null,
+            "здесь"
+         ],
+         "Trust this notebook?": [
+            null,
+            "Доверять этому блокноту?"
+         ],
+         "Notebook failed to load": [
+            null,
+            "Ошибка загрузки блокнота"
+         ],
+         "The error was: ": [
+            null,
+            "Ошибка в: "
+         ],
+         "See the error console for details.": [
+            null,
+            "Дополнительные сведения см. в консоли ошибок."
+         ],
+         "The notebook also failed validation:": [
+            null,
+            "Блокнот также не прошла проверку:"
+         ],
+         "An invalid notebook may not function properly. The validation error was:": [
+            null,
+            "Неисправный блокнот может работать неправильно. Ошибка проверки:"
+         ],
+         "This notebook has been converted from an older notebook format to the current notebook format v(%s).": [
+            null,
+            "Этот блокнот был преобразован из более старого формата блокнота в текущий формат v(%s)."
+         ],
+         "This notebook has been converted from a newer notebook format to the current notebook format v(%s).": [
+            null,
+            "Этот блокнот был преобразован из более нового формата блокнота в текущий формат v(%s)."
+         ],
+         "The next time you save this notebook, the current notebook format will be used.": [
+            null,
+            "При следующем сохранении этого блокнота будет использоваться текущий формат блокнота."
+         ],
+         "Older versions of Jupyter may not be able to read the new format.": [
+            null,
+            "Старые версии Jupiter могут быть не в состоянии прочитать новый формат."
+         ],
+         "Some features of the original notebook may not be available.": [
+            null,
+            "Некоторые функции оригинального блокнота могут быть недоступны."
+         ],
+         "To preserve the original version, close the notebook without saving it.": [
+            null,
+            "Чтобы сохранить исходную версию, закройте блокнот не сохраняя его."
+         ],
+         "Notebook converted": [
+            null,
+            "Блокнот преобразован"
+         ],
+         "(No name)": [
+            null,
+            "(Без имени)"
+         ],
+         "An unknown error occurred while loading this notebook. This version can load notebook formats %s or earlier. See the server log for details.": [
+            null,
+            "При загрузке этого блокнота произошла неизвестная ошибка. Эта версия может загружать форматы блокнотов %s или более ранние. Дополнительные сведения см. в журнале сервера."
+         ],
+         "Error loading notebook": [
+            null,
+            "Ошибка загрузки блокнота"
+         ],
+         "Are you sure you want to revert the notebook to the latest checkpoint?": [
+            null,
+            "Вы уверены, что хотите вернуть блокнот к последней контрольной точке?"
+         ],
+         "This cannot be undone.": [
+            null,
+            "Этого уже не исправить."
+         ],
+         "The checkpoint was last updated at:": [
+            null,
+            "Последний раз контрольная точка обновлялась:"
+         ],
+         "Revert notebook to checkpoint": [
+            null,
+            "Откатить блокнот до контрольной точки"
+         ],
+         "Edit Mode": [
+            null,
+            "Режим редактирования"
+         ],
+         "Command Mode": [
+            null,
+            "Командный режим"
+         ],
+         "Kernel Created": [
+            null,
+            "Ядро создано"
+         ],
+         "Connecting to kernel": [
+            null,
+            "Подключение к ядру"
+         ],
+         "Not Connected": [
+            null,
+            "Не подключено"
+         ],
+         "click to reconnect": [
+            null,
+            "нажмите для переподключения"
+         ],
+         "Restarting kernel": [
+            null,
+            "Перезапуск ядра"
+         ],
+         "Kernel Restarting": [
+            null,
+            "Перезапуск ядра"
+         ],
+         "The kernel appears to have died. It will restart automatically.": [
+            null,
+            "Ядро, по-видимому, умерло. Оно будет перезапущено автоматически."
+         ],
+         "Dead kernel": [
+            null,
+            "Убить ядро"
+         ],
+         "Kernel Dead": [
+            null,
+            "Ядро мертво"
+         ],
+         "Interrupting kernel": [
+            null,
+            "Прерывание ядра"
+         ],
+         "No Connection to Kernel": [
+            null,
+            "Нет связи с ядром"
+         ],
+         "A connection to the notebook server could not be established. The notebook will continue trying to reconnect. Check your network connection or notebook server configuration.": [
+            null,
+            "Не удалось установить соединение с сервером блокнота. Блокнот будет продолжать попытки повторного подключения. Проверьте сетевое подключение или конфигурацию сервера блокнота."
+         ],
+         "Connection failed": [
+            null,
+            "Ошибка подключения"
+         ],
+         "No kernel": [
+            null,
+            "Ядро отсутствует"
+         ],
+         "Kernel is not running": [
+            null,
+            "Ядро не запущено"
+         ],
+         "Don't Restart": [
+            null,
+            "Не перезагружать"
+         ],
+         "Try Restarting Now": [
+            null,
+            "Попробуйте перезагрузить сейчас"
+         ],
+         "The kernel has died, and the automatic restart has failed. It is possible the kernel cannot be restarted. If you are not able to restart the kernel, you will still be able to save the notebook, but running code will no longer work until the notebook is reopened.": [
+            null,
+            "Ядро умерло и автоматический перезапуск не удался. Вполне возможно, что ядро не может быть перезапущено. Если вам не удастся перезапустить ядро - вы все равно сможете сохранить блокнот, но запущенный код больше не будет работать до тех пор, пока блокнот не будет снова открыт."
+         ],
+         "No Kernel": [
+            null,
+            "Ядро отсутствует"
+         ],
+         "Failed to start the kernel": [
+            null,
+            "Не удалось запустить ядро"
+         ],
+         "Kernel Busy": [
+            null,
+            "Ядро занято"
+         ],
+         "Kernel starting, please wait...": [
+            null,
+            "Перезапуск ядра, пожалуйста подождите..."
+         ],
+         "Kernel Idle": [
+            null,
+            "Ядро бездействует"
+         ],
+         "Kernel ready": [
+            null,
+            "Ядро готово"
+         ],
+         "Using kernel: ": [
+            null,
+            "Использование ядра: "
+         ],
+         "Only candidate for language: %1$s was %2$s.": [
+            null,
+            "Единственный кандидат на язык: %1$s был %2$s."
+         ],
+         "Loading notebook": [
+            null,
+            "Загрузка блокнота"
+         ],
+         "Notebook loaded": [
+            null,
+            "Блокнот загружен"
+         ],
+         "Saving notebook": [
+            null,
+            "Сохранение блокнота"
+         ],
+         "Notebook saved": [
+            null,
+            "Блокнот сохранен"
+         ],
+         "Notebook save failed": [
+            null,
+            "Ошибка сохранения блокнота"
+         ],
+         "Notebook copy failed": [
+            null,
+            "Ошибка копирования блокнота"
+         ],
+         "Checkpoint created": [
+            null,
+            "Контрольная точка создана"
+         ],
+         "Checkpoint failed": [
+            null,
+            "Ошибка контрольной точки"
+         ],
+         "Checkpoint deleted": [
+            null,
+            "Контрольная точка удалена"
+         ],
+         "Checkpoint delete failed": [
+            null,
+            "Ошибка удаления контрольной точки"
+         ],
+         "Restoring to checkpoint...": [
+            null,
+            "Восстановление до контрольной точки..."
+         ],
+         "Checkpoint restore failed": [
+            null,
+            "Не удалось восстановить контрольную точку"
+         ],
+         "Autosave disabled": [
+            null,
+            "Автосохранение отключено"
+         ],
+         "Saving every %d sec.": [
+            null,
+            "Сохранение каждые %d секунд."
+         ],
+         "Trusted": [
+            null,
+            "Доверенный"
+         ],
+         "Not Trusted": [
+            null,
+            "Не доверять"
+         ],
+         "click to expand output": [
+            null,
+            "щелкните чтобы развернуть вывод"
+         ],
+         "click to expand output; double click to hide output": [
+            null,
+            "щелкните чтобы развернуть вывод; двойной щелчок чтобы скрыть вывод"
+         ],
+         "click to unscroll output; double click to hide": [
+            null,
+            "щелчок для прокрутки вывода; двойной щелчок - чтобы скрыть"
+         ],
+         "click to scroll output; double click to hide": [
+            null,
+            "щелчок для прокрутки вывода; двойной щелчок - чтобы скрыть"
+         ],
+         "Javascript error adding output!": [
+            null,
+            "Ошибка Javascript при добавлении вывода!"
+         ],
+         "See your browser Javascript console for more details.": [
+            null,
+            "Дополнительные сведения см. в разделе консоль Javascript вашего браузера."
+         ],
+         "Out[%d]:": [
+            null,
+            "Вывод[%d]:"
+         ],
+         "Unrecognized output: %s": [
+            null,
+            "Нераспознанный вывод: %s"
+         ],
+         "Open the pager in an external window": [
+            null,
+            "Открыть пейджер во внешнем окне"
+         ],
+         "Close the pager": [
+            null,
+            "Закрыть пейджер"
+         ],
+         "Jupyter Pager": [
+            null,
+            "Пейджер Jupyter"
+         ],
+         "go to cell start": [
+            null,
+            "перейти к началу ячейки"
+         ],
+         "go to cell end": [
+            null,
+            "перейти к концу ячейки"
+         ],
+         "go one word left": [
+            null,
+            "перейти на слово влево"
+         ],
+         "go one word right": [
+            null,
+            "перейти на слово вправо"
+         ],
+         "delete word before": [
+            null,
+            "удалить слово перед"
+         ],
+         "delete word after": [
+            null,
+            "удалить слово после"
+         ],
+         "code completion or indent": [
+            null,
+            "завершение кода или отступ"
+         ],
+         "tooltip": [
+            null,
+            "всплывающая подсказка"
+         ],
+         "indent": [
+            null,
+            "отступ"
+         ],
+         "dedent": [
+            null,
+            "dedent"
+         ],
+         "select all": [
+            null,
+            "выбрать всё"
+         ],
+         "undo": [
+            null,
+            "отменить"
+         ],
+         "redo": [
+            null,
+            "повторить"
+         ],
+         "Shift": [
+            null,
+            "Shift"
+         ],
+         "Alt": [
+            null,
+            "Alt"
+         ],
+         "Up": [
+            null,
+            "Вверх"
+         ],
+         "Down": [
+            null,
+            "Вниз"
+         ],
+         "Left": [
+            null,
+            "Лево"
+         ],
+         "Right": [
+            null,
+            "Право"
+         ],
+         "Tab": [
+            null,
+            "Tab"
+         ],
+         "Caps Lock": [
+            null,
+            "CapsLock"
+         ],
+         "Esc": [
+            null,
+            "Esc"
+         ],
+         "Ctrl": [
+            null,
+            "Ctrl"
+         ],
+         "Enter": [
+            null,
+            "Enter"
+         ],
+         "Page Up": [
+            null,
+            "Страница вверх"
+         ],
+         "Page Down": [
+            null,
+            "Страница вниз"
+         ],
+         "Home": [
+            null,
+            "Домой"
+         ],
+         "End": [
+            null,
+            "Конец"
+         ],
+         "Space": [
+            null,
+            "Пробел"
+         ],
+         "Backspace": [
+            null,
+            "Бэкспейс"
+         ],
+         "Minus": [
+            null,
+            "Минус"
+         ],
+         "PageUp": [
+            null,
+            "СтраницаВверх"
+         ],
+         "The Jupyter Notebook has two different keyboard input modes.": [
+            null,
+            "Jupyter Notebook имеет два различных режима ввода с клавиатуры."
+         ],
+         "<b>Edit mode</b> allows you to type code or text into a cell and is indicated by a green cell border.": [
+            null,
+            "<b>Режим редактирования</b> позволяет вводить код или текст в ячейку и обозначается зеленой рамкой ячейки."
+         ],
+         "<b>Command mode</b> binds the keyboard to notebook level commands and is indicated by a grey cell border with a blue left margin.": [
+            null,
+            "<b>Командный режим</b> связывает клавиатуру с командами уровня блокнота и обозначается серой рамкой ячейки с синим левым краем."
+         ],
+         "Close": [
+            null,
+            "Закрыть"
+         ],
+         "Keyboard shortcuts": [
+            null,
+            "Сочетания клавиш"
+         ],
+         "Command": [
+            null,
+            "Команда"
+         ],
+         "Control": [
+            null,
+            "Управление"
+         ],
+         "Option": [
+            null,
+            "Параметр"
+         ],
+         "Return": [
+            null,
+            "Возврат"
+         ],
+         "Command Mode (press %s to enable)": [
+            null,
+            "Командный режим (нажмите %s для включения)"
+         ],
+         "Edit Shortcuts": [
+            null,
+            "Редактировать ярлыки"
+         ],
+         "edit command-mode keyboard shortcuts": [
+            null,
+            "редактировать сочетания клавиш командного-режима"
+         ],
+         "Edit Mode (press %s to enable)": [
+            null,
+            "Режим редактирования (нажмите %s для включения)"
+         ],
+         "Autosave Failed!": [
+            null,
+            "Автосохранение не удалось!"
+         ],
+         "Rename": [
+            null,
+            "Переименование"
+         ],
+         "Enter a new notebook name:": [
+            null,
+            "Введите новое имя блокнота:"
+         ],
+         "Rename Notebook": [
+            null,
+            "Переименовать блокнот"
+         ],
+         "Invalid notebook name. Notebook names must have 1 or more characters and can contain any characters except :/\\. Please enter a new notebook name:": [
+            null,
+            "Недействительное имя блокнота. Имена блокнотов должны иметь 1 или более символов и могут содержать любые символы, кроме :/\\. Пожалуйста, введите новое имя блокнота:"
+         ],
+         "Renaming...": [
+            null,
+            "Переименование..."
+         ],
+         "Unknown error": [
+            null,
+            "Неизвестная ошибка"
+         ],
+         "no checkpoint": [
+            null,
+            "контрольная точка отсутствует"
+         ],
+         "Last Checkpoint: %s": [
+            null,
+            "Последняя контрольная точка: %s"
+         ],
+         "(unsaved changes)": [
+            null,
+            "(несохраненные изменения)"
+         ],
+         "(autosaved)": [
+            null,
+            "(автосохранение)"
+         ],
+         "Warning: too many matches (%d). Some changes might not be shown or applied.": [
+            null,
+            "Предупреждение: слишком много совпадений (%d). Некоторые изменения могут быть не показаны или не применены."
+         ],
+         "%d match": [
+            "%d matches",
+            "%d совпадение",
+            "%d совпадения",
+            "%d совпадений"
+         ],
+         "More than 100 matches, aborting": [
+            null,
+            "Более 100 совпадений, прерывание"
+         ],
+         "Use regex (JavaScript regex syntax)": [
+            null,
+            "Используйте регулярное выражение (синтаксис регулярных выражений JavaScript)"
+         ],
+         "Replace in selected cells": [
+            null,
+            "Заменить в выбранных ячейках"
+         ],
+         "Match case": [
+            null,
+            "Учитывать регистр"
+         ],
+         "Find": [
+            null,
+            "Поиск"
+         ],
+         "Replace": [
+            null,
+            "Замена"
+         ],
+         "No matches, invalid or empty regular expression": [
+            null,
+            "Нет совпадений, недопустимое или пустое регулярное выражение"
+         ],
+         "Replace All": [
+            null,
+            "Заменить всё"
+         ],
+         "Find and Replace": [
+            null,
+            "Поиск и замена"
+         ],
+         "find and replace": [
+            null,
+            "поиск и замена"
+         ],
+         "Write raw LaTeX or other formats here, for use with nbconvert. It will not be rendered in the notebook. When passing through nbconvert, a Raw Cell's content is added to the output unmodified.": [
+            null,
+            "Пишите сюда необработанный LaTeX или другие форматы для использования с nbconvert. Он не будет отображаться в блокноте. При прохождении через nbconvert содержимое необработанных ячеек добавляется к выводу неизмененным."
+         ],
+         "Grow the tooltip vertically (press shift-tab twice)": [
+            null,
+            "Растяните всплывающую подсказку вертикально (нажмите shift-tab дважды)"
+         ],
+         "show the current docstring in pager (press shift-tab 4 times)": [
+            null,
+            "показать текущую строку документа в пейджере (нажмите shift-tab 4 раза)"
+         ],
+         "Open in Pager": [
+            null,
+            "Открыть в пейджере"
+         ],
+         "Tooltip will linger for 10 seconds while you type": [
+            null,
+            "Всплывающая подсказка будет задерживаться в течение 10 секунд, пока вы набираете текст"
+         ],
+         "Welcome to the Notebook Tour": [
+            null,
+            "Добро пожаловать в тур по Notebook"
+         ],
+         "You can use the left and right arrow keys to go backwards and forwards.": [
+            null,
+            "Вы можете использовать клавиши со стрелками влево и вправо чтобы двигаться назад и вперед."
+         ],
+         "Filename": [
+            null,
+            "Имя файла"
+         ],
+         "Click here to change the filename for this notebook.": [
+            null,
+            "Нажмите здесь чтобы изменить имя файла для этого блокнота."
+         ],
+         "Notebook Menubar": [
+            null,
+            "Строка меню блокнота"
+         ],
+         "The menubar has menus for actions on the notebook, its cells, and the kernel it communicates with.": [
+            null,
+            "Панель меню имеет меню для действий с блокнотом, ее ячейками и ядром, с которым она взаимодействует."
+         ],
+         "Notebook Toolbar": [
+            null,
+            "Панель инструментов блокнота"
+         ],
+         "The toolbar has buttons for the most common actions. Hover your mouse over each button for more information.": [
+            null,
+            "На панели инструментов есть кнопки для наиболее распространенных действий. Наведите курсор мыши на каждую кнопку для получения дополнительной информации."
+         ],
+         "Mode Indicator": [
+            null,
+            "Индикатор режима"
+         ],
+         "The Notebook has two modes: Edit Mode and Command Mode. In this area, an indicator can appear to tell you which mode you are in.": [
+            null,
+            "Notebook имеет два режима работы: режим редактирования и командный режим. В этой области может появиться индикатор, сообщающий вам, в каком режиме вы находитесь."
+         ],
+         "Right now you are in Command Mode, and many keyboard shortcuts are available. In this mode, no icon is displayed in the indicator area.": [
+            null,
+            "Прямо сейчас вы находитесь в командном режиме и многие сочетания клавиш доступны. В этом режиме значок в области индикатора не отображается."
+         ],
+         "Pressing <code>Enter</code> or clicking in the input text area of the cell switches to Edit Mode.": [
+            null,
+            "Нажатие кнопки <code>Enter</code> или щелчок в области ввода текста ячейки переключает ее в режим редактирования."
+         ],
+         "Notice that the border around the currently active cell changed color. Typing will insert text into the currently active cell.": [
+            null,
+            "Обратите внимание, что граница вокруг текущей активной ячейки изменила цвет. Ввод приведет к вставке текста в текущую активную ячейку."
+         ],
+         "Back to Command Mode": [
+            null,
+            "Возврат к командному режиму"
+         ],
+         "Pressing <code>Esc</code> or clicking outside of the input text area takes you back to Command Mode.": [
+            null,
+            "Нажатие кнопки <code>Esc</code> или щелчок за пределами области ввода текста возвращает вас в командный режим."
+         ],
+         "Keyboard Shortcuts": [
+            null,
+            "Сочетания клавиш"
+         ],
+         "You can click here to get a list of all of the keyboard shortcuts.": [
+            null,
+            "Вы можете нажать здесь, чтобы получить список всех сочетаний клавиш."
+         ],
+         "Kernel Indicator": [
+            null,
+            "Индикатор ядра"
+         ],
+         "This is the Kernel indicator. It looks like this when the Kernel is idle.": [
+            null,
+            "Это и есть индикатор ядра. Он выглядит так, когда ядро простаивает."
+         ],
+         "The Kernel indicator looks like this when the Kernel is busy.": [
+            null,
+            "Индикатор ядра выглядит так, когда ядро занято."
+         ],
+         "Interrupting the Kernel": [
+            null,
+            "Прерывание ядра"
+         ],
+         "To cancel a computation in progress, you can click here.": [
+            null,
+            "Чтобы отменить выполняемые вычисления - вы можете нажать здесь."
+         ],
+         "Notification Area": [
+            null,
+            "Область уведомлений"
+         ],
+         "Messages in response to user actions (Save, Interrupt, etc.) appear here.": [
+            null,
+            "Сообщения в ответ на действия пользователя (сохранение, прерывание и т. д.) появятся здесь."
+         ],
+         "End of Tour": [
+            null,
+            "Конец обзора"
+         ],
+         "This concludes the Jupyter Notebook User Interface Tour.": [
+            null,
+            "На этом завершается экскурсия по пользовательскому интерфейсу Jupyter Notebook."
+         ],
+         "Edit Attachments": [
+            null,
+            "Редактировать вложения"
+         ],
+         "Cell": [
+            null,
+            "Ячейка"
+         ],
+         "Edit Metadata": [
+            null,
+            "Редактировать метаданные"
+         ],
+         "Custom": [
+            null,
+            "Пользовательский"
+         ],
+         "Set the MIME type of the raw cell:": [
+            null,
+            "Установите тип MIME необработанной ячейки:"
+         ],
+         "Raw Cell MIME Type": [
+            null,
+            "Необработанный MIME-тип ячейки"
+         ],
+         "Raw NBConvert Format": [
+            null,
+            "Необработанный формат NBConvert"
+         ],
+         "Raw Cell Format": [
+            null,
+            "Необработанный формат ячейки"
+         ],
+         "Slide": [
+            null,
+            "Слайд"
+         ],
+         "Sub-Slide": [
+            null,
+            "Под-слайд"
+         ],
+         "Fragment": [
+            null,
+            "Фрагмент"
+         ],
+         "Skip": [
+            null,
+            "Пропустить"
+         ],
+         "Notes": [
+            null,
+            "Примечания"
+         ],
+         "Slide Type": [
+            null,
+            "Тип слайда"
+         ],
+         "Slideshow": [
+            null,
+            "Слайд-шоу"
+         ],
+         "Add tag": [
+            null,
+            "Добавить тег"
+         ],
+         "Edit the list of tags below. All whitespace is treated as tag separators.": [
+            null,
+            "Отредактируйте список тегов ниже. Все пробелы рассматриваются как разделители тегов."
+         ],
+         "Edit the tags": [
+            null,
+            "Редактировать теги"
+         ],
+         "Edit Tags": [
+            null,
+            "Редактировать теги"
+         ],
+         "Shutdown": [
+            null,
+            "Выключение"
+         ],
+         "Create a new notebook with %s": [
+            null,
+            "Создать новый блокнот с %s"
+         ],
+         "An error occurred while creating a new notebook.": [
+            null,
+            "При создании нового блокнота произошла ошибка."
+         ],
+         "Creating File Failed": [
+            null,
+            "Ошибка создания файла"
+         ],
+         "An error occurred while creating a new file.": [
+            null,
+            "При создании нового файла произошла ошибка."
+         ],
+         "Creating Folder Failed": [
+            null,
+            "Ошибка создания папки"
+         ],
+         "An error occurred while creating a new folder.": [
+            null,
+            "При создании новой папки произошла ошибка."
+         ],
+         "Failed to read file": [
+            null,
+            "Ошибка чтения файла"
+         ],
+         "Failed to read file %s": [
+            null,
+            "Ошибка чтения файла %s"
+         ],
+         "The file size is %d MB. Do you still want to upload it?": [
+            null,
+            "Размер файла - %d MB. Вы все еще хотите загрузить его?"
+         ],
+         "Large file size warning": [
+            null,
+            "Предупреждение о большом размере файла"
+         ],
+         "Server error: ": [
+            null,
+            "Ошибка сервера: "
+         ],
+         "The notebook list is empty.": [
+            null,
+            "Список блокнотов пуст."
+         ],
+         "Click here to rename, delete, etc.": [
+            null,
+            "Нажмите здесь, чтобы переименовать, удалить и т.д."
+         ],
+         "Running": [
+            null,
+            "Запустить"
+         ],
+         "Enter a new file name:": [
+            null,
+            "Введите новое имя файла:"
+         ],
+         "Enter a new directory name:": [
+            null,
+            "Введите новое название каталога:"
+         ],
+         "Enter a new name:": [
+            null,
+            "Введите новое имя:"
+         ],
+         "Rename file": [
+            null,
+            "Переименовать файл"
+         ],
+         "Rename directory": [
+            null,
+            "Переименовать директорию"
+         ],
+         "Rename notebook": [
+            null,
+            "Переименовать блокнот"
+         ],
+         "Move": [
+            null,
+            "Перемещение"
+         ],
+         "An error occurred while renaming \"%1$s\" to \"%2$s\".": [
+            null,
+            "Произошла ошибка при переименовании \"%1$s\" в \"%2$s\"."
+         ],
+         "Rename Failed": [
+            null,
+            "Ошибка переименования"
+         ],
+         "Enter a new destination directory path for this item:": [
+            "Enter a new destination directory path for these %d items:",
+            "Введите новый путь к каталогу назначения для этого %d элемента:",
+            "Введите новый путь к каталогу назначения для этих %d элементов:",
+            "Введите новый путь к каталогу назначения для этих %d элементов:"
+         ],
+         "Move an Item": [
+            "Move %d Items",
+            "Переместить %d элемент",
+            "Переместить %d элемента",
+            "Переместить %d элементов"
+         ],
+         "An error occurred while moving \"%1$s\" from \"%2$s\" to \"%3$s\".": [
+            null,
+            "Произошла ошибка при перемещении \"%1$s\" из \"%2$s\" в \"%3$s\"."
+         ],
+         "Move Failed": [
+            null,
+            "Ошибка перемещения"
+         ],
+         "Are you sure you want to permanently delete: \"%s\"?": [
+            "Are you sure you want to permanently delete the %d files or folders selected?",
+            "Вы уверены, что хотите навсегда удалить файл или папку \"%s\"?",
+            "Вы уверены, что хотите навсегда удалить %d выбранных файла или папки?",
+            "Вы уверены, что хотите навсегда удалить %d выбранных файлов или папок?"
+         ],
+         "An error occurred while deleting \"%s\".": [
+            null,
+            "Произошла ошибка при удалении \"%s\"."
+         ],
+         "Delete Failed": [
+            null,
+            "Ошибка удаления"
+         ],
+         "Are you sure you want to duplicate: \"%s\"?": [
+            "Are you sure you want to duplicate the %d files selected?",
+            "Вы уверены, что хотите скопировать файл \"%s\"?",
+            "Вы уверены, что хотите скопировать %d выбранных файла?",
+            "Вы уверены, что хотите скопировать %d выбранных файлов?"
+         ],
+         "Duplicate": [
+            null,
+            "Скопировать"
+         ],
+         "An error occurred while duplicating \"%s\".": [
+            null,
+            "Произошла ошибка при копировании \"%s\"."
+         ],
+         "Duplicate Failed": [
+            null,
+            "Ошибка дублирования"
+         ],
+         "Upload": [
+            null,
+            "Загрузить"
+         ],
+         "Invalid file name": [
+            null,
+            "Неверное имя файла"
+         ],
+         "File names must be at least one character and not start with a period": [
+            null,
+            "Имена файлов должны состоять как минимум из одного символа и не начинаться с точки"
+         ],
+         "Cannot upload invalid Notebook": [
+            null,
+            "Невозможно загрузить недействительный Notebook"
+         ],
+         "There is already a file named \"%s\". Do you want to replace it?": [
+            null,
+            "Там уже имеется файл с именем \"%s\". Вы хотите заменить его?"
+         ],
+         "Replace file": [
+            null,
+            "Заменить файл"
+         ]
+      }
+   }
+}

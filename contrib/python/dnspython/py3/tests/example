@@ -1,0 +1,262 @@
+; Copyright (C) 2000, 2001  Internet Software Consortium.
+;
+; Permission to use, copy, modify, and distribute this software for any
+; purpose with or without fee is hereby granted, provided that the above
+; copyright notice and this permission notice appear in all copies.
+;
+; THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM
+; DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
+; IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
+; INTERNET SOFTWARE CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT,
+; INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING
+; FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+; NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION
+; WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+; $Id: example 265924 2016-05-20 18:26:42Z bwelling $
+
+$ORIGIN .
+$TTL 300	; 5 minutes
+example		IN SOA	ns1.example. hostmaster.example. 1 2 3 4 5 
+example.		NS	ns1.example.
+ns1.example.	A	10.53.0.1
+example.		NS	ns2.example.
+ns2.example.	A	10.53.0.2
+
+$ORIGIN example.
+@			NSEC3PARAM	1 1 12 aabbccdd
+@			NSEC3PARAM	1 1 12 -
+*			MX	10 mail
+a			TXT	"foo foo foo"
+			PTR	foo.net.
+$TTL 3600	; 1 hour
+a01			A	0.0.0.0
+a02			A	255.255.255.255
+;;
+;a601			A6	0 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+;			A6	64 ::ffff:ffff:ffff:ffff foo.
+;			A6	127 ::1 foo.
+;			A6	128  .
+aaaa01			AAAA	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+aaaa02			AAAA	::1
+afsdb01			AFSDB	0 hostname
+afsdb02			AFSDB	65535 .
+$TTL 300	; 5 minutes
+b			CNAME	foo.net.
+c			A	73.80.65.49
+$TTL 3600	; 1 hour
+cert01			CERT	65534 65535 PRIVATEOID MxFcby9k/yvedMfQgKzhH5er0Mu/vILz45IkskceFGgi WCn/GxHhai6VAuHAoNUz4YoU1tVfSCSqQYn6//11U6Nl d80jEeC8aTrO+KKmCaY= 
+cname01			CNAME	cname-target.
+cname02			CNAME	cname-target
+cname03			CNAME	.
+dhcid01			DHCID	AAIBY2/AuCccgoJbsaxcQc9TUapptP69lOjxfNuVAA2kjEA=
+dhcid02			DHCID	AAEBOSD+XR3Os/0LozeXVqcNc7FwCfQdWL3b/NaiUDlW2No=
+dhcid03			DHCID	AAABxLmlskllE0MVjd57zHcWmEH3pCQ6VytcKD//7es/deY=
+$TTL 300	; 5 minutes
+d			A	73.80.65.49
+$TTL 3600	; 1 hour
+dname01			DNAME	dname-target.
+dname02			DNAME	dname-target
+dname03			DNAME	.
+$TTL 300	; 5 minutes
+e			MX	10 mail
+			TXT	"one"
+			TXT	"three"
+			TXT	"two"
+			A	73.80.65.49
+			A	73.80.65.50
+			A	73.80.65.52
+			A	73.80.65.51
+f			A	73.80.65.52
+$TTL 3600	; 1 hour
+gpos01			GPOS	"-22.6882" "116.8652" "250.0"
+;;
+;; XXXRTH  I have commented out the following line because I don't think
+;; it is a valid GPOS record.
+;; 
+;;gpos02			GPOS	"" "" ""
+hinfo01			HINFO	"Generic PC clone" "NetBSD-1.4"
+hinfo02			HINFO	"PC" "NetBSD"
+isdn01			ISDN	"isdn-address"
+isdn02			ISDN	"isdn-address" "subaddress"
+isdn03			ISDN	isdn-address
+isdn04			ISDN	isdn-address subaddress
+;key01			KEY	512 255 1 AQMFD5raczCJHViKtLYhWGz8hMY9UGRuniJDBzC7w0aR yzWZriO6i2odGWWQVucZqKVsENW91IOW4vqudngPZsY3 GvQ/xVA8/7pyFj6b7Esga60zyGW6LFe9r8n6paHrlG5o jqf0BaqHT+8= 
+;key02			KEY	HOST|FLAG4 DNSSEC RSAMD5 AQMFD5raczCJHViKtLYhWGz8hMY9UGRuniJDBzC7w0aR yzWZriO6i2odGWWQVucZqKVsENW91IOW4vqudngPZsY3 GvQ/xVA8/7pyFj6b7Esga60zyGW6LFe9r8n6paHrlG5o jqf0BaqHT+8= 
+kx01			KX	10 kdc
+kx02			KX	10 .
+loc01			LOC	60 9 N 24 39 E 10 20 2000 20
+loc02			LOC	60 09 00.000 N 24 39 00.000 E 10.00m 20.00m 2000.00m 20.00m
+loc03			LOC	60 9 0.000 N 24 39 0.000 E 10.00m 90000000.00m 2000m 20m
+loc04			LOC	60 9 1.5 N 24 39 0.000 E 10.00m 90000000.00m 2000m 20m
+loc05			LOC	60 9 1.51 N 24 39 0.000 E 10.00m 90000000.00m 2000m 20m
+loc06			LOC	60 9 1 N 24 39 0.000 E 10.00m 90000000.00m 2000m 20m
+loc07			LOC	0 9 1 N 24 39 E 10 90000000 2000 20
+loc08			LOC	0 9 1 S 24 39 0.000 E 10.00m 90000000.00m 2000m 20m
+;;
+;; XXXRTH  These are all obsolete and unused.  dnspython doesn't implement
+;; them
+;;mb01			MG	madname
+;;mb02			MG	.
+;;mg01			MG	mgmname
+;;mg02			MG	.
+;;minfo01			MINFO	rmailbx emailbx
+;;minfo02			MINFO	. .
+;;mr01			MR	mrname
+;;mr02			MR	.
+mx01			MX	10 mail
+mx02			MX	10 .
+naptr01			NAPTR	0 0 "" "" "" .
+naptr02			NAPTR	65535 65535 "blurgh" "blorf" "blegh" foo.
+nsap-ptr01		NSAP-PTR foo.
+			NSAP-PTR .
+nsap01			NSAP	0x47000580005a0000000001e133ffffff00016100
+nsap02			NSAP	0x47.000580005a0000000001e133ffffff000161.00
+;nxt01			NXT	a.secure ( NS SOA MX SIG KEY LOC NXT )
+;nxt02			NXT	. ( NSAP-PTR NXT )
+;nxt03			NXT	. ( A )
+;nxt04			NXT	. ( 127 )
+ptr01			PTR	example.
+px01			PX	65535 foo. bar.
+px02			PX	65535 . .
+rp01			RP	mbox-dname txt-dname
+rp02			RP	. .
+rt01			RT	0 intermediate-host
+rt02			RT	65535 .
+$TTL 300	; 5 minutes
+s			NS	ns.s
+$ORIGIN s.example.
+ns			A	73.80.65.49
+$ORIGIN example.
+$TTL 3600	; 1 hour
+;sig01			SIG	NXT 1 3 3600 20200101000000 20030101000000 2143 foo MxFcby9k/yvedMfQgKzhH5er0Mu/vILz45IkskceFGgi WCn/GxHhai6VAuHAoNUz4YoU1tVfSCSqQYn6//11U6Nl d80jEeC8aTrO+KKmCaY= 
+srv01			SRV	0 0 0 .
+srv02			SRV	65535 65535 65535 old-slow-box.example.com.
+$TTL 301	; 5 minutes 1 second
+t			A	73.80.65.49
+$TTL 3600	; 1 hour
+tlsa1			TLSA    3 1 1 a9cdf989b504fe5dca90c0d2167b6550570734f7c763e09fdf88904e06157065
+tlsa2			TLSA    1 0 1 efddf0d915c7bdc5782c0881e1b2a95ad099fbdd06d7b1f77982d9364338d955
+tlsa3			TLSA    1 0 2 81ee7f6c0ecc6b09b7785a9418f54432de630dd54dc6ee9e3c49de547708d236d4c413c3e97e44f969e635958aa410495844127c04883503e5b024cf7a8f6a94
+smimea1			SMIMEA    3 1 1 a9cdf989b504fe5dca90c0d2167b6550570734f7c763e09fdf88904e06157065
+smimea2			SMIMEA    1 0 1 efddf0d915c7bdc5782c0881e1b2a95ad099fbdd06d7b1f77982d9364338d955
+smimea3			SMIMEA    1 0 2 81ee7f6c0ecc6b09b7785a9418f54432de630dd54dc6ee9e3c49de547708d236d4c413c3e97e44f969e635958aa410495844127c04883503e5b024cf7a8f6a94
+txt01			TXT	"foo"
+txt02			TXT	"foo" "bar"
+txt03			TXT	foo
+txt04			TXT	foo bar
+txt05			TXT	"foo bar"
+txt06			TXT	"foo\032bar"
+txt07			TXT	foo\032bar
+txt08			TXT	"foo\010bar"
+txt09			TXT	foo\010bar
+txt10			TXT	foo\ bar
+txt11			TXT	"\"foo\""
+txt12			TXT	\"foo\"
+txt13			TXT	"foo;"
+txt14			TXT	"foo\;"
+txt15			TXT	"bar\\;"
+$TTL 300	; 5 minutes
+u			TXT	"txt-not-in-nxt"
+$ORIGIN u.example.
+a			A	73.80.65.49
+b			A	73.80.65.49
+$ORIGIN example.
+$TTL 3600	; 1 hour
+wks01			WKS	10.0.0.1 6 ( 0 1 2 21 23 )
+wks02			WKS	10.0.0.1 17 ( 0 1 2 53 )
+wks03			WKS	10.0.0.2 6 ( 65535 )
+x2501			X25	"123456789"
+ds01			DS	12345 3 1 123456789abcdef67890123456789abcdef67890
+dlv01			DLV	12345 3 1 123456789abcdef67890123456789abcdef67890
+apl01			APL	1:192.168.32.0/21 !1:192.168.38.0/28
+apl02			APL	1:224.0.0.0/4 2:FF00:0:0:0:0:0:0:0/8
+unknown2		TYPE999	\# 8 0a0000010a000001
+unknown3		A       \# 4 7f000002
+rrsig01			RRSIG	NSEC 1 3 3600 20200101000000 20030101000000 2143 foo MxFcby9k/yvedMfQgKzhH5er0Mu/vILz45IkskceFGgi WCn/GxHhai6VAuHAoNUz4YoU1tVfSCSqQYn6//11U6Nl d80jEeC8aTrO+KKmCaY= 
+rrsig02			RRSIG	NSEC 1 3 3600 1577836800 1041379200 2143 foo MxFcby9k/yvedMfQgKzhH5er0Mu/vILz45IkskceFGgi WCn/GxHhai6VAuHAoNUz4YoU1tVfSCSqQYn6//11U6Nl d80jEeC8aTrO+KKmCaY=
+nsec01			NSEC	a.secure A MX RRSIG NSEC TYPE1234
+nsec02			NSEC	. ( NSAP-PTR NSEC )
+nsec03			NSEC	. ( NSEC TYPE65535 )
+nsec301			NSEC3 1 1 12 aabbccdd 2t7b4g4vsa5smi47k61mv5bv1a22bojr MX DNSKEY NS SOA NSEC3PARAM RRSIG
+nsec302			NSEC3 1 1 12 - 2t7b4g4vsa5smi47k61mv5bv1a22bojr MX DNSKEY NS SOA NSEC3PARAM RRSIG
+dnskey01		DNSKEY	512 255 1 AQMFD5raczCJHViKtLYhWGz8hMY9UGRuniJDBzC7w0aR yzWZriO6i2odGWWQVucZqKVsENW91IOW4vqudngPZsY3 GvQ/xVA8/7pyFj6b7Esga60zyGW6LFe9r8n6paHrlG5o jqf0BaqHT+8= 
+dnskey02		DNSKEY	257 3 RSAMD5 ( AQMFD5raczCJHViKtLYhWGz8hMY9UGRuniJDBzC7w0aR yzWZriO6i2odGWWQVucZqKVsENW91IOW4vqudngPZsY3 GvQ/xVA8/7pyFj6b7Esga60zyGW6LFe9r8n6paHrlG5o jqf0BaqHT+8= )
+sshfp1			SSHFP	1 1 aa549bfe898489c02d1715d97d79c57ba2fa76ab
+spf			SPF	"v=spf1 mx -all"
+ipseckey01		IPSECKEY 10 1 2 192.0.2.38 AQNRU3mG7TVTO2BkR47usntb102uFJtugbo6BSGvgqt4AQ==
+ipseckey02		IPSECKEY 10 0 2 . AQNRU3mG7TVTO2BkR47usntb102uFJtugbo6BSGvgqt4AQ==
+ipseckey03		IPSECKEY 10 3 2 mygateway.example.com. AQNRU3mG7TVTO2BkR47usntb102uFJtugbo6BSGvgqt4AQ==
+ipseckey04		IPSECKEY 10 2 2 2001:0DB8:0:8002::2000:1 AQNRU3mG7TVTO2BkR47usntb102uFJtugbo6BSGvgqt4AQ==
+ipseckey05		IPSECKEY 10 3 2 mygateway2 AQNRU3mG7TVTO2BkR47usntb102uFJtugbo6BSGvgqt4AQ==
+hip01			HIP 2 200100107B1A74DF365639CC39F1D578 AwEAAbdxyhNuSutc5EMzxTs9LBPCIkOFH8cIvM4p9+LrV4e19WzK00+CI6zBCQTdtWsuxKbWIy87UOoJTwkUs7lBu+Upr1gsNrut79ryra+bSRGQb1slImA8YVJyuIDsj7kwzG7jnERNqnWxZ48AWkskmdHaVDP4BcelrTI3rMXdXF5D
+hip02			HIP 2 200100107B1A74DF365639CC39F1D578 AwEAAbdxyhNuSutc5EMzxTs9LBPCIkOFH8cIvM4p9+LrV4e19WzK00+CI6zBCQTdtWsuxKbWIy87UOoJTwkUs7lBu+Upr1gsNrut79ryra+bSRGQb1slImA8YVJyuIDsj7kwzG7jnERNqnWxZ48AWkskmdHaVDP4BcelrTI3rMXdXF5D rvs.example.com.
+hip03			HIP 2 200100107B1A74DF365639CC39F1D578 AwEAAbdxyhNuSutc5EMzxTs9LBPCIkOFH8cIvM4p9+LrV4e19WzK00+CI6zBCQTdtWsuxKbWIy87UOoJTwkUs7lBu+Upr1gsNrut79ryra+bSRGQb1slImA8YVJyuIDsj7kwzG7jnERNqnWxZ48AWkskmdHaVDP4BcelrTI3rMXdXF5D rvs1.example.com.  rvs2.example.com.
+cds01			CDS	12345 3 1 123456789abcdef67890123456789abcdef67890
+cdnskey01		CDNSKEY	256 3 8 ( AwEAAbmiLgh411Pz3v3XCSBrvYf52A/Gv55ItN1NbOLH Cqt3Ec3p+VB/kQ87VjjMrycanZFnZT4l9uCFuYh21Ccy xVpcxExbM0UuhX5rJoDyeFSXoQlkHrB01osPl5Vri5Ym KtcmqGxZ9An0VSunohkyiX1SrNRZSdQnk9/pIHDe/c8D )
+nid01                   NID 10 0014:4fff:ff20:ee64
+nid02                   NID 20 0015:5fff:ff21:ee65
+nid03                   NID 10 0016:6fff:ff22:ee66
+l3201                   L32 10 10.1.2.0
+l3202                   L32 20 10.1.4.0
+l3203                   L32 10 10.1.8.0
+l6401                   L64 10 2001:0DB8:1140:1000
+l6402                   L64 20 2001:0DB8:2140:2000
+l6403                   L64 10 2001:0DB8:4140:4000
+lp01                    LP 10 l64-subnet1.example.com.
+lp02                    LP 10 l64-subnet2.example.com.
+lp03                    LP 20 l32-subnet1.example.com.
+eui48                   EUI48 00-00-5e-00-53-2a
+eui64                   EUI64 00-00-5e-ef-10-00-00-2a
+uri01			URI 10 1 "ftp://ftp1.example.com/public"
+uri02			URI 10 1 "http://www.example.com/path"
+caa01			CAA 0 issue "ca.example.net"
+caa02			CAA 0 iodef "mailto:security@example.com"
+caa03			CAA 0 iodef "http://iodef.example.com/"
+caa04			CAA 0 issue "ca.example.net; account=230123"
+caa05			CAA 0 issue "ca.example.net; policy=ev"
+caa06			CAA 128 tbs "Unknown"
+openpgpkey              OPENPGPKEY (
+mQENBEteQDsBCADYnatn9+5t43AdJlVk9dZC2RM0idPQcmrrKcjeAWDnISqoJzkv
+Q8ifX6mefquTBsDZC279uXShyTffYzQtvP2r9ewkK7zmSv52Ar563TSULAMwiLpe
+0gGQE0ex20mX5ggtYn6czdbEtcKpW0t+AfDqRk5YcpgqfZKXapKQ+A3CwWJKP9i3
+ldx2Jz//kuru4YqROLBYyB8D6V2jNUFOdaP6j5C5prh9dxfYFp2O/xFeAKLWlWuH
+9o96INUoIhgdEyj9PHPT3c821NMZu8tCvsZgUB+QPbHA/QYGa+aollcdGkJpVxXo
+Hhbu6aMx/B+pXg55WM5pqOxmoVjyViHIUYfPABEBAAG0IUJvYiBIYWxsZXkgPGhh
+bGxleUBkbnNweXRob24ub3JnPokBPgQTAQIAKAUCS15AOwIbAwUJA8JnAAYLCQgH
+AwIGFQgCCQoLBBYCAwECHgECF4AACgkQ6o6Gb8yUnXaflQgAhlhIqZGncRw3LV3d
+24JmPD+UEcEGiVh2b/Ic/1TMec46Ts7ZqRXAcOATNteQmpzqexx+BRKDWU8ZgYx1
+2J4GZmC06jABr2JDWxgvbMX9qjkUUgDGZZgAS/B2x5AmKgy2ZnCUlaKfePcKmtKT
+B9yNJ8v/WERlFdGaUveEUiFU8g75xp1Hj9Wp9sXCg9yeG1K2RwQ3RQd5tLudhyE6
+7EQdFGgqQFynR53md7cmVhAGopKLwMkpCtToKUlxxlfnDfpKZhhXThmhA0PsUQUk
+JptfGwYwH3O2N3KzfUw3wXRvLa3hona3TlHk3kfg7Qyd7oP4AZGbJKp97YHnfqo1
+kp8rObkBDQRLXkA7AQgA0ePG7g5GgZ/1SdtGZlJJiE2X15vTUc3KGfmx/kI5NaUD
+u4fXb+XK+yFy9I/X+UJ46JSkyhj6QvUxpoI+A7WWk9ThfjbynoZxRD820Kbqidqx
+BSgtFF36SRWzmX8DZfKKAskT9ZGU1odeSKDXLCJF7qAbZVRTuFRiDFGwtoVIICeE
+6Xd65JO6ufhad+ELhgFt95vRwTiFvVrBRjwF7ZgN/nOXfYncxZ/2mpFqfwsnB2eu
+0A2XZBm8IngsSmr/Wrz1RQ7+SNMqt77E7CKwBX7UIAZgyoJxIRxWirJoOt1rIm5V
+UqRR25ubXLuzx9PaHYiC5GiQIU45pWAd0IWcTI/MJQARAQABiQElBBgBAgAPBQJL
+XkA7AhsMBQkDwmcAAAoJEOqOhm/MlJ12HRsIAKrB9E++9X9W6VTXBfdkShCFv0yk
+ZVn2eVs6tkqzoub9s4f+Z5ylWw+a5nkMDMdGVe6bn4A3oIAbf0Tjykq1AetZLVPs
+Hl/QosTbSQluis/PEvJkTQXHaKHB3bFhwA90c/3HNhrLGugt9AmcfLf9LAynXDgN
+LV5eYdPYqfKE+27qjEBARf6PYh/8WQ8CPKS8DILFbwCZbRxUogyrZf/7AiHAGdJi
+8dmpR1WPQYef2hF3kqGX6NngLBPzZ6CQRaHBhD4pHU1S/IRSlx9/3Ytww32PYD9A
+yO732NmCUcq3bmvqcOWy4Cc1NkEwU0Vg0qzwVBNGb84v/ex2MouwtAYScwc=
+)
+amtrelay01              AMTRELAY 0 0 0 .
+amtrelay02              AMTRELAY 0 1 0 .
+amtrelay03              AMTRELAY  10 0 1 203.0.113.15
+amtrelay04              AMTRELAY  10 0 2 2001:db8::15
+amtrelay05              AMTRELAY 128 1 3 amtrelays.example.com.
+csync0			CSYNC 12345 0 A MX RRSIG NSEC TYPE1234
+avc01			AVC "app-name:WOLFGANG|app-class:OAM|business=yes"
+zonemd01                ZONEMD 2018031900 1 1 62e6cf51b02e54b9 b5f967d547ce4313 6792901f9f88e637 493daaf401c92c27 9dd10f0edb1c56f8 080211f8480ee306
+zonemd02                ZONEMD 2018031900 1 2 08cfa1115c7b948c 4163a901270395ea 226a930cd2cbcf2f a9a5e6eb85f37c8a 4e114d884e66f176 eab121cb02db7d65 2e0cc4827e7a3204 f166b47e5613fd27
+zonemd03                ZONEMD 2018031900 1 240 e2d523f654b9422a 96c5a8f44607bbee
+zonemd04                ZONEMD 2018031900 241 1 e1846540e33a9e41 89792d18d5d131f6 05fc283e aaaaaaaa aaaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaa aaaaaaaaaaaaaaa
+svcb01                  SVCB (
+100 foo.com. mandatory="alpn,port" alpn="h2,h3" no-default-alpn port="12345"
+ech="abcd" ipv4hint=1.2.3.4,4.3.2.1 ipv6hint=1::2,3::4 key12345="foo"
+)
+https01                 HTTPS 0 svc
+https02                 HTTPS 1 . port=8002 ech="abcd"

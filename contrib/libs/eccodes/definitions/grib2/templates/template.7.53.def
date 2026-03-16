@@ -1,0 +1,47 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.53, Bi-Fourier: Spectral data for limited area models - complex packing
+
+constant biFourierCoefficients = 1;
+constant complexPacking = 1;
+
+meta codedValues data_g2bifourier_packing(
+          section7Length,
+          offsetBeforeData,
+          offsetSection7,
+
+          unitsFactor,
+      	  unitsBias,
+          changingPrecision,
+          numberOfValues,
+          bitsPerValue,
+          referenceValue,
+          binaryScaleFactor,
+          decimalScaleFactor,
+          optimizeScaleFactor,
+          unpackedSubsetPrecision,
+
+          laplacianOperatorIsSet,
+          laplacianOperator,
+
+          biFourierTruncationType,
+          biFourierResolutionSubSetParameterN,
+          biFourierResolutionSubSetParameterM,
+
+          biFourierResolutionParameterN,
+          biFourierResolutionParameterM,
+          biFourierSubTruncationType,
+          biFourierPackingModeForAxes,
+          biFourierMakeTemplate,
+          totalNumberOfValuesInUnpackedSubset,
+
+          numberOfValues
+      ): read_only;
+
+meta values data_apply_bitmap(
+    codedValues,
+    bitmap,
+    missingValue,
+    binaryScaleFactor,
+    numberOfDataPoints,
+    numberOfValues) : dump;

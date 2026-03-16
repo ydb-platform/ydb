@@ -1,0 +1,46 @@
+Metadata-Version: 2.1
+Name: empy
+Version: 4.2.1
+Summary: A templating system for Python.
+Home-page: http://www.alcyone.com/software/empy/
+Author: Erik Max Francis
+Author-email: software@alcyone.com
+License: BSD
+Platform: any
+Classifier: Development Status :: 6 - Mature
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Other Audience
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: IronPython
+Classifier: Programming Language :: Python :: Implementation :: Jython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Programming Language :: Python :: Implementation :: Stackless
+Classifier: Topic :: Software Development :: Interpreters
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Software Development :: Pre-processors
+Classifier: Topic :: Text Editors :: Text Processing
+Classifier: Topic :: Text Processing :: Filters
+Classifier: Topic :: Text Processing :: General
+Classifier: Topic :: Text Processing :: Markup
+Classifier: Topic :: Utilities
+Requires-Python: >=2.4
+License-File: LICENSE.md
+License-File: LICENSE.md.pre
+
+EmPy is a powerful, robust and mature
+templating system for inserting Python code in template text.  EmPy
+takes a source document, processes it, and produces output.  This is
+accomplished via expansions, which are signals to the EmPy system
+where to act and are indicated with markup.  Markup is set off by a
+customizable prefix (by default the at sign, `@`).  EmPy can expand
+arbitrary Python expressions, statements and control structures in
+this way, as well as a variety of additional special forms.  The
+remaining textual data is sent to the output, allowing Python to be
+used in effect as a markup language.
+
+

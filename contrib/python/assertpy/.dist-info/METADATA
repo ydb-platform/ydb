@@ -1,0 +1,63 @@
+Metadata-Version: 2.1
+Name: assertpy
+Version: 1.1
+Summary: Simple assertion library for unit testing in python with a fluent API
+Home-page: https://github.com/assertpy/assertpy
+Author: Justin Shacklette
+Author-email: justin@saturnboy.com
+License: BSD
+Download-URL: https://github.com/assertpy/assertpy/archive/1.1.tar.gz
+Keywords: test,testing,assert,assertion,assertthat,assert_that,nose,nosetests,pytest,unittest
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Testing
+
+assertpy
+========
+
+Simple assertions library for unit testing in Python with a nice fluent API. Supports both Python 2 and 3.
+
+Usage
+-----
+
+Just import the ``assert_that`` function, and away you go...::
+
+    from assertpy import assert_that
+
+    def test_something():
+        assert_that(1 + 2).is_equal_to(3)
+        assert_that('foobar').is_length(6).starts_with('foo').ends_with('bar')
+        assert_that(['a', 'b', 'c']).contains('a').does_not_contain('x')
+
+Of course, assertpy works best with a python test runner like `pytest <http://pytest.org/>`_ (our favorite) or `Nose <http://nose.readthedocs.org/>`_.
+
+Install
+-------
+
+The assertpy library is available via `PyPI <https://pypi.org/project/assertpy/>`_.
+Just install with::
+
+    pip install assertpy
+
+Or, if you are a big fan of `conda <https://conda.io/>`_ like we are, there is an
+`assertpy-feedstock <https://github.com/conda-forge/assertpy-feedstock>`_ for
+`Conda-Forge <https://conda-forge.org/>`_ that you can use::
+
+    conda install assertpy --channel conda-forge
+
+
+

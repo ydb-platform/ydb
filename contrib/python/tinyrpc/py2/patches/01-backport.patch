@@ -1,0 +1,114 @@
+commit ee4b5e18f2f7576c0dc5a5a1ed62dafb258ed5ce
+merge: 2f4921fd16b094c5b8fb1f87d33fd312d6d852c3 b86a5ea730dca66d3056678143d912773ebacab6
+author: nklokk
+date: 2022-02-16T17:33:18+03:00
+revision: 9152389
+
+    [contrib] Add JSONRPCError in py2/tinyrpc ISSUE: CLEANWEB-2101
+    
+    Добавить прокидывание клиентских ошибок в py2/tinyrpc из py3/tinyrpc
+    
+    REVIEW: 2333994
+
+--- contrib/python/tinyrpc/py2/tinyrpc/client.py	(2f4921fd16b094c5b8fb1f87d33fd312d6d852c3)
++++ contrib/python/tinyrpc/py2/tinyrpc/client.py	(ee4b5e18f2f7576c0dc5a5a1ed62dafb258ed5ce)
+@@ -5,6 +5,7 @@ import sys
+ from collections import namedtuple
+ 
+ from .exc import RPCError
++from .protocols import RPCErrorResponse
+ 
+ RPCCall = namedtuple('RPCCall', 'method args kwargs')
+ """Defines the elements of a RPC call.
+@@ -47,9 +48,14 @@ class RPCClient(object):
+         # ... or process the reply
+         response = self.protocol.parse_reply(reply)
+ 
+-        if not no_exception and hasattr(response, 'error'):
+-            raise RPCError('Error calling remote procedure: %s' %\
+-                           response.error)
++        if not no_exception and isinstance(response, RPCErrorResponse):
++            if hasattr(self.protocol, 'raise_error') and callable(
++                    self.protocol.raise_error):
++                response = self.protocol.raise_error(response)
++            else:
++                raise RPCError(
++                    'Error calling remote procedure: %s' % response.error
++                )
+ 
+         return response
+ 
+--- contrib/python/tinyrpc/py2/tinyrpc/protocols/__init__.py	(2f4921fd16b094c5b8fb1f87d33fd312d6d852c3)
++++ contrib/python/tinyrpc/py2/tinyrpc/protocols/__init__.py	(ee4b5e18f2f7576c0dc5a5a1ed62dafb258ed5ce)
+@@ -131,6 +131,13 @@ class RPCProtocol(object):
+     protocol. Ideally, only once instance of RPCProtocol should be used per
+     client."""
+ 
++    raises_errors = True
++    """If True, this protocol instance will raise an RPCError exception.
++
++    On receipt of an RPCErrorResponse instance an RPCError exception is raised.
++    When this flag is False the RPCErrorResponse object is returned to the caller
++    which is then responsible for handling the error."""
++
+     def create_request(self, method, args=None, kwargs=None, one_way=False):
+         """Creates a new RPCRequest object.
+ 
+--- contrib/python/tinyrpc/py2/tinyrpc/protocols/jsonrpc.py	(2f4921fd16b094c5b8fb1f87d33fd312d6d852c3)
++++ contrib/python/tinyrpc/py2/tinyrpc/protocols/jsonrpc.py	(ee4b5e18f2f7576c0dc5a5a1ed62dafb258ed5ce)
+@@ -72,6 +72,30 @@ class JSONRPCServerError(FixedErrorMessageMixin, InvalidRequestError):
+     message = ''
+ 
+ 
++class JSONRPCError(FixedErrorMessageMixin, RPCError):
++    """Reconstructs (to some extend) the server-side exception.
++    The client creates this exception by providing it with the ``error``
++    attribute of the JSON error response object returned by the server.
++    :param dict error: This dict contains the error specification:
++        * code (int): the numeric error code.
++        * message (str): the error description.
++        * data (any): if present, the data attribute of the error
++    """
++    def __init__(self, error):
++        if isinstance(error, JSONRPCErrorResponse):
++            super(JSONRPCError, self).__init__(error.error)
++            self.message = error.error
++            self._jsonrpc_error_code = error._jsonrpc_error_code
++            if hasattr(error, 'data'):
++                self.data = error.data
++        else:
++            super(JSONRPCError, self).__init__(error.message)
++            self.message = error['message']
++            self._jsonrpc_error_code = error['code']
++            if 'data' in error:
++                self.data = error['data']
++
++
+ class JSONRPCSuccessResponse(RPCResponse):
+     def _to_dict(self):
+         return {
+@@ -312,6 +336,24 @@ class JSONRPCProtocol(RPCBatchProtocol):
+         else:
+             return self._parse_subrequest(req)
+ 
++    def raise_error(self, error):
++        """Recreates the exception.
++        Creates a :py:class:`~tinyrpc.protocols.jsonrpc.JSONRPCError` instance
++        and raises it.
++        This allows the error, message and data attributes of the original
++        exception to propagate into the client code.
++        The :py:attr:`~tinyrpc.protocols.RPCProtocol.raises_error` flag controls if the exception object is
++        raised or returned.
++        :returns: the exception object if it is not allowed to raise it.
++        :raises JSONRPCError: when the exception can be raised.
++            The exception object will contain ``message``, ``code`` and optionally a
++            ``data`` property.
++        """
++        exc = JSONRPCError(error)
++        if self.raises_errors:
++            raise exc
++        return exc
++
+     def _parse_subrequest(self, req):
+         if not isinstance(req, dict):
+             raise JSONRPCInvalidRequestError()

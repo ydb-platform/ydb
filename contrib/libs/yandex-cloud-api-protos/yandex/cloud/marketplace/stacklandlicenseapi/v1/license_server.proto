@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package yandex.cloud.marketplace.stacklandlicenseapi.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/marketplace/stacklandlicenseapi/v1;stacklandlicenseapi";
+option java_package = "yandex.cloud.api.marketplace.stacklandlicenseapi.v1";
+
+// License server metadata
+message LicenseServerMetadata {
+  // Custom labels for the license server
+  map<string, string> labels = 1;
+}
+
+// Request to register a license server
+message RegisterRequest {
+  // Organization ID
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Billing account ID
+  string billing_account_id = 2 [(required) = true, (length) = "<=50"];
+
+  // Optional metadata for the license server
+  LicenseServerMetadata metadata = 3;
+}
+
+// License server entity
+message LicenseServer {
+  // Unique server ID
+  string server_id = 1;
+
+  // License server CA certificate
+  string ls_ca_certificate = 2;
+
+  // Private key for the license server
+  string ls_private_key = 3;
+
+  // Timestamp when the credentials expire
+  google.protobuf.Timestamp valid_until = 4;
+}
+
+// Metadata for register license server operation
+message RegisterLicenseServerMetadata {
+  // Organization ID
+  string organization_id = 1;
+  // Billing account ID
+  string billing_account_id = 2;
+}

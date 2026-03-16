@@ -1,0 +1,24 @@
+transient defaultFaFieldName = "";
+transient defaultFaLevelName = "";
+transient defaultFaModelName = "";
+
+concept ls.faFieldName (defaultFaFieldName,"faFieldName.def",conceptsMasterDir,conceptsLocalDirAll) : no_copy;
+concept ls.faLevelName (defaultFaLevelName,"faLevelName.def",conceptsMasterDir,conceptsLocalDirAll) : no_copy;
+concept ls.faModelName (defaultFaModelName,"faModelName.def",conceptsMasterDir,conceptsLocalDirAll) : no_copy;
+
+transient LSTCUM = 0;
+transient ZLMULT = 1.;
+transient ZLBASE = 0.;
+
+# For compatibility with GRIB2 templates
+
+transient  CLNOMA  = "";
+transient  INGRIB  =  0;
+transient  LLCOSP  =  0;
+transient  INBITS  =  0;
+
+# Scaling factor
+
+transient  FMULTM  = 1;
+transient  FMULTE  = 0;
+

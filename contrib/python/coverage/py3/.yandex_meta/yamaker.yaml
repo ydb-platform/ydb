@@ -1,0 +1,3 @@
+requirements:
+  - library/python/resource
+  - contrib/python/coverage/plugins

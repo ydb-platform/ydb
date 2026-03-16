@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package yandex.cloud.baremetal.v1alpha;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/baremetal/v1alpha/hardware_pool.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/baremetal/v1alpha;baremetal";
+option java_package = "yandex.cloud.api.baremetal.v1alpha";
+
+// A set of methods to retrieve information about HardwarePool resources.
+service HardwarePoolService {
+  // Returns the specific HardwarePool resource.
+  //
+  // To get the list of available HardwarePool resource, make a [List] request.
+  rpc Get (GetHardwarePoolRequest) returns (HardwarePool) {
+    option (google.api.http) = {
+      get: "/baremetal/v1alpha/hardwarePools/{hardware_pool_id}"
+    };
+  }
+
+  // Retrieves the list of HardwarePool resources.
+  rpc List (ListHardwarePoolsRequest) returns (ListHardwarePoolsResponse) {
+    option (google.api.http) = {
+      get: "/baremetal/v1alpha/hardwarePools"
+    };
+  }
+}
+
+message GetHardwarePoolRequest {
+  // ID of the HardwarePool resource to return.
+  //
+  // To get the hardware pool ID, use a [HardwarePoolService.List] request.
+  string hardware_pool_id = 1 [(length) = "<=20"];
+}
+
+message ListHardwarePoolsRequest {
+  // Reserved for future use.
+  reserved 1 to 99;
+
+  // The maximum number of results per page to return. If the number of available
+  // results is greater than `page_size`,
+  // the service returns a [ListHardwarePoolsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value is 20.
+  int64 page_size = 100 [(value) = "<=100"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListHardwarePoolsResponse.next_page_token] returned by a previous list request.
+  string page_token = 101;
+}
+
+message ListHardwarePoolsResponse {
+  // Reserved for future use.
+  reserved 2 to 99;
+
+  // List of HardwarePool resources.
+  repeated HardwarePool hardware_pools = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // [ListHardwarePoolsResponse.page_size], use `next_page_token` as the value
+  // for the [ListHardwarePoolsResponse.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 100;
+}

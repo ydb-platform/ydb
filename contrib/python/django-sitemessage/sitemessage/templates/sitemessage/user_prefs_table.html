@@ -1,0 +1,26 @@
+<table class="sitemessage_prefs {{ table_class }}">
+    <thead>
+        <tr>
+            <th></th>
+            {% for messenger_title in sitemessage_user_prefs.0 %}
+            <th style="text-align:center">{{ messenger_title|safe }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for message_title, prefs_list in sitemessage_user_prefs.1.items %}
+            <tr>
+                <td>{{ message_title }}</td>
+                {% for pref_tuple in prefs_list %}
+                    <td style="text-align:center" data-pref="{{ pref_tuple.0 }}">
+                    {% if pref_tuple.1 %}
+                        <label>
+                        <input type="checkbox" name="sm_user_pref" value="{{ pref_tuple.0 }}" {% if pref_tuple.2 %}checked{% endif %}>
+                        </label>
+                    {% endif %}
+                    </td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>

@@ -1,0 +1,7 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "sameAs.schema.json",
+    "title": "sameAs",
+    "description": "Use the sameAs property to indicate the most canonical URLs for the original in cases of the entity. For example this may be a link to the original metadata of a dataset, definition of a property, Person, Organization or Place.",
+    "$ref": "URI.schema.json"
+}

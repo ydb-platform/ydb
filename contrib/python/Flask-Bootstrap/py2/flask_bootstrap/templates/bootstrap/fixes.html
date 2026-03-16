@@ -1,0 +1,6 @@
+{% macro ie8() %}
+    <!--[if lt IE 9]>
+          <script src="{{bootstrap_find_resource('html5shiv.js', cdn='html5shiv', local=False)}}"></script>
+          <script src="{{bootstrap_find_resource('respond.js', cdn='respond.js', local=False)}}"></script>
+    <![endif]-->
+{% endmacro %}

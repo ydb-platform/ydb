@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package yandex.cloud.marketplace.licensemanager.saas.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/marketplace/licensemanager/v1/lock.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/marketplace/licensemanager/saas/v1;licensemanager";
+option java_package = "yandex.cloud.api.marketplace.licensemanager.saas.v1";
+
+// A set of methods for managing subscription locks.
+service LockService {
+  // Checks if the she specified subscription is already locked to the specified resource.
+  // If it is not locked, locks the subscription to the resource.
+  rpc Ensure(EnsureLockRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/marketplace/license-manager/saas/v1/locks/ensure" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "EnsureLockMetadata"
+      response: "licensemanager.v1.Lock"
+    };
+  }
+
+  // Returns the specified subscription lock.
+  rpc Get(GetLockRequest) returns (licensemanager.v1.Lock) {
+    option (google.api.http) = { get: "/marketplace/license-manager/saas/v1/locks/{lock_id}" };
+  }
+
+  // Returns the subscription lock for given resource and subscription.
+  rpc GetByResourceID(GetLockByResourceIDRequest) returns (licensemanager.v1.Lock) {
+    option (google.api.http) = { get: "/marketplace/license-manager/saas/v1/locks:getByResourceID" };
+  }
+
+}
+
+message EnsureLockRequest {
+  // Signed JWT token which contains information about subscription.
+  string instance_token = 1 [(required) = true];
+  // ID of the resource to which the subscription will be locked.
+  string resource_id = 2 [(required) = true];
+}
+
+message EnsureLockMetadata {
+  // ID of the subscription lock.
+  string lock_id = 1;
+}
+
+message GetLockRequest {
+  // ID of the subscription lock.
+  string lock_id = 1 [(required) = true];
+}
+
+message GetLockByResourceIDRequest {
+  // ID of the resource to with subscription is locked.
+  string resource_id = 1 [(required) = true];
+  // ID of the subscription
+  string instance_id = 2 [(required) = true];
+}

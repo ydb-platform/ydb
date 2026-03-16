@@ -1,0 +1,22 @@
+--- contrib/python/chdb/cpp/src/Processors/Formats/Impl/Parquet/ParquetDataBuffer.h     (index)
++++ contrib/python/chdb/cpp/src/Processors/Formats/Impl/Parquet/ParquetDataBuffer.h     (working tree)
+@@ -2,7 +2,7 @@
+ 
+ #include <Core/Types.h>
+ 
+-#include <arrow/util/bit_stream_utils.h>
++#include <arrow/util/bit_stream_utils_internal.h>
+ #include <arrow/util/decimal.h>
+ #include <parquet/types.h>
+
+--- contrib/python/chdb/cpp/src/Processors/Formats/Impl/Parquet/Write.cpp       (index)
++++ contrib/python/chdb/cpp/src/Processors/Formats/Impl/Parquet/Write.cpp       (working tree)
+@@ -2,7 +2,7 @@
+ #include "Processors/Formats/Impl/Parquet/ThriftUtil.h"
+ #include <parquet/encoding.h>
+ #include <parquet/schema.h>
+-#include <arrow/util/rle_encoding.h>
++#include <arrow/util/rle_encoding_internal.h>
+ #include <lz4.h>
+ #include <Columns/MaskOperations.h>
+ #include <Columns/ColumnFixedString.h>

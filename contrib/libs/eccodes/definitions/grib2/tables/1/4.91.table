@@ -1,0 +1,13 @@
+0 0  Below lower limit
+1 1  Above upper limit
+2 2  Between lower and upper limits.  The range includes the lower limit but not the upper limit
+3 3  Above lower limit
+4 4  Below upper limit
+5 5  Lower or equal lower limit
+6 6  Greater or equal upper limit
+7 7  Between lower and upper limits.  The range includes lower limit and upper limit
+8 8  Greater or equal lower limit
+9 9  Lower or equal upper limit
+10 10  Between lower and upper limits.  The range includes the upper limit but not the lower limit
+11 11  Equal to first limit
+255 missing  Missing

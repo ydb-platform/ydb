@@ -1,0 +1,10 @@
+alias mars.origin = centre;
+
+meta    forecastperiod    g1fcperiod(P1,P2,timeRangeIndicator,indicatorOfUnitOfTimeRange) : no_copy;
+alias   mars.fcperiod = forecastperiod;
+unalias mars.step;
+
+alias   mars.refdate = referenceDate;
+unalias mars.date;
+alias mars.method = methodNumber;
+if (class is "od") { alias mars.system = systemNumber; }

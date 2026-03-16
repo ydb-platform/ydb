@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/iam/v1/resource.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1;iam";
+option java_package = "yandex.cloud.api.iam.v1";
+
+// A Service.
+message Service {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // The service is enabled.
+    ENABLED = 1;
+
+    // The service is paused.
+    PAUSED = 2;
+
+    // The service is disabled.
+    DISABLED = 3;
+
+    // The service is being enabled.
+    ENABLING = 4;
+
+    // The service is being resumed.
+    RESUMING = 5;
+
+    // The service is being paused.
+    PAUSING = 6;
+
+    // The service is being disabled.
+    DISABLING = 7;
+
+    // The service is in error state.
+    ERROR = 8;
+
+    // The service could be auto enabled.
+    DEFAULT = 9;
+  }
+
+  // ID of the service.
+  string service_id = 1;
+
+  // Resource that the service belongs to.
+  Resource resource = 2;
+
+  // Time of the last status update of the service.
+  google.protobuf.Timestamp updated_at = 3;
+
+  // Current status of the service.
+  Status status = 4;
+}
+
+message ServiceAgent {
+  // ID of the agent service account.
+  string service_account_id = 1;
+
+  // ID of the service.
+  string service_id = 2;
+
+  // ID of the microservice.
+  string microservice_id = 3;
+}

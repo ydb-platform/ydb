@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "id1",
+  "title": "Validating Schema ID1",
+  "properties": {
+    "in": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input_dataset_path": {
+          "type": "string",
+          "minLength": 1,
+          "title": "Path to the input dataset",
+          "description": "d1"
+        },
+        "config": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "title": "t2",
+              "description": "d2"
+            },
+            {
+              "type": [
+                "null"
+              ],
+              "title": "t3",
+              "description": "d3"
+            }
+          ]
+        }
+      }
+    },
+    "n1": {
+      "type": "integer"
+    }
+  }
+}

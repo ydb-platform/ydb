@@ -1,0 +1,11 @@
+# aliasing MARS date and time to the date and time defined in section 1
+alias mars.date = dataDate;
+alias mars.time = dataTime;
+
+# dateOfAnalysis and timeOfAnalysis still exist in this stream but is not used in MARS
+
+unalias mars.step;
+alias mars.step = stepRange;
+if (defined(perturbationNumber)) {
+ alias mars.number = perturbationNumber;
+}

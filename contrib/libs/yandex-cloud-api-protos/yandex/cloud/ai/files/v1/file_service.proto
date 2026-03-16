@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.files.v1;
+
+import "yandex/cloud/ai/common/common.proto";
+import "yandex/cloud/ai/files/v1/file.proto";
+import "yandex/cloud/validation.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/files/v1;files";
+option java_package = "yandex.cloud.api.ai.files.v1";
+
+
+// FileService provides operations for managing files.
+service FileService {
+  // Create a new file.
+  rpc Create(CreateFileRequest) returns (File) {
+    option (google.api.http) = {post: "/files/v1/files" body: "*"};
+  }
+
+  // Retrieve details of a specific file by its ID.
+  rpc Get(GetFileRequest) returns (File) {
+    option (google.api.http) = {get: "/files/v1/files/{file_id}"};
+  }
+
+  // Retrieve a URL for accessing or downloading a specific file.
+  rpc GetUrl(GetFileUrlRequest) returns (GetFileUrlResponse) {
+    option (google.api.http) = {get: "/files/v1/files:getUrl"};
+  }
+
+  // Update an existing file.
+  rpc Update(UpdateFileRequest) returns (File) {
+    option (google.api.http) = {patch: "/files/v1/files/{file_id}" body: "*"};
+  }
+
+  // Delete a file by its ID.
+  rpc Delete(DeleteFileRequest) returns (DeleteFileResponse) {
+    option (google.api.http) = {delete: "/files/v1/files/{file_id}"};
+  }
+
+  // List files in a specific folder.
+  rpc List(ListFilesRequest) returns (ListFilesResponse) {
+    option (google.api.http) = {get: "/files/v1/files"};
+  }
+}
+
+// Request message for creating a new file.
+message CreateFileRequest {
+  string folder_id = 1 [(required) = true];
+
+  // Name of the file.
+  string name = 2;
+
+  // Description of the file.
+  string description = 3;
+
+  // MIME type of the file, indicating the file's format (e.g., "application/pdf").
+  // If not specified, will be deduced automatically based on the file content.
+  string mime_type = 4;
+
+  // Binary content of the file.
+  bytes content = 5 [(required) = true];
+
+  // Set of key-value pairs to label the file.
+  map<string, string> labels = 6;
+
+  // Expiration configuration for the file.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 7;
+}
+
+// Request message for retrieving a file by ID.
+message GetFileRequest {
+  // ID of the file to retrieve.
+  string file_id = 1 [(required) = true];
+}
+
+// Request message for retrieving the URL of a specific file.
+message GetFileUrlRequest {
+  // ID of the file which the URL is requested.
+  string file_id = 1 [(required) = true];
+}
+
+// Response message containing the URL to access the requested file.
+message GetFileUrlResponse {
+  // URL that can be used to access or download the file.
+  string url = 1;
+}
+
+// Request message for updating an existing file.
+message UpdateFileRequest {
+  // ID of the file to update.
+  string file_id = 1 [(required) = true];
+
+  // Field mask specifying which fields to update.
+  google.protobuf.FieldMask update_mask = 2 [(required) = true];
+
+  // New name for the file.
+  string name = 3;
+
+  // New description for the file.
+  string description = 4;
+
+  // New expiration configuration for the file.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 5;
+
+  // New set of labels for the file.
+  map<string, string> labels = 6;
+}
+
+// Request message for deleting a file by ID.
+message DeleteFileRequest {
+  // ID of the file to delete.
+  string file_id = 1 [(required) = true];
+}
+
+// Response message for the delete operation.
+message DeleteFileResponse {
+}
+
+// Request message for listing files in a specific folder.
+message ListFilesRequest {
+  // Folder ID from which to list files.
+  string folder_id = 1 [(required) = true];
+
+  // Maximum number of files to return per page.
+  int64 page_size = 2;
+
+  // Token to retrieve the next page of results.
+  string page_token = 3;
+}
+
+// Response message for the list operation.
+message ListFilesResponse {
+  // List of files in the specified folder.
+  repeated File files = 1;
+
+  // Token to retrieve the next page of results.
+  string next_page_token = 2;
+}

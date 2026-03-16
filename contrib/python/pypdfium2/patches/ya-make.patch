@@ -1,0 +1,9 @@
+--- contrib/python/pypdfium2/ya.make	(index)
++++ contrib/python/pypdfium2/ya.make	(working tree)
+@@ -6,1 +6,1 @@ SUBSCRIBER(g:python-contrib)
+-LICENSE(Apache-2.0 AND BSD-3-Clause)
++LICENSE(Apache-2.0 OR BSD-3-Clause)
+@@ -22,1 +22,1 @@ NO_COMPILER_WARNINGS()
+-    syms.cpp
++    GLOBAL syms.cpp
+ )

@@ -1,0 +1,248 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.eventrouter.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/eventrouter/v1;eventrouter";
+option java_outer_classname = "PERR";
+option java_package = "yandex.cloud.api.serverless.eventrouter.v1";
+
+message Rule {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // Rule creation in progress, rule is not enabled yet
+    CREATING = 1;
+    // Rule is operating
+    ENABLED = 2;
+    // Rule update in progress, rule is disabled during update
+    UPDATING = 3;
+    // Rule is explicitly disabled by the user
+    DISABLED = 4;
+    // Rule deletion in progress
+    DELETING = 5;
+  }
+
+  reserved 9, 10;
+
+  // ID of the rule.
+  string id = 1;
+
+  // ID of the bus that the rule belongs to.
+  string bus_id = 2;
+
+  // ID of the folder that the rule resides in.
+  string folder_id = 3;
+
+  // ID of the cloud that the rule resides in.
+  string cloud_id = 4;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 5;
+
+  // Name of the rule.
+  string name = 6;
+
+  // Description of the rule.
+  string description = 7;
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 8;
+
+  // Filter for the rule.
+  Filter filter = 11;
+
+  // Targets of the rule.
+  repeated Target targets = 12 [(size) = "1-5"];
+
+  // Flag that disallow deletion of the rule.
+  bool deletion_protection = 13;
+  // Rule status
+  Status status = 14;
+}
+
+message Filter {
+  oneof condition {
+    option (exactly_one) = true;
+    
+    // JQ filter for matching events. 
+    string jq_filter = 1 [(length) = "<=1024"];
+  }
+}
+
+message Transformer {
+  oneof transformer {
+    option (exactly_one) = true;
+
+    // JQ string inrerpolation expression for changing event format.
+    string jq_transformer = 1 [(length) = "<=65536"];
+  }
+}
+
+message Target {
+  reserved 8 to 49, 53;
+
+  // Status of the target.
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // Target is enabled.
+    ENABLED = 1;
+
+    // Target is disabled.
+    DISABLED = 2;
+
+    // Target does not exist.
+    RESOURCE_NOT_FOUND = 3;
+
+    // Service account does not have read permission on source.
+    PERMISSION_DENIED = 4;
+
+    // Service account not found.
+    SUBJECT_NOT_FOUND = 5;
+  }
+
+  oneof target {
+    option (exactly_one) = true;
+    YdsTarget yds = 1;
+    YmqTarget ymq = 2;
+    FunctionTarget function = 3;
+    ContainerTarget container = 4;
+    GatewayWebsocketBroadcastTarget gateway_ws_broadcast = 5;
+    LoggingTarget logging = 6;
+    WorkflowTarget workflow = 7;
+  }
+
+  // Transformer of the target.
+  Transformer transformer = 50;
+
+  // Retry settings of the target.
+  RetrySettings retry_settings = 51;
+
+  // Dead letter settings of the target.
+  oneof dead_letter {
+      // Dead letter queue.
+      PutQueueMessage dead_letter_queue = 52;
+  }
+
+  // Status of the target.
+  Status status = 54;
+}
+
+message YdsTarget {
+  // Stream database.
+  string database = 1 [(required) = true];
+
+  // Full stream name, like /ru-central1/aoegtvhtp8ob********/cc8004q4lbo6********/test.
+  string stream_name = 2 [(required) = true];
+  
+  // Service account, which has write permission on the stream.
+  string service_account_id = 3 [(required) = true, (length) = "<=50"];
+}
+
+message YmqTarget {
+  // Queue ARN.
+  // Example: yrn:yc:ymq:ru-central1:aoe***:test
+  string queue_arn = 1 [(required) = true];
+
+  // Service account which has write access to the queue.
+  string service_account_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message FunctionTarget {
+  // Function ID.
+  string function_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Function tag, optional.
+  string function_tag = 2;
+
+  // Service account which has call permission on the function, optional.
+  string service_account_id = 3 [(length) = "<=50"];
+
+  // Batch settings.
+  BatchSettings batch_settings = 4;
+}
+
+message ContainerTarget {
+  // Container ID.
+  string container_id = 1  [(required) = true, (length) = "<=50"];
+
+  // Container revision ID.
+  string container_revision_id = 2;
+
+  // Endpoint HTTP path to invoke.
+  string path = 3;
+
+  // Service account which should be used to call a container, optional.
+  string service_account_id = 4 [(length) = "<=50"];
+
+  // Batch settings.
+  BatchSettings batch_settings = 5;
+}
+
+message GatewayWebsocketBroadcastTarget {
+  // Gateway ID.
+  string gateway_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Path.
+  string path = 2 [(required) = true];
+
+  // Service account which has permission for writing to websockets.
+  string service_account_id = 3 [(required) = true, (length) = "<=50"];
+
+  // Batch settings.
+  BatchSettings batch_settings = 4;
+}
+
+message LoggingTarget {
+  // Log group ID or folder ID.
+  oneof destination {
+    option (exactly_one) = true;
+    string log_group_id = 1 [(length) = "<=63"];
+    string folder_id = 2 [(length) = "<=63"];
+  }
+
+  // Service account which has permission for writing logs.
+  string service_account_id = 3 [(required) = true, (length) = "<=50"];
+}
+
+message WorkflowTarget {
+  reserved 2, 3;
+
+  // Workflow ID.
+  string workflow_id = 1  [(required) = true, (length) = "<=50"];
+ 
+  // SA which should be used to start workflow.
+  string service_account_id = 4 [(required) = true, (length) = "<=50"];
+
+  // Batch settings.
+  BatchSettings batch_settings = 5;
+}
+
+message RetrySettings {
+  // Maximum number of retries (extra calls) before an action fails.
+  int64 retry_attempts = 1 [(value) = "0-10"];
+
+  // Event goes to dlq when its age exceeds this value. Default is 24h.
+  google.protobuf.Duration maximum_age = 2 [(value) = "<=24h"];
+}
+
+message PutQueueMessage {
+  // ID of the queue.
+  string queue_arn = 1;
+
+  // Service account which has write permission on the queue.
+  string service_account_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message BatchSettings {
+  // Maximum batch size: trigger will send a batch if number of events exceeds this value.
+  int64 max_count = 1 [(value) = "0-1000"];
+
+  // Maximum batch size: trigger will send a batch if total size of events exceeds this value.
+  int64 max_bytes = 2 [(value) = "0-262144"];
+
+  // Maximum batch size: trigger will send a batch if its lifetime exceeds this value.
+  google.protobuf.Duration cutoff = 3 [(required) = true, (value) = "<=1m"];
+}

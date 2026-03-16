@@ -1,0 +1,144 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Kira <kiraware@github.com>, 2023.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2023-02-13 20:58+0800\n"
+"PO-Revision-Date: 2023-03-12 10:50+0800\n"
+"Last-Translator: Kira <kiraware@github.com>\n"
+"Language-Team: \n"
+"Language: id\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+#: .\dj_rest_auth\app_settings.py:75
+msgid ""
+"The '{}' setting has been removed. Please refer to '{}' for available "
+"settings."
+msgstr ""
+"Pengaturan '{}' telah dihapus. Silakan merujuk ke '{}' untuk pengaturan "
+"pengaturan yang tersedia."
+
+#: .\dj_rest_auth\jwt_auth.py:70
+msgid "WIll override cookie."
+msgstr "Akan menimpa cookie."
+
+#: .\dj_rest_auth\jwt_auth.py:81
+msgid "No valid refresh token found."
+msgstr "Tidak ditemukan \"refresh token\" yang valid."
+
+#: .\dj_rest_auth\registration\serializers.py:76
+msgid "Define callback_url in view"
+msgstr "Tentukan \"callback_url\" dalam \"view\""
+
+#: .\dj_rest_auth\registration\serializers.py:85
+msgid "View is not defined, pass it as a context variable"
+msgstr "\"View\" tidak didefinisikan, berikan sebagai variabel \"context\""
+
+#: .\dj_rest_auth\registration\serializers.py:90
+msgid "Define adapter_class in view"
+msgstr "Tentukan \"adapter_class\" dalam \"view\""
+
+#: .\dj_rest_auth\registration\serializers.py:116
+msgid "Define client_class in view"
+msgstr "Tentukan \"client_class\" dalam \"view\""
+
+#: .\dj_rest_auth\registration\serializers.py:143
+msgid "Incorrect input. access_token or code is required."
+msgstr "Input salah. \"access_token\" atau \"code\" diperlukan."
+
+#: .\dj_rest_auth\registration\serializers.py:153
+msgid "Incorrect value"
+msgstr "Nilai salah"
+
+#: .\dj_rest_auth\registration\serializers.py:170
+msgid "User is already registered with this e-mail address."
+msgstr "Pengguna sudah terdaftar dengan alamat e-mail ini."
+
+#: .\dj_rest_auth\registration\serializers.py:228
+msgid "A user is already registered with this e-mail address."
+msgstr "Seorang pengguna sudah terdaftar dengan alamat e-mail ini."
+
+#: .\dj_rest_auth\registration\serializers.py:237
+msgid "The two password fields didn't match."
+msgstr "Kedua kolom kata sandi tidak cocok."
+
+#: .\dj_rest_auth\registration\views.py:47
+msgid "Verification e-mail sent."
+msgstr "E-mail verifikasi terkirim."
+
+#: .\dj_rest_auth\registration\views.py:114
+#: .\dj_rest_auth\registration\views.py:130
+msgid "ok"
+msgstr "Ok"
+
+#: .\dj_rest_auth\serializers.py:33
+msgid "Must include \"email\" and \"password\"."
+msgstr "Harus menyertakan \"email\" dan \"password\"."
+
+#: .\dj_rest_auth\serializers.py:42
+msgid "Must include \"username\" and \"password\"."
+msgstr "Harus menyertakan \"username\" dan \"password\"."
+
+#: .\dj_rest_auth\serializers.py:53
+msgid "Must include either \"username\" or \"email\" and \"password\"."
+msgstr "Harus menyertakan \"username\" atau \"email\" dan \"password\"."
+
+#: .\dj_rest_auth\serializers.py:99 .\dj_rest_auth\serializers.py:125
+msgid "Unable to log in with provided credentials."
+msgstr "Tidak dapat masuk dengan kredensial yang diberikan."
+
+#: .\dj_rest_auth\serializers.py:106
+msgid "User account is disabled."
+msgstr "Akun pengguna dinonaktifkan."
+
+#: .\dj_rest_auth\serializers.py:116
+msgid "E-mail is not verified."
+msgstr "E-mail tidak diverifikasi."
+
+#: .\dj_rest_auth\serializers.py:288 .\dj_rest_auth\serializers.py:291
+msgid "Invalid value"
+msgstr "Nilai tidak valid"
+
+#: .\dj_rest_auth\serializers.py:335
+msgid "Your old password was entered incorrectly. Please enter it again."
+msgstr "Kata sandi lama anda salah dimasukkan. Silakan masukkan lagi kata "
+"sandi anda."
+
+#: .\dj_rest_auth\views.py:162
+msgid "Successfully logged out."
+msgstr "Berhasil keluar."
+
+#: .\dj_rest_auth\views.py:184
+msgid "Refresh token was not included in request data."
+msgstr "\"Refresh token\" tidak termasuk dalam data permintaan."
+
+#: .\dj_rest_auth\views.py:192 .\dj_rest_auth\views.py:196
+msgid "An error has occurred."
+msgstr "Telah terjadi kesalahan."
+
+#: .\dj_rest_auth\views.py:201
+msgid ""
+"Neither cookies or blacklist are enabled, so the token has not been deleted "
+"server side. Please make sure the token is deleted client side."
+msgstr ""
+"Baik \"cookie\" maupun \"blacklist\" tidak diaktifkan, sehingga token belum "
+"dihapus di sisi server. Harap pastikan token telah dihapus dari sisi klien."
+
+#: .\dj_rest_auth\views.py:253
+msgid "Password reset e-mail has been sent."
+msgstr "Email pengubahan kata sandi telah dikirim."
+
+#: .\dj_rest_auth\views.py:280
+msgid "Password has been reset with the new password."
+msgstr "Kata sandi telah diubah dengan kata sandi baru."
+
+#: .\dj_rest_auth\views.py:303
+msgid "New password has been saved."
+msgstr "Kata sandi baru telah disimpan."

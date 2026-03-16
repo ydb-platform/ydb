@@ -1,0 +1,5 @@
+components:
+  schemas:
+    Foo:
+      allOf:
+        - $ref: "root_model.yaml#/Test"

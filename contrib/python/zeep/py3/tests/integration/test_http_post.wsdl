@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<definitions 
+  xmlns="http://schemas.xmlsoap.org/wsdl/"
+  xmlns:http="http://schemas.xmlsoap.org/wsdl/http/" 
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:mime="http://schemas.xmlsoap.org/wsdl/mime/" 
+  xmlns:tns="http://test.python-zeep.org/tns/"
+  targetNamespace="http://test.python-zeep.org/tns/">
+  <types>
+    <xsd:schema></xsd:schema>
+  </types>
+  <message name="m1">
+    <part name="tickerSymbol" type="xsd:string"/>
+  </message>
+  <message name="m2">
+    <part name="image" type="xsd:hexBinary"/>
+  </message>
+  <portType name="pt1">
+    <operation name="o1">
+      <input message="tns:m1"/>
+      <output message="tns:m2"/>
+    </operation>
+  </portType>
+  <binding name="b1" type="pt1">
+    <http:binding verb="GET"/>
+    <operation name="o1">
+      <http:operation location="/o1/(tickerSymbol)/"/>
+      <input>
+        <http:urlReplacement/>
+      </input>
+      <output>
+        <mime:content type="image/gif"/>
+        <mime:content type="image/jpeg"/>
+      </output>
+    </operation>
+  </binding>
+  <binding name="b2" type="pt1">
+    <http:binding verb="GET"/>
+    <operation name="o1">
+      <http:operation location="/o1"/>
+      <input>
+        <http:urlEncoded/>
+      </input>
+      <output>
+        <mime:content type="image/gif"/>
+        <mime:content type="image/jpeg"/>
+      </output>
+    </operation>
+  </binding>
+  <binding name="b3" type="pt1">
+    <http:binding verb="POST"/>
+    <operation name="o1">
+      <http:operation location="/o1"/>
+      <input>
+        <mime:content type="application/x-www-form-urlencoded"/>
+      </input>
+      <output>
+        <mime:content type="image/gif"/>
+        <mime:content type="image/jpeg"/>
+      </output>
+    </operation>
+  </binding>
+  <service name="CompanyInfoService">
+    <port name="Port1" binding="tns:b1">
+      <http:address location="http://example.com/companyinfo"/>
+    </port>
+    <port name="Port2" binding="tns:b2">
+      <http:address location="http://example.com/companyinfo"/>
+    </port>
+    <port name="Port3" binding="tns:b3">
+      <http:address location="http://example.com/companyinfo"/>
+    </port>
+  </service>
+</definitions>

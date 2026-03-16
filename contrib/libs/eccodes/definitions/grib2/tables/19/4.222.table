@@ -1,0 +1,4 @@
+# Code table 4.222 - Categorical result
+0 0 No
+1 1 Yes
+255 255 Missing

@@ -1,0 +1,9 @@
+# Code table 5.25 - type of bi-Fourier subtruncation
+# 0-76 Reserved
+77 77 Rectangular
+# 78-87 Reserved
+88 88 Elliptic
+# 89-98 Reserved
+99 99 Diamond
+# 100-254 Reserved
+255 255 Missing

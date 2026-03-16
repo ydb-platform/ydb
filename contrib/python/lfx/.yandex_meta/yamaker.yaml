@@ -1,0 +1,17 @@
+requirements:
+  - pydantic: contrib/python/pydantic/pydantic-2
+  - sqlalchemy: contrib/python/sqlalchemy/sqlalchemy-2
+  - langchain-classic
+  - library/python/langflow_patches_lib
+  - mcp
+  - trustcall
+  - openai
+  - beautifulsoup4
+  - toml
+  - cryptography
+  - langchain-anthropic
+  - langchain-experimental
+  - grandalf
+repo_url: "https://github.com/langflow-ai/langflow"
+exclude:
+  - lfx/type_extraction/*

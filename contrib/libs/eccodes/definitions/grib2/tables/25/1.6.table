@@ -1,0 +1,6 @@
+# Code table 1.6 - Type of calendar
+0 0 Gregorian
+1 1 360-day
+2 2 365-day
+3 3 Proleptic Gregorian
+255 255 Missing

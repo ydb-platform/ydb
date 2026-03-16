@@ -1,0 +1,5 @@
+--- contrib/deprecated/python/pymongo/bson/__init__.py	(index)
++++ contrib/deprecated/python/pymongo/bson/__init__.py	(working tree)
+@@ -109,1 +109,1 @@ except ImportError:
+-EPOCH_NAIVE = datetime.datetime.utcfromtimestamp(0)
++EPOCH_NAIVE = EPOCH_AWARE.replace(tzinfo=None)

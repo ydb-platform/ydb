@@ -1,0 +1,386 @@
+%PDF-1.7	
+%% outlines 显示, 如果有子项目count为正数就是展开, 如果为负数不展开
+% page 10 ~ 19 contents 20~29 
+
+1 0 obj		
+<<
+	/Type /Pages
+	/Kids [10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R]		
+	/Count 8
+>>
+endobj
+
+5 0 obj
+<<
+	/Type /Font
+	/Subtype /Type1
+	/BaseFont /Helvetica
+>>
+endobj
+
+10 0 obj		
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 531 666]		% XYZ 
+	/Contents [20 0 R]	
+	/Thumb				71 0 R
+	/Resources <<
+		/Font <</Helv 5 0 R>>
+	>>			
+	
+>>
+endobj
+
+11 0 obj		
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 531 666]		% Fit page
+	/Contents [21 0 R]	
+	/Resources <<
+		/Font <</Helv 5 0 R>>
+	>>			
+	
+>>
+endobj
+
+12 0 obj		
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 531 666]		%% FitB content
+	/Contents [22 0 R]	
+	/Resources <<
+		/Font <</Helv 5 0 R>>
+	>>		
+>>
+endobj
+
+13 0 obj
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 531 400]	% FitV left	
+	/Contents [23 0 R]	
+	/Resources <<
+		/Font <</Helv 5 0 R>>
+	>>
+>>
+endobj
+
+14 0 obj
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 400 666]	% FitV left	
+	/Contents [24 0 R]	
+	/Resources <<
+		/Font <</Helv 5 0 R>>
+	>>
+>>
+endobj
+
+15 0 obj
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 400 500]	% FitV left	
+	/Contents [25 0 R]	
+	/Resources <<
+		/Font <</Helv 5 0 R>>
+	>>
+>>
+endobj
+
+16 0 obj
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 400 500]	% FitBH left	
+	/Contents [26 0 R]	
+	/Resources <<
+		/Font <</Helv 5 0 R>>
+	>>
+>>
+endobj
+
+17 0 obj
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 400 500]	% FitBH left	
+	/Contents [27 0 R]	
+	/Resources <<
+		/Font <</Helv 5 0 R>>
+	>>
+>>
+endobj
+
+3 0 obj		
+<<
+	/Type /Catalog
+	/Pages 1 0 R	
+	/Outlines 30 0 R
+	/PageLabels	<< /Nums [
+	                          0 <</Type /PageLabel /S /r>>
+	                          2 <</S /A /P (appendix-) /St 3>>   
+	                       ]
+	              >>
+	
+>>
+endobj
+
+20 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+
+BT /Helv 20 Tf
+100 50 TD (Page1 100 100 2.1)Tj
+ET
+
+endstream
+endobj
+
+21 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+
+BT /Helv 20 Tf
+100 270 TD (Page2 Fit)Tj
+ET
+
+endstream
+endobj
+
+22 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+
+BT /Helv 20 Tf
+100 270 TD (Page3Page3Page3Page3Page3Page3 FitB)Tj
+ET
+
+endstream
+endobj
+
+23 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+
+BT /Helv 20 Tf
+100 270 TD (Page4 FitV left)Tj
+ET
+endstream
+endobj
+
+24 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+
+BT /Helv 20 Tf
+100 270 TD (Page5 FitH top)Tj
+ET
+endstream
+endobj
+
+25 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+
+BT /Helv 20 Tf
+100 100 TD (Page6 FitR )Tj
+ET
+endstream
+endobj
+
+26 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+
+BT /Helv 20 Tf
+100 100 TD (Page7 FitBH )Tj
+ET
+endstream
+endobj
+
+27 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+
+BT /Helv 20 Tf
+100 100 TD (Page8 FitBV )Tj
+ET
+endstream
+endobj
+
+%% Outlines Object
+30 0 obj
+<<
+/Type 	/Outlines
+/First	40 0 R
+/Last 	47 0 R
+/Count 	8
+>>
+endobj
+
+%% Outline item
+40 0 obj
+<<
+/Title (XYZ 2.1-Page1 red bold)
+/Parent 30 0 R
+/Next  41 0 R
+/Count  0
+/Dest [10 0 R /XYZ 100 100 2.1]
+/C   [1.0 0.0 0.0] % color
+/F   2   % Bold
+>>
+endobj
+
+%% Outline second item
+41 0 obj
+<<
+/Title (Fit-Page2 green Italic)
+/Parent 30 0 R
+/Prev 40 0 R
+/Next 42 0 R
+/Count 0
+/Dest [11 0 R /Fit] % Fit page VH
+/C [0 1 0]
+/F 1	% Italic
+>>
+endobj
+
+%% Outline third item
+42 0 obj
+<<
+/Title (FitB Italic&Bold b)
+/Parent 30 0 R
+/Prev 41 0 R
+/Next 43 0 R
+/Count 0
+/Dest [12 0 R /FitB] % Fit contents VH
+/C [0 0 1]
+/F 3
+>>
+endobj
+
+%% Outline third item
+43 0 obj
+<<
+/Title (FitV Page4)
+/Parent 30 0 R
+/Prev 42 0 R
+/Next 44 0 R
+/Count 0
+/Dest [13 0 R /FitV 500] % Fit contents VH
+/C [0 0 1]
+/F 0
+>>
+endobj
+
+44 0 obj
+<<
+/Title (FitH Page5)
+/Parent 30 0 R
+/Prev 43 0 R
+/Next 45 0 R
+/Count 0
+/Dest [14 0 R /FitH 600] % FitH 
+/C [0 0 1]
+/F 0
+>>
+endobj
+
+45 0 obj
+<<
+/Title (FitR Page6)
+/Parent 30 0 R
+/Prev 44 0 R
+/Next 46 0 R
+/Count 0
+/Dest [15 0 R /FitR 100 100 200 200] % FitR 
+/C [0 0 1]
+/F 0
+>>
+endobj
+
+46 0 obj
+<<
+/Title (FitBH Page7)
+/Parent 30 0 R
+/Prev 45 0 R
+/Next 47 0 R
+/Count 0
+/Dest [16 0 R /FitBH 100] % FitR 
+/C [0 0 1]
+/F 0
+>>
+endobj
+
+47 0 obj
+<<
+/Title (FitBV Page8)
+/Parent 30 0 R
+/Prev 46 0 R
+%/Next 47 0 R
+/Count 0
+/Dest [17 0 R /FitBV 100] % FitR 
+/C [0 0 1]
+/F 0
+>>
+endobj
+
+71 0 obj
+<<
+	/Type /XObject
+	/Subtype /Image
+	/Width 8					% pixel width
+	/Height 8					% pixel height
+	/ColorSpace /DeviceRGB		% color space: each pixel uses R,G,B components
+	/BitsPerComponent 8			% each component uses one byte
+	/Length 0					% should be length of image data. 
+								% Use 0 here for convinience
+	/Filter /ASCIIHexDecode		% use hexidecimal form for convinience
+>> stream
+FF0000 C00000 A00000 800000 600000 400000 200000 0000FF
+FF2000 C00000 A00000 800000 600000 400000 200000 0000C0
+FF4000 C00000 A00000 800000 600000 400000 200000 0000A0
+FF6000 C00000 A00000 800000 600000 400000 200000 000080
+FF8000 C00000 A00000 800000 600000 400000 200000 000060
+FFA000 C00000 A00000 800000 600000 400000 200000 000040
+FFC000 C00000 A00000 800000 600000 400000 200000 000020
+FFFF00 C0C000 A0A000 808000 606000 404000 202000 000000>
+endstream
+endobj
+
+xref	
+		
+
+trailer	
+<<
+	/Size 0		
+	/Root 3 0 R	
+>>
+
+startxref
+0		
+
+%%EOF	
+ 

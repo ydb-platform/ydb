@@ -1,0 +1,122 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2014-07-30 11:17+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: admin.py:160
+msgid "Initial version."
+msgstr "Første version."
+
+#: admin.py:194 templates/reversion/change_list.html:7
+#: templates/reversion/recover_form.html:11
+#: templates/reversion/recover_list.html:11
+#, python-format
+msgid "Recover deleted %(name)s"
+msgstr "Gendan slettede %(name)s"
+
+#: admin.py:311
+#, python-format
+msgid "Reverted to previous version, saved on %(datetime)s"
+msgstr "Gendannet til tidligere version, gemt den %(datetime)s"
+
+#: admin.py:313
+#, python-format
+msgid ""
+"The %(model)s \"%(name)s\" was reverted successfully. You may edit it again "
+"below."
+msgstr ""
+"Gendannelsen af %(model)s \"%(name)s\" var succesfuld. Du kan redigere den igen"
+"her under"
+
+#: admin.py:398
+#, python-format
+msgid "Recover %(name)s"
+msgstr "Genskab %(name)s"
+
+#: admin.py:412
+#, python-format
+msgid "Revert %(name)s"
+msgstr "Revertere %(name)s"
+
+#: models.py:55
+msgid "date created"
+msgstr "oprettelsesdato"
+
+#: models.py:62
+msgid "user"
+msgstr "bruger"
+
+#: models.py:66
+msgid "comment"
+msgstr "kommentar"
+
+#: templates/reversion/object_history.html:8
+msgid "Choose a date from the list below to revert to a previous version of this object."
+msgstr "Vælg en dato fra listen her under for at Revertere til en tidligere version af det her objekt."
+
+#: templates/reversion/object_history.html:15
+#: templates/reversion/recover_list.html:24
+msgid "Date/time"
+msgstr "Dato/tid"
+
+#: templates/reversion/object_history.html:16
+msgid "User"
+msgstr "Bruger"
+
+#: templates/reversion/object_history.html:17
+msgid "Comment"
+msgstr "Kommentar"
+
+#: templates/reversion/object_history.html:38
+msgid ""
+"This object doesn't have a change history. It probably wasn't added via this "
+"admin site."
+msgstr ""
+"Det her objekt har ingen ændringshistorik. Det er sandsynligvis ikke tilføjet via"
+"dette admin-side."
+
+#: templates/reversion/recover_form.html:8
+#: templates/reversion/recover_list.html:8
+#: templates/reversion/revision_form.html:8
+msgid "Home"
+msgstr "Hjem"
+
+#: templates/reversion/recover_form.html:18
+msgid "Press the save button below to recover this version of the object."
+msgstr "Tryk på gem knappen nedenunder for at genskab denne version af objektet."
+
+#: templates/reversion/recover_list.html:18
+msgid "Choose a date from the list below to recover a deleted version of an object."
+msgstr "Vælg en dato fra listen her under for at gendanne til en tidligere version af objektet."
+
+#: templates/reversion/recover_list.html:38
+msgid "There are no deleted objects to recover."
+msgstr "Der findes inden slettede objekter at gendanne."
+
+#: templates/reversion/revision_form.html:12
+msgid "History"
+msgstr "Historik"
+
+#: templates/reversion/revision_form.html:13
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Revertere %(verbose_name)s"
+
+#: templates/reversion/revision_form.html:26
+msgid "Press the save button below to revert to this version of the object."
+msgstr "Tryk på gem her nedenunder for at revertere til denne version af objektet."

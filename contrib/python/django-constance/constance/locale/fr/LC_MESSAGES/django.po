@@ -1,0 +1,95 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2017-07-02 19:01+0100\n"
+"PO-Revision-Date: 2017-07-03 12:35+0100\n"
+"Last-Translator: Bruno Alla <alla.brunoo@gmail.com>\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"Language-Team: \n"
+"X-Generator: Poedit 2.0.2\n"
+
+#: admin.py:111
+#, python-format
+msgid ""
+"Default value type must be equal to declared config parameter type. Please "
+"fix the default value of '%(name)s'."
+msgstr ""
+"Le type de la valeur par défaut doit être le même que le type déclaré dans "
+"la configuration. Veuillez corriger la valeur par défaut de '%(name)s'."
+
+#: admin.py:121
+#, python-format
+msgid ""
+"Constance doesn't support config values of the type %(config_type)s. Please "
+"fix the value of '%(name)s'."
+msgstr ""
+"Constance ne prend pas en charge les valeurs de configuration du type "
+"%(config_type)s. Veuillez corriger la valeur de ‘%(name)s’."
+
+#: admin.py:145
+msgid ""
+"The settings have been modified by someone else. Please reload the form and "
+"resubmit your changes."
+msgstr ""
+"Les paramètres ont été modifiés par quelqu'un d'autre. Veuillez rafraichir "
+"le formulaire et soumettre de nouveau vos modifications."
+
+#: admin.py:209
+msgid "Live settings updated successfully."
+msgstr "Paramètres mis à jour avec succès."
+
+#: admin.py:271
+msgid "config"
+msgstr "config"
+
+#: apps.py:8
+msgid "Constance"
+msgstr "Constance"
+
+#: backends/database/models.py:19
+msgid "constance"
+msgstr "constance"
+
+#: backends/database/models.py:20
+msgid "constances"
+msgstr "constances"
+
+#: management/commands/constance.py:30
+msgid "Get/Set In-database config settings handled by Constance"
+msgstr ""
+"Obtenir/définir les paramètres de configuration de base de données gérées "
+"par Constance"
+
+#: templates/admin/constance/change_list.html:68
+msgid "Save"
+msgstr "Enregistrer"
+
+#: templates/admin/constance/change_list.html:77
+msgid "Home"
+msgstr "Index"
+
+#: templates/admin/constance/includes/results_list.html:5
+msgid "Name"
+msgstr "Nom"
+
+#: templates/admin/constance/includes/results_list.html:6
+msgid "Default"
+msgstr "Défaut"
+
+#: templates/admin/constance/includes/results_list.html:7
+msgid "Value"
+msgstr "Valeur"
+
+#: templates/admin/constance/includes/results_list.html:8
+msgid "Is modified"
+msgstr "Est modifié"

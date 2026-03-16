@@ -1,0 +1,61 @@
+.django-ace-editor {
+    position: relative;
+    flex: 1;  /* Fix for CSS for new admin of Django 4.2 */
+}
+
+.django-ace-widget {
+    display: inline-block;
+    position: relative;
+    width: 500px;
+    height: 300px;
+}
+
+.django-ace-widget > div  {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.django-ace-widget.loading {
+    display: none;
+}
+
+.django-ace-toolbar {
+    font-size: 12px;
+    text-align: left;
+    width: 500px;
+    color: #555;
+    text-shadow: 0 1px 0 #fff;
+    border-bottom: 1px solid #d8d8d8;
+    background-color: #eaeaea;
+    background-image: -moz-linear-gradient(#fafafa, #eaeaea);
+    background-image: -webkit-linear-gradient(#fafafa, #eaeaea);
+    background-image: linear-gradient(#fafafa, #eaeaea);
+    background-repeat: repeat-x;
+    clear: both;
+    overflow: hidden;
+}
+
+.django-ace-max_min {
+    float: right;
+    background-position:5px 5px;
+    background-repeat:no-repeat;
+    padding: 5px;
+
+    background-image:url(img/expand.png);
+    display:block;
+    height: 16px;
+    width: 16px;
+}
+
+
+.django-ace-editor-fullscreen {
+    position: absolute;
+    top: 0px; left: 0px;
+}
+
+.django-ace-editor-fullscreen .django-ace-max_min {
+    background-image:url(img/contract.png);
+}

@@ -1,0 +1,24 @@
+--- contrib/python/regex/py3/src/_regex.c	(index)
++++ contrib/python/regex/py3/src/_regex.c	(working tree)
+@@ -26238,7 +26238,7 @@ error:
+ /* The module definition. */
+ static struct PyModuleDef regex_module = {
+     PyModuleDef_HEAD_INIT,
+-    "_regex",
++    "regex._regex",
+     NULL,
+     -1,
+     _functions,
+--- contrib/python/regex/py3/regex/tests/test_regex.py	(index)
++++ contrib/python/regex/py3/regex/tests/test_regex.py	(working tree)
+@@ -4445,5 +4445,5 @@ if sys.version_info < (3, 2, 0):
+-def test_main():
+-    unittest.main(verbosity=2)
+-
+-if __name__ == "__main__":
+-    test_main()
++# def test_main():
++#     unittest.main(verbosity=2)
++#
++# if __name__ == "__main__":
++#     test_main()

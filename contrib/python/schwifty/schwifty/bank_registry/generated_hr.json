@@ -1,0 +1,170 @@
+[
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "HAABHR22",
+    "bank_code": "2500009",
+    "name": "ADDIKO BANK d.d. Zagreb",
+    "short_name": "ADDIKO BANK d.d. Zagreb"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "KREZHR2X",
+    "bank_code": "2481000",
+    "name": "AGRAM BANKA d.d. Zagreb",
+    "short_name": "AGRAM BANKA d.d. Zagreb"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "SKOVHR22",
+    "bank_code": "4133006",
+    "name": "BANKA KOVANICA d.d. Vara\u017edin",
+    "short_name": "BANKA KOVANICA d.d. Vara\u017edin"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "BFKKHR22",
+    "bank_code": "2488001",
+    "name": "BKS BANK AG, Glavna podru\u017enica Hrvatska",
+    "short_name": "BKS BANK AG, Glavna podru\u017enica Hrvatska"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "CROAHR2X",
+    "bank_code": "2485003",
+    "name": "CROATIA BANKA d.d. Zagreb",
+    "short_name": "CROATIA BANKA d.d. Zagreb"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "ESBCHR22",
+    "bank_code": "2402006",
+    "name": "ERSTE & STEIERM\u00c4RKISCHE BANK d.d. Rijeka",
+    "short_name": "ERSTE & STEIERM\u00c4RKISCHE BANK d.d. Rijeka"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "NBHRHR2X",
+    "bank_code": "1001005",
+    "name": "HRVATSKA NARODNA BANKA",
+    "short_name": "HRVATSKA NARODNA BANKA"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "HPBZHR2X",
+    "bank_code": "2390001",
+    "name": "HRVATSKA PO\u0160TANSKA BANKA d.d. Zagreb",
+    "short_name": "HRVATSKA PO\u0160TANSKA BANKA d.d. Zagreb"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "IMXXHR22",
+    "bank_code": "2492008",
+    "name": "IMEX BANKA d.d. Split",
+    "short_name": "IMEX BANKA d.d. Split"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "ISKBHR2X",
+    "bank_code": "2380006",
+    "name": "ISTARSKA KREDITNA BANKA  UMAG d.d. Umag",
+    "short_name": "ISTARSKA KREDITNA BANKA  UMAG d.d. Umag"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "VBVZHR22",
+    "bank_code": "2489004",
+    "name": "J&T banka d.d. Vara\u017edin",
+    "short_name": "J&T banka d.d. Vara\u017edin"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "KALCHR2X",
+    "bank_code": "2400008",
+    "name": "KARLOVA\u010cKA BANKA d.d. Karlovac",
+    "short_name": "KARLOVA\u010cKA BANKA d.d. Karlovac"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "KENBHR22",
+    "bank_code": "4124003",
+    "name": "KENTBANK d.d. Zagreb",
+    "short_name": "KENTBANK d.d. Zagreb"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "OTPVHR2X",
+    "bank_code": "2407000",
+    "name": "OTP BANKA d.d. Split",
+    "short_name": "OTP BANKA d.d. Split"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "PAZGHR2X",
+    "bank_code": "2408002",
+    "name": "PARTNER BANKA d.d. Zagreb",
+    "short_name": "PARTNER BANKA d.d. Zagreb"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "PDKCHR2X",
+    "bank_code": "2386002",
+    "name": "PODRAVSKA BANKA d.d. Koprivnica",
+    "short_name": "PODRAVSKA BANKA d.d. Koprivnica"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "PBZGHR2X",
+    "bank_code": "2340009",
+    "name": "PRIVREDNA BANKA ZAGREB d.d. Zagreb",
+    "short_name": "PRIVREDNA BANKA ZAGREB d.d. Zagreb"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "RZBHHR2X",
+    "bank_code": "2484008",
+    "name": "RAIFFEISENBANK AUSTRIA d.d. Zagreb",
+    "short_name": "RAIFFEISENBANK AUSTRIA d.d. Zagreb"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "SMBRHR22",
+    "bank_code": "2403009",
+    "name": "SAMOBORSKA BANKA d.d. Samobor",
+    "short_name": "SAMOBORSKA BANKA d.d. Samobor"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "SBSLHR2X",
+    "bank_code": "2412009",
+    "name": "SLATINSKA BANKA d.d. Slatina",
+    "short_name": "SLATINSKA BANKA d.d. Slatina"
+  },
+  {
+    "country_code": "HR",
+    "primary": true,
+    "bic": "ZABAHR2X",
+    "bank_code": "2360000",
+    "name": "ZAGREBA\u010cKA BANKA d.d. Zagreb",
+    "short_name": "ZAGREBA\u010cKA BANKA d.d. Zagreb"
+  }
+]

@@ -1,0 +1,95 @@
+VERSION(1.7.0)
+
+# "win32" should be included before "unix". "unix" is also needed.
+
+ADDINCL(
+    contrib/libs/apache/apr/include/arch/win32
+)
+
+CFLAGS(
+    GLOBAL -DAPR_DECLARE_STATIC
+)
+
+LDFLAGS(
+    Mswsock.lib
+    Rpcrt4.lib
+    Version.lib
+    Ws2_32.lib
+)
+
+SRCS(
+    atomic/win32/apr_atomic.c
+    dso/win32/dso.c
+    encoding/apr_escape.c
+    file_io/unix/copy.c
+    file_io/unix/fileacc.c
+    file_io/unix/filepath_util.c
+    file_io/unix/fullrw.c
+    file_io/unix/mktemp.c
+    file_io/unix/tempdir.c
+    file_io/win32/buffer.c
+    file_io/win32/dir.c
+    file_io/win32/filedup.c
+    file_io/win32/filepath.c
+    file_io/win32/filestat.c
+    file_io/win32/filesys.c
+    file_io/win32/flock.c
+    file_io/win32/open.c
+    file_io/win32/pipe.c
+    file_io/win32/readwrite.c
+    file_io/win32/seek.c
+    locks/win32/proc_mutex.c
+    locks/win32/thread_cond.c
+    locks/win32/thread_mutex.c
+    locks/win32/thread_rwlock.c
+    memory/unix/apr_pools.c
+    misc/unix/errorcodes.c
+    misc/unix/getopt.c
+    misc/unix/otherchild.c
+    misc/unix/version.c
+    misc/win32/charset.c
+    misc/win32/env.c
+    misc/win32/internal.c
+    misc/win32/misc.c
+    misc/win32/rand.c
+    misc/win32/start.c
+    misc/win32/utf8.c
+    mmap/unix/common.c
+    mmap/win32/mmap.c
+    network_io/unix/inet_ntop.c
+    network_io/unix/inet_pton.c
+    network_io/unix/multicast.c
+    network_io/unix/sockaddr.c
+    network_io/unix/socket_util.c
+    network_io/win32/sendrecv.c
+    network_io/win32/sockets.c
+    network_io/win32/sockopt.c
+    passwd/apr_getpass.c
+    poll/unix/poll.c
+    poll/unix/pollcb.c
+    poll/unix/pollset.c
+    poll/unix/select.c
+    poll/unix/wakeup.c
+    random/unix/apr_random.c
+    random/unix/sha2.c
+    random/unix/sha2_glue.c
+    shmem/win32/shm.c
+    strings/apr_cpystrn.c
+    strings/apr_cstr.c
+    strings/apr_fnmatch.c
+    strings/apr_snprintf.c
+    strings/apr_strings.c
+    strings/apr_strnatcmp.c
+    strings/apr_strtok.c
+    tables/apr_hash.c
+    tables/apr_skiplist.c
+    tables/apr_tables.c
+    threadproc/win32/proc.c
+    threadproc/win32/signals.c
+    threadproc/win32/thread.c
+    threadproc/win32/threadpriv.c
+    time/win32/time.c
+    time/win32/timestr.c
+    user/win32/groupinfo.c
+    user/win32/userinfo.c
+)

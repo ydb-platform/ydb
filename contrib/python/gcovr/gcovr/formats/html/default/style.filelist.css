@@ -1,0 +1,51 @@
+div.file-list
+{
+  border: 0;
+  border-spacing: 1px;
+}
+
+div.file-list.coverage-unknown > span:not(:has(meter))
+{
+  background-color: var(--unknown_color) !important;
+}
+
+div.file-list.coverage-none > span:not(:has(meter)),
+div.file-list.coverage-low > span:not(:has(meter))
+{
+  background-color: var(--low_color) !important;
+}
+
+div.file-list.coverage-medium > span:not(:has(meter))
+{
+  background-color: var(--medium_color) !important;
+}
+
+div.file-list.coverage-high > span:not(:has(meter))
+{
+  background-color: var(--high_color) !important;
+}
+
+div.file-list > span:has(meter)
+{
+  margin-right: 5px !important;
+}
+
+div.file-list > span:not(:has(meter))
+{
+  color: black !important;
+  padding-left: 5px !important;
+  padding-right: 5px !important;
+  margin-left: 0px !important;
+  margin-right: 0px !important;
+  text-align: right
+}
+
+div.file-list > span:first-child
+{
+  min-width: 3.5em !important;
+}
+
+div.file-list > span:last-child
+{
+  min-width: 4.5em !important;
+}

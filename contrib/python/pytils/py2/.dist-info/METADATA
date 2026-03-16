@@ -1,0 +1,22 @@
+Metadata-Version: 2.1
+Name: pytils
+Version: 0.3
+Summary: Russian-specific string utils
+Home-page: https://github.com/j2a/pytils/
+Author: Yury Yurevich
+Author-email: yyurevich@jellycrystal.com
+License: MIT
+Platform: All
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Text Processing :: Linguistic
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Natural Language :: Russian
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+
+Simple tools for processing strings in russian
+(choose proper form for plurals, in-words representation of numerals,
+dates in russian without locales, transliteration, etc)
+

@@ -1,0 +1,97 @@
+{% extends original_change_list_template %}
+{% load i18n static admin_modify %}
+
+{% block extrastyle %}
+	{{ advanced_filters.media.css }}
+	{{ block.super }}
+{% endblock extrastyle %}
+
+{% block object-tools-items %}
+	{{ block.super }}
+	{# Add a link to the end of the tool items #}
+	{% if advanced_filters %}
+		<li><div class="afilters">
+			<a class="ajax-popup-link icons-object-tools-add-link" href="#advanced_filters" >{% trans "Advanced Filter" %}</a>{% if '_afilter' in request.GET %}<a class="edit-link" href="{% url 'admin:advanced_filters_advancedfilter_change' current_afilter %}" >{% trans "Edit" %}</a>
+			{% endif %}
+		</div></li>
+	{% endif %}
+{% endblock object-tools-items %}
+
+{% block content %}
+	{{ block.super }}
+	{# Add the dialog content to the bottom of the content #}
+	{% if advanced_filters %}
+		{% with advanced_filters.fields_formset as formset %}
+			<div class="white-popup mfp-hide" id="advanced_filters">
+				<h1>{% trans "Create advanced filter" %}:</h1>
+				<form novalidate method="POST" id="advanced_filters_form">
+					{% csrf_token %}
+					{{ formset.management_form }}
+					<input type="hidden" value="advanced_filters" name="action">
+					<table>
+						{{ advanced_filters.as_table }}
+					</table>
+					<br/>
+					<table id="{{ formset.prefix }}-group" data-rules-formset>
+						<thead>
+							<tr>
+								{% for field in formset.fields %}
+									<th style="color: black;">{{ field.label|capfirst }}</th>
+								{% endfor %}
+							</tr>
+						</thead>
+						<tbody>
+							{% for form in formset %}
+								<tr class="form-row {% cycle "row1" "row2" %} {% if forloop.last %}empty-form{% endif %}" id="{{ formset.prefix }}-{% if not forloop.last %}{{ forloop.counter0 }}{% else %}empty{% endif %}">
+									{{form.non_field_errors}}
+									{% for field in form.visible_fields %}
+										<td{% if field.field.name %} class="field-{{ field.field.name }}"{% endif %}>
+											{{ field }}
+											{% if field.errors %}
+												<ul style="min-height: 30px;" class="errorlist">
+													{% for error in field.errors %}
+														<li>{{ error }}</li>
+													{% endfor %}
+												</ul>
+											{% endif %}
+										</td>
+									{% endfor %}
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+					<br />
+					<input method="POST" type="submit" value="{% trans "Save" %}">
+					<input method="POST" name="_save_goto" type="submit" value="{% trans "Save & Filter Now!" %}">
+					<a href="#" class="grp-button" style="margin:auto" onclick="$.magnificPopup.close();">{% trans "Cancel" %}</a>
+				</form>
+
+				{{ advanced_filters.media.js }}
+
+				<script type="text/javascript" charset="utf-8">
+					// using django's original jquery, initial formset
+					var FORM_MODEL = undefined;
+					var MODEL_LABEL = '{{ app_label }}.{{ opts.model_name }}';
+					(function($) {
+						$.magnificPopup.instance._onFocusIn = function(e) {
+							// Do nothing if target element is select2 input
+							if( $(e.target).hasClass('select2-input') ) {
+								return true;
+							}
+							// Else call parent method
+							$.magnificPopup.proto._onFocusIn.call(this,e);
+						};
+						$('.ajax-popup-link').magnificPopup({
+							type:'inline',
+						});
+						if ($(".errorlist", "#advanced_filters").length) {
+							$('.ajax-popup-link').magnificPopup('open');
+						}
+					})(jQuery);
+				</script>
+
+				{% include "admin/common_js_init.html" with formset=formset %}
+			</div>
+		{% endwith %}
+	{% endif %}
+{% endblock content %}

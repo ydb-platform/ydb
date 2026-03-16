@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:tc2="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tp1="http://www.garmin.com/xmlschemas/TrackPointExtension/v1" version="1.1" creator="TC2 to GPX11 XSLT stylesheet" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd http://www.garmin.com/xmlschemas/TrackPointExtension/v1 http://www.garmin.com/xmlschemas/TrackPointExtensionv1.xsd">
+    <trk>
+        <name>2013-07-06T14:59:00Z</name>
+        <trkseg>
+            <trkpt lat="50.7772126" lon="6.0819695">
+                <ele>191.5999756</ele>
+                <time>2013-07-06T17:26:26Z</time>
+            </trkpt>
+            <trkpt lat="50.7773346" lon="6.0821333">
+                <ele>191.5999756</ele>
+                <time>2013-07-06T17:26:30Z</time>
+            </trkpt>
+            <trkpt lat="50.7774666" lon="6.0823426">
+                <ele>191.5999756</ele>
+                <time>2013-07-06T17:26:35Z</time>
+            </trkpt>
+            <trkpt lat="50.7776203" lon="6.0826253">
+                <ele>191.5999756</ele>
+                <time>2013-07-06T17:26:44Z</time>
+            </trkpt>
+            <trkpt lat="50.7776910" lon="6.0826803">
+                <ele>191.5999756</ele>
+                <time>2013-07-06T17:26:49Z</time>
+            </trkpt>
+            <trkpt lat="50.7777283" lon="6.0827079">
+                <ele>191.5999756</ele>
+                <time>2013-07-06T17:26:57Z</time>
+            </trkpt>
+            <trkpt lat="50.7777341" lon="6.0827095">
+                <ele>191.5999756</ele>
+                <time>2013-07-06T17:27:15Z</time>
+            </trkpt>
+            <trkpt lat="50.7776789" lon="6.0827233">
+                <ele>191.5999756</ele>
+                <time>2013-07-06T17:27:41Z</time>
+            </trkpt>
+            <trkpt lat="50.7776715" lon="6.0827203">
+                <ele>191.5999756</ele>
+                <time>2013-07-06T17:27:42Z</time>
+            </trkpt>
+        </trkseg>
+        <trkseg></trkseg>
+    </trk>
+</gpx>

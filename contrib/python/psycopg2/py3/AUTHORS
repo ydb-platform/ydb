@@ -1,0 +1,15 @@
+Main authors:
+  Federico Di Gregorio <fog@debian.org>
+  Daniele Varrazzo <daniele.varrazzo@gmail.com>
+
+For the win32 port:
+  Jason Erickson <jerickso@indian.com>
+
+Additional Help:
+
+  Peter Fein contributed a logging connection/cursor class that even if it
+  was not used directly heavily influenced the implementation currently in
+  psycopg2.extras.
+
+  Jan Urbański (re)started the work on asynchronous queries and contributed
+  both on that and on other parts of psycopg2.

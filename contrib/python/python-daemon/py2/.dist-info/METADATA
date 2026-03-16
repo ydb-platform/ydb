@@ -1,0 +1,51 @@
+Metadata-Version: 2.1
+Name: python-daemon
+Version: 2.2.4
+Summary: Library to implement a well-behaved Unix daemon process.
+Home-page: https://pagure.io/python-daemon/
+Author: Ben Finney
+Author-email: ben+python@benfinney.id.au
+License: Apache-2
+Keywords: daemon,fork,unix
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Description-Content-Type: text/x-rst
+Requires-Dist: docutils
+Requires-Dist: lockfile (>=0.10)
+Requires-Dist: setuptools
+Provides-Extra: test
+Requires-Dist: coverage ; extra == 'test'
+Requires-Dist: docutils ; extra == 'test'
+Requires-Dist: mock (>=1.3) ; extra == 'test'
+Requires-Dist: testscenarios (>=0.4) ; extra == 'test'
+Requires-Dist: testtools ; extra == 'test'
+Requires-Dist: unittest2 (>=0.5.1) ; extra == 'test'
+
+This library implements the well-behaved daemon specification of
+:pep:`3143`, “Standard daemon process library”.
+
+A well-behaved Unix daemon process is tricky to get right, but the
+required steps are much the same for every daemon program. A
+`DaemonContext` instance holds the behaviour and configured
+process environment for the program; use the instance as a context
+manager to enter a daemon state.
+
+Simple example of usage::
+
+    import daemon
+
+    from spam import do_main_program
+
+    with daemon.DaemonContext():
+        do_main_program()
+
+Customisation of the steps to become a daemon is available by
+setting options on the `DaemonContext` instance; see the
+documentation for that class for each option.
+

@@ -1,0 +1,6 @@
+requirements:
+  - six
+keep:
+  - test/*
+exclude_from_macros:
+  - test/*

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.agent ;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/agent;agent";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.agent";
+
+import "yandex/cloud/validation.proto";
+
+message LogSettings {
+    // Id of Yandex Cloud log group to upload agent logs to 
+    string cloud_log_group_id = 1  [(length) = "<=50"];
+}

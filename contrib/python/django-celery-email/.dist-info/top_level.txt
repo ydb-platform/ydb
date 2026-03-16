@@ -1,0 +1,1 @@
+djcelery_email

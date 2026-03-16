@@ -1,0 +1,70 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-09-20 18:53-0500\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: admin.py:152 templates/adminsortable2/tabular-1.5.html:9
+#: templates/adminsortable2/tabular-1.6.html:9
+msgid "Sort"
+msgstr "مرتب‌سازی"
+
+#: admin.py:175
+msgid "Move selected to specific page"
+msgstr "انتقال موارد انتخاب شده به صفحه خاص"
+
+#: admin.py:179
+msgid "Move selected ... pages back"
+msgstr "انتقال موارد انتخاب شده به صفحه قبل"
+
+#: admin.py:183
+msgid "Move selected ... pages forward"
+msgstr "انتقال موارد انتخاب شده به صفحه بعد"
+
+#: admin.py:187
+msgid "Move selected to first page"
+msgstr "انتقال موارد انتخاب شده به اولین صفحه"
+
+#: admin.py:191
+msgid "Move selected to last page"
+msgstr "انتقال موارد انتخاب شده به آخرین صفحه"
+
+#: templates/adminsortable2/stacked-1.5.html:10
+#: templates/adminsortable2/stacked-1.6.html:10
+#: templates/adminsortable2/tabular-1.5.html:31
+#: templates/adminsortable2/tabular-1.6.html:31
+msgid "View on site"
+msgstr "مشاهده در وب‌گاه"
+
+#: templates/adminsortable2/stacked-1.5.html:28
+#: templates/adminsortable2/stacked-1.6.html:28
+#: templates/adminsortable2/tabular-1.5.html:78
+#: templates/adminsortable2/tabular-1.6.html:77
+msgid "Remove"
+msgstr "حذف"
+
+#: templates/adminsortable2/stacked-1.5.html:29
+#: templates/adminsortable2/stacked-1.6.html:29
+#: templates/adminsortable2/tabular-1.5.html:77
+#: templates/adminsortable2/tabular-1.6.html:76
+#, python-format
+msgid "Add another %(verbose_name)s"
+msgstr "افزودن یک %(verbose_name)s دیگر"
+
+#: templates/adminsortable2/tabular-1.5.html:17
+#: templates/adminsortable2/tabular-1.6.html:17
+msgid "Delete?"
+msgstr "حذف؟"

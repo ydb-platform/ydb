@@ -1,0 +1,81 @@
+Metadata-Version: 2.4
+Name: pydash
+Version: 8.0.6
+Summary: The kitchen sink of Python utility libraries for doing "stuff" in a functional way. Based on the Lo-Dash Javascript library.
+Author-email: Derrick Gilland <dgilland@gmail.com>
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/dgilland/pydash
+Project-URL: Documentation, https://pydash.readthedocs.org
+Project-URL: Repository, https://github.com/dgilland/pydash
+Project-URL: Issues, https://github.com/dgilland/pydash/issues
+Project-URL: Changelog, https://github.com/dgilland/pydash/blob/develop/CHANGELOG.rst
+Keywords: pydash,utility,functional,lodash,underscore
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Utilities
+Requires-Python: >=3.9
+Description-Content-Type: text/x-rst
+License-File: LICENSE.rst
+License-File: AUTHORS.rst
+Requires-Dist: typing-extensions!=4.6.0,>3.10
+Provides-Extra: dev
+Requires-Dist: build; extra == "dev"
+Requires-Dist: coverage; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: furo; extra == "dev"
+Requires-Dist: invoke; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-mypy-testing; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: sphinx; extra == "dev"
+Requires-Dist: tox; extra == "dev"
+Requires-Dist: twine; extra == "dev"
+Requires-Dist: wheel; extra == "dev"
+Requires-Dist: sphinx-autodoc-typehints; extra == "dev"
+Dynamic: license-file
+
+pydash
+******
+
+|version| |build| |coveralls| |license|
+
+The kitchen sink of Python utility libraries for doing "stuff" in a functional way. Based on the `Lo-Dash <http://lodash.com/>`_  Javascript library.
+
+Note
+====
+
+Looking for a library that is more memory efficient and better suited for large datasets? Check out `fnc <https://github.com/dgilland/fnc>`_! It's built around generators and iteration and has iteratee-first function signatures.
+
+
+Links
+=====
+
+- Project: https://github.com/dgilland/pydash
+- Documentation: http://pydash.readthedocs.org
+- PyPi: https://pypi.python.org/pypi/pydash/
+- Github Actions: https://github.com/dgilland/pydash/actions
+
+
+.. |version| image:: http://img.shields.io/pypi/v/pydash.svg?style=flat-square
+    :target: https://pypi.python.org/pypi/pydash/
+
+.. |build| image:: https://img.shields.io/github/actions/workflow/status/dgilland/pydash/main.yml?branch=master&style=flat-square
+    :target: https://github.com/dgilland/pydash/actions
+
+.. |coveralls| image:: http://img.shields.io/coveralls/dgilland/pydash/master.svg?style=flat-square
+    :target: https://coveralls.io/r/dgilland/pydash
+
+.. |license| image:: http://img.shields.io/pypi/l/pydash.svg?style=flat-square
+    :target: https://pypi.python.org/pypi/pydash/

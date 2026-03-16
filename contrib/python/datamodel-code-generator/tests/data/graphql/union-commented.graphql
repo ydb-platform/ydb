@@ -1,0 +1,25 @@
+"""This is a test comment in a single line"""
+type GroupMetadata {
+  name: String!
+}
+
+"""This is a multiline comment,
+with a line break,
+and a line break
+"""
+type UserMetadata {
+  name: String!
+}
+
+"""This is another multiline comment,
+with a line break,
+and another line break
+"""
+union Metadata = UserMetadata | GroupMetadata
+
+"""This is a single line comment"""
+union DummyMetadata = UserMetadata | GroupMetadata
+
+type Resource {
+  metadata: UserMetadata!
+}

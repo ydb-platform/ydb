@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.test;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/test;test";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.test";
+
+// Agent selection criterion.
+//
+// The structure is used by service to determine on which agents a specific test should be executed.
+message AgentSelector {
+  oneof agent {
+    // Selection by agent ID.
+    string agent_id = 1;
+    
+    // Selection by filter string.
+    string match_by_filter = 2;
+
+    // Select anonymoud (i.e. not registered) agents.
+    bool anonymous_agent = 3;
+  }
+}

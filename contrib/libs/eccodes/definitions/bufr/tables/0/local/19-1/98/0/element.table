@@ -1,0 +1,23 @@
+#code|abbreviation|type|name|unit|scale|reference|width|crex_unit|crex_scale|crex_width
+013160|radiometerLiquidContent|double|RADIOMETER LIQUID CONTENT|kg m-2|2|-350|10|kg m-2|2|3
+013161|radiometerLiquidContentForTest|double|RADIOMETER LIQUID CONTENT (FOR TEST)|kg m-2|2|-350|10|kg m-2|2|3
+021148|trailingEdgeVariationFlag|flag|TRAILING EDGE VARIATION FLAG|FLAG TABLE|0|0|2|FLAG TABLE|0|1
+021176|specificBandCorrectedOceanBackscatterCoefficient|double|SPECIFIC BAND CORRECTED OCEAN BACKSCATTER COEFFICIENT|dB|2|-32768|16|DB|2|5
+021177|stdSpecificBandCorrectedOceanBackscatterCoefficient|double|STD SPECIFIC BAND CORRECTED OCEAN BACKSCATTER COEFFICIENT|dB|2|-32768|16|DB|2|5
+021178|specificBandNetInstrumentalCorrectionForAGC|double|SPECIFIC BAND NET INSTRUMENTAL CORRECTION FOR AGC|DB|2|-2048|12|DB|2|4
+021179|specificBandAutomaticGainControl|double|SPECIFIC BAND AUTOMATIC GAIN CONTROL|dB|2|0|13|DB|2|4
+021180|rmsSpecificBandAutomaticGainControl|double|RMS SPECIFIC BAND AUTOMATIC GAIN CONTROL|dB|2|0|8|DB|2|3
+021181|numberOfValidPointsForSpecificBandAutomaticGainControl|double|NUMBER OF VALID POINTS FOR SPECIFIC BAND AUTOMATIC GAIN CONTROL|NUMERIC|0|0|7|NUMERIC|0|2
+022188|specificBandOceanRange|double|SPECIFIC BAND OCEAN RANGE|m|3|0|31|m|3|10
+022189|specificBandSignificantWaveHeight|double|SPECIFIC BAND SIGNIFICANT WAVE HEIGHT|m|3|0|16|m|3|5
+022190|rmsOfSpecificBandOceanRange|double|RMS OF SPECIFIC BAND OCEAN RANGE|m|4|0|16|m|4|5
+022191|numberOfValidPointsForSpecificBand|long|NUMBER OF VALID POINTS FOR SPECIFIC BAND|Numeric|0|0|10|Numeric|0|4
+022192|rmsSpecificBandSignificnatWaveHeight|double|RMS SPECIFIC BAND SIGNIFICANT WAVE HEIGHT|m|3|0|16|m|3|5
+022193|numberOfValidPointsForSpecificBandSing|long|NUMBER OF VALID POINTS FOR SPECIFIC BAND SIGN. WAVE HEIGHT|NUMERIC|0|0|10|NUMERIC|0|4
+022194|specificBandNetInstrCorrectionForSigWaveHeight|double|SPECIFIC BAND NET INSTR. CORRECTION FOR SIGNIFICANT WAVE HEIGHT|M|3|-1000|11|M|3|4
+022195|numberOfValidPointsForSpecificBandBackscatter|long|NUMBER OF VALID POINTS FOR SPECIFIC BAND BACKSCATTER|NUMERIC|0|0|10|NUMERIC|0|4
+025112|bandSpecificAltimeterDataQualityFlag|flag|BAND SPECIFIC ALTIMETER DATA QUALITY FLAG|FLAG TABLE|0|0|9|FLAG TABLE|0|3
+025113|bandSpecificAltimeterCorrectionQualityFlag|flag|BAND SPECIFIC ALTIMETER CORRECTION QUALITY FLAG|FLAG TABLE|0|0|9|FLAG TABLE|0|3
+025165|ionosphericCorrectionFromModelOnSpecificBand|double|IONOSPHERIC CORRECTION FROM MODEL ON SPECIFIC BAND|m|4|-32768|16|m|4|5
+025166|seaStateBiasCorrectionOnSpecificBand|double|SEA STATE BIAS CORRECTION ON SPECIFIC BAND|m|4|-32768|16|m|4|5
+025167|specificBandNetInstrumentalCorrection|double|SPECIFIC BAND NET INSTRUMENTAL CORRECTION|m|4|-120000|18|m|4|6

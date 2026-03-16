@@ -1,0 +1,5 @@
+[openinference_instrumentor]
+langchain = openinference.instrumentation.langchain:LangChainInstrumentor
+
+[opentelemetry_instrumentor]
+langchain = openinference.instrumentation.langchain:LangChainInstrumentor

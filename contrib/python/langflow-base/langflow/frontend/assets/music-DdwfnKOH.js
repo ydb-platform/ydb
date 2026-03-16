@@ -1,0 +1,1 @@
+import{a8 as c}from"./index-Cp3b7MWQ.js";const e=[["path",{d:"M9 18V5l12-2v13",key:"1jmyc2"}],["circle",{cx:"6",cy:"18",r:"3",key:"fqmcym"}],["circle",{cx:"18",cy:"16",r:"3",key:"1hluhg"}]],r=c("music",e);export{e as __iconNode,r as default};

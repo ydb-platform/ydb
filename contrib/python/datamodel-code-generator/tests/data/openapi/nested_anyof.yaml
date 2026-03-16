@@ -1,0 +1,27 @@
+openapi: 3.0.0
+info:
+  title: datamodel-code-generator bug example
+components:
+  schemas:
+    Container:
+      allOf:
+        - type: object
+          required:
+            - contents
+          properties:
+            contents:
+              type: array
+              items:
+                anyOf:
+                  - $ref: '#/components/schemas/Type1'
+                  - $ref: '#/components/schemas/Type2'
+    Type1:
+      type: object
+      properties:
+        prop:
+          type: string
+    Type2:
+      type: object
+      properties:
+        prop:
+          type: string

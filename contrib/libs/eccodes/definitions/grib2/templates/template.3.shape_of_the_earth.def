@@ -1,0 +1,106 @@
+# (C) Copyright 2005- ECMWF.
+
+codetable[1] shapeOfTheEarth ('3.2.table',masterDir,localDir) : dump;
+
+# Scale factor of radius of spherical earth
+unsigned[1] scaleFactorOfRadiusOfSphericalEarth = missing() : can_be_missing, edition_specific;
+
+# Scaled value of radius of spherical earth (in metres)
+unsigned[4] scaledValueOfRadiusOfSphericalEarth = missing(): can_be_missing, edition_specific;
+
+# Scale factor of major axis of oblate spheroid earth
+unsigned[1] scaleFactorOfEarthMajorAxis = missing(): can_be_missing, edition_specific;
+alias scaleFactorOfMajorAxisOfOblateSpheroidEarth=scaleFactorOfEarthMajorAxis;
+
+# Scaled value of major axis of oblate spheroid earth
+unsigned[4] scaledValueOfEarthMajorAxis = missing(): can_be_missing, edition_specific;
+alias scaledValueOfMajorAxisOfOblateSpheroidEarth=scaledValueOfEarthMajorAxis;
+
+# Scale factor of minor axis of oblate spheroid earth
+unsigned[1] scaleFactorOfEarthMinorAxis = missing(): can_be_missing, edition_specific;
+alias scaleFactorOfMinorAxisOfOblateSpheroidEarth=scaleFactorOfEarthMinorAxis ;
+
+# Scaled value of minor axis of oblate spheroid earth
+unsigned[4] scaledValueOfEarthMinorAxis = missing(): can_be_missing, edition_specific;
+alias scaledValueOfMinorAxisOfOblateSpheroidEarth=scaledValueOfEarthMinorAxis;
+
+alias earthIsOblate = true;
+
+_if (shapeOfTheEarth == 0) {
+  transient radius=6367470;
+  alias radiusOfTheEarth=radius;
+  alias radiusInMetres=radius;
+  alias earthIsOblate=false;
+}
+_if (shapeOfTheEarth == 1){
+  meta radius from_scale_factor_scaled_value(
+                          scaleFactorOfRadiusOfSphericalEarth,
+                          scaledValueOfRadiusOfSphericalEarth);
+  alias radiusOfTheEarth=radius;
+  alias radiusInMetres=radius;
+  alias earthIsOblate=false;
+}
+_if (shapeOfTheEarth == 6){
+  transient radius=6371229;
+  alias radiusOfTheEarth=radius;
+  alias radiusInMetres=radius;
+  alias earthIsOblate=false;
+}
+
+_if (shapeOfTheEarth == 8){
+  transient radius=6371200;
+  alias radiusOfTheEarth=radius;
+  alias radiusInMetres=radius;
+  alias earthIsOblate=false;
+}
+
+
+# Oblate spheroid cases
+_if (shapeOfTheEarth == 2){
+  # IAU in 1965
+  transient earthMajorAxis = 6378160.0;
+  transient earthMinorAxis = 6356775.0;
+  alias earthMajorAxisInMetres=earthMajorAxis;
+  alias earthMinorAxisInMetres=earthMinorAxis;
+}
+_if (shapeOfTheEarth == 3){
+  # Major and minor axes specified (in km) by data producer
+  meta earthMajorAxis from_scale_factor_scaled_value(
+       scaleFactorOfEarthMajorAxis, scaledValueOfEarthMajorAxis);
+  meta earthMinorAxis from_scale_factor_scaled_value(
+       scaleFactorOfEarthMinorAxis, scaledValueOfEarthMinorAxis);
+
+  # ECC-979
+  # The 'scale' accessor works with integers so rounds its first argument
+  # which is not what we want because the inputs are doubles with decimal
+  # expansions.
+  #
+  # meta earthMajorAxisInMetres scale(earthMajorAxis, thousand, one, zero);
+  # meta earthMinorAxisInMetres scale(earthMinorAxis, thousand, one, zero);
+  meta earthMajorAxisInMetres multdouble(earthMajorAxis, 1000);
+  meta earthMinorAxisInMetres multdouble(earthMinorAxis, 1000);
+}
+_if (shapeOfTheEarth == 7){
+  # Major and minor axes specified (in m) by data producer
+  meta earthMajorAxis from_scale_factor_scaled_value(
+       scaleFactorOfEarthMajorAxis, scaledValueOfEarthMajorAxis);
+  meta earthMinorAxis from_scale_factor_scaled_value(
+       scaleFactorOfEarthMinorAxis, scaledValueOfEarthMinorAxis);
+  alias earthMajorAxisInMetres=earthMajorAxis;
+  alias earthMinorAxisInMetres=earthMinorAxis;
+}
+_if (shapeOfTheEarth == 4 || shapeOfTheEarth == 5){
+  # 4 -> IAG-GRS80 model
+  # 5 -> WGS84
+  transient earthMajorAxis = 6378137.0;
+  transient earthMinorAxis = 6356752.314;
+  alias earthMajorAxisInMetres=earthMajorAxis;
+  alias earthMinorAxisInMetres=earthMinorAxis;
+}
+_if (shapeOfTheEarth == 9){
+  # Airy 1830
+  transient earthMajorAxis = 6377563.396;
+  transient earthMinorAxis = 6356256.909;
+  alias earthMajorAxisInMetres=earthMajorAxis;
+  alias earthMinorAxisInMetres=earthMinorAxis;
+}

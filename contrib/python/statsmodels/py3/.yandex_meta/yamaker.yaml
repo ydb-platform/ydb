@@ -1,0 +1,5 @@
+mark_as_cython_c:
+  - statsmodels/**/*.pyx
+exclude:
+  - statsmodels/*.pyx.in
+  - statsmodels/setup.cfg

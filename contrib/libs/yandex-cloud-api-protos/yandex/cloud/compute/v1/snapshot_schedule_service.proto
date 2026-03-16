@@ -1,0 +1,443 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/duration.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/compute/v1/disk.proto";
+import "yandex/cloud/compute/v1/snapshot.proto";
+import "yandex/cloud/compute/v1/snapshot_schedule.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// A set of methods for managing snapshot schedules.
+service SnapshotScheduleService {
+  // Returns the specified snapshot schedule.
+  //
+  // To get the list of available snapshot schedules, make a [List] request.
+  rpc Get (GetSnapshotScheduleRequest) returns (SnapshotSchedule) {
+    option (google.api.http) = { get: "/compute/v1/snapshotSchedules/{snapshot_schedule_id}" };
+  }
+
+  // Retrieves the list of snapshot schedules in the specified folder.
+  rpc List (ListSnapshotSchedulesRequest) returns (ListSnapshotSchedulesResponse) {
+    option (google.api.http) = { get: "/compute/v1/snapshotSchedules" };
+  }
+
+  // Creates a snapshot schedule in the specified folder.
+  rpc Create (CreateSnapshotScheduleRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/snapshotSchedules" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateSnapshotScheduleMetadata"
+      response: "SnapshotSchedule"
+    };
+  }
+
+  // Updates the specified snapshot schedule.
+  //
+  // The schedule is updated only after all snapshot creations and deletions triggered by the schedule are completed.
+  rpc Update (UpdateSnapshotScheduleRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/compute/v1/snapshotSchedules/{snapshot_schedule_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSnapshotScheduleMetadata"
+      response: "SnapshotSchedule"
+    };
+  }
+
+  // Deletes the specified snapshot schedule.
+  //
+  // Deleting a snapshot schedule removes its data permanently and is irreversible. However, deleting a schedule
+  // does not delete any snapshots created by the schedule. You must delete snapshots separately.
+  //
+  // The schedule is deleted only after all snapshot creations and deletions triggered by the schedule are completed.
+  rpc Delete (DeleteSnapshotScheduleRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/compute/v1/snapshotSchedules/{snapshot_schedule_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteSnapshotScheduleMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Updates the list of disks attached to the specified schedule.
+  //
+  // The schedule is updated only after all snapshot creations and deletions triggered by the schedule are completed.
+  rpc UpdateDisks (UpdateSnapshotScheduleDisksRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/compute/v1/snapshotSchedules/{snapshot_schedule_id}:updateDisks" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSnapshotScheduleDisksMetadata"
+      response: "SnapshotSchedule"
+    };
+  }
+
+  // Disables the specified snapshot schedule.
+  //
+  // The [SnapshotSchedule.status] is changed to `INACTIVE`: the schedule is interrupted, snapshots won't be created
+  // or deleted.
+  //
+  // The schedule is disabled only after all snapshot creations and deletions triggered by the schedule are completed.
+  rpc Disable(DisableSnapshotScheduleRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/snapshotSchedules/{snapshot_schedule_id}:disable" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DisableSnapshotScheduleMetadata"
+      response: "SnapshotSchedule"
+    };
+  }
+  
+  // Enables the specified snapshot schedule.
+  //
+  // The [SnapshotSchedule.status] is changed to `ACTIVE`: new disk snapshots will be created, old ones deleted
+  // (if [SnapshotSchedule.retention_policy] is specified).
+  rpc Enable(EnableSnapshotScheduleRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/snapshotSchedules/{snapshot_schedule_id}:enable" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "EnableSnapshotScheduleMetadata"
+      response: "SnapshotSchedule"
+    };
+  }
+
+  // Lists operations for the specified snapshot schedule.
+  rpc ListOperations (ListSnapshotScheduleOperationsRequest) returns (ListSnapshotScheduleOperationsResponse) {
+    option (google.api.http) = { get: "/compute/v1/snapshotSchedules/{snapshot_schedule_id}/operations" };
+  }
+
+  // Retrieves the list of snapshots created by the specified snapshot schedule.
+  rpc ListSnapshots (ListSnapshotScheduleSnapshotsRequest) returns (ListSnapshotScheduleSnapshotsResponse) {
+    option (google.api.http) = { get: "/compute/v1/snapshotSchedules/{snapshot_schedule_id}/snapshots" };
+  }
+
+  // Retrieves the list of disks attached to the specified snapshot schedule.
+  rpc ListDisks (ListSnapshotScheduleDisksRequest) returns (ListSnapshotScheduleDisksResponse) {
+    option (google.api.http) = { get: "/compute/v1/snapshotSchedules/{snapshot_schedule_id}/disks" };
+  }
+
+  // access
+
+  // Lists access bindings for the snapshot schedule.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/compute/v1/snapshotSchedules/{resource_id}:listAccessBindings" };
+  }
+
+  // Sets access bindings for the snapshot schedule.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/snapshotSchedules/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Updates access bindings for the snapshot schedule.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/snapshotSchedules/{resource_id}:updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+}
+
+message GetSnapshotScheduleRequest {
+  // ID of the snapshot schedule to return.
+  //
+  // To get a schedule ID, make a [SnapshotScheduleService.List] request.
+  string snapshot_schedule_id = 1;
+}
+
+message ListSnapshotSchedulesRequest {
+  // ID of the folder to list snapshot schedules in.
+  //
+  // To get the folder ID, make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListSnapshotSchedulesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListSnapshotSchedulesResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters snapshot schedules listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on [SnapshotSchedule.name] field.
+  // 2. An operator. Can be either `=` or `!=` for single values, `IN` or `NOT IN` for lists of values.
+  // 3. The value. Must be 3-63 characters long and match the regular expression `^[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name=my-schedule`.
+  string filter = 4 [(length) = "<=1000"];
+
+  // A sorting expression that sorts snapshot schedules listed in the response.
+  //
+  // The expression must specify the field name from [SnapshotSchedule] and `asc`ending or `desc`ending order,
+  // e.g. `createdAt desc`.
+  //
+  // Default value: `id asc`.
+  string order_by = 5 [(length) = "<=100"];
+}
+
+message ListSnapshotSchedulesResponse {
+  // List of snapshot schedules in the specified folder.
+  repeated SnapshotSchedule snapshot_schedules = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListSnapshotSchedulesRequest.page_size], use `next_page_token` as the value
+  // for the [ListSnapshotSchedulesRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateSnapshotScheduleRequest {
+  // ID of the folder to create a snapshot schedule in.
+  //
+  // Snapshots are created in the same folder as the schedule, even if disks from other folders are attached
+  // to the schedule.
+  //
+  // To get a folder ID, make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1;
+
+  // Name of the snapshot schedule.
+  //
+  // The name must be unique within the folder.
+  string name = 2;
+
+  // Description of the snapshot schedule.
+  string description = 3;
+
+  // Snapshot schedule labels as `key:value` pairs.
+  map<string, string> labels = 4;
+    
+  // Frequency settings of the snapshot schedule.
+  SchedulePolicy schedule_policy = 5;
+
+  // Retention policy of the snapshot schedule.
+  oneof retention_policy {
+    // Retention period of the snapshot schedule. Once a snapshot created by the schedule reaches this age, it is
+    // automatically deleted.
+    google.protobuf.Duration retention_period = 6;
+
+    // Retention count of the snapshot schedule. Once the number of snapshots created by the schedule exceeds this
+    // number, the oldest ones are automatically deleted. E.g. if the number is 5, the first snapshot is deleted
+    // after the sixth one is created, the second is deleted after the seventh one is created, and so on.
+    int64 snapshot_count = 7;
+  }
+
+  // Attributes of snapshots created by the snapshot schedule.
+  SnapshotSpec snapshot_spec = 8;
+
+  // List of IDs of the disks attached to the snapshot schedule.
+  //
+  // To get a disk ID, make a [yandex.cloud.compute.v1.DiskService.List] request.
+  repeated string disk_ids = 9;
+}
+
+message CreateSnapshotScheduleMetadata {
+  // ID of the snapshot schedule that is being created.
+  string snapshot_schedule_id = 1;
+}
+
+message UpdateSnapshotScheduleRequest {
+  // ID of the snapshot schedule to update.
+  //
+  // To get the snapshot schedule ID, make a [SnapshotScheduleService.List] request.
+  string snapshot_schedule_id = 1;
+
+  // Field mask that specifies which attributes of the snapshot schedule should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New name for the snapshot schedule.
+  //
+  // The name must be unique within the folder.
+  string name = 3;
+
+  // New description of the snapshot schedule.
+  string description = 4;
+
+  // Snapshot schedule labels as `key:value` pairs.
+  //
+  // Existing set of labels is completely replaced by the provided set, so if you just want
+  // to add or remove a label:
+  // 1. Get the current set of labels with a [SnapshotScheduleService.Get] request.
+  // 2. Add or remove a label in this set.
+  // 3. Send the new set in this field.
+  map<string, string> labels = 5;
+
+  // New frequency settings of the snapshot schedule.
+  SchedulePolicy schedule_policy = 6;
+
+  // New retention policy of the snapshot schedule.
+  oneof retention_policy {
+    // Retention period of the snapshot schedule. Once a snapshot created by the schedule reaches this age, it is
+    // automatically deleted.
+    google.protobuf.Duration retention_period = 7;
+
+    // Retention count of the snapshot schedule. Once the number of snapshots created by the schedule exceeds this
+    // number, the oldest ones are automatically deleted. E.g. if the number is 5, the first snapshot is deleted
+    // after the sixth one is created, the second is deleted after the seventh one is created, and so on.
+    int64 snapshot_count = 8;
+  }
+
+  // New attributes of snapshots created by the snapshot schedule.
+  SnapshotSpec snapshot_spec = 9;
+}
+
+message UpdateSnapshotScheduleMetadata {
+  // ID of the snapshot schedule that is being updated.
+  string snapshot_schedule_id = 1;
+}
+
+message DeleteSnapshotScheduleRequest {
+  // ID of the snapshot schedule to delete.
+  //
+  // To get a snapshot schedule ID, make a [SnapshotScheduleService.List] request.
+  string snapshot_schedule_id = 1;
+}
+
+message DeleteSnapshotScheduleMetadata {
+  // ID of the snapshot schedule that is being deleted.
+  string snapshot_schedule_id = 1;
+}
+
+message DisableSnapshotScheduleRequest {
+  // ID of the snapshot schedule to disable.
+  //
+  // To get a snapshot schedule ID, make a [SnapshotScheduleService.List] request.
+  string snapshot_schedule_id = 1;
+}
+
+message DisableSnapshotScheduleMetadata {
+  // ID of the snapshot schedule that is being disabled.
+  string snapshot_schedule_id = 1;
+}
+
+message EnableSnapshotScheduleRequest {
+  // ID of the snapshot schedule to enable.
+  //
+  // To get a snapshot schedule ID, make a [SnapshotScheduleService.List] request.
+  string snapshot_schedule_id = 1;
+}
+
+message EnableSnapshotScheduleMetadata {
+  // ID of the snapshot schedule that is being enabled.
+  string snapshot_schedule_id = 1;
+}
+
+message ListSnapshotScheduleOperationsRequest {
+  // ID of the snapshot schedule to list operations for.
+  //
+  // To get a snapshot schedule ID, make a [SnapshotScheduleService.List] request.
+  string snapshot_schedule_id = 1;
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListSnapshotScheduleOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2;
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListSnapshotScheduleOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3;
+}
+
+message ListSnapshotScheduleOperationsResponse {
+  // List of operations for the specified snapshot schedule.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListSnapshotScheduleOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListSnapshotScheduleOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListSnapshotScheduleSnapshotsRequest {
+  // ID of the snapshot schedule to list created snapshots for.
+  //
+  // To get a snapshot schedule ID, make a [SnapshotScheduleService.List] request.
+  string snapshot_schedule_id = 1;
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListSnapshotScheduleOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2;
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListSnapshotScheduleOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3;
+}
+
+message ListSnapshotScheduleSnapshotsResponse {
+  // List of snapshots created by the specified snapshot schedule.
+  repeated Snapshot snapshots = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListSnapshotScheduleSnapshotsRequest.page_size], use `next_page_token` as the value
+  // for the [ListSnapshotScheduleSnapshotsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListSnapshotScheduleDisksRequest {
+  // ID of the snapshot schedule to list attached disks for.
+  //
+  // To get a snapshot schedule ID, make a [SnapshotScheduleService.List] request.
+  string snapshot_schedule_id = 1;
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListSnapshotScheduleDisksResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2;
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListSnapshotScheduleDisksResponse.next_page_token] returned by a previous list request.
+  string page_token = 3;
+}
+
+message ListSnapshotScheduleDisksResponse {
+  // List of disks attached to the specified snapshot schedule.
+  repeated Disk disks = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListSnapshotScheduleDisksRequest.page_size], use `next_page_token` as the value
+  // for the [ListSnapshotScheduleDisksRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message UpdateSnapshotScheduleDisksRequest {
+  // ID of the snapshot schedule to update.
+  //
+  // To get a snapshot schedule ID, make a [SnapshotScheduleService.List] request.
+  string snapshot_schedule_id = 1;
+
+  // List of IDs of the disks to detach from the specified schedule.
+  //
+  // To get an ID of a disk attached to the schedule, make a [SnapshotScheduleService.ListDisks] request.
+  repeated string remove = 2;
+
+  // List of IDs of the disks to attach to the specified schedule.
+  //
+  // To get a disk ID, make a [yandex.cloud.compute.v1.DiskService.List] request.
+  repeated string add = 3;
+}
+
+message UpdateSnapshotScheduleDisksMetadata {
+  // ID of the snapshot schedule that is being updated.
+  string snapshot_schedule_id = 1;
+}

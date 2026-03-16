@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v2;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v2;datasphere";
+option java_package = "yandex.cloud.api.datasphere.v2";
+
+message Dataset {
+  // ID of the dataset.
+  string id = 1;
+
+  // ID of the project.
+  string project_id = 2;
+
+  // Time the dataset was created.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the dataset.
+  string name = 4;
+
+  // Description of the dataset.
+  string description = 5;
+
+  // Labels of the dataset.
+  map<string, string> labels = 6;
+
+  // ID of the user who created the dataset.
+  string created_by_id = 7;
+
+  // Code used to create dataset.
+  string code = 8;
+
+  // Size of the dataset, Gb.
+  int64 size_gb = 9;
+
+  // Zone IDs where dataset is available.
+  repeated string zone_ids = 10;
+
+  // Dataset mount path.
+  string mount_path = 11;
+
+  // ID of the data capsule object, storing information about dataset storage.
+  string data_capsule_id = 12;
+}
+
+message DatasetStatus {
+  oneof status {
+    // Dataset is activated.
+    StatusActive status_active = 1;
+
+    // Dataset is inactive.
+    StatusInactive status_inactive = 2;
+
+    // Error while activating dataset.
+    StatusError status_error = 3;
+  }
+
+  message StatusActive {}
+  message StatusInactive {}
+  message StatusError {
+    // Text of the error.
+    string error = 1;
+  }
+}

@@ -1,0 +1,12 @@
+requirements:
+  - contrib/libs/zeromq
+disable_includes:
+  - afunix.h
+  - zmq_utils.h
+mark_as_sources:
+  - zmq/tests/__init__.py
+mark_as_cythonize_py:
+  - zmq/backend/cython/_zmq.py
+exclude_from_macros:
+  - zmq/backend/cffi/*
+  - zmq/utils/*.json

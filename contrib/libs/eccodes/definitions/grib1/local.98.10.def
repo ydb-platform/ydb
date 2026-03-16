@@ -1,0 +1,52 @@
+# (C) Copyright 2005- ECMWF.
+# EPS tubes
+
+constant GRIBEXSection1Problem = 334 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] tubeNumber  : dump;
+
+unsigned[1] totalNumberOfTubes  : dump;
+unsigned[1] centralClusterDefinition  : dump;
+
+unsigned[1] parameterIndicator  : dump;
+#alias indicatorOfParameter = parameterIndicator;
+
+unsigned[1] levelIndicator  : dump;
+
+signed[3] northLatitudeOfDomainOfTubing  : dump;
+
+signed[3] westLongitudeOfDomainOfTubing  : dump;
+
+signed[3] southLatitudeOfDomainOfTubing  : dump;
+
+signed[3] eastLongitudeOfDomainOfTubing  : dump;
+
+unsigned[1] numberOfOperationalForecastTube  : dump;
+
+unsigned[1] numberOfControlForecastTube  : dump;
+
+unsigned[2] heightOrPressureOfLevel  : dump;
+
+unsigned[2] referenceStep  : dump;
+
+unsigned[2] radiusOfCentralCluster  : dump;
+
+unsigned[2] ensembleStandardDeviation  : dump;
+
+unsigned[2] distanceFromTubeToEnsembleMean  : dump;
+
+unsigned[1] numberOfForecastsInTube  : dump;
+
+unsigned[1] ensembleForecastNumbers[numberOfForecastsInTube] : dump;
+
+# spareToEnsureFixedLength
+padto padding_loc10_1(offsetSection1 + 334);
+
+concept tubeDomain(unknown,"tube_domain.def",conceptsMasterDir,conceptsLocalDirAll): no_copy;
+
+alias number = tubeNumber;
+alias totalNumber = totalNumberOfTubes;
+alias reference = referenceStep;
+alias domain = tubeDomain;

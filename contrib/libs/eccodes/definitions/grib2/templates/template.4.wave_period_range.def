@@ -1,0 +1,11 @@
+# (C) Copyright 2005- ECMWF.
+# Template for wave parameters defined on a certain period range
+
+#  Type of period interval
+codetable[1] typeOfWavePeriodInterval ('4.91.table',masterDir,localDir) = 255 : dump,no_copy,edition_specific,string_type;
+
+signed[1] scaleFactorOfLowerWavePeriodLimit = missing() : can_be_missing,dump;
+unsigned[4] scaledValueOfLowerWavePeriodLimit = missing() : can_be_missing,dump;
+
+signed[1] scaleFactorOfUpperWavePeriodLimit = missing() : can_be_missing,dump;
+unsigned[4] scaledValueOfUpperWavePeriodLimit = missing() : can_be_missing,dump;

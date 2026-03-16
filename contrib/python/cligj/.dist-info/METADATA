@@ -1,0 +1,170 @@
+Metadata-Version: 2.1
+Name: cligj
+Version: 0.7.2
+Summary: Click params for commmand line interfaces to GeoJSON
+Home-page: https://github.com/mapbox/cligj
+Author: Sean Gillies
+Author-email: sean@mapbox.com
+License: BSD
+Platform: UNKNOWN
+Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, <4
+License-File: LICENSE
+Requires-Dist: click (>=4.0)
+Provides-Extra: test
+Requires-Dist: pytest-cov ; extra == 'test'
+
+cligj
+======
+
+.. image:: https://travis-ci.com/mapbox/cligj.svg
+   :target: https://travis-ci.com/mapbox/cligj
+
+.. image:: https://coveralls.io/repos/mapbox/cligj/badge.png?branch=master
+   :target: https://coveralls.io/r/mapbox/cligj?branch=master
+
+Common arguments and options for GeoJSON processing commands, using Click.
+
+`cligj` is for Python developers who create command line interfaces for geospatial data.
+`cligj` allows you to quickly build consistent, well-tested and interoperable CLIs for handling GeoJSON.
+
+
+Arguments
+---------
+
+``files_in_arg``
+Multiple files
+
+``files_inout_arg``
+Multiple files, last of which is an output file.
+
+``features_in_arg``
+GeoJSON Features input which accepts multiple representations of GeoJSON features
+and returns the input data as an iterable of GeoJSON Feature-like dictionaries
+
+Options
+--------
+
+``verbose_opt``
+
+``quiet_opt``
+
+``format_opt``
+
+JSON formatting options
+~~~~~~~~~~~~~~~~~~~~~~~
+
+``indent_opt``
+
+``compact_opt``
+
+Coordinate precision option
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``precision_opt``
+
+Geographic (default), projected, or Mercator switch
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``projection_geographic_opt``
+
+``projection_projected_opt``
+
+``projection_mercator_opt``
+
+Feature collection or feature sequence switch
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``sequence_opt``
+
+``use_rs_opt``
+
+GeoJSON output mode option
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+``geojson_type_collection_opt``
+
+``geojson_type_feature_opt``
+
+``def geojson_type_bbox_opt``
+
+Example
+-------
+
+Here's an example of a command that writes out GeoJSON features as a collection
+or, optionally, a sequence of individual features. Since most software that
+reads and writes GeoJSON expects a text containing a single feature collection,
+that's the default, and a LF-delimited sequence of texts containing one GeoJSON
+feature each is a feature that is turned on using the ``--sequence`` option.
+To write sequences of feature texts that conform to the `GeoJSON Text Sequences
+standard <https://tools.ietf.org/html/rfc8142>`__ (and might contain
+pretty-printed JSON) with the ASCII Record Separator (0x1e) as a delimiter, use
+the ``--rs`` option
+
+.. warning:: Future change warning
+   GeoJSON sequences (`--sequence`), not collections (`--no-sequence`), will be
+   the default in version 1.0.0.
+
+
+.. code-block:: python
+
+    import click
+    import cligj
+    import json
+
+    def process_features(features):
+        for feature in features:
+            # TODO process feature here
+            yield feature
+
+    @click.command()
+    @cligj.features_in_arg
+    @cligj.sequence_opt
+    @cligj.use_rs_opt
+    def pass_features(features, sequence, use_rs):
+        if sequence:
+            for feature in process_features(features):
+                if use_rs:
+                    click.echo(u'\x1e', nl=False)
+                click.echo(json.dumps(feature))
+        else:
+            click.echo(json.dumps(
+                {'type': 'FeatureCollection',
+                 'features': list(process_features(features))}))
+
+On the command line, the generated help text explains the usage
+
+.. code-block:: console
+
+    Usage: pass_features [OPTIONS] FEATURES...
+
+    Options:
+    --sequence / --no-sequence  Write a LF-delimited sequence of texts
+                                containing individual objects or write a single
+                                JSON text containing a feature collection object
+                                (the default).
+    --rs / --no-rs              Use RS (0x1E) as a prefix for individual texts
+                                in a sequence as per http://tools.ietf.org/html
+                                /draft-ietf-json-text-sequence-13 (default is
+                                False).
+    --help                      Show this message and exit.
+
+And can be used like this
+
+.. code-block:: console
+
+    $ cat data.geojson
+    {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'id': '1'}, {'type': 'Feature', 'id': '2'}]}
+
+    $ pass_features data.geojson
+    {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'id': '1'}, {'type': 'Feature', 'id': '2'}]}
+
+    $ cat data.geojson | pass_features
+    {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'id': '1'}, {'type': 'Feature', 'id': '2'}]}
+
+    $ cat data.geojson | pass_features --sequence
+    {'type': 'Feature', 'id': '1'}
+    {'type': 'Feature', 'id': '2'}
+
+    $ cat data.geojson | pass_features --sequence --rs
+    ^^{'type': 'Feature', 'id': '1'}
+    ^^{'type': 'Feature', 'id': '2'}
+
+In this example, ``^^`` represents 0x1e.
+
+

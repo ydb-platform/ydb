@@ -1,0 +1,3 @@
+mark_as_py3_sources:
+  - vcr/_handle_coroutine.py
+  - vcr/stubs/aiohttp_stubs/__init__.py

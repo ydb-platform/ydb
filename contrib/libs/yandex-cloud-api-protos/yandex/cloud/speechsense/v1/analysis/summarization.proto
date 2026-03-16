@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1.analysis;
+
+option java_package = "yandex.cloud.api.speechsense.v1.analysis";
+option java_outer_classname = "SummarizationProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1/analysis;speechsense";
+
+message Summarization {
+  repeated SummarizationStatement statements = 1;
+}
+
+message SummarizationStatement {
+  SummarizationField field = 1;
+  repeated string response = 2;
+}
+
+message SummarizationField {
+  string id = 3;
+  string name = 1;
+  SummarizationFieldType type = 2;
+}
+
+enum SummarizationFieldType {
+  SUMMARIZATION_FIELD_TYPE_UNSPECIFIED = 0;
+  TEXT = 1;
+  TEXT_ARRAY = 2;
+}

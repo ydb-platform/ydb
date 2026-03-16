@@ -1,0 +1,159 @@
+{% extends '//builtin/pycargo.ym' %}
+
+{% block arcadia_tools %}
+{{super()}}
+devtools/yamaker/libym2/scripts/python3
+{% endblock %}
+
+{% block init_bash %}
+{{super()}}
+
+WIN_LIB_DIR_RELPATH="x86_64-pc-windows-msvc/release"
+WIN_LIB_RELPATH="${WIN_LIB_DIR_RELPATH}/tokenizers.lib"
+BUILT_WIN_LIB="${BUILD}/${WIN_LIB_RELPATH}"
+{% endblock %}
+
+{% block mod_name %}
+tokenizers
+{% endblock %}
+
+{% block py_register %}
+tokenizers.tokenizers
+{% endblock %}
+
+{% block current_version %}0.21.0{% endblock %}
+{% block current_url %}https://github.com/huggingface/tokenizers/archive/refs/tags/v{{self.version().strip()}}.tar.gz{% endblock %}
+
+{% block patch_source %}
+{{super()}}
+sed -e 's|cdylib|staticlib|' -i Cargo.toml
+sed -e 's|abi3-py39|abi3-py312|' -i Cargo.toml
+{% endblock %}
+
+{#
+In case of error `ld.lld: error: undefined symbol: PyInit_10tokenizers10tokenizer` to find original symbol name run
+llvm-nm --extern-only --defined-only -A a/x86_64-unknown-linux-gnu/release/libtokenizers.a 2>/dev/null | sed -e 's|.* ||' | grep PyInit
+#}
+{% block build_source %}
+{% for p in self.platforms().strip().split('\n') %}
+export CXX_{{p.replace('-', '_')}}=target-cxx
+{% endfor %}
+export CXX_x86_64_apple_darwin=mac-target-cxx
+export CC_x86_64_apple_darwin=mac-target-cc
+export CXX_aarch64_apple_darwin=mac-target-cxx
+export CC_aarch64_apple_darwin=mac-target-cc
+export CXX_x86_64_pc_windows_msvc=win-target-cxx
+export CC_x86_64_pc_windows_msvc=win-target-cc
+export AR_x86_64_pc_windows_msvc=win-target-ar
+export PYO3_CROSS_PYTHON_VERSION=3.12
+export PYO3_PYTHON="${BIN}/python3"
+rm -rf docs vectors tests
+rm -rf tokenizers/examples
+cd bindings/python
+{{super()}}
+rm -rf .git
+
+dlls_dir=$(extract_dlls_from_lib ${BUILT_WIN_LIB})
+
+(find ${BUILD} -type f -name '*.a'; find ${BUILD} -type f -name '*.lib') | grep -v "/deps/" | while read l; do
+    llvm-objcopy --redefine-sym "_PyInit_tokenizers=_PyInit_10tokenizers10tokenizers" ${l}
+    llvm-objcopy --redefine-sym "PyInit_tokenizers=PyInit_10tokenizers10tokenizers" ${l}
+done
+
+restore_dlls_to_lib ${BUILT_WIN_LIB} ${dlls_dir}
+unset dlls_dir
+{% endblock %}
+
+{% block platforms %}
+x86_64-unknown-linux-gnu
+aarch64-apple-darwin
+x86_64-apple-darwin
+x86_64-pc-windows-msvc
+{% endblock %}
+
+{% block sanitize_output %}
+{{super()}}
+{% for p in self.platforms().strip().split('\n') %}
+rm -rf ${OUTPUT}/a/{{p}}/release/build
+{% endfor %}
+{% endblock %}
+
+{% block prepare_env %}
+{{super()}}
+export CLANG=$(ya tool c++ --print-path)
+LLVM_LIB="$(dirname ${CLANG})/llvm-lib"
+
+# download SDKs for win & mac
+# resource ids are from build/internal/platform/*/ya.make
+WINDOWS_KITS="${TMPDIR}/windows_kits"
+MSVC_FOR_CLANG="${TMPDIR}/msvc_for_clang"
+MACOS_SDK="${TMPDIR}/macos_sdk"
+ya download --untar sbr:1939557911 "${WINDOWS_KITS}"
+ya download --untar sbr:1383387533 "${MSVC_FOR_CLANG}"
+ya download --untar sbr:8156037824 "${MACOS_SDK}"
+
+# linux
+cat << EOF > ${BIN}/target-cxx
+#!/usr/bin/env sh
+exec ${CLANG} -I{{arcadia_root}}/contrib/libs/cxxsupp/libcxx/include -nostdinc++ "\${@}"
+EOF
+
+chmod +x ${BIN}/target-cxx
+
+# macOS
+cat << EOF > ${BIN}/mac-target-cxx
+#!/usr/bin/env sh
+exec ${CLANG} -isysroot ${MACOS_SDK} "\${@}"
+EOF
+
+cat << EOF > ${BIN}/mac-target-cc
+#!/usr/bin/env sh
+exec ${BIN}/mac-target-cxx -x c "\${@}"
+EOF
+
+chmod +x ${BIN}/mac-target-cxx ${BIN}/mac-target-cc
+
+# windows
+CLANG_WIN_SDK_FLAGS="-isystem${MSVC_FOR_CLANG}/include \
+    -isystem${WINDOWS_KITS}/Include/10.0.18362.0/shared \
+    -isystem${WINDOWS_KITS}/Include/10.0.18362.0/ucrt \
+    -isystem${WINDOWS_KITS}/Include/10.0.18362.0/um \
+    -isystem${WINDOWS_KITS}/Include/10.0.18362.0/winrt"
+# -mno-incremental-linker-compatible removes non-deterimism of TimeDateStamp COFF header
+CLANG_WIN_FLADS="${CLANG_WIN_SDK_FLAGS} -mno-incremental-linker-compatible"
+cat << EOF > ${BIN}/win-target-cxx
+#!/usr/bin/env bash
+# esaxx-rs forces c++11, but its code requires newer std
+exec ${CLANG} ${CLANG_WIN_FLADS}  -std=c++17 "\${@/-std=c++11}"
+EOF
+
+cat << EOF > ${BIN}/win-target-cc
+#!/usr/bin/env sh
+exec ${CLANG} -x c ${CLANG_WIN_FLADS} "\${@}"
+EOF
+
+cat << EOF > ${BIN}/win-target-ar
+#!/usr/bin/env sh
+exec ${LLVM_LIB} "\${@}"
+EOF
+
+chmod +x ${BIN}/win-target-cxx ${BIN}/win-target-cc ${BIN}/win-target-ar
+{% endblock %}
+
+{% block move_to_output %}
+dlls_dir=$(extract_dlls_from_lib ${BUILT_WIN_LIB})
+
+{{super()}}
+
+out_win_lib="${OUTPUT}/a/${WIN_LIB_RELPATH}"
+restore_dlls_to_lib ${out_win_lib} ${dlls_dir}
+mv ${out_win_lib} $(dirname ${out_win_lib})/libtokenizers.lib
+{% endblock %}
+
+{% block extra_ya_make %}
+IF (OS_WINDOWS)
+    LDFLAGS(
+        ntdll.lib
+    )
+ENDIF()
+{% endblock %}

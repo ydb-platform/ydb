@@ -1,0 +1,112 @@
+# Polish translation for django-simple-history
+# Copyright (C) 2016
+# This file is distributed under the same license as the django-simple-history package.
+# Grzegorz Bialy <grzegorzbialy@github.com>, 2016.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-simple-history\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2016-05-05 15:36+0200\n"
+"PO-Revision-Date: 2017-06-06 15:38+0200\n"
+"Last-Translator: Grzegorz Bialy <grzegorzbialy@github.com>\n"
+"Language-Team: Polish <django-commons@github.com>\n"
+"Language: pl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 "
+"|| n%100>=20) ? 1 : 2);\n"
+"X-Generator: Poedit 2.0.2\n"
+
+#: admin.py:73
+#, python-format
+msgid "Change history: %s"
+msgstr "Historia zmian: %s"
+
+#: admin.py:92
+#, python-format
+msgid "The %(name)s \"%(obj)s\" was changed successfully."
+msgstr "%(name)s \"%(obj)s\" został pomyślnie zmodyfikowany."
+
+#: admin.py:98
+msgid "You may edit it again below"
+msgstr "Możesz edytować go ponownie poniżej"
+
+#: admin.py:156
+#, python-format
+msgid "Revert %s"
+msgstr "Przywróć %s"
+
+#: models.py:211
+msgid "Created"
+msgstr "Dodane"
+
+#: models.py:212
+msgid "Changed"
+msgstr "Zmodyfikowane"
+
+#: models.py:213
+msgid "Deleted"
+msgstr "Usunięte"
+
+#: templates/simple_history/object_history.html:10
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr ""
+"Wybierz datę z poniższej listy aby przywrócić poprzednią wersję tego obiektu."
+
+#: templates/simple_history/object_history.html:46
+msgid "This object doesn't have a change history."
+msgstr "Ten obiekt nie ma historii zmian."
+
+#: templates/simple_history/object_history_form.html:7
+msgid "Home"
+msgstr "Strona główna"
+
+#: templates/simple_history/object_history_form.html:11
+msgid "History"
+msgstr "Historia"
+
+#: templates/simple_history/object_history_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Przywróć %(verbose_name)s"
+
+#: templates/simple_history/object_history_form.html:21
+msgid ""
+"Press the 'Revert' button below to revert to this version of the object."
+msgstr "Naciśnij przycisk „Przywróć” aby przywrócić tę wersję obiektu."
+
+#: templates/simple_history/object_history_form.html:21
+msgid "Or press the 'Change History' button to edit the history."
+msgstr "Lub naciśnij przycisk „Historia zmian” aby edytować historię."
+
+#: templates/simple_history/object_history_list.html:9
+msgid "Object"
+msgstr "Obiekt"
+
+#: templates/simple_history/object_history_list.html:13
+msgid "Date/time"
+msgstr "Data/czas"
+
+#: templates/simple_history/object_history_list.html:14
+msgid "Comment"
+msgstr "Komentarz"
+
+#: templates/simple_history/object_history_list.html:15
+msgid "Changed by"
+msgstr "Zmodyfikowane przez"
+
+#: templates/simple_history/object_history_list.html:42
+msgid "None"
+msgstr "Brak"
+
+#: templates/simple_history/submit_line.html:3
+msgid "Revert"
+msgstr "Przywróć"
+
+#: templates/simple_history/submit_line.html:4
+msgid "Change History"
+msgstr "Historia zmian"

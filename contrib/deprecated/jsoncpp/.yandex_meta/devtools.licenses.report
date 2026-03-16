@@ -1,0 +1,208 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  201412215a3eccfdf8e635184095e21a
+BELONGS ya.make
+    License text:
+        The JsonCpp Authors, and is released under the terms of the MIT License (see below).
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [11:11]
+
+KEEP     MIT                  2bb3404ff31b39a41176fe7ced57355f
+BELONGS ya.make
+    License text:
+        is licensed under the
+        MIT license,
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [66:67]
+
+KEEP     Public-Domain        396d70bb3782280fe12721820b0af612
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [5:7]
+
+KEEP     Public-Domain AND MIT 3c7a35767e899c0a29ead2e5481eda06
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [50:55]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [50:55]
+
+KEEP     Public-Domain        4fe8a673f1598220441970a4b7355b2e
+BELONGS ya.make
+    License text:
+        In jurisdictions which do not recognize Public Domain property (e.g. Germany as of
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [9:9]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 6b3b015a7f5aaac87a63d2968c2030cd
+BELONGS ya.make
+    License text:
+        tests and demonstration applications, are licensed under the following
+        conditions...
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [2:3]
+
+KEEP     Public-Domain        7fafb49c8b79c9b35fd809c67d0018e2
+BELONGS ya.make
+    License text:
+        public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        README.md [67:67]
+
+KEEP     Public-Domain AND MIT 8037fd1f9f6f7681f0009c5bf6d94a05
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [13:23]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [13:23]
+
+KEEP     MIT                  85d8e4d4e50109a7d0c07fa8ee8c200f
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: LICENSE at line 42
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [28:46]
+
+KEEP     MIT AND Public-Domain af267047b0d46c57387ed60652ed5977
+BELONGS ya.make
+    License text:
+        // Distributed under MIT license, or public domain if desired and
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/json/allocator.h [2:2]
+        include/json/assertions.h [2:2]
+        include/json/config.h [2:2]
+        include/json/forwards.h [2:2]
+        include/json/json.h [2:2]
+        include/json/json_features.h [2:2]
+        include/json/reader.h [2:2]
+        include/json/value.h [2:2]
+        include/json/writer.h [2:2]
+        src/lib_json/json_reader.cpp [3:3]
+        src/lib_json/json_tool.h [2:2]
+        src/lib_json/json_value.cpp [2:2]
+        src/lib_json/json_valueiterator.inl [2:2]
+        src/lib_json/json_writer.cpp [2:2]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        include/json/allocator.h [2:2]
+        include/json/assertions.h [2:2]
+        include/json/config.h [2:2]
+        include/json/forwards.h [2:2]
+        include/json/json.h [2:2]
+        include/json/json_features.h [2:2]
+        include/json/reader.h [2:2]
+        include/json/value.h [2:2]
+        include/json/writer.h [2:2]
+        src/lib_json/json_reader.cpp [3:3]
+        src/lib_json/json_tool.h [2:2]
+        src/lib_json/json_value.cpp [2:2]
+        src/lib_json/json_valueiterator.inl [2:2]
+        src/lib_json/json_writer.cpp [2:2]
+
+KEEP     MIT                  da4f01c55f39844885f308b31161eeff
+BELONGS ya.make
+    License text:
+        [![badge](https://img.shields.io/badge/license-MIT-blue)](https://github.com/open-source-parsers/jsoncpp/blob/master/LICENSE)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [4:4]

@@ -1,0 +1,48 @@
+Copying this work
+#################
+
+‘python-daemon’ is under Copyright © 2008–2024 Ben Finney and others.
+
+This work, ‘python-daemon’, is free software: you may copy, modify,
+and/or distribute this work under certain conditions; see the relevant
+files for specific grant of license. No warranty expressed or implied.
+
+‘daemon’ library
+================
+
+The files ‘daemon/*’ constitute the Python ‘daemon’ library.
+
+The Python ‘daemon’ library is licensed to you under the terms of the Apache
+License, version 2.0 as published by the Apache Software Foundation.
+See the file `LICENSE.ASF-2 <LICENSE.ASF-2>`_ for details.
+
+All other files
+===============
+
+All other files in this distribution, including but not limited to the
+packaging definition and test suite, are licensed to you under the terms of the
+GNU General Public License as published by the Free Software Foundation;
+version 3 of that license or any later version.
+See the file `LICENSE.GPL-3 <LICENSE.GPL-3>`_ for details.
+
+
+..
+    This document is written using `reStructuredText`_ markup, and can
+    be rendered with `Docutils`_ to other formats.
+
+    ..  _Docutils: https://docutils.sourceforge.io/
+    ..  _reStructuredText: https://docutils.sourceforge.io/rst.html
+
+..
+    This is free software: you may copy, modify, and/or distribute this work
+    under the terms of the Apache License version 2.0 as published by the
+    Apache Software Foundation.
+    No warranty expressed or implied. See the file ‘LICENSE.ASF-2’ for details.
+
+..
+    Local variables:
+    coding: utf-8
+    mode: text
+    mode: rst
+    End:
+    vim: fileencoding=utf-8 filetype=rst :

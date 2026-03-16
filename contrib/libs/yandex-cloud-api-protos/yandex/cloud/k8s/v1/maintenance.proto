@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package yandex.cloud.k8s.v1;
+
+import "google/type/dayofweek.proto";
+import "google/type/timeofday.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1;k8s";
+option java_package = "yandex.cloud.api.k8s.v1";
+
+message MaintenanceWindow {
+  // Maintenance policy.
+  oneof policy {
+    option (exactly_one) = true;
+    // Updating the master at any time.
+    AnytimeMaintenanceWindow anytime = 1;
+
+    // Updating the master on any day during the specified time window.
+    DailyMaintenanceWindow daily_maintenance_window = 2;
+
+    // Updating the master on selected days during the specified time window.
+    WeeklyMaintenanceWindow weekly_maintenance_window = 3;
+  }
+}
+
+message AnytimeMaintenanceWindow {}
+
+message DailyMaintenanceWindow {
+  // Window start time, in the UTC timezone.
+  google.type.TimeOfDay start_time = 1 [(required) = true];
+
+  // Window duration.
+  google.protobuf.Duration duration = 2 [(value) = "1h-24h"];
+}
+
+message DaysOfWeekMaintenanceWindow {
+  // Days of the week when automatic updates are allowed.
+  repeated google.type.DayOfWeek days = 1 [(size) = "1-7"];
+
+  // Window start time, in the UTC timezone.
+  google.type.TimeOfDay start_time = 2 [(required) = true];
+
+  // Window duration.
+  google.protobuf.Duration duration = 3 [(value) = "1h-24h"];
+}
+
+message WeeklyMaintenanceWindow {
+  // Days of the week and the maintenance window for these days when automatic updates are allowed.
+  repeated DaysOfWeekMaintenanceWindow days_of_week = 1 [(size) = "1-7"];
+}
+
+message ScheduledMaintenance {
+  // Time until which the update should be postponed.
+  google.protobuf.Timestamp delayed_until = 1;
+  // Time when the update became available.
+  google.protobuf.Timestamp available_from = 2;
+  // The latest possible date by which a mandatory update must be applied.
+  google.protobuf.Timestamp no_later_than = 3;
+  // Description of the planned operation, for example, "Infrastructure planned update".
+  string description = 4;
+}

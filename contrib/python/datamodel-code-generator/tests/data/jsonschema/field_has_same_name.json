@@ -1,0 +1,15 @@
+{
+  "title": "Test",
+  "type": "object",
+  "properties": {
+    "TestObject": {
+      "title": "TestObject",
+      "type": "object",
+      "properties": {
+        "test_string": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

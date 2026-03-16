@@ -1,0 +1,18 @@
+--- contrib/python/jupyter-events/jupyter_events/validators.py	(index)
++++ contrib/python/jupyter-events/jupyter_events/validators.py	(working tree)
+@@ -20,10 +20,11 @@ draft7_format_checker = (
+-METASCHEMA_PATH = pathlib.Path(__file__).parent.joinpath("schemas")
++import importlib.resources
++METASCHEMA_PATH = importlib.resources.files(__package__).joinpath("schemas")
+ 
+ EVENT_METASCHEMA_FILEPATH = METASCHEMA_PATH.joinpath("event-metaschema.yml")
+-EVENT_METASCHEMA = yaml.load(EVENT_METASCHEMA_FILEPATH)
++EVENT_METASCHEMA = yaml.loads(EVENT_METASCHEMA_FILEPATH.read_text())
+ 
+ EVENT_CORE_SCHEMA_FILEPATH = METASCHEMA_PATH.joinpath("event-core-schema.yml")
+-EVENT_CORE_SCHEMA = yaml.load(EVENT_CORE_SCHEMA_FILEPATH)
++EVENT_CORE_SCHEMA = yaml.loads(EVENT_CORE_SCHEMA_FILEPATH.read_text())
+ 
+ PROPERTY_METASCHEMA_FILEPATH = METASCHEMA_PATH.joinpath("property-metaschema.yml")
+-PROPERTY_METASCHEMA = yaml.load(PROPERTY_METASCHEMA_FILEPATH)
++PROPERTY_METASCHEMA = yaml.loads(PROPERTY_METASCHEMA_FILEPATH.read_text())

@@ -1,0 +1,10 @@
+additional_requirements:
+  - boto3
+  - crowd-kit
+  - kazoo
+  - plotly
+  - pandas
+  - setuptools
+exclude:
+  - toloka/metrics/jupyter_dashboard.py
+  - toloka/autoquality/*

@@ -1,0 +1,2 @@
+[console_scripts]
+crc32c = crc32c:main

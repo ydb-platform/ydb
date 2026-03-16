@@ -1,0 +1,127 @@
+{
+    "name": "@pyviz/jupyterlab_pyviz",
+    "version": "3.0.6",
+    "description": "A JupyterLab extension for rendering HoloViz content.",
+    "keywords": [
+        "jupyter",
+        "jupyterlab",
+        "jupyterlab-extension"
+    ],
+    "homepage": "https://github.com/holoviz/pyviz_comms",
+    "bugs": {
+        "url": "https://github.com/holoviz/pyviz_comms/issues"
+    },
+    "license": "BSD-3-Clause",
+    "author": {
+        "name": "Philipp Rudiger"
+    },
+    "files": [
+        "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
+        "style/**/*.{css,.js,eot,gif,html,jpg,json,png,svg,woff2,ttf}",
+        "schema/*.json",
+        "style/index.js"
+    ],
+    "main": "lib/index.js",
+    "types": "lib/index.d.ts",
+    "style": "style/index.css",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/holoviz/pyviz_comms.git"
+    },
+    "scripts": {
+        "build": "jlpm build:lib && jlpm build:labextension:dev",
+        "build:labextension": "jupyter labextension build .",
+        "build:labextension:dev": "jupyter labextension build --development True .",
+        "build:lib": "tsc --sourceMap",
+        "build:lib:prod": "tsc",
+        "build:prod": "jlpm clean && jlpm build:lib:prod && jlpm build:labextension",
+        "clean": "jlpm clean:lib",
+        "clean:all": "jlpm clean:lib && jlpm clean:labextension && jlpm clean:lintcache",
+        "clean:labextension": "rimraf pyviz_comms/labextension pyviz_comms/_version.py",
+        "clean:lib": "rimraf lib tsconfig.tsbuildinfo",
+        "clean:lintcache": "rimraf .eslintcache .stylelintcache",
+        "eslint": "jlpm eslint:check --fix",
+        "eslint:check": "eslint . --cache --ext .ts,.tsx",
+        "install:extension": "jlpm build",
+        "lint": "jlpm prettier && jlpm eslint",
+        "lint:check": "jlpm prettier:check && jlpm eslint:check",
+        "prettier": "jlpm prettier:base --write --list-different",
+        "prettier:base": "prettier \"**/*{.ts,.tsx,.js,.jsx,.css,.json,.md}\"",
+        "prettier:check": "jlpm prettier:base --check",
+        "stylelint": "jlpm stylelint:check --fix",
+        "stylelint:check": "stylelint --cache \"style/**/*.css\"",
+        "watch": "run-p watch:src watch:labextension",
+        "watch:labextension": "jupyter labextension watch .",
+        "watch:src": "tsc -w --sourceMap"
+    },
+    "dependencies": {
+        "@jupyterlab/application": "^4.0.3",
+        "@jupyterlab/apputils": "^4.1.3",
+        "@jupyterlab/coreutils": "^6.0.3",
+        "@jupyterlab/docregistry": "^4.0.3",
+        "@jupyterlab/fileeditor": "^4.0.3",
+        "@jupyterlab/mainmenu": "^4.0.3",
+        "@jupyterlab/notebook": "^4.0.3",
+        "@jupyterlab/settingregistry": "^4.0.3",
+        "@jupyterlab/ui-components": "^4.0.3",
+        "@lumino/coreutils": "^2.1.1",
+        "@lumino/signaling": "^2.1.1",
+        "tippy.js": "^6"
+    },
+    "resolutions": {
+        "@lumino/widgets": "^2.1.1",
+        "react": "^17.0.1",
+        "react-dom": "^17.0.1"
+    },
+    "peerDependencies": {
+        "@jupyter-widgets/base": "^2 || ^3 || ^4 || ^5 || ^6",
+        "@jupyter-widgets/jupyterlab-manager": "^5.0.4"
+    },
+    "devDependencies": {
+        "@jupyter-widgets/base": "^2 || ^3 || ^4 || ^5 || ^6",
+        "@jupyter-widgets/jupyterlab-manager": "^5.0.7",
+        "@jupyterlab/builder": "^4.0.0",
+        "@jupyterlab/testutils": "^3.0.0",
+        "@types/json-schema": "^7.0.11",
+        "@types/node": "^14.14.16",
+        "@types/react": "^18.0.26",
+        "@types/react-dom": "^17.0.0",
+        "@typescript-eslint/eslint-plugin": "^5.55.0",
+        "@typescript-eslint/parser": "^5.55.0",
+        "css-loader": "^6.7.1",
+        "eslint": "^8.36.0",
+        "eslint-config-prettier": "^8.8.0",
+        "eslint-plugin-prettier": "^5.0.0",
+        "npm-run-all": "^4.1.5",
+        "prettier": "^3.0.0",
+        "rimraf": "^4.4.1",
+        "source-map-loader": "^1.0.2",
+        "style-loader": "^3.3.1",
+        "stylelint": "^15.10.1",
+        "stylelint-config-recommended": "^13.0.0",
+        "stylelint-config-standard": "^34.0.0",
+        "stylelint-prettier": "^4.0.0",
+        "typescript": "~5.0.2",
+        "yjs": "^13.5.40"
+    },
+    "sideEffects": [
+        "style/*.css",
+        "style/index.js"
+    ],
+    "styleModule": "style/index.js",
+    "jupyterlab": {
+        "extension": true,
+        "outputDir": "pyviz_comms/labextension",
+        "schemaDir": "schema",
+        "sharedPackages": {
+            "@jupyter-widgets/jupyterlab-manager": {
+                "bundled": false,
+                "singleton": true
+            },
+            "@jupyter-widgets/base": {
+                "bundled": false,
+                "singleton": true
+            }
+        }
+    }
+}

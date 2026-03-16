@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.assistants.v1.searchindex;
+
+import "yandex/cloud/ai/common/common.proto";
+import "yandex/cloud/ai/assistants/v1/searchindex/search_index.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/assistants/v1/searchindex;searchindex";
+option java_package = "yandex.cloud.api.ai.assistants.v1.searchindex";
+
+// SearchIndexService provides operations for managing search indexes.
+service SearchIndexService {
+  // Create a new search index in [asynchronous mode](/docs/foundation-models/concepts/#working-mode).
+  rpc Create(CreateSearchIndexRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "SearchIndex"
+    };
+    option (google.api.http) = {post: "/assistants/v1/searchIndex" body: "*"};
+  }
+
+  // Retrieve details of a specific search index by its ID.
+  rpc Get(GetSearchIndexRequest) returns (SearchIndex) {
+    option (google.api.http) = {get: "/assistants/v1/searchIndex/{search_index_id}"};
+  }
+
+  // Update an existing search index.
+  rpc Update(UpdateSearchIndexRequest) returns (SearchIndex) {
+    option (google.api.http) = {patch: "/assistants/v1/searchIndex/{search_index_id}" body: "*"};
+  }
+
+  // Delete a search index by its ID.
+  rpc Delete(DeleteSearchIndexRequest) returns (DeleteSearchIndexResponse) {
+    option (google.api.http) = {delete: "/assistants/v1/searchIndex/{search_index_id}"};
+  }
+
+  // List search indexes in a specific folder.
+  rpc List(ListSearchIndicesRequest) returns (ListSearchIndicesResponse) {
+    option (google.api.http) = {get: "/assistants/v1/searchIndex"};
+  }
+}
+
+// Request to create a new search index.
+message CreateSearchIndexRequest {
+  string folder_id = 1 [(required) = true];
+
+  // List of file IDs to be indexed.
+  repeated string file_ids = 2;
+
+  // Name of the search index.
+  string name = 3;
+
+  // Description of the search index.
+  string description = 4;
+
+  // Expiration configuration for the search index.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 5;
+
+  // Set of key-value pairs to label the search index.
+  map<string, string> labels = 6;
+
+  oneof IndexType {
+    // Configuration for a traditional keyword-based text search index.
+    TextSearchIndex text_search_index = 7;
+
+    // Configuration for a vector-based search index using embeddings.
+    VectorSearchIndex vector_search_index = 8;
+
+    // Configuration for a hybrid (vector-based + keyword-based) search index.
+    HybridSearchIndex hybrid_search_index = 9;
+  }
+}
+
+// Request message for retrieving a search index by ID.
+message GetSearchIndexRequest {
+  // ID of the search index to retrieve.
+  string search_index_id = 1 [(required) = true];
+}
+
+// Request message for updating an existing search index.
+message UpdateSearchIndexRequest {
+  // ID of the search index to update.
+  string search_index_id = 1 [(required) = true];
+
+  // Field mask specifying which fields to update.
+  google.protobuf.FieldMask update_mask = 2 [(required) = true];
+
+  // New name for the search index.
+  string name = 3;
+
+  // New description for the search index.
+  string description = 4;
+
+  // New expiration configuration for the search index.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 5;
+
+  // New set of labels for the search index.
+  map<string, string> labels = 6;
+}
+
+// Request message for deleting a search index by ID.
+message DeleteSearchIndexRequest {
+  // ID of the search index to delete.
+  string search_index_id = 1 [(required) = true];
+}
+
+// Response message for the delete operation.
+message DeleteSearchIndexResponse {
+}
+
+// Request message for listing search indexes in a specific folder.
+message ListSearchIndicesRequest {
+  // Folder ID from which to list search indexes.
+  string folder_id = 1 [(required) = true];
+
+  // Maximum number of threads to return per page.
+  int64 page_size = 2;
+
+  // Token to retrieve the next page of results.
+  string page_token = 3;
+}
+
+// Response message for the list operation.
+message ListSearchIndicesResponse {
+  // List of search indexes in the specified folder.
+  repeated SearchIndex indices = 1;
+
+  // Token to retrieve the next page of results.
+  string next_page_token = 2;
+}

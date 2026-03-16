@@ -1,0 +1,175 @@
+{
+	"aria": {
+		"sortAscending": ": activate to sort column ascending",
+		"sortDescending": ": activate to sort column descending"
+	},
+	"buttons": {
+		"collection": "Collection <span class='ui-button-icon-primary ui-icon ui-icon-triangle-1-s'/>",
+		"colvis": "Show/Hide columns",
+		"colvisRestore": "Restore visibility",
+		"copy": "Copy",
+		"copyKeys": "Press ctrl or u2318 + C to copy the table data to your system clipboard.<br><br>To cancel, click this message or press escape.",
+		"copySuccess": {
+			"1": "Copied 1 row to clipboard",
+			"_": "Copied %d rows to clipboard"
+		},
+		"copyTitle": "Copy to Clipboard",
+		"createState": "Create State",
+		"csv": "CSV",
+		"excel": "Excel",
+		"pageLength": {
+			"-1": "Show all rows",
+			"_": "Show %d rows"
+		},
+		"pdf": "PDF",
+		"print": "Print",
+		"removeAllStates": "Remove All States",
+		"removeState": "Remove",
+		"renameState": "Rename",
+		"savedStates": "Saved States",
+		"stateRestore": "State %d",
+		"updateState": "Update"
+	},
+	"datetime": {
+		"amPm": [
+			"am",
+			"pm"
+		],
+		"hours": "Hour",
+		"minutes": "Minute",
+		"months": [
+			"January",
+			"February",
+			"March",
+			"April",
+			"May",
+			"June",
+			"July",
+			"August",
+			"September",
+			"October",
+			"November",
+			"December"
+		],
+		"next": "Next",
+		"previous": "Previous",
+		"seconds": "Second",
+		"unknown": "-",
+		"weekdays": [
+			"Sun",
+			"Mon",
+			"Tue",
+			"Wed",
+			"Thu",
+			"Fri",
+			"Sat"
+		]
+	},
+	"decimal": ".",
+	"emptyTable": "No data available in table",
+	"info": "Showing _START_ to _END_ of _TOTAL_ entries",
+	"infoEmpty": "Showing 0 to 0 of 0 entries",
+	"infoFiltered": "(filtered from _MAX_ total entries)",
+	"infoThousands": ",",
+	"lengthMenu": "Show _MENU_ entries",
+	"loadingRecords": "Loading...",
+	"paginate": {
+		"first": "First",
+		"last": "Last",
+		"next": "Next",
+		"previous": "Previous"
+	},
+	"processing": "Processing...",
+	"search": "Search:",
+	"searchBuilder": {
+		"add": "Add Condition",
+		"button": {
+			"0": "<i class=\"fa-solid fa-filter\"></i> Filter",
+			"_": "<i class=\"fa-solid fa-filter\"></i> Filter (%d)"
+		},
+		"clearAll": "Reset",
+		"condition": "Condition",
+		"conditions": {
+			"array": {
+				"contains": "Contains",
+				"empty": "Empty",
+				"equals": "Equals",
+				"not": "Not",
+				"notEmpty": "Not Empty",
+				"without": "Without"
+			},
+			"date": {
+				"after": "After",
+				"before": "Before",
+				"between": "Between",
+				"empty": "Empty",
+				"equals": "Equals",
+				"not": "Not",
+				"notBetween": "Not Between",
+				"notEmpty": "Not Empty"
+			},
+			"number": {
+				"between": "Between",
+				"empty": "Empty",
+				"equals": "Equals",
+				"gt": "Greater Than",
+				"gte": "Greater Than Equal To",
+				"lt": "Less Than",
+				"lte": "Less Than Equal To",
+				"not": "Not",
+				"notBetween": "Not Between",
+				"notEmpty": "Not Empty"
+			},
+			"string": {
+				"contains": "Contains",
+				"empty": "Empty",
+				"endsWith": "Ends With",
+				"equals": "Equals",
+				"not": "Not",
+				"notContains": "Does Not Contain",
+				"notEmpty": "Not Empty",
+				"notEndsWith": "Does Not End With",
+				"notStartsWith": "Does Not Start With",
+				"startsWith": "Starts With"
+			}
+		},
+		"data": "Data",
+		"deleteTitle": "Delete filtering rule",
+		"leftTitle": "Outdent Criteria",
+		"logicAnd": "And",
+		"logicOr": "Or",
+		"rightTitle": "Indent Criteria",
+		"title": {
+			"0": "Filter",
+			"_": "Filter (%d)"
+		},
+		"value": "Value"
+	},
+	"select": {
+		"cells": {
+			"1": "1 cell selected",
+			"_": "%d cells selected"
+		},
+		"columns": {
+			"1": "1 column selected",
+			"_": "%d columns selected"
+		},
+		"rows": {
+			"1": "1 row selected",
+			"_": "%d rows selected"
+		}
+	},
+	"starlette-admin": {
+		"buttons": {
+			"export": "Export"
+		},
+		"conditions": {
+			"empty": "Empty",
+			"false": "False",
+			"notEmpty": "Not Empty",
+			"true": "True"
+		}
+	},
+	"thousands": ",",
+	"zeroRecords": "No matching records found"
+}

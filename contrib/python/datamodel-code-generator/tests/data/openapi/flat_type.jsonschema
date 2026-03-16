@@ -1,0 +1,16 @@
+{
+  "title": "Foo",
+  "$schema": "http://json-schema.org/schema#",
+  "description": "",
+  "type": "object",
+  "properties": {
+    "foo": {
+      "$ref": "#/definitions/foo"
+    }
+  },
+  "definitions": {
+    "foo": {
+      "type": "string"
+    }
+  }
+}

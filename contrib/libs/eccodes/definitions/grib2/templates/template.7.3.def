@@ -1,0 +1,49 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.3, Grid point data - complex packing and spatial differencing
+
+position offsetBeforeData;
+
+meta codedValues data_g22order_packing(
+     section7Length,
+     offsetBeforeData,
+     offsetSection7,
+
+     numberOfValues,
+     bitsPerValue,
+     referenceValue,
+     binaryScaleFactor,
+     decimalScaleFactor,
+     optimizeScaleFactor,
+
+     typeOfOriginalFieldValues,
+     groupSplittingMethodUsed,
+     missingValueManagementUsed,
+     primaryMissingValueSubstitute,
+     secondaryMissingValueSubstitute,
+     numberOfGroupsOfDataValues,
+     referenceForGroupWidths,
+     numberOfBitsUsedForTheGroupWidths,
+     referenceForGroupLengths,
+     lengthIncrementForTheGroupLengths,
+     trueLengthOfLastGroup,
+     numberOfBitsForScaledGroupLengths,
+     orderOfSpatialDifferencing,
+     numberOfOctetsExtraDescriptors
+): read_only;
+
+meta values data_apply_bitmap(
+     codedValues,
+     bitmap,
+     missingValue,
+     binaryScaleFactor,
+     numberOfDataPoints,
+     numberOfValues
+) : dump;
+
+alias data.packedValues=codedValues;
+
+template statistics "common/statistics_grid.def";
+
+meta numberOfMissing count_missing(bitmap,unusedBitsInBitmap,numberOfDataPoints,missingValueManagementUsed) : dump;
+alias numberOfMissingValues=numberOfMissing;

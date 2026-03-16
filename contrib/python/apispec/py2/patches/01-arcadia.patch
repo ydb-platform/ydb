@@ -1,0 +1,213 @@
+--- contrib/python/apispec/py2/apispec/__init__.py	(index)
++++ contrib/python/apispec/py2/apispec/__init__.py	(working tree)
+--- contrib/python/apispec/py2/apispec/ext/marshmallow/openapi.py	(index)
++++ contrib/python/apispec/py2/apispec/ext/marshmallow/openapi.py	(working tree)
+@@ -121,12 +121,13 @@ class OpenAPIConverter(object):
+         :param str name: Field name
+         :rtype: str
+         """
+-        if MARSHMALLOW_VERSION_INFO[0] < 3:
++        # XXX: Check before update marshmallow
++        # if MARSHMALLOW_VERSION_INFO[0] < 3:
+             # use getattr in case we're running against older versions of marshmallow.
+-            dump_to = getattr(field, 'dump_to', None)
+-            load_from = getattr(field, 'load_from', None)
+-            return dump_to or load_from or name
+-        return field.data_key or name
++        dump_to = getattr(field, 'dump_to', None)
++        load_from = getattr(field, 'load_from', None)
++        return dump_to or load_from or name
++        # return field.data_key or name
+ 
+     def map_to_openapi_type(self, *args):
+         """Decorator to set mapping for custom fields.
+--- contrib/python/apispec/py2/apispec/utils.py	(index)
++++ contrib/python/apispec/py2/apispec/utils.py	(working tree)
+@@ -61,7 +61,7 @@ def load_yaml_from_docstring(docstring):
+ 
+     yaml_string = '\n'.join(split_lines[cut_from:])
+     yaml_string = dedent(yaml_string)
+-    return yaml.load(yaml_string)
++    return yaml.safe_load(yaml_string)
+ 
+ 
+ PATH_KEYS = set([
+--- contrib/python/apispec/py2/tests/conftest.py	(index)
++++ contrib/python/apispec/py2/tests/conftest.py	(working tree)
+@@ -1,6 +1,4 @@
+ # -*- coding: utf-8 -*-
+-
+-
+ from collections import namedtuple
+ 
+ import pytest
+@@ -9,6 +7,7 @@ from apispec import APISpec
+ from apispec.ext.marshmallow import MarshmallowPlugin
+ 
+ 
++
+ @pytest.fixture(params=(
+     ('2.0', True),
+     ('2.0', False),
+@@ -21,7 +20,9 @@ def spec(request):
+         version='0.1',
+         plugins=(
+             # Test both plugin class and deprecated interface
+-            MarshmallowPlugin() if request.param[1] else 'apispec.ext.marshmallow',
++            MarshmallowPlugin()
++            if request.param[1] else
++            'apispec.ext.marshmallow',
+         ),
+         openapi_version=request.param[0],
+     )
+--- contrib/python/apispec/py2/tests/plugins/dummy_plugin.py	(index)
++++ contrib/python/apispec/py2/tests/plugins/dummy_plugin.py	(working tree)
+@@ -1,4 +1,7 @@
+ # -*- coding: utf-8 -*-
+ 
++
+ def setup(spec):
+-    spec.old_plugins['tests.plugins.dummy_plugin']['foo'] = 42
++    spec.old_plugins[
++        '__tests__.plugins.dummy_plugin'
++    ]['foo'] = 42
+--- contrib/python/apispec/py2/tests/test_core.py	(index)
++++ contrib/python/apispec/py2/tests/test_core.py	(working tree)
+@@ -425,7 +425,7 @@ class TestPlugins:
+ 
+ class TestOldPlugins:
+ 
+-    DUMMY_PLUGIN = 'tests.plugins.dummy_plugin'
++    DUMMY_PLUGIN = '__tests__.plugins.dummy_plugin'
+ 
+     @mock.patch(DUMMY_PLUGIN + '.setup', autospec=True)
+     def test_setup_plugin(self, mock_setup, spec):
+@@ -444,7 +444,7 @@ class TestOldPlugins:
+             spec.setup_plugin('plugin.doesnt.exist')
+ 
+     def test_setup_plugin_with_no_setup_function_raises_error(self, spec):
+-        plugin_path = 'tests.plugins.dummy_plugin_no_setup'
++        plugin_path = '__tests__.plugins.dummy_plugin_no_setup'
+         with pytest.raises(PluginError) as excinfo:
+             spec.setup_plugin(plugin_path)
+         msg = excinfo.value.args[0]
+@@ -595,9 +595,9 @@ def test_plugins_as_string_deprecation_warning(recwarn):
+     with pytest.deprecated_call():
+         APISpec(
+             title='Swagger Petstore', version='1.0.0',
+-            plugins=('tests.plugins.dummy_plugin', ),
++            plugins=('__tests__.plugins.dummy_plugin', ),
+         )
+ 
+ def test_setup_plugin_deprecation_warning(spec, recwarn):
+     with pytest.deprecated_call():
+-        spec.setup_plugin('tests.plugins.dummy_plugin', )
++        spec.setup_plugin('__tests__.plugins.dummy_plugin', )
+--- contrib/python/apispec/py2/tests/test_ext_marshmallow.py	(index)
++++ contrib/python/apispec/py2/tests/test_ext_marshmallow.py	(working tree)
+@@ -10,7 +10,7 @@ from marshmallow import Schema
+ from apispec import APISpec
+ from apispec.ext.marshmallow import MarshmallowPlugin
+ from apispec.ext.marshmallow.openapi import MARSHMALLOW_VERSION_INFO
+-from .schemas import (
++from tests.schemas import (
+     PetSchema, AnalysisSchema, SampleSchema, RunSchema,
+     SelfReferencingSchema, OrderedSchema, PatternedObjectSchema,
+     DefaultCallableSchema, AnalysisWithListSchema
+--- contrib/python/apispec/py2/tests/test_ext_order.py	(index)
++++ contrib/python/apispec/py2/tests/test_ext_order.py	(working tree)
+@@ -1,10 +1,11 @@
+ # -*- coding: utf-8 -*-
+-from bottle import route
++import pytest
++# from bottle import route
+ from flask import Flask
+ from flask.views import MethodView
+ from tornado.web import RequestHandler
+ from apispec import APISpec
+-from apispec.ext.bottle import BottlePlugin
++# from apispec.ext.bottle import BottlePlugin
+ from apispec.ext.flask import FlaskPlugin
+ from apispec.ext.tornado import TornadoPlugin
+ from apispec.ext.marshmallow import MarshmallowPlugin
+@@ -35,23 +36,27 @@ def confirm_ext_order_independency(web_framework_plugin, **kwargs_for_add_path):
+         specs.append(spec)
+     assert specs[0].to_dict() == specs[1].to_dict()
+ 
+-class TestExtOrder:
+-    def test_bottle(self):
+-        @route('/hello')
+-        def hello():
+-            """A greeting endpoint.
+ 
+-            ---
+-            get:
+-                description: get a greeting
+-                responses:
+-                    200:
+-                        description: a pet to be returned
+-                        schema: tests.schemas.PetSchema
+-            """
+-            return 'hi'
++class TestExtOrder(object):
+ 
+-        confirm_ext_order_independency(BottlePlugin, view=hello)
++    @pytest.mark.skipif(True, reason='Bottle is not used by Yandex')
++    def test_bottle(self):
++        # @route('/hello')
++        # def hello():
++        #     """A greeting endpoint.
++        #
++        #     ---
++        #     get:
++        #         description: get a greeting
++        #         responses:
++        #             200:
++        #                 description: a pet to be returned
++        #                 schema: tests.schemas.PetSchema
++        #     """
++        #     return 'hi'
++        #
++        # confirm_ext_order_independency(BottlePlugin, view=hello)
++        pass
+ 
+     def test_flask(self):
+         app = Flask(__name__)
+--- contrib/python/apispec/py2/tests/test_openapi.py	(index)
++++ contrib/python/apispec/py2/tests/test_openapi.py	(working tree)
+@@ -5,6 +5,7 @@ import warnings
+ import pytest
+ from pytest import mark
+ 
++import marshmallow
+ from marshmallow import fields, Schema, validate
+ 
+ from apispec.ext.marshmallow import MarshmallowPlugin
+@@ -251,7 +252,7 @@ class TestMarshmallowSchemaToModelDefinition:
+         assert props['email']['description'] == 'email address of the user'
+ 
+     @pytest.mark.skipif(
+-        MARSHMALLOW_VERSION_INFO[0] >= 3,
++        MARSHMALLOW_VERSION_INFO[0] >= 3 and marshmallow.__version__ != '3.0.0b6',  # this version is more 2 than 3
+         reason='Behaviour changed in marshmallow 3',
+     )
+     def test_schema2jsonschema_override_name_ma2(self, openapi):
+@@ -278,7 +279,7 @@ class TestMarshmallowSchemaToModelDefinition:
+         assert '_global' not in props and 'global' not in props
+ 
+     @pytest.mark.skipif(
+-        MARSHMALLOW_VERSION_INFO[0] < 3,
++        MARSHMALLOW_VERSION_INFO[0] < 3 or marshmallow.__version__ == '3.0.0b6',
+         reason='Behaviour changed in marshmallow 3',
+     )
+     def test_schema2jsonschema_override_name_ma3(self, openapi):
+@@ -364,7 +365,7 @@ class TestMarshmallowSchemaToModelDefinition:
+             assert issubclass(warning.category, UserWarning)
+ 
+     def test_observed_field_name_for_required_field(self, openapi):
+-        if MARSHMALLOW_VERSION_INFO[0] < 3:
++        if MARSHMALLOW_VERSION_INFO[0] < 3 or marshmallow.__version__ == '3.0.0b6':
+             fields_dict = {
+                 'user_id': fields.Int(load_from='id', dump_to='id', required=True),
+             }
+

@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package yandex.cloud.cdn.v1;
+
+import "yandex/cloud/api/operation.proto";
+
+import "yandex/cloud/cdn/v1/shielding.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cdn/v1;cdn";
+option java_package = "yandex.cloud.api.cdn.v1";
+
+// Shielding management service.
+service ShieldingService {
+    // Activate shielding for a resource.
+    rpc Activate(ActivateShieldingRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "ActivateShieldingMetadata"
+            response: "ShieldingDetails"
+        };
+    }
+
+    // Deactivate shielding for a resource.
+    rpc Deactivate(DeactivateShieldingRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "DeactivateShieldingMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+
+    // Get shielding details by resource ID.
+    rpc Get(GetShieldingDetailsRequest) returns (ShieldingDetails);
+
+    // Updates shielding parameters for a resource, such as changing the geographical location of the shielding server.
+    // Changes may take up to 15 minutes to propagate across CDN servers.
+    // After updating, it is recommended to purge the resource's cache.
+    rpc Update(UpdateShieldingRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "UpdateShieldingMetadata"
+            response: "ShieldingDetails"
+        };
+    }
+
+    // Lists available geographical locations.
+    rpc ListAvailableLocations(ListShieldingLocationsRequest) returns (ListShieldingLocationsResponse);
+}
+
+// Request to retrieve shielding details for a specific resource.
+message GetShieldingDetailsRequest {
+    // ID of the resource for which to get shielding details.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Request to activate shielding for a specific resource.
+message ActivateShieldingRequest {
+    // ID of the resource to activate shielding for.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+
+    // ID of the location to activate shielding in, allowing selection of a suitable geographical location.
+    int64 location_id = 2 [(value) = ">0"];
+}
+
+// Metadata for shielding activation, detailing the operations performed.
+message ActivateShieldingMetadata {
+    // ID of the resource for which shielding is being activated.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Request to deactivate shielding for a specific resource.
+message DeactivateShieldingRequest {
+    // ID of the resource to deactivate shielding for.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Metadata for shielding deactivation, detailing the operations performed.
+message DeactivateShieldingMetadata {
+    // ID of the resource for which shielding is being deactivated.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Request to update shielding parameters, including location adjustments.
+message UpdateShieldingRequest {
+    // ID of the resource for which shielding parameters are being updated.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+
+    // ID of the location for updating shielding parameters, allowing for geographical adjustments.
+    int64 location_id = 2 [(value) = ">0"];
+}
+
+// Metadata for shielding updates, detailing the operations performed.
+message UpdateShieldingMetadata {
+    // ID of the resource for which shielding parameters are being updated.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Request to list available geographical locations for shielding.
+message ListShieldingLocationsRequest {
+    // ID of the folder for which to request a list of locations where shielding can be activated.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Maximum number of results per page.
+    int64 page_size = 2 [(value) = "<=1000"];
+
+    // Page token. To get the next page of results,
+    // set [page_token] to the [ListShieldingLocationsResponse.next_page_token]
+    // returned by a previous list response.
+    string page_token = 3 [(length) = "<=100"];
+
+    // ID of the resource for which to request a list of locations where shielding can be activated.
+    string resource_id = 4 [(required) = true, (length) = "<=50"];
+}
+
+// Response for the list of available shielding locations.
+message ListShieldingLocationsResponse {
+    // List of available shielding locations, each representing a potential geographical location for the shielding server.
+    repeated ShieldingDetails shielding_locations = 1;
+
+    // Token for getting the next page of results.
+    string next_page_token = 2;
+}

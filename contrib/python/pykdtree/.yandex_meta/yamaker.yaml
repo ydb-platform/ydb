@@ -1,0 +1,4 @@
+mark_as_cython_c:
+  - pykdtree/kdtree.pyx
+mark_as_tests:
+  - pykdtree/test_*.py

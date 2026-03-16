@@ -1,0 +1,43 @@
+{% extends "dashboard/repository_settings/base.html" %}
+{% load i18n %}
+
+{% block content_panel %}
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <div class="btn-group pull-right">
+                <a href="{% url 'dashboard:cidr_create' repo=view.repository.slug %}" class="btn btn-success btn-xs">
+                    <span class="icon-plus icon-white"></span> Create new
+                </a>
+            </div>
+            Access control list
+        </div>
+        <div class="panel-body">
+            <p>Overview of IP addresses which have acccess to download packages from your localshop. Hosts which are not listed here will receive a 403 error.
+            </p>
+        </div>
+
+        <table class="table table-striped table-bordered">
+            <thead>
+                <tr>
+                    <th>CIDR</th>
+                    <th>Label</th>
+                    <th>Credentials</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cidr in cidr_list %}
+                <tr>
+                    <td><a href="{% url 'dashboard:cidr_edit' repo=view.repository.slug pk=cidr.pk %}">{{ cidr.cidr }}</a></td>
+                    <td>{{ cidr.label|default:'n/a' }}</td>
+                    <td>{{ cidr.require_credentials|yesno }}</td>
+                    <td>
+                        <a href="{% url 'dashboard:cidr_edit' repo=view.repository.slug pk=cidr.pk %}"><span class="icon-edit"></span> edit</a> |
+                        <a href="{% url 'dashboard:cidr_delete' repo=view.repository.slug pk=cidr.pk %}"><span class="icon-trash"></span> delete</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

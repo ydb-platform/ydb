@@ -1,0 +1,33 @@
+***************************************************************
+* This code is LGPL. You CAN make commercial solutions using  *
+* LGPL software.                                              *
+*                                                             *
+* Peter Harvey 04.APR.99 pharvey@codebydesign.com             *
+***************************************************************
+
++-------------------------------------------------------------+
+| unixODBC                                                    |
+| LST lib (liblst.so)                                         |
++-------------------------------------------------------------+
+
+TODO
+
+1. Improve the handling of concurrency issues.
+
+2. Add support for user defined sort function.
+
+3. Enhance lstSeek() so as to use sort order to improve search
+   efficiency.
+
+4. Improve handling of serious errors where memory is likely to
+   be lost... for example printf a message.
+
++-------------------------------------------------------------+
+| Peter Harvey                                                |
+| pharvey@codebydesign.com                                    |
+| www.genix.net/unixODBC                                      |
+| 16.APR.99                                                   |
++-------------------------------------------------------------+
+
+
+

@@ -1,0 +1,222 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.idp;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/organizationmanager/v1/idp/synchronization_settings.proto";
+import "yandex/cloud/validation.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/idp;idp";
+option java_package = "yandex.cloud.api.organizationmanager.v1.idp";
+
+// A set of methods for managing synchronization settings.
+service SynchronizationService {
+  // Sets the replication token for synchronization.
+  rpc SetReplicationToken(SetReplicationTokenRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/synchronization-settings:setReplicationToken" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "SetReplicationTokenMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Resets the replication token for synchronization.
+  rpc ResetReplicationToken(ResetReplicationTokenRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/synchronization-settings:resetReplicationToken" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "ResetReplicationTokenMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Creates synchronization settings for a subject container.
+  rpc CreateSynchronizationSettings(CreateSynchronizationSettingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/synchronization-settings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateSynchronizationSettingsMetadata"
+      response: "SynchronizationSettings"
+    };
+  }
+
+  // Updates synchronization settings for a subject container.
+  rpc UpdateSynchronizationSettings(UpdateSynchronizationSettingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/idp/synchronization-settings/{subject_container_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSynchronizationSettingsMetadata"
+      response: "SynchronizationSettings"
+    };
+  }
+
+  // Deletes synchronization settings for a subject container.
+  rpc DeleteSynchronizationSettings(DeleteSynchronizationSettingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/organization-manager/v1/idp/synchronization-settings/{subject_container_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteSynchronizationSettingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Returns synchronization settings for a subject container.
+  rpc GetSynchronizationSettings(GetSynchronizationSettingsRequest) returns (SynchronizationSettings) {
+    option (google.api.http) = { get: "/organization-manager/v1/idp/synchronization-settings/{subject_container_id}" };
+  }
+
+  // Lists supported attributes for synchronization.
+  rpc ListSupportedAttributes(ListSupportedAttributesRequest) returns (ListSupportedAttributesResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/idp/synchronization-supported-attributes" };
+  }
+}
+
+// Request to create synchronization settings.
+message CreateSynchronizationSettingsRequest {
+  // ID of the subject container.
+  string subject_container_id = 1 [(required) = true, (length) = "<=50"];
+  // Filter configuration for synchronization.
+  SynchronizationFilter filter = 2 [(required) = true];
+  // Domain replacement configuration.
+  string replacement_domain = 3 [(length) = "0-253"];
+  // Behavior when removing users.
+  RemoveUserBehavior remove_user_behavior = 4;
+  // Interval between synchronization runs.
+  google.protobuf.Duration synchronization_interval = 5 [(value) = "15m-6h"];
+  // Whether users can be captured during synchronization.
+  bool allow_to_capture_users = 6;
+  // Whether groups can be captured during synchronization.
+  bool allow_to_capture_groups = 7;
+  // User attribute mappings.
+  repeated UserAttributeMapping user_attribute_mappings = 8 [(size) = "<=50"];
+  // Group attribute mappings.
+  repeated GroupAttributeMapping group_attribute_mappings = 9 [(size) = "<=50"];
+}
+
+// Metadata for the [SynchronizationService.CreateSynchronizationSettings] operation.
+message CreateSynchronizationSettingsMetadata { 
+  // ID of the subject container.
+  string subject_container_id = 1; 
+}
+
+// Request to update synchronization settings.
+message UpdateSynchronizationSettingsRequest {
+  // ID of the subject container.
+  string subject_container_id = 1 [(required) = true, (length) = "<=50"];
+  // Filter configuration for synchronization.
+  SynchronizationFilter filter = 2;
+  // Domain replacement configuration.
+  string replacement_domain = 3 [(length) = "0-253"];
+  // Behavior when removing users.
+  RemoveUserBehavior remove_user_behavior = 4;
+  // Interval between synchronization runs.
+  google.protobuf.Duration synchronization_interval = 5 [(value) = "15m-6h"];
+  // Whether users can be captured during synchronization.
+  bool allow_to_capture_users = 6;
+  // Whether groups can be captured during synchronization.
+  bool allow_to_capture_groups = 7;
+  // User attribute mappings.
+  repeated UserAttributeMapping user_attribute_mappings = 8 [(size) = "<=50"];
+  // Group attribute mappings.
+  repeated GroupAttributeMapping group_attribute_mappings = 9 [(size) = "<=50"];
+  // Field mask that specifies which fields are going to be updated.
+  google.protobuf.FieldMask update_mask = 10;
+}
+
+// Metadata for the [SynchronizationService.UpdateSynchronizationSettings] operation.
+message UpdateSynchronizationSettingsMetadata { 
+  // ID of the subject container.
+  string subject_container_id = 1; 
+}
+
+// Request to delete synchronization settings.
+message DeleteSynchronizationSettingsRequest { 
+  // ID of the subject container.
+  string subject_container_id = 1 [(required) = true, (length) = "<=50"]; 
+}
+
+// Metadata for the [SynchronizationService.DeleteSynchronizationSettings] operation.
+message DeleteSynchronizationSettingsMetadata {
+  // ID of the subject container.
+  string subject_container_id = 1; 
+}
+
+// Request to get synchronization settings.
+message GetSynchronizationSettingsRequest {
+  // ID of the subject container.
+  string subject_container_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Flavor of attributes to list.
+enum AttributesFlavor {
+  // The flavor is not specified.
+  ATTRIBUTES_FLAVOR_UNSPECIFIED = 0;
+  // Active Directory attributes.
+  ACTIVE_DIRECTORY = 1;
+}
+
+// Request to list supported attributes.
+message ListSupportedAttributesRequest {
+  // Flavor of attributes to list.
+  AttributesFlavor flavor = 1 [(required) = true];
+}
+
+// Response message for [SynchronizationService.ListSupportedAttributes].
+message ListSupportedAttributesResponse {
+  // List of supported user attributes.
+  repeated UserSupportedAttribute user_supported_attributes = 1;
+  // List of supported group attributes.
+  repeated GroupSupportedAttribute group_supported_attributes = 2;
+}
+
+// Supported user attribute configuration.
+message UserSupportedAttribute {
+  // Target attribute to map to.
+  UserTargetAttribute target_attribute = 1;
+  // List of source attribute configurations.
+  repeated SourceAttributes source_attributes = 2;
+}
+
+// Supported group attribute configuration.
+message GroupSupportedAttribute {
+  // Target attribute to map to.
+  GroupTargetAttribute target_attribute = 1;
+  // List of source attribute configurations.
+  repeated SourceAttributes source_attributes = 2;
+}
+
+// Source attribute configuration.
+message SourceAttributes {
+  // Type of mapping.
+  MappingType type = 1;  
+  // List of source attribute names. Empty for EMPTY type.
+  repeated string attributes = 2;
+}
+
+// Request to set replication token.
+message SetReplicationTokenRequest {
+  // ID of the subject container.
+  string subject_container_id = 1 [(required) = true, (length) = "<=50"];
+  // Replication token value.
+  string replication_token = 2 [(required) = true, (length) = "<=1000"];
+  // Type of synchronization session.
+  SessionType session_type = 3 [(required) = true];
+}
+
+// Metadata for the [SynchronizationService.SetReplicationToken] operation.
+message SetReplicationTokenMetadata {
+  // ID of the subject container.
+  string subject_container_id = 1;
+}
+
+// Request to reset replication token.
+message ResetReplicationTokenRequest {
+  // ID of the subject container.
+  string subject_container_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Metadata for the [SynchronizationService.ResetReplicationToken] operation.
+message ResetReplicationTokenMetadata {
+  // ID of the subject container.
+  string subject_container_id = 1;
+}

@@ -1,0 +1,4 @@
+[console_scripts]
+mibcopy=pysmi.scripts.mibcopy:start
+mibdump=pysmi.scripts.mibdump:start
+

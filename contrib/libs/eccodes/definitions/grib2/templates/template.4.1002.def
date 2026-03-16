@@ -1,0 +1,22 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.1002, Cross-section of analysis and forecast, averaged or otherwise statistically processed over latitude or longitude
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+
+codetable[1] horizontalDimensionProcessed ('4.220.table',masterDir,localDir) : dump;
+
+# Treatment of missing data (e.g. below ground)
+codetable[1] treatmentOfMissingData ('4.221.table',masterDir,localDir) : dump;
+
+# Type of statistical processing
+codetable[1] typeOfStatisticalProcessing ('4.10.table',masterDir,localDir) : dump;
+#alias typeOfStatisticalProcessing=stepType;
+
+unsigned[4] startOfRange  : dump;
+unsigned[4] endOfRange  : dump;
+
+#  Number of values
+unsigned[2] numberOfDataValues : read_only,dump;

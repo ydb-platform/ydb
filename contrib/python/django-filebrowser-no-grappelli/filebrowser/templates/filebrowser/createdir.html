@@ -1,0 +1,56 @@
+{% extends "admin/base_site.html" %}
+
+<!-- LOADING -->
+{% load static i18n fb_tags fb_csrf fb_compat %}
+
+<!-- STYLESHEETS -->
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" type="text/css" href="{% static "admin/css/forms.css" %}" />
+{% endblock %}
+
+<!-- COLTYPE/BODYCLASS -->
+{% block bodyclass %}change-form filebrowser{% if query.pop %} popup{% endif %}{% endblock %}
+{% block coltype %}colM{% endblock %}
+
+<!-- BREADCRUMBS -->
+{% block breadcrumbs %}{% include "filebrowser/include/breadcrumbs.html" %}{% endblock %}
+
+<!-- CONTENT -->
+{% block content %}
+<div id="content-main">
+    <!-- POP-UP BREADCRUMBS -->
+    {% if query.pop %}
+        {% include "filebrowser/include/breadcrumbs.html" %}
+    {% endif %}
+    <form action="{% query_string '' 'p' %}" method="post">{% fb_csrf_token %}
+        <div>
+            {% if form.errors %}<p class="errornote">{% trans 'Please correct the following errors.' %}</p>{% endif %}
+            <fieldset class="module aligned wide">
+                <div class="form-row field-{{ form.name.name }}{% if form.name.errors %} errors{% endif %}">
+                    {% if form.name.errors %}{{ form.name.errors }}{% endif %}
+                    <div>
+                        <label class="required" for="id_dir_name">{{ form.name.label }}</label>
+                        {{ form.name }}
+                        <p class="help">
+                            {{ form.name.help_text|safe }}
+                            {% if settings_var.NORMALIZE_FILENAME or settings_var.CONVERT_FILENAME %}
+                                <br />
+                                {% if settings_var.NORMALIZE_FILENAME %}
+                                    {% trans "The Name will be normalized by converting or stripping all non-standard characters." %} <br />
+                                {% endif %}
+                                {% if settings_var.CONVERT_FILENAME %}
+                                    {% trans "The Name will be converted to lowercase. Spaces will be replaced with underscores." %}
+                                {% endif %}
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </fieldset>
+            <div class="submit-row">
+                <input type="submit" value="{% trans 'Submit' %}" class="default" />
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

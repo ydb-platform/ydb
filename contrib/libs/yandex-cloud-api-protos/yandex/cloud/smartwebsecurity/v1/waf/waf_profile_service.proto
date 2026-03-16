@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package yandex.cloud.smartwebsecurity.v1.waf;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/smartwebsecurity/v1/waf/waf_profile.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/smartwebsecurity/v1/waf;smartwebsecurity";
+option java_package = "yandex.cloud.api.smartwebsecurity.v1.waf";
+
+// A set of methods for managing WafProfile resources.
+service WafProfileService {
+  // Returns the specified WafProfile resource.
+  rpc Get(GetWafProfileRequest) returns (WafProfile) {
+    option (google.api.http) = {get: "/smartwebsecurity/v1/wafProfiles/{waf_profile_id}"};
+  }
+
+  // Retrieves the list of WafProfile resources in the specified folder.
+  rpc List(ListWafProfilesRequest) returns (ListWafProfilesResponse) {
+    option (google.api.http) = {get: "/smartwebsecurity/v1/wafProfiles"};
+  }
+
+  // Creates a WAF profile in the specified folder using the data specified in the request.
+  rpc Create(CreateWafProfileRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/smartwebsecurity/v1/wafProfiles" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateWafProfileMetadata"
+      response: "WafProfile"
+    };
+  }
+
+  // Updates the specified WAF profile.
+  rpc Update(UpdateWafProfileRequest) returns (operation.Operation) {
+    option (google.api.http) = {patch: "/smartwebsecurity/v1/wafProfiles/{waf_profile_id}" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateWafProfileMetadata"
+      response: "WafProfile"
+    };
+  }
+
+  // Deletes the specified WAF profile.
+  rpc Delete(DeleteWafProfileRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/smartwebsecurity/v1/wafProfiles/{waf_profile_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteWafProfileMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetWafProfileRequest {
+  // ID of the WafProfile resource to return.
+  string waf_profile_id = 1 [(required) = true];
+}
+
+message ListWafProfilesRequest {
+  // ID of the folder that the WAF profile belongs to.
+  // Currently page_size, page_token, filter and order_by are not supported and List method will return all WAF profiles in the folder.
+  string folder_id = 1 [(required) = true];
+}
+
+message ListWafProfilesResponse {
+  // List of WafProfile resources.
+  // Currently next_page_token is not supported and List method will return all WAF profiles in the folder.
+  repeated WafProfile waf_profiles = 1;
+}
+
+message CreateWafProfileRequest {
+  // ID of the folder to create a WAF profile in.
+  string folder_id = 1;
+
+  // Name of the WAF profile. The name is unique within the folder. 1-50 characters long.
+  string name = 2;
+
+  // Optional description of the WAF profile.
+  string description = 3;
+
+  // Labels as `` key:value `` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 4;
+
+  // Settings for each rule in rule set.
+  repeated WafProfileRule rules = 5;
+
+  // List of exclusion rules. See [Rules](/docs/smartwebsecurity/concepts/waf#exclusion-rules).
+  repeated WafProfileExclusionRule exclusion_rules = 6;
+
+  oneof rule_set {
+    // Core rule set settings. See [Basic rule set](/docs/smartwebsecurity/concepts/waf#rules-set) for details.
+    WafProfile.CoreRuleSet core_rule_set = 7;
+  }
+
+  // Parameters for request body analyzer.
+  WafProfile.AnalyzeRequestBody analyze_request_body = 8;
+
+  // List of rule sets. See [Rules](/docs/smartwebsecurity/concepts/waf#rules-set).
+  repeated WafProfile.WafProfileRuleSet rule_sets = 9;
+
+  // Parameter determines should all rule sets be matched.
+  bool match_all_rule_sets = 10;
+}
+
+message CreateWafProfileMetadata {
+  // ID of the WAF profile that is being created.
+  string waf_profile_id = 1;
+}
+
+message UpdateWafProfileRequest {
+  // ID of the WAF profile to update.
+  string waf_profile_id = 1 [(required) = true];
+
+  // Field mask that specifies which fields of the WafProfile resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the WAF profile. The name is unique within the folder. 1-50 characters long.
+  string name = 3;
+
+  // Optional description of the WAF profile.
+  string description = 4;
+
+  // Labels as `` key:value `` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 5;
+
+  // Settings for each rule in rule set.
+  repeated WafProfileRule rules = 6;
+
+  // List of exclusion rules. See [Rules](/docs/smartwebsecurity/concepts/waf#exclusion-rules).
+  repeated WafProfileExclusionRule exclusion_rules = 7;
+
+  oneof rule_set {
+    // Core rule set settings. See [Basic rule set](/docs/smartwebsecurity/concepts/waf#rules-set) for details.
+    WafProfile.CoreRuleSet core_rule_set = 8;
+  }
+
+  // Parameters for request body analyzer.
+  WafProfile.AnalyzeRequestBody analyze_request_body = 9;
+
+  // List of rule sets. See [Rules](/docs/smartwebsecurity/concepts/waf#rules-set).
+  repeated WafProfile.WafProfileRuleSet rule_sets = 10;
+
+  // Parameter determines should all rule sets be matched.
+  bool match_all_rule_sets = 11;
+}
+
+message UpdateWafProfileMetadata {
+  // ID of the WafProfile resource that is being updated.
+  string waf_profile_id = 1;
+}
+
+message DeleteWafProfileRequest {
+  // ID of the WAF profile to delete.
+  string waf_profile_id = 1 [(required) = true];
+}
+
+message DeleteWafProfileMetadata {
+  // ID of the WafProfile resource that is being deleted.
+  string waf_profile_id = 1;
+}

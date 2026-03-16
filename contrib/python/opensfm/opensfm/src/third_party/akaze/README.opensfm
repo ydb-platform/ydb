@@ -1,0 +1,8 @@
+Project: AKAZE
+URL: https://github.com/pablofdezalc/akaze
+License: BSD
+Version: 1.4.0,  07-10-2014
+Authors and contributors: See README.akaze
+Local modifications:
+
+* Strip the library to contain only the feature extraction script akaze_features.cpp which is further modified as lib/src/akaze.cpp.

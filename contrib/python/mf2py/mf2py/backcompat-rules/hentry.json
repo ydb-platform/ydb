@@ -1,0 +1,41 @@
+{
+    "type": [
+        "h-entry"
+    ], 
+    "properties": {
+        "category": [
+            "p-category"
+        ], 
+        "entry-title": [
+            "p-name"
+        ], 
+        "published": [
+            "dt-published"
+        ],
+        "entry-content": [
+            "e-content"
+        ], 
+        "entry-summary": [
+            "p-summary"
+        ], 
+        "author": [
+            "p-author", 
+            "h-card"
+        ], 
+        "geo": [
+            "p-geo", 
+            "h-geo"
+        ], 
+        "updated": [
+            "dt-updated"
+        ]
+    },
+    "rels": {
+        "bookmark": [
+            "u-url"
+        ],
+        "tag": [
+            "p-category"
+        ]
+    }
+}

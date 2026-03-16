@@ -1,0 +1,132 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Customizing the Base{% endblock %}
+
+{% block extrahead %}
+	<script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(grp.jQuery);
+	</script>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Customizing the Base</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Customizing the Base</h1>
+    <div class="grp-doc-description">
+    	<p>This page provides an overlook of what a basic Grappelli admin template looks like.</p>
+    </div>
+    <div class="g-d-c">
+    	<section>
+	    	<div class="g-d-24">
+		        <div class="grp-doc-description">
+		            <h1>Doctype</h1>
+		            <p>Since Grappelli is HTML5 you have to define the following <span class="grp-doc-dom"><span>doctype</span></span>.</p>
+		        </div>
+		    </div>
+	    	<div class="g-d-24">
+	    		<div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<!DOCTYPE html>
+<html lang="Your Language Code e.g. en-us">
+<head>
+    <title>{% templatetag openblock %} block title {% templatetag closeblock %}{% templatetag openblock %} endblock {% templatetag closeblock %}</title>
+    <meta charset="utf-8" />
+    {% templatetag openblock %} block blockbots %}<meta name="robots" content="NONE,NOARCHIVE" />{% templatetag openblock %} endblock {% templatetag closeblock %}
+    {% templatetag openblock %} block stylesheets %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+    {% templatetag openblock %} block extrastyle %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+    {% templatetag openblock %} block javascripts %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+    {% templatetag openblock %} block extrahead %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+</head>
+<body class="{% templatetag openblock %} if is_popup %}grp-popup {% templatetag openblock %} endif %}{% templatetag openblock %} block bodyclass %}{% templatetag openblock %} endblock {% templatetag closeblock %}">
+    <div id="container" class="grp-container">
+
+        <!-- HEADER -->
+        <header id="grp-header" class="{% templatetag openblock %} block header-class %}{% templatetag openblock %} endblock {% templatetag closeblock %}">
+            {% templatetag openblock %} if not is_popup %}
+
+                <!-- NAVIGATION -->
+                {% templatetag openblock %} include "admin/includes_grappelli/header.html" %}
+
+                <!-- CONTEXT NAVIGATION -->
+                <div id="grp-context-navigation">
+                    <nav id="grp-breadcrumbs" class="{% templatetag openblock %} block breadcrumbs-class %}{% templatetag openblock %} endblock {% templatetag closeblock %}">
+                        <header style="display:none"><h1>Breadcrumbs</h1></header>
+                        {% templatetag openblock %} block breadcrumbs %}
+                            <ul>
+                                <li><a href="/">{% templatetag openblock %} trans 'Home' %}</a></li>
+                                {% templatetag openblock %} if title %}
+                                    <li> &rsaquo; {{ title }}</li>
+                                {% templatetag openblock %} endif %}
+                            </ul>
+                        {% templatetag openblock %} endblock {% templatetag closeblock %}
+                    </nav>
+                    <nav id="grp-page-tools">
+                        <header style="display:none"><h1>Page Tools</h1></header>
+                        {% templatetag openblock %} block page-tools %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+                    </nav>
+                </div>
+            {% templatetag openblock %} endif %}
+        </header>
+
+        <!-- CONTENT -->
+        <article id="grp-content" class="{% templatetag openblock %} block content-class %}{% templatetag openblock %} endblock {% templatetag closeblock %}">
+
+            <!-- MESSAGES -->
+            {% templatetag openblock %} if messages %}
+                <ul class="grp-messagelist">
+                    {% templatetag openblock %} for message in messages %}
+                        <li{% templatetag openblock %} if message.tags %} class="grp-{{ message.tags }}"{% templatetag openblock %} endif %}>{{ message }}</li>
+                    {% templatetag openblock %} endfor %}
+                </ul>
+            {% templatetag openblock %} endif %}
+
+            <!-- CONTENT TITLE -->
+            <header id="grp-content-title">
+                {% templatetag openblock %} block pretitle %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+                {% templatetag openblock %} block content_title %}{% templatetag openblock %} if title %}<h1>{{ title }}</h1>{% templatetag openblock %} endif %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+                {% templatetag openblock %} block object-tools %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+            </header>
+
+            <!-- CONTENT-CONTAINER -->
+            <div id="grp-content-container">
+                {% templatetag openblock %} block content %}
+                    {{ content }}
+                    {% templatetag openblock %} block filters %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+                {% templatetag openblock %} endblock {% templatetag closeblock %}
+            </div>
+
+        </article>
+
+        <!-- FOOTER -->
+        {% templatetag openblock %} block footer %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+    </div>
+</body>
+</html>
+{% endfilter %}</code></pre></div>
+	    	</div>
+	    </section>
+    </div>
+{% endblock %}

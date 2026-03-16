@@ -1,0 +1,34 @@
+Metadata-Version: 1.1
+Name: Pyro4
+Version: 4.8
+Summary: distributed object middleware for Python (RPC)
+Home-page: http://irmen.home.xs4all.nl/pyro/
+Author: Irmen de Jong
+Author-email: irmen@razorvine.net
+License: MIT
+Description: Pyro means PYthon Remote Objects. 
+        It is a library that enables you to build applications in which
+        objects can talk to eachother over the network, with minimal programming effort.
+        You can just use normal Python method calls, with almost every possible parameter
+        and return value type, and Pyro takes care of locating the right object on the right
+        computer to execute the method. It is designed to be very easy to use, and to 
+        generally stay out of your way. But it also provides a set of powerful features that
+        enables you to build distributed applications rapidly and effortlessly.
+        Pyro is written in 100% pure Python and therefore runs on many platforms and Python versions,
+        including Python 2.x, Python 3.x, IronPython, Jython and Pypy.
+Keywords: distributed objects,middleware,network communication,remote method call,IPC
+Platform: any
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: English
+Classifier: Natural Language :: Dutch
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.2
+Classifier: Topic :: Software Development :: Object Brokering
+Classifier: Topic :: System :: Distributed Computing
+Classifier: Topic :: System :: Networking

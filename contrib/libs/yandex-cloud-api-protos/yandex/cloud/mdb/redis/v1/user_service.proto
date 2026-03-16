@@ -1,0 +1,157 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.redis.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/redis/v1/user.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/redis/v1;redis";
+option java_package = "yandex.cloud.api.mdb.redis.v1";
+
+// A set of methods for managing Redis User resources.
+service UserService {
+  // Returns the specified Redis User resource.
+  //
+  // To get the list of available Redis User resources, make a [List] request.
+  rpc Get (GetUserRequest) returns (User) {
+    option (google.api.http) = { get: "/managed-redis/v1/clusters/{cluster_id}/users/{user_name}" };
+  }
+
+  // Retrieves the list of Redis User resources in the specified cluster.
+  rpc List (ListUsersRequest) returns (ListUsersResponse) {
+    option (google.api.http) = { get: "/managed-redis/v1/clusters/{cluster_id}/users" };
+  }
+
+  // Creates a Redis user in the specified cluster.
+  rpc Create (CreateUserRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-redis/v1/clusters/{cluster_id}/users" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateUserMetadata"
+      response: "User"
+    };
+  }
+
+  // Updates the specified Redis user.
+  rpc Update (UpdateUserRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/managed-redis/v1/clusters/{cluster_id}/users/{user_name}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateUserMetadata"
+      response: "User"
+    };
+  }
+
+  // Deletes the specified Redis user.
+  rpc Delete (DeleteUserRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/managed-redis/v1/clusters/{cluster_id}/users/{user_name}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteUserMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+
+}
+
+message GetUserRequest {
+  // ID of the Redis cluster the user belongs to.
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the Redis User resource to return.
+  // To get the name of the user, use a [UserService.List] request.
+  string user_name = 2 [(required) = true, (length) = "<=32", (pattern) = "^[a-zA-Z0-9_][a-zA-Z0-9_-]*$"];
+}
+
+message ListUsersRequest {
+  // ID of the cluster to list Redis users in.
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListUsersResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListUsersResponse.next_page_token] returned by the previous list request.
+  string page_token = 3 [(length) = "<=400"];
+}
+
+message ListUsersResponse {
+  // List of Redis User resources.
+  repeated User users = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListUsersRequest.page_size], use the [next_page_token] as the value
+  // for the [ListUsersRequest.page_token] parameter in the next list request. Each subsequent
+  // list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateUserRequest {
+  // ID of the Redis cluster to create a user in.
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Properties of the user to be created.
+  UserSpec user_spec = 2;
+}
+
+message CreateUserMetadata {
+  // ID of the Redis cluster the user is being created in.
+  string cluster_id = 1;
+
+  // Name of the user that is being created.
+  string user_name = 2;
+}
+
+message UpdateUserRequest {
+  // ID of the Redis cluster the user belongs to.
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the Redis user to be updated.
+  string user_name = 2 [(required) = true, (length) = "<=32", (pattern) = "^[a-zA-Z0-9_][a-zA-Z0-9_-]*$"];
+
+  // Field mask that specifies which fields of the Redis User resource should be updated.
+  google.protobuf.FieldMask update_mask = 3;
+
+  // New passwords the Redis user.
+  repeated string passwords = 4 [(size) = "1"];
+
+  // New set of permissions to grant to the user.
+  Permissions permissions = 5;
+
+  // Is Redis user enabled
+  bool enabled = 6;
+}
+
+message UpdateUserMetadata {
+  // ID of the Redis cluster the user belongs to.
+  string cluster_id = 1;
+
+  // Name of the user that is being updated.
+  string user_name = 2;
+}
+
+message DeleteUserRequest {
+  // ID of the Redis cluster the user belongs to.
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the user to delete.
+  // To get the name of the user use a [UserService.List] request.
+  string user_name = 2 [(required) = true, (length) = "<=63", (pattern) = "^[a-zA-Z0-9_][a-zA-Z0-9_-]*$"];
+}
+
+message DeleteUserMetadata {
+  // ID of the Redis cluster the user belongs to.
+  string cluster_id = 1;
+
+  // Name of the user that is being deleted.
+  string user_name = 2;
+}

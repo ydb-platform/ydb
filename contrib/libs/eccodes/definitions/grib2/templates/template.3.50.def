@@ -1,0 +1,5 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.50, Spherical harmonic coefficients
+
+include "grib2/templates/template.3.spherical_harmonics.def"

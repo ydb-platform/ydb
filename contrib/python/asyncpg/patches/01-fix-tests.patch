@@ -1,0 +1,13 @@
+--- contrib/python/asyncpg/tests/test_connect.py	(index)
++++ contrib/python/asyncpg/tests/test_connect.py	(working tree)
+@@ -34,8 +34,8 @@ from asyncpg.serverversion import split_server_version_string
+ 
+ _system = platform.uname().system
+ 
+-
+-CERTS = os.path.join(os.path.dirname(__file__), 'certs')
++import yatest.common
++CERTS = yatest.common.test_source_path('certs')
+ SSL_CA_CERT_FILE = os.path.join(CERTS, 'ca.cert.pem')
+ SSL_CA_CRL_FILE = os.path.join(CERTS, 'ca.crl.pem')
+ SSL_CERT_FILE = os.path.join(CERTS, 'server.cert.pem')

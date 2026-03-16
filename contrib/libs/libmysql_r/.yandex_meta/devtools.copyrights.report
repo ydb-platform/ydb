@@ -1,0 +1,2538 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0235a4ec5cc69f37ebaf29175a87601c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [520:522]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 023b3f6f438b6ec27de8f801115a5081
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2008, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_rdtsc.h [1:1]
+        mysys/my_rdtsc.cc [1:1]
+        mysys/my_winerr.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 04cab8ffb837d42e05d359e1a3b86824
+BELONGS ya.make
+    License text:
+         Copyright (C) 1998, 1999 Greg Colvin and Beman Dawes.
+         Copyright (C) 2001, 2002, 2003 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3633:3634]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 04cecc1df68d72027d7355d714a17662
+BELONGS dbug/ya.make mysys/ya.make strings/ya.make ya.make
+    License text:
+        /* Copyright (c) 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        dbug/trace.cc [1:1]
+        mysys/my_fallocator.cc [1:1]
+        sql/auth/sha2_password_common.h [2:2]
+        strings/CHARSET_INFO.txt [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 059c74493411bf91496521528ecc94c3
+BELONGS ya.make
+    License text:
+        // Copyright 2008, Google Inc.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [563:564]
+        LICENSE [1382:1383]
+        LICENSE [1491:1492]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0610fc246a02de69ad0c0a0725707d5d
+BELONGS ya.make
+    License text:
+        /*  Copyright (c) 2011, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mysql/service_my_plugin_log.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 06f3ad25abe7d23073fb48ef1a22454e
+BELONGS ya.make
+    License text:
+         Copyright (C) 2002 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3640:3640]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 074a090caf93317e953d4d4822966ccf
+BELONGS strings/ya.make ya.make
+    License text:
+        /* Copyright (c) 2016, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mf_wcomp.h [1:1]
+        sql/stateless_allocator.h [1:1]
+        strings/str_uca_type.h [1:1]
+        strings/uca900_data.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 096e49c5edf365285c4f0160c192e530
+BELONGS ya.make
+    License text:
+        Copyright (c) 1998 The NetBSD Foundation, Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1054:1055]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b0b9d6dd889621e9d2fd2c1652e0cc1
+BELONGS ya.make
+    License text:
+        Copyright (c) 2013-2017 by Duktape authors (see AUTHORS.rst)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [899:899]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b90bbcf56f9e22951896b662d1340c1
+BELONGS ya.make
+    License text:
+        Copyright (c) 2003 Michael A. Davis <mike@datanerds.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2782:2782]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c87cfb8b518b14d560356ad48d35a1f
+BELONGS ya.make
+    License text:
+        \#   * Copyrighy (c) 1999 TaBE Project.
+        \#   * Copyright (c) 1999 Pai-Hsiang Hsiao.
+        \#   * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1753:1755]
+        LICENSE [2321:2323]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d5f379020e7b5a78a7898c54f993d87
+BELONGS ya.make
+    License text:
+        Copyright (c) 2001-2008, Taku Kudo
+        Copyright (c) 2004-2008, Nippon Telegraph and Telephone Corporation
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4819:4821]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 114e68009ff25acda1eb95ae4630c114
+BELONGS ya.make
+    License text:
+        Copyright (c) 2014-2015 Automattic <dev@cloudup.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5602:5602]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 127ca1debadc86c9870fadcd69654480
+BELONGS ya.make
+    License text:
+        @  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3630:3630]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 127ed674e1fe4cc611a04f76947e7b3d
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2012, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/crypt_genhash_impl.h [1:1]
+        include/mysql/client_authentication.h [1:1]
+        include/mysql/psi/mysql_memory.h [1:1]
+        include/pfs_file_provider.h [1:1]
+        include/pfs_socket_provider.h [1:1]
+        include/pfs_stage_provider.h [1:1]
+        include/pfs_statement_provider.h [1:1]
+        mysys/my_default_priv.h [1:1]
+        mysys/my_md5.cc [1:1]
+        mysys/my_rnd.cc [2:2]
+        mysys/my_sha1.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 12c13673979d84c93fb3f9aed80709bd
+BELONGS ya.make
+    License text:
+        Copyright (c) 1998 Todd C. Miller <Todd.Miller@courtesan.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1035:1035]
+        LICENSE [2779:2779]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 13943f0838ac1a6c82e28b625eb54a09
+BELONGS ya.make
+    License text:
+        Copyright Abandoned 1998 Irena Pancirov - Irnet Snc
+        This file is public domain and comes with NO WARRANTY of any kind
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4973:4974]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 145e52c6567b4f0dcfb2af78d2b72e53
+BELONGS ya.make
+    License text:
+        Copyright (c) 2002 Hewlett-Packard Co.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4635:4635]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 15e9d2db96f8b2da6b841c03490c22b6
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strings/ctype-tis620.cc [34:38]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 15ea059e291513523eae31358c93aa04
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2009, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_config-linux.h [1:1]
+        include/mysql/services.h [2:2]
+        sql/mdl.h [3:3]
+        sql/sql_cmd.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 184016b836b7ec5a7fcf7ee1f984e605
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009 The NetBSD Foundation, Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1085:1086]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 18a27f1ac42593c2c10d8ecf31482a89
+BELONGS mysys/ya.make strings/ya.make
+    License text:
+        /* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        mysys/mf_same.cc [1:1]
+        mysys/my_bit.cc [1:1]
+        mysys/my_delete.cc [1:1]
+        strings/strmake.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a1606196b3a4c8a59c5a8d393b77572
+BELONGS strings/ya.make ya.make
+    License text:
+        Copyright (C) 1998 by Theppitak Karoonboonyanan, all rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5519:5519]
+        strings/t_ctype.h [26:26]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1aa4db7c9186fb7014d42c18c972e612
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_murmur3.h [4:4]
+        mysys/my_murmur3.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1acd85c65b192d506c2d84aeb2665874
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2005, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_user.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b0cae398aa067d17e4aa2913853a467
+BELONGS ya.make
+    License text:
+        Copyright (C) 2004 Ami Tavory and Vladimir Dreizin, IBM-HRL.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3672:3672]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b197302d9aeca7dde8295e44f1dba0e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2017 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5102:5102]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b97c810e191ae9c9c7e75b02f3a9a1c
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strings/ctype-tis620.cc [34:38]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e1846e71b6cf65b16e5ce7e59956172
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009 Free Software Foundation, Inc. <http://fsf.org/>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3530:3530]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 206a3776ca29c4fffac8206d63ea3394
+BELONGS ya.make
+    License text:
+        Copyright (c) 2002-2004 MontaVista Software, Inc.
+        Copyright (c) 2005-2010 RedHat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [800:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2071c977bb1a146334880613b9c329b2
+BELONGS ya.make
+    License text:
+        Copyright (c) 2002-2003 Networks Associates Technology, Inc.
+        Copyright (c) 2004-2007 Dag-Erling Smørgrav
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5041:5043]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22ddabd62bf2716dabf4d8cebe33209d
+BELONGS strings/ya.make
+    License text:
+        /* Copyright (c) 2002 MySQL AB & tommy@valley.ne.jp
+           Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strings/ctype-bin.cc [1:2]
+        strings/ctype-eucjpms.cc [1:2]
+        strings/ctype-ujis.cc [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 25971bb198cac6a8231815982d230235
+BELONGS ya.make
+    License text:
+        documentation, are copyright (C) 1996-2010 Julian R Seward.  All
+        rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [761:762]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 273f1b38956bcf1dd19f585da7d751a2
+BELONGS ya.make
+    License text:
+        version 1.2.5, April 19th, 2010
+        Copyright (C) 1995-2010 Jean-loup Gailly and Mark Adler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5794:5795]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28a8ddcbdf33c59a86d971c2778a8b71
+BELONGS ya.make
+    License text:
+        Copyright (c) (c) 2009-2013 Petri Lehtinen <petri@digip.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2552:2552]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28e40ed3a31fae9c0d72c36c55c84a2a
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2009, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mysql/service_thd_alloc.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2a820c72c3233903127da1abe9ef1c8e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2003, Danga Interactive, Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4933:4934]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d7f40e93537d5f1ad4a1c1b4d837b9d
+BELONGS mysys/ya.make
+    License text:
+        /* Copyright (c) 2004, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        mysys/my_gethwaddr.cc [1:1]
+        mysys/my_largepage.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2fa1dc4ca587732053688c1c8f427fe1
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strings/ctype-tis620.cc [34:38]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 30dcc28270abcea9044ee1e09cf93e58
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strings/ctype-tis620.cc [34:38]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 30f42a2ec4f84b1a8852a4ca9c6fcb85
+BELONGS mysys/ya.make strings/ya.make
+    License text:
+        /* Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        mysys/my_aes.cc [1:1]
+        mysys/my_getopt.cc [1:1]
+        strings/ctype-bin.cc [1:2]
+        strings/ctype-mb.cc [1:1]
+        strings/ctype-simple.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 315a7554fc178f85d65ddbb338fd58a5
+BELONGS ya.make
+    License text:
+         Copyright (c) 1996,1997
+         Silicon Graphics Computer Systems, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3615:3616]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3474764bd293405485321734850791f6
+BELONGS strings/ya.make ya.make
+    License text:
+        Copyright (C) 1998, 1999 by Pruet Boonma, all rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5518:5518]
+        strings/t_ctype.h [25:25]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3480aa847b49eef50d25e64bcecda848
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012, Facebook, Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1206:1207]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 34d20a35fbae63a903131feefc3fdaed
+BELONGS ya.make
+    License text:
+        Copyright (c) 1997 The NetBSD Foundation, Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [999:1000]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3914474224e9f5cecdd62f152062ebc2
+BELONGS vio/ya.make
+    License text:
+        /* Copyright (c) 2011, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vio/viopipe.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 39ef8f24c5f560e039297d84fd5352df
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2633:2636]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3a3ae7eb76f1525468e14a527ef513d5
+BELONGS ya.make
+    License text:
+        \#  Copyright (c) 2013 International Business Machines Corporation
+        \#  and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1903:1904]
+        LICENSE [2471:2472]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c4a314e1cf4859c3635b22de4f30f90
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2006, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        mysys/lf_alloc-pin.cc [2:2]
+        mysys/lf_dynarray.cc [1:1]
+        sql/partition_info.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c6b233cc42c083ff9afd952a11fc727
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016-present, Yann Collet, Facebook, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5821:5821]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3da890df9fa10383f224d1c72d16c9c3
+BELONGS ya.make
+    License text:
+        Copyright (c) 2000 Dug Song <dugsong@monkey.org>
+        Copyright (c) 1993 The Regents of the University of California.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2775:2776]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e601efc62264a5883fa96eaf469071e
+BELONGS strings/ya.make ya.make
+    License text:
+           Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_getopt.h [2:2]
+        strings/ctype-ujis.cc [1:2]
+        strings/ctype-win1250ch.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 40ffe492f140e57372a3d8d283226ee7
+BELONGS vio/ya.make ya.make
+    License text:
+        /* Copyright (c) 2010, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mysql/service_thd_wait.h [1:1]
+        include/mysql/service_thread_scheduler.h [2:2]
+        vio/vioshm.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 42170dd0b6ecce6df73e5bebbb9a2652
+BELONGS ya.make
+    License text:
+        Copyright (c) 2014 - 2015, Hsiaoming Yang
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [632:632]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4305aaaa1326659381544f6737f11894
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2015, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sql/psi_memory_key.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4536ec185761b30e2c4e3909277105a2
+BELONGS ya.make
+    License text:
+        Copyright (c) 2002-2004 MontaVista Software, Inc.
+        Copyright (c) 2005-2010 RedHat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [800:801]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 45f740f785c84f3afefaf79c068dd3cb
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2015, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sql/select_lex_visitor.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 491a9477a9af3fb693dde1fa4d54c664
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_sqlcommand.h [1:1]
+        include/mysql/service_security_context.h [1:1]
+        include/mysql/service_srv_session.h [1:1]
+        include/sql_chars.h [2:2]
+        mysys/sql_chars.cc [2:2]
+        sql/sql_plugin_ref.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4a0598c306a452a02e82c6f75a600dfd
+BELONGS ya.make
+    License text:
+        Copyright (c) 2008, 2009 Percona Inc
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5308:5309]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4bd1977a040e71442ebb3a732b5c1d94
+BELONGS dbug/ya.make ya.make
+    License text:
+                           Copyright Abandoned, 1987, Fred Fish
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1291:1291]
+        dbug/dbug.cc [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4cb8447010f6f686ae36eee0b00e7a54
+BELONGS ya.make
+    License text:
+        Copyright (c) 1995-2016 International Business Machines Corporation and others
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1666:1667]
+        LICENSE [5716:5717]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4e5d85642294ae43388a6a3e38c29420
+BELONGS mysys/ya.make strings/ya.make vio/ya.make
+    License text:
+        /* Copyright (c) 2003, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        mysys/mf_keycaches.cc [1:1]
+        strings/ctype-extra.cc [9:9]
+        strings/my_strtoll10.cc [1:1]
+        strings/xml.cc [1:1]
+        vio/vio_priv.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 505af658bc5e66e6682627a2737f7919
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2011, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_compare.h [1:1]
+        libbinlogevents/include/binlog_event.h [1:1]
+        mysys/crypt_genhash_impl.cc [1:1]
+        mysys/my_compare.cc [1:1]
+        mysys/psi_noop.cc [1:1]
+        sql-common/client_authentication.cc [1:1]
+        sql/mem_root_array.h [1:1]
+        sql/rpl_gtid.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5085a971e08c98f17cf5db1d5df37450
+BELONGS mysys/ya.make strings/ya.make ya.make
+    License text:
+        /* Copyright (c) 2004, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_time.h [1:1]
+        mysys/my_systime.cc [1:1]
+        mysys/my_time.cc [1:1]
+        strings/ctype-uca.cc [1:1]
+        strings/decimal.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 511a026c9251b0472f31fe3fc3860aba
+BELONGS strings/ya.make
+    License text:
+           Shared, independent copyright: (C) 2001 Jan Pazdziora.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strings/ctype-win1250ch.cc [29:29]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 520badd92383c5be1df4a0925c6f9198
+BELONGS mysys/ya.make ya.make
+    License text:
+           Copyright (c) 2001, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_bitmap.h [2:2]
+        include/my_byteorder.h [4:4]
+        mysys/my_bitmap.cc [2:2]
+        mysys/my_symlink.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 521e29c963cafc1e10536cde64cc3962
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2014, 2015, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sql/dd/object_id.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 522505e5894778a882702849ee07b13a
+BELONGS ya.make
+    License text:
+        Copyright 2011, Google Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5570:5571]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 52d04947d1b5663f48469dd954686f7f
+BELONGS ya.make
+    License text:
+        Copyright 1999-2003 The OpenLDAP Foundation, Redwood City,
+        California, USA.  All Rights Reserved.  Permission to copy and
+        distribute verbatim copies of this document is granted.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5032:5034]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 57a04ee5bdb49c5682977d3f21890225
+BELONGS ya.make
+    License text:
+        /* Copyright Abandoned 1996,1999 TCX DataKonsult AB & Monty Program KB
+           & Detron HB, 1996, 1999-2004, 2007 MySQL AB.
+           This file is public domain and comes with NO WARRANTY of any kind
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mysql_version.h [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a4af42f9665ca81b2cb4dddb427e30c
+BELONGS ya.make
+    License text:
+        Copyright (C) 2009-2010 Facebook, Inc.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1157:1157]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5b3794cbdfb08d12eb6c64ca6449cf91
+BELONGS ya.make
+    License text:
+        Copyright (c) 1995-2013 International Business Machines Corporation and
+        others
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2175:2176]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c85ca831b8809876c0790cfad2d8956
+BELONGS ya.make
+    License text:
+        Copyright 1992, 1993, 1994 Henry Spencer.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5480:5480]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5d8515d0fdd7ba86037cb6130046454f
+BELONGS ya.make
+    License text:
+        Copyright (c) 2014 Guillermo Rauch
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5626:5626]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5e108c2b31a3c60233f4f3d594575845
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2009, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sql/sql_plist.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6311a72ce758031e9216e6c32d64ca94
+BELONGS ya.make
+    License text:
+        Copyright (c) 2008, Google Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1585:1586]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 64ad41a9da8360b4ae09a7f268770842
+BELONGS ya.make
+    License text:
+        Copyright (c) 1996, David Mazieres <dm@uun.org>
+        Copyright (c) 2008, Damien Miller <djm@openbsd.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2795:2796]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 66a6f0bc0ef0524000b5974649deba37
+BELONGS ya.make
+    License text:
+        \#  Copyright 1996 Chih-Hao Tsai @ Beckman Institute,
+        \#      University of Illinois
+        \#  c-tsai4@uiuc.edu  http://casper.beckman.uiuc.edu/~c-tsai4
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1819:1821]
+        LICENSE [2387:2388]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6734a3bc06019453e764940603d211df
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2002, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/sha1.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 69fca811dc3abf7c9a8e5d05a61c777c
+BELONGS strings/ya.make ya.make
+    License text:
+        /* Copyright (c) 2005, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sql/partition_element.h [4:4]
+        sql/rpl_tblmap.h [1:1]
+        sql/sql_plugin.h [1:1]
+        strings/ctype-cp932.cc [1:1]
+        strings/ctype-eucjpms.cc [1:2]
+        strings/my_strchr.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a4e658251e3d456cb548bf29cc0625e
+BELONGS ya.make
+    License text:
+        \#  Copyright (C) 2013 Brian Eugene Wilson, Robert Martin Campbell.
+        \#  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1914:1915]
+        LICENSE [2484:2485]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6b7009a642dc87eaeee71d8f71755769
+BELONGS ya.make
+    License text:
+        Copyright 2009 Kitware, Inc.
+        Copyright 2009 Philip Lowman
+        Copyright 2009 Daniel Blezek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1232:1234]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d6f058f95a37938ddcc2c265fe97aad
+BELONGS strings/ya.make ya.make
+    License text:
+        /* Copyright (c) 2017, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/map_helpers.h [1:1]
+        include/my_basename.h [1:1]
+        include/mysql/components/services/log_builtins.h [1:1]
+        include/mysql/components/services/log_shared.h [1:1]
+        include/mysql/components/services/system_variable_source_type.h [2:2]
+        include/mysql/status_var.h [1:1]
+        include/mysql/udf_registration_types.h [1:1]
+        include/print_version.h [1:1]
+        strings/uca900_ja_data.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6f0785d19cf53fb76d0db6c539f43928
+BELONGS strings/ya.make ya.make
+    License text:
+        /* Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/sql_common.h [4:4]
+        sql-common/client.cc [1:1]
+        sql/sql_bitmap.h [1:1]
+        strings/ctype-ucs2.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7197a7d386bc3f4a432c41de2fb4c167
+BELONGS ya.make
+    License text:
+        Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>
+        Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2743:2744]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71a5570b4ed12474c30d73d9c6d6af57
+BELONGS ya.make
+    License text:
+        Copyright (c) 1992, 1993
+        The Regents of the University of California. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [926:927]
+        LICENSE [2709:2710]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 737ceb595409faf77b1c599f03dbc899
+BELONGS ya.make
+    License text:
+        Copyright 2005, 2013 jQuery Foundation, Inc. and other contributors
+        http://jquery.com/
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2605:2606]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 76395c89957476f85264bdbe23f33f34
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5198:5198]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 786fbdf515bc37c90be6adbc41c96e4c
+BELONGS ya.make
+    License text:
+        \#  Copyright (c) 2014 International Business Machines Corporation
+        \#  and others. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1945:1946]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 79af77673dca37999b73276d3ef47ce1
+BELONGS mysys/ya.make strings/ya.make ya.make
+    License text:
+           Copyright (c) 2000, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/m_string.h [2:2]
+        include/my_aes.h [4:4]
+        include/my_md5.h [4:4]
+        include/my_thread.h [1:1]
+        include/mysys_err.h [1:1]
+        include/thr_lock.h [1:1]
+        mysys/errors.cc [1:1]
+        mysys/mf_dirname.cc [1:1]
+        mysys/mf_fn_ext.cc [1:1]
+        mysys/mf_format.cc [1:1]
+        mysys/mf_loadpath.cc [1:1]
+        mysys/mf_path.cc [1:1]
+        mysys/mf_tempdir.cc [1:1]
+        mysys/mf_wcomp.cc [1:1]
+        mysys/my_compress.cc [1:1]
+        mysys/my_conio.cc [1:1]
+        mysys/my_copy.cc [1:1]
+        mysys/my_create.cc [1:1]
+        mysys/my_div.cc [1:1]
+        mysys/my_error.cc [1:1]
+        mysys/my_fstream.cc [1:1]
+        mysys/my_getwd.cc [1:1]
+        mysys/my_malloc.cc [1:1]
+        mysys/my_mkdir.cc [1:1]
+        mysys/my_mmap.cc [1:1]
+        mysys/my_open.cc [1:1]
+        mysys/my_read.cc [1:1]
+        mysys/my_string.cc [1:1]
+        mysys/my_syslog.cc [2:2]
+        mysys/my_thread.cc [1:1]
+        mysys/my_windac.cc [1:1]
+        mysys/mysys_priv.h [1:1]
+        mysys/pack.cc [1:1]
+        mysys/ptr_cmp.cc [1:1]
+        mysys/thr_lock.cc [1:1]
+        sql/auth/password.cc [2:2]
+        sql/discrete_interval.h [4:4]
+        sql/query_options.h [1:1]
+        sql/sql_data_change.h [3:3]
+        strings/ctype-big5.cc [1:1]
+        strings/ctype-czech.cc [1:1]
+        strings/ctype-euc_kr.cc [1:1]
+        strings/ctype-sjis.cc [1:1]
+        strings/ctype-tis620.cc [1:1]
+        strings/ctype.cc [1:1]
+        strings/strcont.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7b24563929422447294323b01db4537e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2016-present, Facebook, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5839:5839]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c121c59d9b56b53aa91eba4224cc22c
+BELONGS mysys/ya.make strings/ya.make vio/ya.make ya.make
+    License text:
+        /* Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/decimal.h [1:1]
+        include/errmsg.h [4:4]
+        include/m_ctype.h [1:1]
+        include/my_alloc.h [1:1]
+        include/my_base.h [1:1]
+        include/my_dbug.h [1:1]
+        include/my_sys.h [1:1]
+        include/myisampack.h [4:4]
+        include/mysql.h [1:1]
+        include/mysql/components/services/my_thread_bits.h [1:1]
+        include/mysql_com.h [1:1]
+        include/mysqld_error.h [1:1]
+        include/sql_string.h [4:4]
+        include/typelib.h [1:1]
+        include/violite.h [1:1]
+        libmysql/errmsg.cc [1:1]
+        libmysql/libmysql.cc [1:1]
+        mysys/charset-def.cc [1:1]
+        mysys/charset.cc [1:1]
+        mysys/mf_cache.cc [1:1]
+        mysys/mf_iocache.cc [1:1]
+        mysys/mf_iocache2.cc [1:1]
+        mysys/mf_keycache.cc [1:1]
+        mysys/mf_pack.cc [1:1]
+        mysys/mf_tempfile.cc [1:1]
+        mysys/my_alloc.cc [1:1]
+        mysys/my_default.cc [1:1]
+        mysys/my_init.cc [1:1]
+        mysys/my_lib.cc [1:1]
+        mysys/my_static.cc [1:1]
+        mysys/my_static.h [4:4]
+        mysys/my_thr_init.cc [1:1]
+        mysys/tree.cc [1:1]
+        mysys/typelib.cc [1:1]
+        sql-common/get_password.cc [1:1]
+        sql-common/net_serv.cc [1:1]
+        sql/handler.h [5:5]
+        sql/log_event.h [1:1]
+        sql/sql_list.h [3:3]
+        strings/ctype-latin1.cc [1:1]
+        strings/ctype-utf8.cc [1:1]
+        strings/str2int.cc [1:1]
+        vio/vio.cc [1:1]
+        vio/viossl.cc [1:1]
+        vio/viosslfactories.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c2936cc0453639e0a55b4d9f729353c
+BELONGS ya.make
+    License text:
+        Copyright (c) 2000 Dug Song <dugsong@monkey.org>
+        Copyright (c) 1993 The Regents of the University of California.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2775:2776]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e3bee405b3a15fe1bbe6a13b6d5a288
+BELONGS ya.make
+    License text:
+            This file is copyrighted by Red Hat Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1536:1536]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e3dab59f12f5de31d45563a98292467
+BELONGS ya.make
+    License text:
+             Copyright June 1987, Binayak Banerjee
+             All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1333:1334]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7f4ec34043d2ad85b87b20314b07ad13
+BELONGS ya.make
+    License text:
+        Copyright (C) 2009-2016 Francesc Alted <francesc@blosc.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [669:669]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 83229afbf3acce4cf34d6795bf9ab937
+BELONGS ya.make
+    License text:
+        Copyright (c) 2011-2014, Yann Collet
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4769:4770]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 83d247c42107285a21baffb19b17d0d7
+BELONGS ya.make
+    License text:
+        Copyright 2009 Kitware, Inc.
+        Copyright 2009 Philip Lowman
+        Copyright 2009 Daniel Blezek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1232:1234]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 841c4dd0de0c77e56dec075b2bb9cdff
+BELONGS ya.make
+    License text:
+            Copyright ?? 1991-2013 Unicode, Inc. All rights reserved. Distributed
+        under the Terms of Use in http://www.unicode.org/copyright.html.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2230:2231]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 85f01196787841ee930c7d9e9afe5891
+BELONGS ya.make
+    License text:
+        Copyright (C) 1991 Free Software Foundation, Inc.
+        51 Franklin St, Fifth Floor, Boston, MA  02110-1301, USA
+        Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [6544:6546]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 87310c53fab7af4aed24918c0416af63
+BELONGS mysys/ya.make
+    License text:
+        /* Copyright (c) 2008, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        mysys/my_winfile.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 873caef5fb790d5c334ba79b5438e9ff
+BELONGS mysys/ya.make
+    License text:
+        /* Copyright (c) 2007, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        mysys/my_sha2.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 880f81f3a9150e14fa3c6e7f1eacbef1
+BELONGS strings/ya.make
+    License text:
+         * File generated by cset
+         * (C) Abandoned 1997 Zarko Mocnik <zarko.mocnik@dem.si>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strings/ctype-czech.cc [487:488]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8a398f081f3752fcd9c158e9282aa23d
+BELONGS ya.make
+    License text:
+        Copyright (C) 2004 Sam Hocevar <sam@hocevar.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [559:559]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8cf91579d8cb4087b6bd775cd2b2bbed
+BELONGS ya.make
+    License text:
+        Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
+        51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+        Everyone is permitted to copy and distribute verbatim
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [67:69]
+        LICENSE [3761:3763]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8d2f0958c0578f0edbcc4273ed2e7572
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2010, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sql/lock.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 902f15af5208134cd532cb9bcbe201e0
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2017, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/memory_debugging.h [1:1]
+        include/wolfssl_fix_namespace_pollution.h [1:1]
+        include/wolfssl_fix_namespace_pollution_pre.h [1:1]
+        libbinlogevents/include/uuid.h [1:1]
+        mysys/print_version.cc [1:1]
+        sql/auth/i_sha2_password_common.h [2:2]
+        sql/auth/sha2_password_common.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 90a38d1f12ac813f5b16f4aba811975f
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_uctype.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9146a1521f897e2185f4e57a22b683d8
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2005, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mysql/plugin.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 930a6e72883713e7b987065a56197739
+BELONGS ya.make
+    License text:
+         Copyright (C) 1998, 1999 Greg Colvin and Beman Dawes.
+         Copyright (C) 2001, 2002, 2003 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3633:3634]
+        LICENSE [3637:3637]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9356469afe65c245b4ab259b9d7dca41
+BELONGS ya.make
+    License text:
+        Copyright (c) 2001 The NetBSD Foundation, Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [963:964]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 936eec909687fc2eeec18ea3010b27dd
+BELONGS strings/ya.make
+    License text:
+        /* Copyright (c) 2000, 2001, 2003 MySQL AB
+           Use is subject to license terms
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strings/t_ctype.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 945f656078309035caf01d2420f95535
+BELONGS ya.make
+    License text:
+        Copyright 2001-2004 Unicode, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4701:4701]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 94e6a398ea54ea059b5b34718adcb613
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2015, 2016, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libmysql/init_commands_array.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 99cd07f0e9761ab8795635e799c6401a
+BELONGS ya.make
+    License text:
+        Copyright (C) 1995-2004 Jean-loup Gailly and Mark Adler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5787:5787]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9a80ad510090429b11292e780f492281
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2014, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libbinlogevents/include/debug_vars.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c2a679a36f4a88ec953612c419928f0
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2010, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_compiler.h [4:4]
+        include/mysql/components/services/mysql_socket_bits.h [4:4]
+        include/mysql/plugin_auth_common.h [1:2]
+        include/mysql/psi/mysql_socket.h [1:1]
+        include/mysql/psi/mysql_stage.h [1:1]
+        include/mysql/psi/mysql_statement.h [1:1]
+        include/mysql/psi/mysql_table.h [1:1]
+        sql-common/client_plugin.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9ebae6c9b942b87e4abbe0b2773bbe91
+BELONGS ya.make
+    License text:
+        Copyright 2014, Google Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1542:1542]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a1dec19049692cfa4c6530661f697986
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2013, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libbinlogevents/include/table_id.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a29ac0accd5113629b2d795bbd9e3021
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012-2014, Yann Collet
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5752:5753]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a3b0f6940cc8b095be04e48d4272b8a3
+BELONGS ya.make
+    License text:
+        Copyright (c) 2002 Christopher Clark
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2785:2785]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a4a10e27cf992a4f3cab9f4c56afd236
+BELONGS ya.make
+    License text:
+        \#  Copyright (c) 2013, LeRoy Benjamin Sharon
+        \#  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1952:1953]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7831931571cb11df5942e281a68009f
+BELONGS ya.make
+    License text:
+         Copyright (c) 1994
+         Hewlett-Packard Company
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3601:3602]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7e20bd41844b367143620d3c1765698
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2003, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/base64.h [1:1]
+        include/keycache.h [1:1]
+        libmysql/client_settings.h [1:1]
+        mysys/base64.cc [1:1]
+        mysys/my_sync.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a81cfa845b52f128195a44acce44b13b
+BELONGS ya.make
+    License text:
+        Copyright 2009 Kitware, Inc.
+        Copyright 2009 Philip Lowman
+        Copyright 2009 Daniel Blezek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1232:1234]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8f0d8ebf643d77a95c781a1502f2a1d
+BELONGS ya.make
+    License text:
+           Copyright (c) 2001, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_psi_config.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8f8c6f4c38577fd98ec343bfc4ba569
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012-2016, Anton Bachin
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [600:601]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a9186b096de748308f888dd86b387f53
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mutex_lock.h [1:1]
+        include/my_timer.h [1:1]
+        include/mysql/service_mysql_password_policy.h [1:1]
+        include/mysql/service_rpl_transaction_ctx.h [1:1]
+        include/mysql/service_rpl_transaction_write_set.h [1:1]
+        include/thr_cond.h [4:4]
+        include/thr_rwlock.h [4:4]
+        mysys/my_chmod.cc [1:1]
+        mysys/posix_timers.cc [1:1]
+        mysys/thr_cond.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ad8ce898775acc8dcee2fdb99f0e5321
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mysql/components/services/page_track_service.h [1:1]
+        include/mysql/components/services/psi_system_bits.h [1:1]
+        include/mysql/psi/psi_system.h [1:1]
+        sql/stream_cipher.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL af8fb4ad6a9a881d1a70865b6f0db704
+BELONGS ya.make
+    License text:
+        Copyright (c) 2000
+        SWsoft company
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2675:2676]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aff3dc90bd054108716ad9ad16452926
+BELONGS ya.make
+    License text:
+        Copyright (c) 1996, David Mazieres <dm@uun.org>
+        Copyright (c) 2008, Damien Miller <djm@openbsd.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2795:2796]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b14a95e103509c1745abccf89db82c11
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2006, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        mysys/lf_hash.cc [1:1]
+        mysys/my_user.cc [1:1]
+        sql/key.h [1:1]
+        sql/rpl_reporting.h [1:1]
+        sql/rpl_utility.h [1:1]
+        sql/sql_const.h [1:1]
+        sql/thr_malloc.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b2058012546d6588b8e9f2bc1c8fc639
+BELONGS mysys/ya.make vio/ya.make ya.make
+    License text:
+        /* Copyright (c) 2001, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_stacktrace.h [1:1]
+        mysys/stacktrace.cc [1:1]
+        vio/viosocket.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b2fa82f331d4915d971d8941f3f6ad65
+BELONGS ya.make
+    License text:
+        Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>
+        Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2743:2744]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b4c3a86823a0b0ec82e3aa9b7994c1a2
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2015, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_command.h [1:1]
+        include/mysql/com_data.h [1:1]
+        include/mysql/service_command.h [3:3]
+        include/mysql/service_locking.h [2:2]
+        include/mysql/service_parser.h [3:3]
+        include/mysql/service_rules_table.h [4:4]
+        include/mysql/service_srv_session_info.h [3:3]
+        mysys/my_aes_openssl.cc [1:1]
+        sql/key_spec.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b5860edcdb054e809856c251b71cb8ec
+BELONGS ya.make
+    License text:
+        \#   * Copyright (c) 1999 Computer Systems and Communication Lab,
+        \#   *                    Institute of Information Science, Academia
+        \#       *                    Sinica. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1786:1788]
+        LICENSE [2354:2356]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b5d9feca5a8a4cddef0318df1118c7ec
+BELONGS mysys/ya.make ya.make
+    License text:
+           Copyright (c) 2007, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_bit.h [2:2]
+        mysys/mf_arr_appstr.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b7028214995c2fb78be58408df37985f
+BELONGS ya.make
+    License text:
+        version 1.2.3, July 18th, 2005
+        Copyright (C) 1995-2005 Jean-loup Gailly and Mark Adler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5790:5791]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b72643731dd6fbb6ddf9d496532b79ba
+BELONGS strings/ya.make ya.make
+    License text:
+           Copyright (c) 2016, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_double2ulonglong.h [2:2]
+        include/my_macros.h [2:2]
+        include/my_shm_defaults.h [2:2]
+        strings/mb_wc.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b785c5376e4eb4ee914074a00828bcf6
+BELONGS ya.make
+    License text:
+           Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights
+           reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [38:39]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b8628379cba4e5932622e20b6699d81c
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012 Chad Austin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5535:5535]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b86e06682b95e3d3984abe5863eb0cdf
+BELONGS strings/ya.make ya.make
+    License text:
+        /* Copyright (c) 2007, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/lf.h [1:1]
+        include/sha2.h [1:1]
+        sql/rpl_constants.h [1:1]
+        strings/dtoa.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc93b86cf8b8650f52fbbf2c6758536e
+BELONGS ya.make
+    License text:
+        Copyright 2000-2009 Kitware, Inc., Insight Software Consortium
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1251:1252]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c01a996219ea0b3a67cf76d0ea70e25d
+BELONGS strings/ya.make
+    License text:
+                Author: (c) 1997--1998 Jan Pazdziora, adelton@fi.muni.cz
+                Jan Pazdziora has a shared copyright for this code
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strings/ctype-czech.cc [58:59]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c04dc92362847439c1443484df61fa47
+BELONGS ya.make
+    License text:
+        Copyright Theodore Ts'o, 1996. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4726:4726]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a57b1ae46b38e64a28017f32458971
+BELONGS ya.make
+    License text:
+        Copyright (c) 1991-2016 Unicode, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1622:1622]
+        LICENSE [2025:2026]
+        LICENSE [2139:2139]
+        LICENSE [5679:5679]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [326:330]
+        LICENSE [4017:4022]
+        LICENSE [4551:4556]
+        LICENSE [6459:6464]
+        LICENSE [6913:6917]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0aba3c7b20690bcef5d9d5f5e9dc30a
+BELONGS ya.make
+    License text:
+        Copyright (c) 1998-2006, Google Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1451:1452]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c1c7b853f1942a2c931bec3b09b96899
+BELONGS ya.make
+    License text:
+           Copyright (c) 2012, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_rnd.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c7db5f6a728d8090ce70133d1872218a
+BELONGS ya.make
+    License text:
+        Copyright (c) 2010, Salvatore Sanfilippo <antirez at gmail dot com>
+        Copyright (c) 2010, Pieter Noordhuis <pcnoordhuis at gmail dot com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4661:4662]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c80fc1ccd5d8a3b1c4bc7b6d671dedc1
+BELONGS ya.make
+    License text:
+        Copyright (c) 1997 - 2000 Kungliga Tekniska Högskolan
+        (Royal Institute of Technology, Stockholm, Sweden).
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1344:1346]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c85e6722fc6a1d152e472cfe9dc72942
+BELONGS ya.make
+    License text:
+        \#  Copyright (C) 2006-2008, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1705:1705]
+        LICENSE [2274:2274]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9983c5e153b04c589cc08a64d51be33
+BELONGS mysys/ya.make ya.make
+    License text:
+           Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_getpwnam.h [2:2]
+        include/my_hostname.h [2:2]
+        include/mysql/client_plugin.h [2:2]
+        include/mysql_async.h [1:1]
+        mysys/my_getpwnam.cc [1:1]
+        sql-common/client_async_authentication.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca890d69bc2476f4e1be39cfb6dbac12
+BELONGS strings/ya.make ya.make
+    License text:
+        Copyright (c) 1991, 2000, 2001 by Lucent Technologies.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [880:880]
+        strings/dtoa.cc [36:36]
+        strings/dtoa.cc [538:538]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd4261008c9e0a6ceee7e04f6837fcaa
+BELONGS mysys/ya.make strings/ya.make ya.make
+    License text:
+        /* Copyright (c) 2014, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/field_types.h [1:1]
+        include/mysql/components/services/thr_cond_bits.h [1:1]
+        include/mysql/components/services/thr_mutex_bits.h [1:1]
+        include/mysql/components/services/thr_rwlock_bits.h [1:1]
+        include/thr_mutex.h [4:4]
+        libbinlogevents/include/binlog_config-linux.h [2:2]
+        libbinlogevents/include/control_events.h [1:1]
+        libbinlogevents/include/rows_event.h [1:1]
+        libbinlogevents/include/statement_events.h [1:1]
+        libbinlogevents/include/wrapper_functions.h [1:1]
+        mysys/my_aes_impl.h [1:1]
+        mysys/my_aes_wolfssl.cc [1:1]
+        sql/memroot_allocator.h [1:1]
+        strings/ctype-gb18030.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce38e2d0475bdfd101677e441f7f7697
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2012, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/little_endian.h [3:3]
+        include/my_default.h [1:1]
+        include/mysql/plugin_trace.h [1:1]
+        include/mysql/service_mysql_alloc.h [1:1]
+        include/mysql/service_mysql_string.h [1:1]
+        libmysql/mysql_trace.cc [1:1]
+        libmysql/mysql_trace.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
+BELONGS ya.make
+    License text:
+        Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+        51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+        Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3706:3708]
+        LICENSE [4116:4118]
+        LICENSE [6025:6027]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cefa79882419c6d97d6caa092d6ecd27
+BELONGS ya.make
+    License text:
+        \#   * Copyrighy (c) 1999 TaBE Project.
+        \#   * Copyright (c) 1999 Pai-Hsiang Hsiao.
+        \#   * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1753:1755]
+        LICENSE [2321:2323]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cfd2f1152c535d9145ada194dbe285ca
+BELONGS ya.make
+    License text:
+        Copyright (c) 2002 JSON.org
+        All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5423:5424]
+        LICENSE [5427:5428]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d0964636d8003233a99affb199b86d68
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mysql_time.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d25f00ed0e56feb634e3fb2d253a1e3d
+BELONGS ya.make
+    License text:
+        Copyright (C) 2015 THL A29 Limited, a Tencent company, and Milo Yip.  All
+        rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5371:5372]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d8acd08a67eebfc8c083a70b867ae9d2
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2014, 2016, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libbinlogevents/include/byteorder.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL df01d8bb2bc465423d11dcf6587ebf89
+BELONGS ya.make
+    License text:
+        * Copyright (c) 1994-2012 Carnegie Mellon University.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [835:835]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dfe2a8f2e05441501cfc8ea516f3d1d7
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009, 2010, 2013-2016 by the Brotli Authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [729:729]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e0f72e9df669c9180f5422046dcac0c9
+BELONGS strings/ya.make ya.make
+    License text:
+           Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_io.h [2:2]
+        include/my_loglevel.h [2:2]
+        include/my_pointer_arithmetic.h [4:4]
+        include/my_sharedlib.h [2:2]
+        include/mysql/mysql_lex_string.h [1:1]
+        include/mysql/service_mysql_keyring.h [1:1]
+        include/mysql/service_plugin_registry.h [1:1]
+        sql/dd/string_type.h [1:1]
+        strings/uca_data.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e31bc9dd173d009cda26bdead5d7c6ed
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2014, 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libbinlogevents/include/load_data_events.h [1:1]
+        mysys/kqueue_timers.cc [1:1]
+        mysys/win_timers.cc [1:1]
+        sql/dd/types/object_table.h [1:1]
+        sql/malloc_allocator.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e4b625025d878157e071c187439c90b0
+BELONGS ya.make
+    License text:
+        Copyright (C) 1995-2005 Mark Adler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1182:1182]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e504c2cf8c0318d658412851213f6f49
+BELONGS mysys/ya.make strings/ya.make ya.make
+    License text:
+        /* Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ft_global.h [4:4]
+        include/lex_string.h [2:2]
+        include/my_dir.h [1:1]
+        include/my_list.h [1:1]
+        include/my_thread_local.h [1:1]
+        include/my_tree.h [1:1]
+        include/my_xml.h [1:1]
+        mysys/array.cc [1:1]
+        mysys/checksum.cc [1:1]
+        mysys/list.cc [1:1]
+        mysys/mf_unixpath.cc [1:1]
+        mysys/mulalloc.cc [1:1]
+        mysys/my_access.cc [1:1]
+        mysys/my_chsize.cc [1:1]
+        mysys/my_file.cc [1:1]
+        mysys/my_fopen.cc [1:1]
+        mysys/my_mess.cc [1:1]
+        mysys/my_once.cc [1:1]
+        mysys/my_pread.cc [1:1]
+        mysys/my_rename.cc [1:1]
+        mysys/my_seek.cc [1:1]
+        mysys/my_symlink2.cc [1:1]
+        mysys/my_write.cc [1:1]
+        mysys/thr_mutex.cc [1:1]
+        mysys/thr_rwlock.cc [1:1]
+        strings/ctype-gb2312.cc [1:1]
+        strings/ctype-gbk.cc [1:1]
+        strings/int2str.cc [1:1]
+        strings/longlong2str.cc [1:1]
+        strings/str_alloc.cc [1:1]
+        strings/strxmov.cc [1:1]
+        strings/strxnmov.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e5bfd2f5f14cca23ff76ef90b784b367
+BELONGS mysys/ya.make ya.make
+    License text:
+        /* Copyright (c) 2008, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mysql/components/services/mysql_cond_bits.h [1:1]
+        include/mysql/components/services/mysql_mutex_bits.h [1:1]
+        include/mysql/components/services/mysql_rwlock_bits.h [1:1]
+        include/mysql/components/services/psi_cond_bits.h [1:1]
+        include/mysql/components/services/psi_file_bits.h [1:1]
+        include/mysql/components/services/psi_idle_bits.h [1:1]
+        include/mysql/components/services/psi_mdl_bits.h [1:1]
+        include/mysql/components/services/psi_mutex_bits.h [1:1]
+        include/mysql/components/services/psi_rwlock_bits.h [1:1]
+        include/mysql/components/services/psi_socket_bits.h [1:1]
+        include/mysql/components/services/psi_stage_bits.h [1:1]
+        include/mysql/components/services/psi_statement_bits.h [1:1]
+        include/mysql/components/services/psi_table_bits.h [1:1]
+        include/mysql/components/services/psi_thread_bits.h [1:1]
+        include/mysql/components/services/psi_transaction_bits.h [1:1]
+        include/mysql/psi/mysql_cond.h [1:1]
+        include/mysql/psi/mysql_file.h [1:1]
+        include/mysql/psi/mysql_mutex.h [1:1]
+        include/mysql/psi/mysql_rwlock.h [1:1]
+        include/mysql/psi/mysql_thread.h [1:1]
+        include/mysql/psi/psi_base.h [1:1]
+        include/mysql/psi/psi_cond.h [1:1]
+        include/mysql/psi/psi_file.h [1:1]
+        include/mysql/psi/psi_idle.h [1:1]
+        include/mysql/psi/psi_mdl.h [1:1]
+        include/mysql/psi/psi_mutex.h [1:1]
+        include/mysql/psi/psi_rwlock.h [1:1]
+        include/mysql/psi/psi_socket.h [1:1]
+        include/mysql/psi/psi_stage.h [1:1]
+        include/mysql/psi/psi_statement.h [1:1]
+        include/mysql/psi/psi_table.h [1:1]
+        include/mysql/psi/psi_thread.h [1:1]
+        include/mysql/psi/psi_transaction.h [1:1]
+        mysys/my_handler_errors.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e5fbd518858efc8ff309b5a636b06982
+BELONGS strings/ya.make ya.make
+    License text:
+        /* Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libbinlogevents/include/event_reader.h [1:1]
+        strings/uca900_zh_data.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e69e7ec3a76b47464c1ca40548f1482a
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009, Google Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1414:1415]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e7212b9c7ba8e4267735d2213114d670
+BELONGS ya.make
+    License text:
+            This file is copyrighted by Bloomberg Finance LP.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1540:1540]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e7b2539b421bc18466527fff5888cdef
+BELONGS ya.make
+    License text:
+        \#  Copyright 2000, 2001, 2002, 2003 Nara Institute of Science
+        \#  and Technology.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1828:1829]
+        LICENSE [2396:2397]
+        LICENSE [4860:4861]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e9603c71db20876499e00155cba3c040
+BELONGS strings/ya.make ya.make
+    License text:
+           Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_inttypes.h [2:2]
+        include/my_systime.h [2:2]
+        include/mysql/components/component_implementation.h [1:1]
+        include/mysql/components/my_service.h [1:1]
+        include/mysql/components/service.h [1:1]
+        include/mysql/components/service_implementation.h [1:1]
+        include/mysql/components/services/dynamic_loader.h [1:1]
+        include/mysql/components/services/my_io_bits.h [1:1]
+        include/mysql/components/services/psi_error_bits.h [1:1]
+        include/mysql/components/services/registry.h [1:1]
+        include/mysql/psi/psi_data_lock.h [1:1]
+        include/mysql/psi/psi_error.h [1:1]
+        strings/uca9-dump.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ed74a7304d6e0bdd2e932b7adfb405b1
+BELONGS strings/ya.make
+    License text:
+           Copyright (C) 2003  by Sathit Jittanupat
+                  <jsat66@hotmail.com,jsat66@yahoo.com>
+                * solving bug crash with long text field string
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        strings/ctype-tis620.cc [29:31]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eda6781f67b4f7d3d147b07fc96fae8c
+BELONGS ya.make
+    License text:
+        Copyright (c) 2010, Salvatore Sanfilippo <antirez at gmail dot com>
+        Copyright (c) 2010, Pieter Noordhuis <pcnoordhuis at gmail dot com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4661:4662]
+
+KEEP     COPYRIGHT_SERVICE_LABEL edabc4ecb3628f9589555c3c3b61df60
+BELONGS ya.make
+    License text:
+        Copyright (c) 2001-2008, Taku Kudo
+        Copyright (c) 2004-2008, Nippon Telegraph and Telephone Corporation
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4819:4821]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f0d89f41f3e9b6fbf88ad94d45fdf971
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2013, 2019, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/mysql/components/services/psi_memory_bits.h [1:1]
+        include/mysql/psi/psi_memory.h [1:1]
+        include/prealloced_array.h [1:1]
+        include/template_utils.h [1:1]
+        libmysql/libmysql.ver [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f0e6e66d876a25c8b8a649b895eaf7be
+BELONGS ya.make
+    License text:
+        Copyright (c) 2006 Maxim Yegorushkin <maxim.yegorushkin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2788:2788]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f420765694763788b251b3b8952ddd80
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012 Paul Bakaus, http://jqueryui.com/
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2575:2575]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4d2490c76552286e9c484abd3bea2b4
+BELONGS ya.make
+    License text:
+        /* Copyright 2015 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [751:751]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f556407274c01ef8e47714e8cc0bc9f8
+BELONGS ya.make
+    License text:
+        Copyright (c) 2006-2013 Alexander Chemeris
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5393:5394]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f73d87e93e5e059a05541dd4c91ae54a
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2006, 2017, Oracle and/or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/my_atomic.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fbf47124032ce07a1b388b253cc8ed9e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2002-2003 Networks Associates Technology, Inc.
+        Copyright (c) 2004-2007 Dag-Erling Smørgrav
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5041:5043]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe6f4a2cadd39168e946fc1f97e42e56
+BELONGS ya.make
+    License text:
+        Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
+        Everyone is permitted to copy and distribute verbatim copies of
+        this license document, but changing it is not allowed.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2819:2821]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe7aa9b775c303fd7df677f209e6ca13
+BELONGS ya.make
+    License text:
+        argparse is (c) 2006-2009 Steven J. Bethard <steven.bethard@gmail.com>.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [485:485]

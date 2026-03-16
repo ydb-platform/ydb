@@ -1,0 +1,96 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+IGNORE_FILES NEWS
+
+SKIP     LicenseRef-scancode-unknown-license-reference 5b8492d2305940023465527cf5f375e6
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: libexslt/exslt.h at line 4, libexslt/exsltexports.h at line 4
+    License text:
+         * Copy: See Copyright for the status of this software.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        libexslt/exslt.h [4:4]
+        libexslt/exsltexports.h [4:4]
+
+KEEP     X11-XConsortium-Veillard a43e40158f0ba2962fe82e382483cecc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-x11-xconsortium_veillard
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/x11-xconsortium_veillard.LICENSE
+    Files with this license:
+        Copyright [5:24]
+
+SKIP     Unknown              bc9814146b7ce77f5ac6f5aa8ae1c4e9
+BELONGS ya.make
+    License text:
+         * See COPYRIGHT for the status of this software
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        libexslt/libexslt.h [4:4]
+
+KEEP     X11                  c7327fce84448c5a3e1e1982fc605cf7
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: Copyright at line 46
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: X11
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/current/LICENSE5.html, https://spdx.org/licenses/X11
+    Files with this license:
+        Copyright [33:52]
+
+SKIP     Unknown              db4a32b2f76695e476e159b02d538062
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: libexslt/date.c at line 7, libexslt/dynamic.c at line 7, libexslt/exsltconfig.h at line 4
+    # file Copyright allready included
+    License text:
+         * See Copyright for the status of this software.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        libexslt/date.c [7:7]
+        libexslt/dynamic.c [7:7]
+        libexslt/exsltconfig.h [4:4]

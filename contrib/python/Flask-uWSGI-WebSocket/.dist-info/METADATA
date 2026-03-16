@@ -1,0 +1,270 @@
+Metadata-Version: 2.1
+Name: Flask-uWSGI-WebSocket
+Version: 0.6.1
+Summary: High-performance WebSockets for your Flask apps powered by uWSGI.
+Home-page: https://github.com/zeekay/flask_uwsgi_websocket
+Author: Zach Kelling
+Author-email: zk@monoid.io
+License: MIT
+Keywords: uwsgi flask websockets
+Platform: any
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Dist: Flask
+Requires-Dist: uwsgi
+
+Flask-uWSGI-WebSocket
+=====================
+High-performance WebSockets for your Flask apps powered by `uWSGI
+<http://uwsgi-docs.readthedocs.org/en/latest/>`_. Low-level uWSGI WebSocket API
+access and flexible high-level abstractions for building complex WebSocket
+applications with Flask. Supports several different concurrency models
+including Gevent. Inspired by `Flask-Sockets
+<https://github.com/kennethreitz/flask-sockets>`_.
+
+.. code-block:: python
+
+    from flask import Flask
+    from flask_uwsgi_websocket import GeventWebSocket
+
+    app = Flask(__name__)
+    websocket = GeventWebSocket(app)
+
+    @websocket.route('/echo')
+    def echo(ws):
+        while True:
+            msg = ws.receive()
+            ws.send(msg)
+
+    if __name__ == '__main__':
+        app.run(gevent=100)
+
+
+Installation
+------------
+Preferred method of installation is via pip::
+
+    $ pip install Flask-uWSGI-WebSocket
+
+Installing uWSGI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Of course you'll also need uWSGI (with SSL support, at minimum). It can also be
+installed with pip::
+
+    $ pip install uwsgi
+
+If that fails or you need to enable the asyncio plugin, read on.
+
+uWSGI on Mac OS X
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+On some versions of Mac OS X, OpenSSL headers are no longer included. If you
+use Homebrew, install OpenSSL and ensure they are available::
+
+    $ brew install openssl && brew link openssl --force
+
+This should ensure pip can install uWSGI::
+
+    $ LDFLAGS="-L/usr/local/lib" pip install uwsgi --no-use-wheel
+
+If you plan to use the asyncio plugin, you'll need to ensure that it's enabled
+when uWSGI is compiled. You can use ``UWSGI_PROFILE`` to do this. With Homebrew Python 3.5 installed::
+
+    $ LDFLAGS="-L/usr/local/lib" CFLAGS="-I/usr/local/include/python3.5m" UWSGI_PROFLILE="asyncio" pip3 install uwsgi --no-use-wheel
+
+
+uWSGI on Linux
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If your Linux distribution includes uWSGI with specific plugins, that is many
+times your best bet. If that fails or you'd prefer to compile uWSGI yourself,
+you'll need to ensure that the requisite build tools, OpenSSL headers, etc are
+installed::
+
+    $ apt-get install build-essential libssl-dev python3-dev python3-venv
+
+According to the `uWSGI asyncio docs
+<http://uwsgi-docs.readthedocs.org/en/latest/asyncio.html>`_, ``UWSGI_PROFILE``
+and ``greenlet.h`` location should be specified.
+
+If you are installing uWSGI into a virtualenv, the process is::
+
+    $ python3 -m venv pyvenv
+    $ . pyvenv/bin/activate
+    (pyvenv)$ pip install greenlet
+
+Now, ``greenlet.h`` should be available at ``$VIRTUAL_ENV/include/site/python3.5``. To build with pip::
+
+    $ mkdir -p $VIRTUAL_ENV/include/site/python3.5/greenlet
+    $ ln -s ../greenlet.h $VIRTUAL_ENV/include/site/python3.5/greenlet/
+    $ CFLAGS="-I$VIRTUAL_ENV/include/site/python3.5" UWSGI_PROFILE="asyncio" pip install uwsgi --no-use-wheel
+
+Deployment
+----------
+You can use uWSGI's built-in HTTP router to get up and running quickly::
+
+    $ uwsgi --master --http :8080 --http-websockets --wsgi echo:app
+
+...which is what ``app.run`` does after wrapping your Flask app::
+
+    app.run(debug=True, host='localhost', port=8080, master=true, processes=8)
+
+uWSGI supports several concurrency models, in particular it has nice support
+for Gevent. If you want to use Gevent, import
+``flask_uwsgi_websocket.GeventWebSocket`` and configure uWSGI to use the
+gevent loop engine::
+
+    $ uwsgi --master --http :8080 --http-websockets --gevent 100 --wsgi echo:app
+
+...or::
+
+    app.run(debug=True, gevent=100)
+
+Note that you cannot use multiple threads with gevent loop engine.
+
+To enable asyncio instead::
+
+    $ uwsgi --master --http :5000 --http-websockets --asyncio 100 --greenlet --wsgi chat:app
+
+...or::
+
+    app.run(debug=True, asyncio=100, greenlet=True)
+
+For production you'll probably want to run uWSGI behind Haproxy or Nginx,
+instead of using the built-int HTTP router. Explore the `uWSGI documentation
+<http://uwsgi-docs.readthedocs.org/en/latest/WebSockets.html>`_ to learn more
+about the various concurrency and deployment options.
+
+Development
+-----------
+It's possible to take advantage of Flask's interactive debugger by installing
+Werkzeug's ``DebuggedApplication`` middleware::
+
+    from werkzeug.debug import DebuggedApplication
+    app.wsgi_app = DebuggedApplication(app.wsgi_app, True)
+
+...and running uWSGI with only a single worker::
+
+    $ uwsgi --master --http :8080 --http-websockets --wsgi-file --workers 1 --threads 8 app.py
+
+If you use ``app.run(debug=True)`` or export ``FLASK_UWSGI_DEBUG``,
+Flask-uWSGI-Websocket will do this automatically for you.
+
+
+Examples
+--------
+There are several examples `available here <https://github.com/zeekay/flask-uwsgi-websocket/tree/master/examples>`_.
+
+API
+---
+
+``WebSocket``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Applies ``WebSocketMiddleware`` to your Flask App, allowing you to decorate
+routes with the ``route`` method, turning them into WebSocket handlers.
+
+Additionally monkey-patches ``app.run``, to run your app directly in uWSGI.
+
+``route(url)``
+
+``run(debug, host, port, **kwargs)``
+``**kwargs`` are passed to uWSGI as command line arguments.
+
+
+``WebSocketMiddleware``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+WebSocket Middleware which automatically performs WebSocket handshake and
+passes ``WebSocketClient`` instances to your route.
+
+
+``WebSocketClient``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Exposes the `uWSGI WebSocket API
+<http://uwsgi-docs.readthedocs.org/en/latest/WebSockets.html#api>`_.
+
+``recv()`` (alias ``WebSocket.receive()``)
+
+``recv_nb()``
+
+``send(msg)``
+
+``send_binary(msg)``
+
+``recv_nb()``
+
+``send_from_sharedarea(id, pos)``
+
+``send_binary_from_sharedarea(id, pos)``
+
+
+``GeventWebSocket``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Fancier WebSocket abstraction that takes advantage of Gevent loop engine.
+Requires uWSGI to be run with ``--uwsgi`` option.
+
+
+``GeventWebSocketMiddleware``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Automatically performs WebSocket handshake and passes a
+``GeventWebSocketClient`` instance to your route.
+
+
+``GeventWebSocketClient``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+WebSocket client abstraction with fully non-blocking methods.
+
+``receive()``
+
+``send(msg)``
+
+``close()``
+
+``connected``
+
+
+``AsyncioWebSocket``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Fancier WebSocket abstraction that takes advantage of Asyncio loop engine.
+Requires uWSGI to be run with ``--asyncio`` and ``--greenlet`` option.
+
+
+``AsyncioWebSocketMiddleware``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Automatically performs WebSocket handshake and passes a ``AsyncioWebSocketClient`` instance to your route.
+
+
+``AsyncioWebSocketClient``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+WebSocket client abstraction with asyncio coroutines.
+
+``coroutine a_recv()`` (alias ``receive()``, ``recv()``)
+
+``coroutine a_send(msg)`` (alias ``send()``)
+
+``recv_nb()`` (should be useless)
+
+``send_nb()`` (should be useless)
+
+``close()``
+
+``connected``
+
+
+Advanced Usage
+--------------
+Normally websocket routes happen outside of the normal request context. You can
+get a request context in your websocket handler by using
+``app.request_context``::
+
+    app = Flask(__name__)
+    ws = GeventWebSocket(app)
+
+    @ws.route('/websocket')
+    def websocket(ws):
+        with app.request_context(ws.environ):
+            print request.args
+
+

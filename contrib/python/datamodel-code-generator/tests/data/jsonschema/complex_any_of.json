@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft/2019-09/schema#",
+  "anyOf": [
+    {
+      "type": "integer",
+      "$comment": "int"
+    },
+    {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "object",
+            "properties": {
+              "address": {
+                "type": "string",
+                "$comment": "address"
+              },
+              "nat": {
+                "type": "string",
+                "$comment": "nat"
+              }
+            },
+            "required": [
+              "address",
+              "nat"
+            ],
+            "additionalProperties": false,
+            "$comment": "pair"
+          },
+          "value": {
+            "type": "string",
+            "$comment": "nat"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "$comment": "big_map"
+}

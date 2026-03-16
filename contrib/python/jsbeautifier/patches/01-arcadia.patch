@@ -1,0 +1,11 @@
+--- contrib/python/jsbeautifier/jsbeautifier/unpackers/__init__.py	(index)
++++ contrib/python/jsbeautifier/jsbeautifier/unpackers/__init__.py	(working tree)
+@@ -10,7 +10,7 @@ import re
+ from jsbeautifier.unpackers import evalbased
+ 
+ # NOTE: AT THE MOMENT, IT IS DEACTIVATED FOR YOUR SECURITY: it runs js!
+-BLACKLIST = ["jsbeautifier.unpackers.evalbased"]
++BLACKLIST = ["jsbeautifier.unpackers.evalbased", "jsbeautifier.unpackers.__init__"]
+ 
+ 
+ class UnpackingError(Exception):

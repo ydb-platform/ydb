@@ -1,0 +1,6 @@
+{# -*- engine: jinja -*- #}
+{% if info.link_function_list %}
+<div class="m-3">
+  <a href="{% if info.single_page %}#{% endif %}{{ FUNCTIONS_FNAME }}"{% if info.single_page and not info.static_report %} class="js-disabled-hidden"{% endif %}>List of functions</a>
+</div>
+{% endif -%}

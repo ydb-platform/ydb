@@ -1,0 +1,245 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# 
+# Translators:
+# Ali Javadi <rohamn@hotmail.com>, 2013.
+msgid ""
+msgstr ""
+"Project-Id-Version: django-sitetree\n"
+"Report-Msgid-Bugs-To: https://github.com/idlesign/django-sitetree/issues\n"
+"POT-Creation-Date: 2012-09-11 22:07+0700\n"
+"PO-Revision-Date: 2013-01-19 17:49+0000\n"
+"Last-Translator: rohamn <rohamn@hotmail.com>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fa\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: admin.py:54
+msgid "Basic settings"
+msgstr "تنظیمات پایه"
+
+#: admin.py:57
+msgid "Access settings"
+msgstr "تنظیمات دسترسی"
+
+#: admin.py:61
+msgid "Display settings"
+msgstr "تنظیمات نمایش"
+
+#: admin.py:65
+msgid "Additional settings"
+msgstr "تنظیمات اضافی"
+
+#: admin.py:148
+msgid ""
+"You are seeing this warning because \"URL as Pattern\" option is active and "
+"pattern entered above seems to be invalid. Currently registered URL pattern "
+"names and parameters: "
+msgstr "شما این پیغام را می‌بینید چون گزینه‌ی «آدرس به عنوان قالب» فعال است و قالب ارائه شده غلط به نظر می‌رسد. قالب و متغیر‌های قالب‌های ثبت شده در حال حاظر: "
+
+#: admin.py:211
+msgid "Item's parent left unchanged. Item couldn't be parent to itself."
+msgstr "ریشه‌‌ی آیتم بدون تغییر باقی مانده است. آیتم نمی‌تواند ریشه‌ی خود باشد."
+
+#: models.py:26 models.py:46 templates/admin/sitetree/tree/change_form.html:40
+msgid "Title"
+msgstr "عنوان"
+
+#: models.py:26
+msgid "Site tree title for presentational purposes."
+msgstr "عنوان نمایشی منو."
+
+#: models.py:27 models.py:52
+msgid "Alias"
+msgstr "لقب"
+
+#: models.py:27
+msgid ""
+"Short name to address site tree from templates.<br /><b>Note:</b> change "
+"with care."
+msgstr "نامی کوتاه برای آدرس دهی درقالب‌های کد. نکته: با دقت تغییر دهید."
+
+#: models.py:30 models.py:50
+msgid "Site Tree"
+msgstr "شاخه‌های سایت"
+
+#: models.py:31
+msgid "Site Trees"
+msgstr "شاخه‌های سایت"
+
+#: models.py:42
+msgid "Any"
+msgstr "هر"
+
+#: models.py:43
+msgid "All"
+msgstr "همه"
+
+#: models.py:46
+msgid ""
+"Site tree item title. Can contain template variables E.g.: {{ mytitle }}."
+msgstr "عنوان شاخه‌ی سایت. می‌تواند حاوی متغیر‌های قالب‌های کد باشد. مانند: {{ mytitle }}"
+
+#: models.py:47
+msgid "Hint"
+msgstr "راهنمایی"
+
+#: models.py:47
+msgid "Some additional information about this item that is used as a hint."
+msgstr "برخی اطلاعات اضافی در مورد این آیتم که می‌تواند به عنوان راهنمایی استفاده شود."
+
+#: models.py:48 templates/admin/sitetree/tree/change_form.html:41
+msgid "URL"
+msgstr "آدرس"
+
+#: models.py:48
+msgid "Exact URL or URL pattern (see \"Additional settings\") for this item."
+msgstr "آدرس دقبق یا قالب آدرس ( برای  تنظیمات اضافی را ببینید)"
+
+#: models.py:49
+msgid "URL as Pattern"
+msgstr "آدرس به صورت قالب"
+
+#: models.py:49
+msgid ""
+"Whether the given URL should be treated as a pattern.<br /><b>Note:</b> "
+"Refer to Django \"URL dispatcher\" documentation (e.g. \"Naming URL "
+"patterns\" part)."
+msgstr "اینکه با این آدرس باید به صورت قالب برخورد شود یا نه. "
+
+#: models.py:50
+msgid "Site tree this item belongs to."
+msgstr "شاخه‌ای که این آیتم به آن متعلق است."
+
+#: models.py:51 templates/admin/sitetree/tree/change_form.html:34
+msgid "Hidden"
+msgstr "پنهان"
+
+#: models.py:51
+msgid "Whether to show this item in navigation."
+msgstr "اینکهاین آیتم  باید درمسیریابی استفاده شود یا نه."
+
+#: models.py:52
+msgid ""
+"Short name to address site tree item from a template.<br /><b>Reserved "
+"aliases:</b> \"trunk\", \"this-children\", \"this-siblings\" and \"this-"
+"ancestor-children\"."
+msgstr "نامی کوتاه که برای صدا زدن شاخه‌های سایت در یک قالب استفاده می‌شود. لقب‌های رزرو شده: \"trunk\" و \"this-children\" و \"this-siblings\" و \"this-ancestor-children\""
+
+#: models.py:53
+msgid "Description"
+msgstr "توضیحات"
+
+#: models.py:53
+msgid "Additional comments on this item."
+msgstr "توضیحات اضافی روی این آیتم."
+
+#: models.py:54
+msgid "Show in menu"
+msgstr "نمایش در منو"
+
+#: models.py:54
+msgid "Whether to show this item in a menu."
+msgstr "اینکه این آیتم در یک منو به نمایش در آید یا نه."
+
+#: models.py:55
+msgid "Show in breadcrumb path"
+msgstr "نمایش در نقشه‌ی سایت."
+
+#: models.py:55
+msgid "Whether to show this item in a breadcrumb path."
+msgstr "اینکه این آیتم درنقشه‌ی سایت به نمایش درآید یا نه."
+
+#: models.py:56
+msgid "Show in site tree"
+msgstr "نمایش در شاخه‌های سایت"
+
+#: models.py:56
+msgid "Whether to show this item in a site tree."
+msgstr "اینکه این آیتم در شاخه‌های سایت به نمایش در آید یا نه."
+
+#: models.py:57
+msgid "Logged in only"
+msgstr "کاربران وارد شده"
+
+#: models.py:57
+msgid "Check it to grant access to this item to authenticated users only."
+msgstr "تیک بزنید تا دسترسی این آیتم تنها به کاربرای تصدیق هویت شده محدود شود."
+
+#: models.py:58
+msgid "Restrict access to permissions"
+msgstr "محدود کردن دسترسی‌ها به اجازه‌ها"
+
+#: models.py:58
+msgid ""
+"Check it to restrict user access to this item, using Django permissions "
+"system."
+msgstr "تیک بزنید تا دسترسی کاربر را به اجازه‌ی دسترسی‌های خاص محدود کنید."
+
+#: models.py:59
+msgid "Permissions granting access"
+msgstr "اجازه‌های دسترسی مجاز"
+
+#: models.py:60
+msgid "Permissions interpretation"
+msgstr "تفسیر اجازه‌های دسترسی"
+
+#: models.py:63
+msgid "Parent"
+msgstr "ریشه"
+
+#: models.py:63
+msgid "Parent site tree item."
+msgstr "شاخه‌ی ریشه."
+
+#: models.py:64 templates/admin/sitetree/tree/change_form.html:42
+msgid "Sort order"
+msgstr "ترتیب"
+
+#: models.py:64
+msgid "Item position among other site tree items under the same parent."
+msgstr "محل جاگیری آیتم در شاخه."
+
+#: models.py:77
+msgid "Site Tree Item"
+msgstr "آیتم شاخه‌های سایت"
+
+#: models.py:78 templates/admin/sitetree/tree/change_form.html:17
+msgid "Site Tree Items"
+msgstr "آیتم‌های شاخه‌های سایت"
+
+#: templates/admin/sitetree/tree/change_form.html:24
+msgid "Add Site Tree item"
+msgstr "اضافه کردن شاخه"
+
+#: templates/admin/sitetree/tree/change_form.html:35
+msgid "Menu"
+msgstr "منو"
+
+#: templates/admin/sitetree/tree/change_form.html:36
+msgid "Breadcrumbs"
+msgstr "نقشه‌ی سایت"
+
+#: templates/admin/sitetree/tree/change_form.html:37
+msgid "Tree"
+msgstr "شاخه"
+
+#: templates/admin/sitetree/tree/change_form.html:38
+msgid "Rights Restriction"
+msgstr "محدود کردن حقوق"
+
+#: templates/admin/sitetree/tree/change_form.html:39
+msgid "For logged in"
+msgstr "برای کاربران وارد شده"
+
+#: templates/admin/sitetree/tree/tree.html:22
+msgid "Move up"
+msgstr "بالا بردن"
+
+#: templates/admin/sitetree/tree/tree.html:24
+msgid "Move down"
+msgstr "ایین آوردن"

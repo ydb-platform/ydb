@@ -1,0 +1,2 @@
+mark_as_tests:
+  - meld3/test_meld3.py

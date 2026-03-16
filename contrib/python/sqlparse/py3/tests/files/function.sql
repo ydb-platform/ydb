@@ -1,0 +1,13 @@
+CREATE OR REPLACE FUNCTION foo(
+	p_in1 VARCHAR
+	, p_in2 INTEGER
+) RETURNS INTEGER AS
+
+  DECLARE
+	v_foo INTEGER;  
+  BEGIN
+  	SELECT *
+  	FROM foo
+  	INTO v_foo;
+  	RETURN v_foo.id;
+  END;

@@ -1,0 +1,306 @@
+Metadata-Version: 2.1
+Name: djangorestframework-camel-case
+Version: 1.4.2
+Summary: Camel case JSON support for Django REST framework.
+Home-page: https://github.com/vbabiy/djangorestframework-camel-case
+Author: Vitaly Babiy
+Author-email: vbabiy86@gmail.com
+License: BSD
+Keywords: djangorestframework_camel_case
+Platform: UNKNOWN
+Classifier: Development Status :: 2 - Pre-Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Requires-Python: >=3.5
+Description-Content-Type: text/x-rst
+
+====================================
+Django REST Framework JSON CamelCase
+====================================
+
+.. image:: https://travis-ci.org/vbabiy/djangorestframework-camel-case.svg?branch=master
+        :target: https://travis-ci.org/vbabiy/djangorestframework-camel-case
+
+.. image:: https://badge.fury.io/py/djangorestframework-camel-case.svg
+    :target: https://badge.fury.io/py/djangorestframework-camel-case
+
+Camel case JSON support for Django REST framework.
+
+============
+Installation
+============
+
+At the command line::
+
+    $ pip install djangorestframework-camel-case
+
+Add the render and parser to your django settings file.
+
+.. code-block:: python
+
+    # ...
+    REST_FRAMEWORK = {
+
+        'DEFAULT_RENDERER_CLASSES': (
+            'djangorestframework_camel_case.render.CamelCaseJSONRenderer',
+            'djangorestframework_camel_case.render.CamelCaseBrowsableAPIRenderer',
+            # Any other renders
+        ),
+
+        'DEFAULT_PARSER_CLASSES': (
+            # If you use MultiPartFormParser or FormParser, we also have a camel case version
+            'djangorestframework_camel_case.parser.CamelCaseFormParser',
+            'djangorestframework_camel_case.parser.CamelCaseMultiPartParser',
+            'djangorestframework_camel_case.parser.CamelCaseJSONParser',
+            # Any other parsers
+        ),
+    }
+    # ...
+
+Add query param middleware to django settings file.
+
+.. code-block:: python
+
+    # ...
+    MIDDLEWARE = [
+        # Any other middleware
+        'djangorestframework_camel_case.middleware.CamelCaseMiddleWare',
+    ]
+    # ...
+
+=================
+Swapping Renderer
+=================
+
+By default the package uses `rest_framework.renderers.JSONRenderer`. If you want
+to use another renderer, the two possible are:
+
+`drf_orjson_renderer.renderers.ORJSONRenderer` or
+`rest_framework.renderers.UnicodeJSONRenderer` for DRF < 3.0,specify it in your django
+settings file.
+
+.. code-block:: python
+
+    # ...
+    JSON_CAMEL_CASE = {
+        'RENDERER_CLASS': 'drf_orjson_renderer.renderers.ORJSONRenderer'
+    }
+    # ...
+
+=====================
+Underscoreize Options
+=====================
+
+
+**No Underscore Before Number**
+
+
+As raised in `this comment <https://github.com/krasa/StringManipulation/issues/8#issuecomment-121203018>`_
+there are two conventions of snake case.
+
+.. code-block:: text
+
+    # Case 1 (Package default)
+    v2Counter -> v_2_counter
+    fooBar2 -> foo_bar_2
+
+    # Case 2
+    v2Counter -> v2_counter
+    fooBar2 -> foo_bar2
+
+
+By default, the package uses the first case. To use the second case, specify it in your django settings file.
+
+.. code-block:: python
+
+    REST_FRAMEWORK = {
+        # ...
+        'JSON_UNDERSCOREIZE': {
+            'no_underscore_before_number': True,
+        },
+        # ...
+    }
+
+Alternatively, you can change this behavior on a class level by setting `json_underscoreize`:
+
+.. code-block:: python
+
+    from djangorestframework_camel_case.parser import CamelCaseJSONParser
+    from rest_framework.generics import CreateAPIView
+
+    class NoUnderscoreBeforeNumberCamelCaseJSONParser(CamelCaseJSONParser):
+        json_underscoreize = {'no_underscore_before_number': True}
+
+    class MyView(CreateAPIView):
+        queryset = MyModel.objects.all()
+        serializer_class = MySerializer
+        parser_classes = (NoUnderscoreBeforeNumberCamelCaseJSONParser,)
+
+=============
+Ignore Fields
+=============
+
+You can also specify fields which should not have their data changed.
+The specified field(s) would still have their name change, but there would be no recursion.
+For example:
+
+.. code-block:: python
+
+    data = {"my_key": {"do_not_change": 1}}
+
+Would become:
+
+.. code-block:: python
+
+    {"myKey": {"doNotChange": 1}}
+
+However, if you set in your settings:
+
+.. code-block:: python
+
+    REST_FRAMEWORK = {
+        # ...
+        "JSON_UNDERSCOREIZE": {
+            # ...
+            "ignore_fields": ("my_key",),
+            # ...
+        },
+        # ...
+    }
+
+The `my_key` field would not have its data changed:
+
+.. code-block:: python
+
+    {"myKey": {"do_not_change": 1}}
+
+===========
+Ignore Keys
+===========
+
+You can also specify keys which should *not* be renamed.
+The specified field(s) would still change (even recursively).
+For example:
+
+.. code-block:: python
+
+    data = {"unchanging_key": {"change_me": 1}}
+
+Would become:
+
+.. code-block:: python
+
+    {"unchangingKey": {"changeMe": 1}}
+
+However, if you set in your settings:
+
+.. code-block:: python
+
+    REST_FRAMEWORK = {
+        # ...
+        "JSON_UNDERSCOREIZE": {
+            # ...
+            "ignore_keys": ("unchanging_key",),
+            # ...
+        },
+        # ...
+    }
+
+The `unchanging_key` field would not be renamed:
+
+.. code-block:: python
+
+    {"unchanging_key": {"changeMe": 1}}
+
+ignore_keys and ignore_fields can be applied to the same key if required.
+
+=============
+Running Tests
+=============
+
+To run the current test suite, execute the following from the root of he project::
+
+    $ python -m unittest discover
+
+
+=======
+License
+=======
+
+* Free software: BSD license
+
+
+
+
+History
+=======
+
+1.4.2 (2023-02-13)
+------------------
+- Middleware to underscorize query params #123
+
+1.4.1 (2023-02-13)
+------------------
+- ORJSONRenderer #124
+
+1.4.0 (2023-02-09)
+------------------
+- Merge pull request #110
+- Merge pull request #119
+- Merge pull request #122
+- Merge pull request #93
+
+
+1.3.0 (2021-11-14)
+------------------
+- Merge pull request #104
+- Merge pull request #99
+- Merge pull request #100
+- Merge pull request #90
+- Merge pull request #92
+
+
+- added ignore_keys
+
+1.2.0 (2020-06-16)
+------------------
+
+- added ignore_fields
+- Merge pull request #88
+- Merge pull request #84
+- Merge pull request #77
+- Merge pull request #73
+
+1.1.2 (2019-10-22)
+------------------
+
+- Merge pull request #63
+- Merge pull request #70
+- Merge pull request #71
+
+1.1.1 (2019-09-09)
+------------------
+
+- Add json_underscoreize as CamelCaseJSONParser class attribute #44
+
+1.1.0 (2019-09-09)
+------------------
+
+Long awaited stable release:
+
+Changes can be viewed:
+https://github.com/vbabiy/djangorestframework-camel-case/compare/e6db468...39ae6bb
+
+0.1.0 (2013-12-20)
+------------------
+
+* First release on PyPI.
+
+

@@ -1,0 +1,82 @@
+PY2TEST()
+
+PEERDIR(
+    contrib/python/Shapely
+)
+
+NO_LINT()
+
+TEST_SRCS(
+    __init__.py
+    conftest.py
+    test_affinity.py
+    test_box.py
+    test_buffer.py
+    test_cga.py
+    test_clip_by_rect.py
+    test_collection.py
+    test_coords.py
+    test_create_inconsistent_dimensionality.py
+    test_default_impl.py
+    test_delaunay.py
+    test_delegated.py
+    # test_dlls.py
+    # test_doctests.py
+    test_emptiness.py
+    test_empty_polygons.py
+    test_equality.py
+    test_geointerface.py
+    test_geometry_base.py
+    test_geomseq.py
+    test_geos_err_handler.py
+    test_getitem.py
+    test_hash.py
+    test_invalid_geometries.py
+    test_iterops.py
+    test_linear_referencing.py
+    test_linemerge.py
+    test_linestring.py
+    # test_locale.py
+    test_mapping.py
+    test_minimum_clearance.py
+    test_minimum_rotated_rectangle.py
+    test_multi.py
+    test_multilinestring.py
+    test_multipoint.py
+    test_multipolygon.py
+    test_ndarrays.py
+    test_nearest.py
+    test_operations.py
+    test_operators.py
+    test_orient.py
+    test_parallel_offset.py
+    test_persist.py
+    test_pickle.py
+    test_point.py
+    test_polygon.py
+    test_polygonize.py
+    test_polylabel.py
+    test_predicates.py
+    test_prepared.py
+    test_products_z.py
+    test_shape.py
+    test_shared_paths.py
+    test_singularity.py
+    test_snap.py
+    test_split.py
+    test_strtree.py
+    test_strtree_nearest.py
+    test_styles.py
+    test_substring.py
+    test_svg.py
+    test_transform.py
+    test_union.py
+    test_validation.py
+    test_vectorized.py
+    test_wkb.py
+    test_wkt.py
+    test_xy.py
+    threading_test.py
+)
+
+END()

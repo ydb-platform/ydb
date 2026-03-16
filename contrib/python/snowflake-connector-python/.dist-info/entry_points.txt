@@ -1,0 +1,5 @@
+[console_scripts]
+snowflake-dump-certs = snowflake.connector.tool.dump_certs:main
+snowflake-dump-ocsp-response = snowflake.connector.tool.dump_ocsp_response:main
+snowflake-dump-ocsp-response-cache = snowflake.connector.tool.dump_ocsp_response_cache:main
+snowflake-export-certs = snowflake.connector.tool.export_certs:main

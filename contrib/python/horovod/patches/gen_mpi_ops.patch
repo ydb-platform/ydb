@@ -1,0 +1,7 @@
+diff --git a/horovod/tensorflow/mpi_ops.py b/horovod/tensorflow/mpi_ops.py
+index 8f4ed3d..491b574 100644
+--- a/horovod/tensorflow/mpi_ops.py
++++ b/horovod/tensorflow/mpi_ops.py
+@@ -47 +47 @@ def _load_library(name):
+-MPI_LIB = _load_library('mpi_lib' + get_ext_suffix())
++from . import gen_mpi_ops as MPI_LIB

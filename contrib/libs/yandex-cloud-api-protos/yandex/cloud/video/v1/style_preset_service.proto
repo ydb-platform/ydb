@@ -1,0 +1,259 @@
+syntax = "proto3";
+
+package yandex.cloud.video.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/video/v1/style_preset.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/video/v1;video";
+option java_package = "yandex.cloud.api.video.v1";
+
+// StylePreset management service.
+// Provides methods for creating, retrieving, updating, and deleting style presets,
+// which define the visual appearance and layout of video players and associated widgets.
+service StylePresetService {
+  // Retrieves detailed information about a specific style preset by its ID.
+  // Returns all style preset properties, colors, layout settings, and widget configurations.
+  rpc Get(GetStylePresetRequest) returns (StylePreset) {
+    option (google.api.http) = {
+      get: "/video/v1/stylePresets/{style_preset_id}"
+    };
+  }
+
+  // Lists all style presets in a specific channel with pagination support.
+  // Results can be filtered and sorted using the provided parameters.
+  rpc List(ListStylePresetsRequest) returns (ListStylePresetsResponse) {
+    option (google.api.http) = {
+      get: "/video/v1/stylePresets"
+    };
+  }
+
+  // Creates a new style preset in the specified channel with the provided visual settings.
+  // Style presets define the appearance of players, including colors, spacing, borders, and widgets.
+  rpc Create(CreateStylePresetRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/video/v1/stylePresets"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateStylePresetMetadata"
+      response: "StylePreset"
+    };
+  }
+
+  // Updates an existing style preset's properties and visual settings.
+  // Only fields specified in the field_mask will be updated.
+  rpc Update(UpdateStylePresetRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/video/v1/stylePresets/{style_preset_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateStylePresetMetadata"
+      response: "StylePreset"
+    };
+  }
+
+  // Deletes a specific style preset by its ID.
+  // This operation will fail if the style preset is currently in use by any videos, streams, or playlists.
+  rpc Delete(DeleteStylePresetRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      delete: "/video/v1/stylePresets/{style_preset_id}"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteStylePresetMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetStylePresetRequest {
+  // ID of the style preset to retrieve.
+  string style_preset_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListStylePresetsRequest {
+  // Reserved for future use.
+  reserved 2 to 99;
+
+  // ID of the channel containing the style presets to list.
+  string channel_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of style presets to return per page.
+  int64 page_size = 100 [(value) = "<=100"];
+
+  // Page token for retrieving the next page of results.
+  // This token is obtained from the next_page_token field in the previous ListStylePresetsResponse.
+  string page_token = 101 [(length) = "<=15000"];
+
+  // Specifies the ordering of results.
+  // Format is "<field> <order>" (e.g., "createdAt desc").
+  // Default: "id asc".
+  // Supported fields: ["id", "title", "createdAt", "updatedAt"].
+  // Both snake_case and camelCase field names are supported.
+  string order_by = 102 [(length) = "<=50"];
+
+  // Filter expression to narrow down the list of returned style presets.
+  // Expressions consist of terms connected by logical operators.
+  // Values containing spaces or quotes must be enclosed in quotes (`'` or `"`)
+  // with inner quotes being backslash-escaped.
+  //
+  // Supported logical operators: ["AND", "OR"].
+  // Supported comparison operators: ["=", "!=", ":"] where ":" enables substring matching.
+  // Parentheses can be used to group logical expressions.
+  //
+  // Example: `title:'dark' AND id='preset-1'`
+  //
+  // Filterable fields: ["id", "title"].
+  // Both snake_case and camelCase field names are supported.
+  string filter = 103 [(length) = "<=1000"];
+}
+
+message ListStylePresetsResponse {
+  // Reserved for future use.
+  reserved 2 to 99;
+
+  // List of style presets matching the request criteria.
+  // May be empty if no style presets match the criteria or if the channel has no style presets.
+  repeated StylePreset style_presets = 1;
+
+  // Token for retrieving the next page of results.
+  // Empty if there are no more results available.
+  string next_page_token = 100;
+}
+
+message CreateStylePresetRequest {
+  reserved 9, 10;
+
+  // ID of the channel.
+  string channel_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Style preset title.
+  string title = 2 [(required) = true, (length) = "<=50"];
+
+  // Background color.
+  string background_color = 3 [(required) = true, (pattern) = "[#a-zA-Z0-9]+", (length) = "<=50"];
+
+  // Widget primary text color.
+  string widget_text_color_primary = 4 [(required) = true, (pattern) = "[#a-zA-Z0-9]+", (length) = "<=50"];
+
+  // Widget secondary text color.
+  string widget_text_color_secondary = 5 [(required) = true, (pattern) = "[#a-zA-Z0-9]+", (length) = "<=50"];
+
+  // Widget accent color.
+  string widget_accent_color = 6 [(required) = true, (pattern) = "[#a-zA-Z0-9]+", (length) = "<=50"];
+
+  // Gap between widget blocks.
+  int64 widget_block_gap = 7 [(value) = "0-50"];
+
+  // Line color between widget blocks.
+  string widget_block_separator_color = 8 [(required) = true, (pattern) = "[#a-zA-Z0-9]+", (length) = "<=50"];
+
+  // Player border radius.
+  int64 player_border_radius = 13 [(value) = ">=0"];
+
+  // Player color.
+  string player_color = 14 [(required) = true, (pattern) = "[#a-zA-Z0-9]+", (length) = "<=50"];
+
+  // Background color of selected video in playlist.
+  string playlist_selected_item_background_color = 15 [(required) = true, (pattern) = "[#a-zA-Z0-9]+", (length) = "<=50"];
+
+  // Playlist item border radius.
+  int64 playlist_item_border_radius = 16 [(value) = ">=0"];
+
+  // Gap between videos in playlist.
+  int64 playlist_item_gap = 17 [(value) = "0-50"];
+
+  // Playlist widget location.
+  StylePreset.WidgetLocation playlist_location = 18 [(required) = true];
+
+  // List of widgets to display to the right of the player.
+  repeated Widget right_widgets = 11;
+
+  // List of widgets to display below the player.
+  repeated Widget bottom_widgets = 12;
+}
+
+message CreateStylePresetMetadata {
+  // ID of the style preset being created.
+  string style_preset_id = 1;
+}
+
+message UpdateStylePresetRequest {
+  reserved 10, 11;
+
+  // ID of the style preset.
+  string style_preset_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask specifying which fields of the style preset should be updated.
+  // Only fields specified in this mask will be modified;
+  // all other fields will retain their current values.
+  // This allows for partial updates.
+  google.protobuf.FieldMask field_mask = 2 [(required) = true];
+
+  // Style preset title.
+  string title = 3 [(length) = "<=50"];
+
+  // Background color.
+  string background_color = 4 [(pattern) = "[#a-zA-Z0-9-]*", (length) = "<=50"];
+
+  // Widget primary text color.
+  string widget_text_color_primary = 5 [(pattern) = "[#a-zA-Z0-9-]*", (length) = "<=50"];
+
+  // Widget secondary text color.
+  string widget_text_color_secondary = 6 [(pattern) = "[#a-zA-Z0-9-]*", (length) = "<=50"];
+
+  // Widget accent color.
+  string widget_accent_color = 7 [(pattern) = "[#a-zA-Z0-9-]*", (length) = "<=50"];
+
+  // Gap between widget blocks.
+  int64 widget_block_gap = 8 [(value) = "0-50"];
+
+  // Line color between widget blocks.
+  string widget_block_separator_color = 9 [(pattern) = "[#a-zA-Z0-9-]*", (length) = "<=50"];
+
+  // Player border radius.
+  int64 player_border_radius = 14 [(value) = ">=0"];
+
+  // Player color.
+  string player_color = 15 [(pattern) = "[#a-zA-Z0-9]*", (length) = "<=50"];
+
+  // Background color of selected video in playlist.
+  string playlist_selected_item_background_color = 16 [(pattern) = "[#a-zA-Z0-9]*", (length) = "<=50"];
+
+  // Playlist item border radius.
+  int64 playlist_item_border_radius = 17 [(value) = ">=0"];
+
+  // Gap between videos in playlist.
+  int64 playlist_item_gap = 18 [(value) = "0-50"];
+
+  // Playlist widget location.
+  StylePreset.WidgetLocation playlist_location = 19;
+
+  // List of widgets to display to the right of the player.
+  repeated Widget right_widgets = 12;
+
+  // List of widgets to display below the player.
+  repeated Widget bottom_widgets = 13;
+}
+
+message UpdateStylePresetMetadata {
+  // ID of the style preset being updated.
+  string style_preset_id = 1;
+}
+
+message DeleteStylePresetRequest {
+  // ID of the style preset to delete.
+  // The style preset must not be in use by any videos, episodes, or playlists.
+  string style_preset_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteStylePresetMetadata {
+  // ID of the style preset being deleted.
+  // This identifier can be used to track the style preset deletion operation.
+  string style_preset_id = 1;
+}

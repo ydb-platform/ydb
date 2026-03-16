@@ -1,0 +1,170 @@
+syntax = "proto3";
+package yandex.cloud.ai.llm.v1alpha;
+
+import "yandex/cloud/ai/llm/v1alpha/llm.proto";
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/llm/v1alpha;llm";
+option java_package = "yandex.cloud.api.ai.llm.v1alpha";
+
+// Request for instructing the model to generate text.
+message InstructRequest {
+
+  // The name or identifier of the model to be used for text generation.
+  // Possible value for now: `general`.
+  string model = 1 [(length) = "<=50"];
+
+  // Configuration options for text generation.
+  GenerationOptions generation_options = 2;
+
+  // Text precondition or context of the request.
+  // For example, if the instruction is "You are the youngest Nobel laureate",
+  // the request text might be "Tell us about your daily routine".
+  oneof Instruction {
+    // The text-based instruction for text generation.
+    string instruction_text = 3;
+
+    // A URI containing instructions for text generation.
+    string instruction_uri = 5;
+  }
+
+  // Request for text generation.
+  oneof Request {
+    // The text-based request for text generation.
+    string request_text = 4;
+  }
+}
+
+// Response containing generated text alternatives and token count.
+message InstructResponse {
+  // A list of alternative text responses.
+  repeated Alternative alternatives = 1;
+
+  // The number of tokens used in the prompt, including both the [instruction_text] and [request_text].
+  int64 num_prompt_tokens = 2;
+}
+
+// Request to engage in a chat conversation with a text generation model.
+message ChatRequest {
+
+  // The name or identifier of the model to be used for the chat.
+  // Possible value for now: `general`.
+  string model = 1 [(length) = "<=50"];
+
+  // Configuration options for text generation.
+  GenerationOptions generation_options = 2;
+
+  // Text precondition or context of the request.
+  // For example, the instruction may be "You are a helpful assistant".
+  oneof Instruction {
+    // The text-based instruction for the conversation.
+    string instruction_text = 3;
+  }
+
+  // A list of messages in the conversation.
+  repeated Message messages = 4;
+}
+
+// Contains a model-generated response for a chat query.
+message ChatResponse {
+  // The assistant's message in the chat conversation.
+  Message message = 1;
+  // Total number of tokens used in both the chat request and chat response.
+  int64 num_tokens = 2;
+}
+
+// Service for text generation and conversation.
+service TextGenerationService {
+  // RPC method for instructing the model to generate text.
+  rpc Instruct (InstructRequest) returns (stream InstructResponse) {
+    option (google.api.http) = {post: "/llm/v1alpha/instruct" body: "*"};
+  }
+
+  // RPC method for engaging in a chat conversation with the model.
+  rpc Chat (ChatRequest) returns (stream ChatResponse) {
+    option (google.api.http) = {post: "/llm/v1alpha/chat" body: "*"};
+  }
+}
+
+// Request to tokenize input text.
+message TokenizeRequest {
+  // The name or identifier of the model to be used for tokenization.
+  // Possible values for now: `general`, `general:embedding`.
+  string model = 1 [(length) = "<=50"];
+
+  // The input text to tokenize.
+  string text = 2;
+}
+
+// Tokenization response.
+message TokenizeResponse {
+  // A list of tokens obtained from tokenization.
+  repeated Token tokens = 1;
+}
+
+// Service for tokenizing input text.
+service TokenizerService {
+  // RPC method for tokenizing input text.
+  rpc Tokenize (TokenizeRequest) returns (TokenizeResponse) {
+    option (google.api.http) = {post: "/llm/v1alpha/tokenize" body: "*"};
+  }
+}
+
+// Represents a request to obtain embeddings for text data.
+message EmbeddingRequest {
+  // Enum to specify the type of embedding to be generated.
+  enum EmbeddingType {
+    // Unspecified embedding type.
+    EMBEDDING_TYPE_UNSPECIFIED = 0;
+
+    // Embedding for a query. Use this when you have a short query or search term
+    // that you want to obtain an embedding for. Query embeddings are typically
+    // used in information retrieval and search applications.
+    EMBEDDING_TYPE_QUERY = 1;
+
+    // Embedding for a document. Use this when you have a longer document or a piece
+    // of text that you want to obtain an embedding for. Document embeddings are often
+    // used in natural language understanding and document similarity tasks.
+    EMBEDDING_TYPE_DOCUMENT = 2;
+  }
+
+  // The type of embedding to be generated.
+  EmbeddingType embedding_type = 1;
+
+  // The name or identifier of the model to be used for embedding. Possible value for now: `general:embedding`.
+  string model = 2 [(length) = "<=50"];
+
+  // The input text for which the embedding is requested.
+  string text = 3;
+}
+
+// Represents a response containing embeddings for input text data.
+message EmbeddingResponse {
+  // A repeated list of double values representing the embedding.
+  repeated double embedding = 1;
+
+  // The number of tokens in the input text.
+  int64 num_tokens = 2;
+}
+
+// Service for obtaining embeddings for text data.
+service EmbeddingsService {
+  // RPC method to obtain embeddings for input text data.
+  rpc Embedding (EmbeddingRequest) returns (EmbeddingResponse) {
+    option (google.api.http) = {post: "/llm/v1alpha/embedding" body: "*"};
+  }
+}
+
+// Service for asynchronous text generation.
+service TextGenerationAsyncService {
+  // RPC method for instructing the model to generate text.
+  rpc Instruct (InstructRequest) returns  (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "InstructResponse"
+    };
+    option (google.api.http) = {post: "/llm/v1alpha/instructAsync" body: "*"};
+  }
+}

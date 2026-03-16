@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.tuning.v1;
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/tuning/v1;fomo";
+
+option java_package = "yandex.cloud.api.ai.tuning.v1";
+
+message OptimizerAdamw {
+    double beta1 = 1;
+    double beta2 = 2;
+    double eps = 3;
+    double weight_decay = 4;
+}

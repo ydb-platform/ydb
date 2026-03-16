@@ -1,0 +1,6 @@
+# Code table 4.2 - discipline=0 category=4 for ERA6
+192 192 UV visible albedo for diffuse radiation (0-1)
+193 193 UV visible albedo for direct radiation (0-1)
+194 194 UV visible albedo for direct radiation, geometric component (0-1)
+195 195 UV visible albedo for direct radiation, isotropic component (0-1)
+196 196 UV visible albedo for direct radiation, volumetric component (0-1)

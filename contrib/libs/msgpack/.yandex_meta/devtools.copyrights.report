@@ -1,0 +1,1455 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 06f12139423100c74c14f7a3021aabca
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/seq/variadic_seq_to_seq.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07768c1f931908a6588b63e8720456cc
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2008-2017 FURUHASHI Sadayuki and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v1/vrefbuffer.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b745f2c5c8b9e7a8ef3208c60d7c2e2
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2008-2016 FURUHASHI Sadayuki
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v1/adaptor/array_ref.hpp [4:4]
+        include/msgpack/v1/adaptor/bool.hpp [4:4]
+        include/msgpack/v1/adaptor/int.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e77faac6c58d8b5ee5a53b520bcbfd5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/list/to_array.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 14ae2152373abc3bf7cd4d76cda1bdbf
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2008-2013 FURUHASHI Sadayuki and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/gcc_atomic.hpp [4:4]
+        include/msgpack/v1/detail/cpp11_zone.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 183b48541b137cb639b4ca46c794a45c
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2015 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/adaptor/boost/fusion.hpp [4:4]
+        include/msgpack/adaptor/ext.hpp [4:4]
+        include/msgpack/v1/adaptor/boost/optional.hpp [4:4]
+        include/msgpack/v1/adaptor/boost/string_ref.hpp [4:4]
+        include/msgpack/v1/adaptor/check_container_size.hpp [4:4]
+        include/msgpack/v1/adaptor/cpp11/reference_wrapper.hpp [4:4]
+        include/msgpack/v1/adaptor/cpp11/shared_ptr.hpp [4:4]
+        include/msgpack/v1/adaptor/cpp11/unique_ptr.hpp [4:4]
+        include/msgpack/v1/adaptor/vector_bool.hpp [4:4]
+        include/msgpack/v1/meta.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1de0b40eaac2964bd4fea60350b9dc66
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2008-2015
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef.h [2:4]
+        include/msgpack/predef/architecture.h [2:4]
+        include/msgpack/predef/architecture/alpha.h [2:4]
+        include/msgpack/predef/architecture/arm.h [2:6]
+        include/msgpack/predef/architecture/ia64.h [2:4]
+        include/msgpack/predef/architecture/m68k.h [2:4]
+        include/msgpack/predef/architecture/mips.h [2:4]
+        include/msgpack/predef/architecture/parisc.h [2:4]
+        include/msgpack/predef/architecture/ppc.h [2:4]
+        include/msgpack/predef/architecture/rs6k.h [2:4]
+        include/msgpack/predef/architecture/sparc.h [2:4]
+        include/msgpack/predef/architecture/superh.h [2:4]
+        include/msgpack/predef/architecture/sys370.h [2:4]
+        include/msgpack/predef/architecture/sys390.h [2:4]
+        include/msgpack/predef/architecture/x86.h [2:4]
+        include/msgpack/predef/architecture/x86/32.h [2:4]
+        include/msgpack/predef/architecture/x86/64.h [2:4]
+        include/msgpack/predef/architecture/z.h [2:4]
+        include/msgpack/predef/compiler.h [2:4]
+        include/msgpack/predef/compiler/borland.h [2:4]
+        include/msgpack/predef/compiler/clang.h [2:4]
+        include/msgpack/predef/compiler/comeau.h [2:4]
+        include/msgpack/predef/compiler/compaq.h [2:4]
+        include/msgpack/predef/compiler/diab.h [2:4]
+        include/msgpack/predef/compiler/digitalmars.h [2:4]
+        include/msgpack/predef/compiler/dignus.h [2:4]
+        include/msgpack/predef/compiler/edg.h [2:4]
+        include/msgpack/predef/compiler/ekopath.h [2:4]
+        include/msgpack/predef/compiler/gcc.h [2:4]
+        include/msgpack/predef/compiler/gcc_xml.h [2:4]
+        include/msgpack/predef/compiler/greenhills.h [2:4]
+        include/msgpack/predef/compiler/hp_acc.h [2:4]
+        include/msgpack/predef/compiler/iar.h [2:4]
+        include/msgpack/predef/compiler/ibm.h [2:4]
+        include/msgpack/predef/compiler/intel.h [2:4]
+        include/msgpack/predef/compiler/kai.h [2:4]
+        include/msgpack/predef/compiler/llvm.h [2:4]
+        include/msgpack/predef/compiler/metaware.h [2:4]
+        include/msgpack/predef/compiler/metrowerks.h [2:4]
+        include/msgpack/predef/compiler/microtec.h [2:4]
+        include/msgpack/predef/compiler/mpw.h [2:4]
+        include/msgpack/predef/compiler/palm.h [2:4]
+        include/msgpack/predef/compiler/pgi.h [2:4]
+        include/msgpack/predef/compiler/sgi_mipspro.h [2:4]
+        include/msgpack/predef/compiler/sunpro.h [2:4]
+        include/msgpack/predef/compiler/tendra.h [2:4]
+        include/msgpack/predef/compiler/visualc.h [2:4]
+        include/msgpack/predef/compiler/watcom.h [2:4]
+        include/msgpack/predef/library.h [2:4]
+        include/msgpack/predef/library/c.h [2:4]
+        include/msgpack/predef/library/c/gnu.h [2:4]
+        include/msgpack/predef/library/c/uc.h [2:4]
+        include/msgpack/predef/library/c/vms.h [2:4]
+        include/msgpack/predef/library/c/zos.h [2:4]
+        include/msgpack/predef/library/std.h [2:4]
+        include/msgpack/predef/library/std/dinkumware.h [2:4]
+        include/msgpack/predef/library/std/libcomo.h [2:4]
+        include/msgpack/predef/library/std/modena.h [2:4]
+        include/msgpack/predef/library/std/msl.h [2:4]
+        include/msgpack/predef/library/std/roguewave.h [2:4]
+        include/msgpack/predef/library/std/sgi.h [2:4]
+        include/msgpack/predef/library/std/stdcpp3.h [2:4]
+        include/msgpack/predef/library/std/stlport.h [2:4]
+        include/msgpack/predef/library/std/vacpp.h [2:4]
+        include/msgpack/predef/make.h [2:4]
+        include/msgpack/predef/os.h [2:5]
+        include/msgpack/predef/os/aix.h [2:4]
+        include/msgpack/predef/os/amigaos.h [2:4]
+        include/msgpack/predef/os/beos.h [2:4]
+        include/msgpack/predef/os/bsd.h [2:4]
+        include/msgpack/predef/os/cygwin.h [2:4]
+        include/msgpack/predef/os/hpux.h [2:4]
+        include/msgpack/predef/os/irix.h [2:4]
+        include/msgpack/predef/os/linux.h [2:4]
+        include/msgpack/predef/os/macos.h [2:5]
+        include/msgpack/predef/os/qnxnto.h [2:4]
+        include/msgpack/predef/os/solaris.h [2:4]
+        include/msgpack/predef/os/unix.h [2:4]
+        include/msgpack/predef/os/windows.h [2:4]
+        include/msgpack/predef/platform/mingw.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21959bbfabcef0c0a725190ceece57cb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/array/enum.hpp [3:6]
+        include/msgpack/preprocessor/array/to_list.hpp [3:6]
+        include/msgpack/preprocessor/array/to_seq.hpp [3:6]
+        include/msgpack/preprocessor/array/to_tuple.hpp [3:6]
+        include/msgpack/preprocessor/facilities/overload.hpp [3:6]
+        include/msgpack/preprocessor/list/to_array.hpp [3:6]
+        include/msgpack/preprocessor/seq/detail/binary_transform.hpp [3:5]
+        include/msgpack/preprocessor/seq/to_list.hpp [3:6]
+        include/msgpack/preprocessor/tuple/enum.hpp [3:6]
+        include/msgpack/preprocessor/tuple/size.hpp [3:6]
+        include/msgpack/preprocessor/tuple/to_array.hpp [3:6]
+        include/msgpack/preprocessor/variadic.hpp [3:6]
+        include/msgpack/preprocessor/variadic/elem.hpp [3:6]
+        include/msgpack/preprocessor/variadic/size.hpp [3:6]
+        include/msgpack/preprocessor/variadic/to_array.hpp [3:6]
+        include/msgpack/preprocessor/variadic/to_list.hpp [3:6]
+        include/msgpack/preprocessor/variadic/to_seq.hpp [3:6]
+        include/msgpack/preprocessor/variadic/to_tuple.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28467714d17407abf257b8ba02a977ef
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2008-2015
+        Copyright Franz Detro 2014
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/architecture/arm.h [2:6]
+        include/msgpack/predef/os.h [2:5]
+        include/msgpack/predef/os/ios.h [2:5]
+        include/msgpack/predef/os/macos.h [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2fd1cb4c5bd0ad8ebd01444f50141363
+BELONGS ya.make
+    License text:
+        \# /* Copyright (C) 2001
+        \#  * Housemarque Oy
+        \#  * http://www.housemarque.com
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor.hpp [1:3]
+        include/msgpack/preprocessor/arithmetic.hpp [1:3]
+        include/msgpack/preprocessor/arithmetic/add.hpp [1:3]
+        include/msgpack/preprocessor/arithmetic/dec.hpp [1:3]
+        include/msgpack/preprocessor/arithmetic/detail/div_base.hpp [1:3]
+        include/msgpack/preprocessor/arithmetic/div.hpp [1:3]
+        include/msgpack/preprocessor/arithmetic/inc.hpp [1:3]
+        include/msgpack/preprocessor/arithmetic/mod.hpp [1:3]
+        include/msgpack/preprocessor/arithmetic/mul.hpp [1:3]
+        include/msgpack/preprocessor/arithmetic/sub.hpp [1:3]
+        include/msgpack/preprocessor/cat.hpp [1:3]
+        include/msgpack/preprocessor/comparison.hpp [1:3]
+        include/msgpack/preprocessor/comparison/equal.hpp [1:3]
+        include/msgpack/preprocessor/comparison/greater.hpp [1:3]
+        include/msgpack/preprocessor/comparison/greater_equal.hpp [1:3]
+        include/msgpack/preprocessor/comparison/less.hpp [1:3]
+        include/msgpack/preprocessor/comparison/less_equal.hpp [1:3]
+        include/msgpack/preprocessor/comparison/not_equal.hpp [1:3]
+        include/msgpack/preprocessor/config/limits.hpp [1:3]
+        include/msgpack/preprocessor/control/detail/dmc/while.hpp [1:3]
+        include/msgpack/preprocessor/control/detail/edg/while.hpp [1:3]
+        include/msgpack/preprocessor/control/detail/msvc/while.hpp [1:3]
+        include/msgpack/preprocessor/control/detail/while.hpp [1:3]
+        include/msgpack/preprocessor/control/expr_if.hpp [1:3]
+        include/msgpack/preprocessor/control/if.hpp [1:3]
+        include/msgpack/preprocessor/control/while.hpp [1:3]
+        include/msgpack/preprocessor/debug/assert.hpp [1:3]
+        include/msgpack/preprocessor/facilities/empty.hpp [1:3]
+        include/msgpack/preprocessor/facilities/expand.hpp [1:3]
+        include/msgpack/preprocessor/facilities/identity.hpp [1:3]
+        include/msgpack/preprocessor/list.hpp [1:3]
+        include/msgpack/preprocessor/list/adt.hpp [1:3]
+        include/msgpack/preprocessor/list/append.hpp [1:3]
+        include/msgpack/preprocessor/list/at.hpp [1:3]
+        include/msgpack/preprocessor/list/cat.hpp [1:3]
+        include/msgpack/preprocessor/list/detail/dmc/fold_left.hpp [1:3]
+        include/msgpack/preprocessor/list/detail/edg/fold_left.hpp [1:3]
+        include/msgpack/preprocessor/list/detail/edg/fold_right.hpp [1:3]
+        include/msgpack/preprocessor/list/detail/fold_left.hpp [1:3]
+        include/msgpack/preprocessor/list/detail/fold_right.hpp [1:3]
+        include/msgpack/preprocessor/list/enum.hpp [1:3]
+        include/msgpack/preprocessor/list/filter.hpp [1:3]
+        include/msgpack/preprocessor/list/first_n.hpp [1:3]
+        include/msgpack/preprocessor/list/fold_left.hpp [1:3]
+        include/msgpack/preprocessor/list/fold_right.hpp [1:3]
+        include/msgpack/preprocessor/list/for_each.hpp [1:3]
+        include/msgpack/preprocessor/list/for_each_i.hpp [1:3]
+        include/msgpack/preprocessor/list/for_each_product.hpp [1:3]
+        include/msgpack/preprocessor/list/rest_n.hpp [1:3]
+        include/msgpack/preprocessor/list/reverse.hpp [1:3]
+        include/msgpack/preprocessor/list/size.hpp [1:3]
+        include/msgpack/preprocessor/list/to_tuple.hpp [1:3]
+        include/msgpack/preprocessor/list/transform.hpp [1:3]
+        include/msgpack/preprocessor/logical.hpp [1:3]
+        include/msgpack/preprocessor/logical/and.hpp [1:3]
+        include/msgpack/preprocessor/logical/bool.hpp [1:3]
+        include/msgpack/preprocessor/logical/nor.hpp [1:3]
+        include/msgpack/preprocessor/logical/not.hpp [1:3]
+        include/msgpack/preprocessor/logical/or.hpp [1:3]
+        include/msgpack/preprocessor/logical/xor.hpp [1:3]
+        include/msgpack/preprocessor/punctuation/comma.hpp [1:3]
+        include/msgpack/preprocessor/punctuation/comma_if.hpp [1:3]
+        include/msgpack/preprocessor/repetition/detail/dmc/for.hpp [1:3]
+        include/msgpack/preprocessor/repetition/detail/edg/for.hpp [1:3]
+        include/msgpack/preprocessor/repetition/detail/for.hpp [1:3]
+        include/msgpack/preprocessor/repetition/detail/msvc/for.hpp [1:3]
+        include/msgpack/preprocessor/repetition/enum.hpp [1:3]
+        include/msgpack/preprocessor/repetition/enum_params.hpp [1:3]
+        include/msgpack/preprocessor/repetition/enum_params_with_a_default.hpp [1:3]
+        include/msgpack/preprocessor/repetition/enum_params_with_defaults.hpp [1:3]
+        include/msgpack/preprocessor/repetition/enum_shifted.hpp [1:3]
+        include/msgpack/preprocessor/repetition/enum_shifted_params.hpp [1:3]
+        include/msgpack/preprocessor/repetition/for.hpp [1:3]
+        include/msgpack/preprocessor/repetition/repeat.hpp [1:3]
+        include/msgpack/preprocessor/repetition/repeat_from_to.hpp [1:3]
+        include/msgpack/preprocessor/selection/max.hpp [1:3]
+        include/msgpack/preprocessor/selection/min.hpp [1:3]
+        include/msgpack/preprocessor/stringize.hpp [1:3]
+        include/msgpack/preprocessor/tuple.hpp [1:3]
+        include/msgpack/preprocessor/tuple/eat.hpp [1:3]
+        include/msgpack/preprocessor/tuple/elem.hpp [1:3]
+        include/msgpack/preprocessor/tuple/reverse.hpp [1:3]
+        include/msgpack/preprocessor/tuple/to_list.hpp [1:3]
+        include/msgpack/v1/preprocessor.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 325475fe90c4f4ae446985cd19fb3133
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2013-2016 Vladimir Volodko and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v1/fbuffer_decl.hpp [4:4]
+        include/msgpack/v2/fbuffer_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3524d0f9a1923f55030e1791e8907cc1
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2008-2015 FURUHASHI Sadayuki and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v1/adaptor/cpp11/tuple.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp11_msgpack_tuple_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/vector.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3a101448ab7ea5bb06f1fbcf1a910852
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/array/detail/get_data.hpp [3:5]
+        include/msgpack/preprocessor/array/push_back.hpp [3:6]
+        include/msgpack/preprocessor/array/push_front.hpp [3:6]
+        include/msgpack/preprocessor/facilities/detail/is_empty.hpp [3:5]
+        include/msgpack/preprocessor/facilities/is_empty.hpp [3:6]
+        include/msgpack/preprocessor/facilities/is_empty_variadic.hpp [3:5]
+        include/msgpack/preprocessor/punctuation/detail/is_begin_parens.hpp [3:5]
+        include/msgpack/preprocessor/punctuation/is_begin_parens.hpp [3:5]
+        include/msgpack/preprocessor/punctuation/remove_parens.hpp [3:5]
+        include/msgpack/preprocessor/tuple/detail/is_single_return.hpp [3:5]
+        include/msgpack/preprocessor/variadic/detail/is_single_return.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3cc43ba4aae70f6e45b3b35ff118e972
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2015-2016 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/adaptor/adaptor_base.hpp [4:4]
+        include/msgpack/adaptor/boost/msgpack_variant.hpp [4:4]
+        include/msgpack/adaptor/check_container_size.hpp [4:4]
+        include/msgpack/meta.hpp [4:4]
+        include/msgpack/meta_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/adaptor_base.hpp [4:4]
+        include/msgpack/v1/adaptor/boost/fusion.hpp [4:4]
+        include/msgpack/v1/adaptor/boost/msgpack_variant.hpp [4:4]
+        include/msgpack/v1/adaptor/boost/msgpack_variant_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/check_container_size_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp03_define_map.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp03_define_map_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/ext.hpp [4:4]
+        include/msgpack/v1/adaptor/ext_decl.hpp [4:4]
+        include/msgpack/v1/meta_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/adaptor_base.hpp [4:4]
+        include/msgpack/v2/adaptor/detail/cpp03_define_map_decl.hpp [4:4]
+        include/msgpack/v2/meta_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/adaptor_base.hpp [4:4]
+        include/msgpack/v3/adaptor/detail/cpp03_define_map_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e17a582e15583acc6ff0339c8727826
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/repetition/enum_shifted_binary_params.hpp [3:5]
+        include/msgpack/preprocessor/slot/counter.hpp [3:5]
+        include/msgpack/preprocessor/slot/detail/counter.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 422fd0149793514d8ae9f207af3849fe
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2014 KONDO-2015 Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v1/adaptor/cpp11/forward_list.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 42bc1b152f56e4a7af6ff0d1a73cec36
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2016-2017 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v2/parse.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49c85f9c3e9bb242a6e6dd6d3d306ae2
+BELONGS ya.make
+    License text:
+        \#  *     (C) Copyright Edward Diener 2015.
+        \#  *     Distributed under the Boost Software License, Version 1.0. (See
+        \#  *     accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/seq/detail/is_empty.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 50702fabec299c07f04093e5e95b9f10
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2008-2010 FURUHASHI Sadayuki
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/pack_define.h [4:4]
+        include/msgpack/pack_template.h [4:4]
+        include/msgpack/sysdep.h [4:4]
+        include/msgpack/unpack_define.h [4:4]
+        include/msgpack/unpack_template.h [4:4]
+        include/msgpack/zone.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 52d3d0587f7137ef056c8c36337cfe33
+BELONGS ya.make
+    License text:
+        Copyright Jessica Hamilton 2014
+        Copyright Rene Rivera 2014-2015
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/os/haiku.h [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 554b6349aa084ffd849d6f4375abbb76
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2008-2016 FURUHASHI Sadayuki and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/adaptor/array_ref.hpp [4:4]
+        include/msgpack/adaptor/array_ref_decl.hpp [4:4]
+        include/msgpack/adaptor/bool.hpp [4:4]
+        include/msgpack/adaptor/define.hpp [4:4]
+        include/msgpack/adaptor/map.hpp [4:4]
+        include/msgpack/adaptor/map_decl.hpp [4:4]
+        include/msgpack/adaptor/nil.hpp [4:4]
+        include/msgpack/adaptor/raw.hpp [4:4]
+        include/msgpack/adaptor/v4raw.hpp [4:4]
+        include/msgpack/object.hpp [4:4]
+        include/msgpack/object_fwd.hpp [4:4]
+        include/msgpack/pack.hpp [4:4]
+        include/msgpack/sbuffer.hpp [4:4]
+        include/msgpack/unpack.hpp [4:4]
+        include/msgpack/v1/adaptor/array_ref_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp03_define_array.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp03_define_array_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp03_msgpack_tuple.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp03_msgpack_tuple_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp11_define_array.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp11_define_array_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp11_define_map.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp11_define_map_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp11_msgpack_tuple.hpp [4:4]
+        include/msgpack/v1/adaptor/int_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/map.hpp [4:4]
+        include/msgpack/v1/adaptor/map_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/msgpack_tuple.hpp [4:4]
+        include/msgpack/v1/adaptor/msgpack_tuple_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/nil.hpp [4:4]
+        include/msgpack/v1/adaptor/nil_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/raw_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/v4raw.hpp [4:4]
+        include/msgpack/v1/adaptor/v4raw_decl.hpp [4:4]
+        include/msgpack/v1/detail/cpp03_zone.hpp [4:4]
+        include/msgpack/v1/detail/cpp03_zone_decl.hpp [4:4]
+        include/msgpack/v1/detail/cpp11_zone_decl.hpp [4:4]
+        include/msgpack/v1/object_fwd_decl.hpp [4:4]
+        include/msgpack/v1/pack.hpp [4:4]
+        include/msgpack/v1/pack_decl.hpp [4:4]
+        include/msgpack/v1/parse_return.hpp [4:4]
+        include/msgpack/v1/sbuffer.hpp [4:4]
+        include/msgpack/v1/sbuffer_decl.hpp [4:4]
+        include/msgpack/v1/unpack.hpp [4:4]
+        include/msgpack/v1/unpack_decl.hpp [4:4]
+        include/msgpack/v1/unpack_exception.hpp [4:4]
+        include/msgpack/v1/vrefbuffer_decl.hpp [4:4]
+        include/msgpack/v1/zone_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/detail/cpp03_define_array_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/detail/cpp11_define_array_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/msgpack_tuple_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/nil_decl.hpp [4:4]
+        include/msgpack/v2/object_fwd.hpp [4:4]
+        include/msgpack/v2/object_fwd_decl.hpp [4:4]
+        include/msgpack/v2/pack_decl.hpp [4:4]
+        include/msgpack/v2/parse_return.hpp [4:4]
+        include/msgpack/v2/zone_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/detail/cpp03_define_array_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/detail/cpp11_define_array_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/msgpack_tuple_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/nil_decl.hpp [4:4]
+        include/msgpack/vrefbuffer.hpp [4:4]
+        include/msgpack/zone.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c403ec7fc96b9eeeb8d0d6da8005e84
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2013-2015
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/architecture/blackfin.h [2:4]
+        include/msgpack/predef/other.h [2:4]
+        include/msgpack/predef/other/endian.h [2:4]
+        include/msgpack/predef/platform.h [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5e5122844c5c00c4740356da3c3eaecb
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2013-2015
+        Copyright (c) Microsoft Corporation 2014
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/architecture/arm.h [2:6]
+        include/msgpack/predef/platform.h [2:5]
+        include/msgpack/predef/platform/windows_desktop.h [2:5]
+        include/msgpack/predef/platform/windows_phone.h [2:5]
+        include/msgpack/predef/platform/windows_runtime.h [2:5]
+        include/msgpack/predef/platform/windows_store.h [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5e8b36f8b7344a5c105fd71620e6cebc
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2011-2015
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/architecture/convex.h [2:4]
+        include/msgpack/predef/architecture/pyramid.h [2:4]
+        include/msgpack/predef/detail/test_def.h [2:4]
+        include/msgpack/predef/language.h [2:4]
+        include/msgpack/predef/language/objc.h [2:4]
+        include/msgpack/predef/language/stdc.h [2:4]
+        include/msgpack/predef/language/stdcpp.h [2:4]
+        include/msgpack/predef/library/std/cxx.h [2:4]
+        include/msgpack/predef/os/os400.h [2:4]
+        include/msgpack/predef/os/vms.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 60a2739fa0b10a8912542f3a422b8446
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/tuple/rem.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 60afa261240af467ca83d0ce5454e60a
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2008-2014 FURUHASHI Sadayuki and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/adaptor/msgpack_tuple.hpp [4:4]
+        include/msgpack/v1/adaptor/define.hpp [4:4]
+        include/msgpack/v1/object.hpp [4:4]
+        include/msgpack/v1/object_decl.hpp [4:4]
+        include/msgpack/v1/object_fwd.hpp [4:4]
+        include/msgpack/v1/zone.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6452f67e0510431928f313d9b1272e58
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2018-2017 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v3/parse_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6518675878f6c96ced7667e2a4ed728a
+BELONGS ya.make
+    License text:
+        Copyright Jessica Hamilton 2014
+        Copyright Rene Rivera 2014-2015
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/os/haiku.h [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d1f158e3cd8c2952a47fc402919aed0
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2017 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/adaptor/boost/string_view.hpp [4:4]
+        include/msgpack/adaptor/cpp17/optional.hpp [4:4]
+        include/msgpack/adaptor/cpp17/string_view.hpp [4:4]
+        include/msgpack/parse_return.hpp [4:4]
+        include/msgpack/unpack_exception.hpp [4:4]
+        include/msgpack/v1/adaptor/boost/string_view.hpp [4:4]
+        include/msgpack/v1/adaptor/cpp17/optional.hpp [4:4]
+        include/msgpack/v1/adaptor/cpp17/string_view.hpp [4:4]
+        include/msgpack/v1/adaptor/detail/cpp11_convert_helper.hpp [4:4]
+        include/msgpack/v2/create_object_visitor.hpp [4:4]
+        include/msgpack/v2/create_object_visitor_decl.hpp [4:4]
+        include/msgpack/v2/null_visitor.hpp [4:4]
+        include/msgpack/v2/x3_parse.hpp [4:4]
+        include/msgpack/v2/x3_parse_decl.hpp [4:4]
+        include/msgpack/v2/x3_unpack.hpp [4:4]
+        include/msgpack/v3/null_visitor_decl.hpp [4:4]
+        include/msgpack/v3/x3_unpack_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6f2106d29f8f11f40ccd5ca1f99c446b
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2014
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/detail/comp_detected.h [2:4]
+        include/msgpack/predef/detail/platform_detected.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7847dd132299dd522b778f700587670d
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2012-2015
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/os/bsd/bsdi.h [2:4]
+        include/msgpack/predef/os/bsd/dragonfly.h [2:4]
+        include/msgpack/predef/os/bsd/free.h [2:4]
+        include/msgpack/predef/os/bsd/net.h [2:4]
+        include/msgpack/predef/os/bsd/open.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7935ab641e9f23e0889d7730e25cf4b2
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2010-2016 FURUHASHI Sadayuki and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v1/zbuffer.hpp [4:4]
+        include/msgpack/v1/zbuffer_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e942e158d997f6b82ad84cfb98c981c
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2016 FURUHASHI Sadayuki and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/adaptor/fixint.hpp [4:4]
+        include/msgpack/adaptor/fixint_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/fixint.hpp [4:4]
+        include/msgpack/v1/adaptor/fixint_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/fixint_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/int_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/fixint_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/int_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7eaedf6b762d6ca4e7244fa87408e11b
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2018 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/create_object_visitor.hpp [4:4]
+        include/msgpack/create_object_visitor_decl.hpp [4:4]
+        include/msgpack/null_visitor.hpp [4:4]
+        include/msgpack/null_visitor_decl.hpp [4:4]
+        include/msgpack/parse.hpp [4:4]
+        include/msgpack/parse_decl.hpp [4:4]
+        include/msgpack/v2/null_visitor_decl.hpp [4:4]
+        include/msgpack/v2/parse_decl.hpp [4:4]
+        include/msgpack/v2/x3_unpack_decl.hpp [4:4]
+        include/msgpack/v3/cpp_config_decl.hpp [4:4]
+        include/msgpack/v3/create_object_visitor_decl.hpp [4:4]
+        include/msgpack/v3/iterator_decl.hpp [4:4]
+        include/msgpack/v3/object_decl.hpp [4:4]
+        include/msgpack/v3/parse.hpp [4:4]
+        include/msgpack/v3/sbuffer_decl.hpp [4:4]
+        include/msgpack/v3/unpack.hpp [4:4]
+        include/msgpack/v3/unpack_decl.hpp [4:4]
+        include/msgpack/v3/vrefbuffer_decl.hpp [4:4]
+        include/msgpack/v3/x3_parse_decl.hpp [4:4]
+        include/msgpack/v3/x3_unpack.hpp [4:4]
+        include/msgpack/v3/zbuffer_decl.hpp [4:4]
+        include/msgpack/x3_parse.hpp [4:4]
+        include/msgpack/x3_parse_decl.hpp [4:4]
+        include/msgpack/x3_unpack.hpp [4:4]
+        include/msgpack/x3_unpack_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8193198f8b9120bcf75cd34e643dd443
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2005, 2008-2013
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/version_number.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 861057944f34a04f706e0f6a42df266a
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2013
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/detail/endian_compat.h [2:4]
+        include/msgpack/predef/detail/os_detected.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 87b60968f87d56e96c32b92105f26f84
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2013-2016 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/cpp_config.hpp [4:4]
+        include/msgpack/v1/cpp_config.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8c8b8d0e501cec3762ad902ffdcf4fb1
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2016 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/adaptor/adaptor_base_decl.hpp [4:4]
+        include/msgpack/adaptor/boost/msgpack_variant_decl.hpp [4:4]
+        include/msgpack/adaptor/boost/optional.hpp [4:4]
+        include/msgpack/adaptor/boost/string_ref.hpp [4:4]
+        include/msgpack/adaptor/carray.hpp [4:4]
+        include/msgpack/adaptor/char_ptr.hpp [4:4]
+        include/msgpack/adaptor/check_container_size_decl.hpp [4:4]
+        include/msgpack/adaptor/cpp11/array.hpp [4:4]
+        include/msgpack/adaptor/cpp11/array_char.hpp [4:4]
+        include/msgpack/adaptor/cpp11/array_unsigned_char.hpp [4:4]
+        include/msgpack/adaptor/cpp11/forward_list.hpp [4:4]
+        include/msgpack/adaptor/cpp11/reference_wrapper.hpp [4:4]
+        include/msgpack/adaptor/cpp11/shared_ptr.hpp [4:4]
+        include/msgpack/adaptor/cpp11/tuple.hpp [4:4]
+        include/msgpack/adaptor/cpp11/unique_ptr.hpp [4:4]
+        include/msgpack/adaptor/cpp11/unordered_map.hpp [4:4]
+        include/msgpack/adaptor/cpp11/unordered_set.hpp [4:4]
+        include/msgpack/adaptor/define_decl.hpp [4:4]
+        include/msgpack/adaptor/deque.hpp [4:4]
+        include/msgpack/adaptor/ext_decl.hpp [4:4]
+        include/msgpack/adaptor/float.hpp [4:4]
+        include/msgpack/adaptor/int.hpp [4:4]
+        include/msgpack/adaptor/int_decl.hpp [4:4]
+        include/msgpack/adaptor/list.hpp [4:4]
+        include/msgpack/adaptor/msgpack_tuple_decl.hpp [4:4]
+        include/msgpack/adaptor/nil_decl.hpp [4:4]
+        include/msgpack/adaptor/pair.hpp [4:4]
+        include/msgpack/adaptor/raw_decl.hpp [4:4]
+        include/msgpack/adaptor/set.hpp [4:4]
+        include/msgpack/adaptor/size_equal_only.hpp [4:4]
+        include/msgpack/adaptor/size_equal_only_decl.hpp [4:4]
+        include/msgpack/adaptor/string.hpp [4:4]
+        include/msgpack/adaptor/v4raw_decl.hpp [4:4]
+        include/msgpack/adaptor/vector.hpp [4:4]
+        include/msgpack/adaptor/vector_bool.hpp [4:4]
+        include/msgpack/adaptor/vector_char.hpp [4:4]
+        include/msgpack/adaptor/vector_unsigned_char.hpp [4:4]
+        include/msgpack/cpp_config_decl.hpp [4:4]
+        include/msgpack/fbuffer_decl.hpp [4:4]
+        include/msgpack/iterator_decl.hpp [4:4]
+        include/msgpack/object_decl.hpp [4:4]
+        include/msgpack/object_fwd_decl.hpp [4:4]
+        include/msgpack/pack_decl.hpp [4:4]
+        include/msgpack/sbuffer_decl.hpp [4:4]
+        include/msgpack/unpack_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/adaptor_base_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/carray.hpp [4:4]
+        include/msgpack/v1/adaptor/define_decl.hpp [4:4]
+        include/msgpack/v1/adaptor/size_equal_only.hpp [4:4]
+        include/msgpack/v1/adaptor/size_equal_only_decl.hpp [4:4]
+        include/msgpack/v1/cpp_config_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/adaptor_base_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/array_ref_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/boost/msgpack_variant_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/check_container_size_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/define_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/detail/cpp03_msgpack_tuple_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/detail/cpp11_define_map_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/detail/cpp11_msgpack_tuple_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/ext_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/map_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/raw_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/size_equal_only_decl.hpp [4:4]
+        include/msgpack/v2/adaptor/v4raw_decl.hpp [4:4]
+        include/msgpack/v2/cpp_config_decl.hpp [4:4]
+        include/msgpack/v2/detail/cpp03_zone_decl.hpp [4:4]
+        include/msgpack/v2/detail/cpp11_zone_decl.hpp [4:4]
+        include/msgpack/v2/iterator_decl.hpp [4:4]
+        include/msgpack/v2/object.hpp [4:4]
+        include/msgpack/v2/object_decl.hpp [4:4]
+        include/msgpack/v2/sbuffer_decl.hpp [4:4]
+        include/msgpack/v2/unpack.hpp [4:4]
+        include/msgpack/v2/unpack_decl.hpp [4:4]
+        include/msgpack/v2/vrefbuffer_decl.hpp [4:4]
+        include/msgpack/v2/zbuffer_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/adaptor_base_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/array_ref_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/boost/msgpack_variant_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/check_container_size_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/define_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/detail/cpp03_msgpack_tuple_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/detail/cpp11_define_map_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/detail/cpp11_msgpack_tuple_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/ext_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/map_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/raw_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/size_equal_only_decl.hpp [4:4]
+        include/msgpack/v3/adaptor/v4raw_decl.hpp [4:4]
+        include/msgpack/v3/detail/cpp03_zone_decl.hpp [4:4]
+        include/msgpack/v3/detail/cpp11_zone_decl.hpp [4:4]
+        include/msgpack/vrefbuffer_decl.hpp [4:4]
+        include/msgpack/zbuffer_decl.hpp [4:4]
+        include/msgpack/zone_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8d4e102d4368b9b87b7ee92dd7a909df
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2010 FURUHASHI Sadayuki
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/zbuffer.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8eaeb67f4ef3e1667d08fa53a73270dd
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2013-2018 Vladimir Volodko and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v3/fbuffer_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9146cd4ceb3b8a3eedaa5e17a6adfa44
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2013 Vladimir Volodko
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/fbuffer.h [4:4]
+        include/msgpack/fbuffer.hpp [4:4]
+        include/msgpack/v1/fbuffer.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9a87cb7a493593f7a44d557ec87837d8
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2008-2009 FURUHASHI Sadayuki
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack.h [4:4]
+        include/msgpack.hpp [4:4]
+        include/msgpack/object.h [4:4]
+        include/msgpack/pack.h [4:4]
+        include/msgpack/sbuffer.h [4:4]
+        include/msgpack/unpack.h [4:4]
+        include/msgpack/v1/adaptor/float.hpp [4:4]
+        include/msgpack/v1/adaptor/pair.hpp [4:4]
+        include/msgpack/v1/adaptor/raw.hpp [4:4]
+        include/msgpack/version.h [4:4]
+        include/msgpack/vrefbuffer.h [4:4]
+        src/objectc.c [4:4]
+        src/unpack.c [4:4]
+        src/vrefbuffer.c [4:4]
+        src/zone.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a04d60693ae88d69afc8ccff61832efc
+BELONGS ya.make
+    License text:
+        \#  *     (C) Copyright Edward Diener 2013.
+        \#  *     Distributed under the Boost Software License, Version 1.0. (See
+        \#  *     accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/tuple/insert.hpp [3:5]
+        include/msgpack/preprocessor/tuple/pop_back.hpp [3:5]
+        include/msgpack/preprocessor/tuple/pop_front.hpp [3:5]
+        include/msgpack/preprocessor/tuple/push_back.hpp [3:5]
+        include/msgpack/preprocessor/tuple/push_front.hpp [3:5]
+        include/msgpack/preprocessor/tuple/remove.hpp [3:5]
+        include/msgpack/preprocessor/tuple/replace.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a08e41a239cdee1f96eadc8647e90ab7
+BELONGS ya.make
+    License text:
+        Copyright Charly Chevalier 2015
+        Copyright Joel Falcou 2015
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/hardware.h [2:5]
+        include/msgpack/predef/hardware/simd.h [2:5]
+        include/msgpack/predef/hardware/simd/arm.h [2:5]
+        include/msgpack/predef/hardware/simd/arm/versions.h [2:5]
+        include/msgpack/predef/hardware/simd/ppc.h [2:5]
+        include/msgpack/predef/hardware/simd/ppc/versions.h [2:5]
+        include/msgpack/predef/hardware/simd/x86.h [2:5]
+        include/msgpack/predef/hardware/simd/x86/versions.h [2:5]
+        include/msgpack/predef/hardware/simd/x86_amd.h [2:5]
+        include/msgpack/predef/hardware/simd/x86_amd/versions.h [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a710f97cab1f756de65cb7fa81633cdb
+BELONGS ya.make
+    License text:
+        \#  *     (C) Copyright Paul Mensonides 2002.
+        \#  *     Distributed under the Boost Software License, Version 1.0. (See
+        \#  *     accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/array/data.hpp [3:5]
+        include/msgpack/preprocessor/array/elem.hpp [3:5]
+        include/msgpack/preprocessor/array/insert.hpp [3:5]
+        include/msgpack/preprocessor/array/pop_back.hpp [3:5]
+        include/msgpack/preprocessor/array/pop_front.hpp [3:5]
+        include/msgpack/preprocessor/array/push_back.hpp [3:6]
+        include/msgpack/preprocessor/array/push_front.hpp [3:6]
+        include/msgpack/preprocessor/array/remove.hpp [3:5]
+        include/msgpack/preprocessor/array/replace.hpp [3:5]
+        include/msgpack/preprocessor/array/reverse.hpp [3:5]
+        include/msgpack/preprocessor/array/size.hpp [3:5]
+        include/msgpack/preprocessor/assert_msg.hpp [3:5]
+        include/msgpack/preprocessor/comma.hpp [3:5]
+        include/msgpack/preprocessor/comma_if.hpp [3:5]
+        include/msgpack/preprocessor/control.hpp [3:5]
+        include/msgpack/preprocessor/control/deduce_d.hpp [3:5]
+        include/msgpack/preprocessor/control/expr_iif.hpp [3:5]
+        include/msgpack/preprocessor/control/iif.hpp [3:5]
+        include/msgpack/preprocessor/debug.hpp [3:5]
+        include/msgpack/preprocessor/debug/error.hpp [3:5]
+        include/msgpack/preprocessor/debug/line.hpp [3:5]
+        include/msgpack/preprocessor/dec.hpp [3:5]
+        include/msgpack/preprocessor/detail/auto_rec.hpp [3:5]
+        include/msgpack/preprocessor/detail/check.hpp [3:5]
+        include/msgpack/preprocessor/detail/dmc/auto_rec.hpp [3:5]
+        include/msgpack/preprocessor/detail/is_binary.hpp [3:5]
+        include/msgpack/preprocessor/detail/is_nullary.hpp [3:5]
+        include/msgpack/preprocessor/detail/is_unary.hpp [3:5]
+        include/msgpack/preprocessor/detail/null.hpp [3:5]
+        include/msgpack/preprocessor/detail/split.hpp [3:5]
+        include/msgpack/preprocessor/empty.hpp [3:5]
+        include/msgpack/preprocessor/enum.hpp [3:5]
+        include/msgpack/preprocessor/enum_params.hpp [3:5]
+        include/msgpack/preprocessor/enum_params_with_a_default.hpp [3:5]
+        include/msgpack/preprocessor/enum_params_with_defaults.hpp [3:5]
+        include/msgpack/preprocessor/enum_shifted.hpp [3:5]
+        include/msgpack/preprocessor/enum_shifted_params.hpp [3:5]
+        include/msgpack/preprocessor/expand.hpp [3:5]
+        include/msgpack/preprocessor/expr_if.hpp [3:5]
+        include/msgpack/preprocessor/facilities/apply.hpp [3:5]
+        include/msgpack/preprocessor/facilities/intercept.hpp [3:5]
+        include/msgpack/preprocessor/for.hpp [3:5]
+        include/msgpack/preprocessor/identity.hpp [3:5]
+        include/msgpack/preprocessor/if.hpp [3:5]
+        include/msgpack/preprocessor/inc.hpp [3:5]
+        include/msgpack/preprocessor/iterate.hpp [3:5]
+        include/msgpack/preprocessor/iteration.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/bounds/lower1.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/bounds/lower2.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/bounds/lower3.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/bounds/lower4.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/bounds/lower5.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/bounds/upper1.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/bounds/upper2.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/bounds/upper3.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/bounds/upper4.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/bounds/upper5.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/finish.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/iter/forward1.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/iter/forward2.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/iter/forward3.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/iter/forward4.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/iter/forward5.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/iter/reverse1.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/iter/reverse2.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/iter/reverse3.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/iter/reverse4.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/iter/reverse5.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/local.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/rlocal.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/self.hpp [3:5]
+        include/msgpack/preprocessor/iteration/detail/start.hpp [3:5]
+        include/msgpack/preprocessor/iteration/iterate.hpp [3:5]
+        include/msgpack/preprocessor/iteration/local.hpp [3:5]
+        include/msgpack/preprocessor/iteration/self.hpp [3:5]
+        include/msgpack/preprocessor/limits.hpp [3:5]
+        include/msgpack/preprocessor/logical/bitand.hpp [3:5]
+        include/msgpack/preprocessor/logical/bitnor.hpp [3:5]
+        include/msgpack/preprocessor/logical/bitor.hpp [3:5]
+        include/msgpack/preprocessor/logical/bitxor.hpp [3:5]
+        include/msgpack/preprocessor/logical/compl.hpp [3:5]
+        include/msgpack/preprocessor/max.hpp [3:5]
+        include/msgpack/preprocessor/min.hpp [3:5]
+        include/msgpack/preprocessor/punctuation.hpp [3:5]
+        include/msgpack/preprocessor/punctuation/paren.hpp [3:5]
+        include/msgpack/preprocessor/punctuation/paren_if.hpp [3:5]
+        include/msgpack/preprocessor/repeat.hpp [3:5]
+        include/msgpack/preprocessor/repeat_2nd.hpp [3:5]
+        include/msgpack/preprocessor/repeat_3rd.hpp [3:5]
+        include/msgpack/preprocessor/repeat_from_to.hpp [3:5]
+        include/msgpack/preprocessor/repeat_from_to_2nd.hpp [3:5]
+        include/msgpack/preprocessor/repeat_from_to_3rd.hpp [3:5]
+        include/msgpack/preprocessor/repetition.hpp [3:5]
+        include/msgpack/preprocessor/repetition/deduce_r.hpp [3:5]
+        include/msgpack/preprocessor/repetition/deduce_z.hpp [3:5]
+        include/msgpack/preprocessor/repetition/enum_binary_params.hpp [3:5]
+        include/msgpack/preprocessor/repetition/enum_trailing.hpp [3:5]
+        include/msgpack/preprocessor/repetition/enum_trailing_binary_params.hpp [3:5]
+        include/msgpack/preprocessor/repetition/enum_trailing_params.hpp [3:5]
+        include/msgpack/preprocessor/selection.hpp [3:5]
+        include/msgpack/preprocessor/seq/cat.hpp [3:5]
+        include/msgpack/preprocessor/seq/detail/split.hpp [3:5]
+        include/msgpack/preprocessor/seq/elem.hpp [3:5]
+        include/msgpack/preprocessor/seq/enum.hpp [3:5]
+        include/msgpack/preprocessor/seq/filter.hpp [3:5]
+        include/msgpack/preprocessor/seq/first_n.hpp [3:5]
+        include/msgpack/preprocessor/seq/fold_left.hpp [3:5]
+        include/msgpack/preprocessor/seq/fold_right.hpp [3:5]
+        include/msgpack/preprocessor/seq/for_each.hpp [3:5]
+        include/msgpack/preprocessor/seq/for_each_i.hpp [3:5]
+        include/msgpack/preprocessor/seq/for_each_product.hpp [3:5]
+        include/msgpack/preprocessor/seq/insert.hpp [3:5]
+        include/msgpack/preprocessor/seq/pop_back.hpp [3:5]
+        include/msgpack/preprocessor/seq/pop_front.hpp [3:5]
+        include/msgpack/preprocessor/seq/push_back.hpp [3:5]
+        include/msgpack/preprocessor/seq/push_front.hpp [3:5]
+        include/msgpack/preprocessor/seq/remove.hpp [3:5]
+        include/msgpack/preprocessor/seq/replace.hpp [3:5]
+        include/msgpack/preprocessor/seq/rest_n.hpp [3:5]
+        include/msgpack/preprocessor/seq/reverse.hpp [3:5]
+        include/msgpack/preprocessor/seq/seq.hpp [3:5]
+        include/msgpack/preprocessor/seq/size.hpp [3:5]
+        include/msgpack/preprocessor/seq/subseq.hpp [3:5]
+        include/msgpack/preprocessor/seq/to_array.hpp [3:5]
+        include/msgpack/preprocessor/seq/to_tuple.hpp [3:5]
+        include/msgpack/preprocessor/seq/transform.hpp [3:5]
+        include/msgpack/preprocessor/slot.hpp [3:5]
+        include/msgpack/preprocessor/slot/detail/def.hpp [3:5]
+        include/msgpack/preprocessor/slot/detail/shared.hpp [3:5]
+        include/msgpack/preprocessor/slot/detail/slot1.hpp [3:5]
+        include/msgpack/preprocessor/slot/detail/slot2.hpp [3:5]
+        include/msgpack/preprocessor/slot/detail/slot3.hpp [3:5]
+        include/msgpack/preprocessor/slot/detail/slot4.hpp [3:5]
+        include/msgpack/preprocessor/slot/detail/slot5.hpp [3:5]
+        include/msgpack/preprocessor/slot/slot.hpp [3:5]
+        include/msgpack/preprocessor/while.hpp [3:5]
+        include/msgpack/preprocessor/wstringize.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8aaf07db8d2d735218a088a6b51c93c
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2008-2013 FURUHASHI Sadayuki and Takatoshi Kondo
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v1/version.hpp [4:4]
+        include/msgpack/version.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac35770391c69072ea1722a98afaa216
+BELONGS ya.make
+    License text:
+        \#  *     (C) Copyright Paul Mensonides 2003.
+        \#  *     Distributed under the Boost Software License, Version 1.0. (See
+        \#  *     accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/facilities/is_1.hpp [3:5]
+        include/msgpack/preprocessor/facilities/is_empty.hpp [3:6]
+        include/msgpack/preprocessor/facilities/is_empty_or_1.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b4c15b3c14733d5b40db2e8395ff78fd
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2014 FURUHASHI Sadayuki
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/util.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc8163e1a5d3a5b046c6b6f994fea2b0
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2010-2013 FURUHASHI Sadayuki and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/zbuffer.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c3813bc43fb45363daf247950761e4d4
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2008-2013
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/library/c/_prefix.h [2:4]
+        include/msgpack/predef/library/std/_prefix.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c4ea2eea28e1408e04f31b43fc7574c0
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2014 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v1/versioning.hpp [4:4]
+        include/msgpack/versioning.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c76a2f55366b4f9354548d6ef58f5636
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/array.hpp [3:6]
+        include/msgpack/preprocessor/array/enum.hpp [3:6]
+        include/msgpack/preprocessor/array/to_list.hpp [3:6]
+        include/msgpack/preprocessor/array/to_seq.hpp [3:6]
+        include/msgpack/preprocessor/array/to_tuple.hpp [3:6]
+        include/msgpack/preprocessor/config/config.hpp [3:6]
+        include/msgpack/preprocessor/facilities.hpp [3:6]
+        include/msgpack/preprocessor/facilities/overload.hpp [3:6]
+        include/msgpack/preprocessor/library.hpp [3:6]
+        include/msgpack/preprocessor/list/to_seq.hpp [3:5]
+        include/msgpack/preprocessor/seq.hpp [3:6]
+        include/msgpack/preprocessor/seq/to_list.hpp [3:6]
+        include/msgpack/preprocessor/tuple/enum.hpp [3:6]
+        include/msgpack/preprocessor/tuple/size.hpp [3:6]
+        include/msgpack/preprocessor/tuple/to_array.hpp [3:6]
+        include/msgpack/preprocessor/tuple/to_seq.hpp [3:6]
+        include/msgpack/preprocessor/variadic.hpp [3:6]
+        include/msgpack/preprocessor/variadic/elem.hpp [3:6]
+        include/msgpack/preprocessor/variadic/size.hpp [3:6]
+        include/msgpack/preprocessor/variadic/to_array.hpp [3:6]
+        include/msgpack/preprocessor/variadic/to_list.hpp [3:6]
+        include/msgpack/preprocessor/variadic/to_seq.hpp [3:6]
+        include/msgpack/preprocessor/variadic/to_tuple.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c98683db2d8fa0352ce99bf5eb8af524
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2015-2016
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/version.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cadd0a7e7ac6181e67d2bd2e43646b41
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2008-2018 FURUHASHI Sadayuki and KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v3/object_fwd.hpp [4:4]
+        include/msgpack/v3/object_fwd_decl.hpp [4:4]
+        include/msgpack/v3/pack_decl.hpp [4:4]
+        include/msgpack/v3/parse_return.hpp [4:4]
+        include/msgpack/v3/zone_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4ba5a7d8e5380c8f09844406a07b435
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2014-2015 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v1/adaptor/char_ptr.hpp [4:4]
+        include/msgpack/v1/adaptor/cpp11/array.hpp [4:4]
+        include/msgpack/v1/adaptor/cpp11/array_char.hpp [4:4]
+        include/msgpack/v1/adaptor/cpp11/array_unsigned_char.hpp [4:4]
+        include/msgpack/v1/adaptor/cpp11/unordered_map.hpp [4:4]
+        include/msgpack/v1/adaptor/cpp11/unordered_set.hpp [4:4]
+        include/msgpack/v1/adaptor/vector_char.hpp [4:4]
+        include/msgpack/v1/adaptor/vector_unsigned_char.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d6ffc9c8b7faf6b69be894dbb468e1ac
+BELONGS ya.make
+    License text:
+        Copyright Charly Chevalier 2015
+        Copyright Joel Falcou 2015
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/hardware.h [2:5]
+        include/msgpack/predef/hardware/simd.h [2:5]
+        include/msgpack/predef/hardware/simd/arm.h [2:5]
+        include/msgpack/predef/hardware/simd/arm/versions.h [2:5]
+        include/msgpack/predef/hardware/simd/ppc.h [2:5]
+        include/msgpack/predef/hardware/simd/ppc/versions.h [2:5]
+        include/msgpack/predef/hardware/simd/x86.h [2:5]
+        include/msgpack/predef/hardware/simd/x86/versions.h [2:5]
+        include/msgpack/predef/hardware/simd/x86_amd.h [2:5]
+        include/msgpack/predef/hardware/simd/x86_amd/versions.h [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e375f9f33ab97263bdffba2a16e216e8
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2015
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/os/android.h [2:4]
+        include/msgpack/predef/os/ios.h [2:5]
+        include/msgpack/predef/platform/windows_desktop.h [2:5]
+        include/msgpack/predef/platform/windows_phone.h [2:5]
+        include/msgpack/predef/platform/windows_runtime.h [2:5]
+        include/msgpack/predef/platform/windows_store.h [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e5e3497f3b7a7548f1c8879a20c46cdb
+BELONGS ya.make
+    License text:
+        Copyright (C) 2008-2015 FURUHASHI Sadayuki
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:1]
+        include/msgpack/adaptor/tr1/unordered_map.hpp [4:4]
+        include/msgpack/adaptor/tr1/unordered_set.hpp [4:4]
+        include/msgpack/v1/adaptor/deque.hpp [4:4]
+        include/msgpack/v1/adaptor/list.hpp [4:4]
+        include/msgpack/v1/adaptor/set.hpp [4:4]
+        include/msgpack/v1/adaptor/string.hpp [4:4]
+        include/msgpack/v1/adaptor/tr1/unordered_map.hpp [4:4]
+        include/msgpack/v1/adaptor/tr1/unordered_set.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ebbb5e73f5b99b3a2787fd7720e44c1b
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2015-2018 KONDO Takatoshi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/v3/meta_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec1e7aaf135df995876bb078c9fbfb07
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2015-2016 MIZUKI Hirata
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/iterator.hpp [4:4]
+        include/msgpack/v1/iterator.hpp [4:4]
+        include/msgpack/v1/iterator_decl.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL edcaf1fe274bdd8386838aee1de0e9b8
+BELONGS ya.make
+    License text:
+        Copyright Rene Rivera 2011-2012
+        Distributed under the Boost Software License, Version 1.0.
+        (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/predef/detail/_cassert.h [2:4]
+        include/msgpack/predef/detail/_exception.h [2:4]
+        include/msgpack/predef/detail/test.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f1ac7bc8521aa0e32b429682f728df8d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/msgpack/preprocessor/array.hpp [3:6]
+        include/msgpack/preprocessor/config/config.hpp [3:6]
+        include/msgpack/preprocessor/facilities.hpp [3:6]
+        include/msgpack/preprocessor/library.hpp [3:6]
+        include/msgpack/preprocessor/seq.hpp [3:6]
+        include/msgpack/preprocessor/tuple/rem.hpp [3:6]
+        include/msgpack/preprocessor/tuple/to_seq.hpp [3:6]

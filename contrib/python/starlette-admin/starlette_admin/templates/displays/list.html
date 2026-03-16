@@ -1,0 +1,7 @@
+<ul>
+    {% for value in data %}
+        {% with data=value, error=False, field=field.field %}
+            <li>{% include field.display_template %}</li>
+        {% endwith %}
+    {% endfor %}
+</ul>

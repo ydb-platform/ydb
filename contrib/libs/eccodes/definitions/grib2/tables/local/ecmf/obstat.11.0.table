@@ -1,0 +1,4 @@
+#Code Table obstat.11.0: Scan position definition
+0 0 Explicit scan position (table 11.1)
+1 1 Scan position interval (table 11.2)
+255 255 Missing 

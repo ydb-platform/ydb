@@ -1,0 +1,108 @@
+#!/bin/sh
+
+. "$TESTSUITE_LIB_UTILS"
+
+if [ "x$REDIS_TMPDIR" = "x" ]; then
+    die "REDIS_TMPDIR must be set"
+fi
+if [ "x$REDIS_CONFIGS_DIR" = "x" ]; then
+    die "REDIS_CONFIGS_DIR must be set"
+fi
+
+set -e
+REDIS_SERVER=$(choose_binaries_or_die valkey-server redis-server)
+REDIS_CLI=$(choose_binaries_or_die valkey-cli redis-cli)
+REDIS_ROLES="master0 master1 slave0 slave1 slave2"
+REDIS_SENTINEL_CONF=$REDIS_CONFIGS_DIR/redis_sentinel.conf
+REDIS_SLEEP_WORKAROUND_SECONDS=${REDIS_SLEEP_WORKAROUND_SECONDS:=15}
+REDIS_DATADIR=$REDIS_TMPDIR/data
+REDIS_LOGSDIR=$REDIS_TMPDIR/logs
+set +e
+
+[ -z "$REDIS_SENTINEL_HOST" ] && die "REDIS_SENTINEL_HOST must be set"
+[ -z "$REDIS_SENTINEL_PORT" ] && die "REDIS_SENTINEL_PORT must be set"
+
+wait_redis_startup() {
+    local SLAVES=
+    local STATUS='OK'
+    local KEY=
+    for i in $(seq -${REDIS_SLEEP_WORKAROUND_SECONDS} ${REDIS_SLEEP_WORKAROUND_SECONDS}); do
+        SLAVES=$(
+          $REDIS_CLI -h $REDIS_SENTINEL_HOST -p $REDIS_SENTINEL_PORT SENTINEL slaves test_master0
+          $REDIS_CLI -h $REDIS_SENTINEL_HOST -p $REDIS_SENTINEL_PORT SENTINEL slaves test_master1
+        )
+
+        STATUS='OK'
+        KEY=''
+        for line in ${SLAVES}; do
+            if [ "x$line" = "xflags" ]; then
+                KEY='flags'
+            elif [ "x$line" = "xmaster-link-status" ]; then
+                KEY='master-link-status'
+            elif [ "x$KEY" = "xflags" ] && (echo "$line" | grep -q "disconnected"); then
+                STATUS='FAIL'
+                break
+            elif [ "x$KEY" = "xmaster-link-status" ] && (echo "$line" | grep -q "err"); then
+                STATUS='FAIL'
+                break
+            else
+                KEY=''
+            fi
+        done
+
+        if [ "x$STATUS" = "xOK" ]; then
+            return
+        fi
+
+        sleep 0.5
+    done
+
+    die "Redis instances failed to negotiate in ${REDIS_SLEEP_WORKAROUND_SECONDS} seconds. \
+        Try increasing the REDIS_SLEEP_WORKAROUND_SECONDS."
+}
+
+start() {
+    rm -rf $REDIS_DATADIR
+
+    mkdir -p $REDIS_TMPDIR
+    mkdir -p $REDIS_DATADIR
+    mkdir -p $REDIS_LOGSDIR
+
+    for role in $REDIS_ROLES; do
+        echo "Starting redis ($role)..."
+        config=$REDIS_CONFIGS_DIR/redis_${role}.conf
+        pidfile="$(get_pidfile $role)"
+        logfile=$REDIS_LOGSDIR/$role.log
+        $REDIS_SERVER $config \
+                      --pidfile $pidfile \
+                      --dir $REDIS_DATADIR \
+                      --dbfilename $role.db \
+                      --logfile "$logfile" || {
+            dump_log_stderr "$logfile"
+            die "Failed to start redis ($role) server"
+        }
+    done
+
+    # Start sentinel
+    cp $REDIS_SENTINEL_CONF $REDIS_TMPDIR
+    config=$REDIS_TMPDIR/redis_sentinel.conf
+    pidfile="$(get_pidfile sentinel)"
+    logfile=$REDIS_LOGSDIR/sentinel.log
+    echo "Starting redis sentinel..."
+    $REDIS_SERVER $config  \
+                  --pidfile $pidfile --logfile $logfile --sentinel || {
+        dump_log "$logfile" >&2
+        die "Failed to start redis sentinel server"
+    }
+
+    wait_redis_startup
+}
+
+stop() {
+    for role in $REDIS_ROLES sentinel; do
+        pidfile="$(get_pidfile $role)"
+        stop_daemon $REDIS_SERVER $pidfile
+    done
+}
+
+script_main "$@"

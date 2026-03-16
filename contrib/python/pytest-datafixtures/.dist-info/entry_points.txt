@@ -1,0 +1,2 @@
+[pytest11]
+datafixtures = datafixtures.entry

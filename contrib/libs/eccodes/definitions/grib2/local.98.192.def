@@ -1,0 +1,11 @@
+# Local definition 192: Multiple ECMWF local definitions
+
+unsigned[1] numberOfLocalDefinitions = 2  : dump;
+
+if (numberOfLocalDefinitions == 2 ) {
+    unsigned[1] subLocalDefinitionNumber1 = 1  : dump;
+    template  subDefinitions1  "grib2/local.98.[subLocalDefinitionNumber1].def";
+
+    unsigned[1] subLocalDefinitionNumber2 = 24  : dump;
+    template  subDefinitions2  "grib2/local.98.[subLocalDefinitionNumber2].def";
+}

@@ -1,0 +1,26 @@
+--- contrib/python/thrift/ya.make	(index)
++++ contrib/python/thrift/ya.make	(working tree)
+@@ -28,12 +28,14 @@ NO_CHECK_IMPORTS(
+ 
+-SRCS(
+-    src/ext/binary.cpp
+-    src/ext/compact.cpp
+-    src/ext/module.cpp
+-    src/ext/types.cpp
+-)
++IF (NOT OS_WINDOWS)
++    SRCS(
++        src/ext/binary.cpp
++        src/ext/compact.cpp
++        src/ext/module.cpp
++        src/ext/types.cpp
++    )
+ 
+-PY_REGISTER(
+-    fastbinary
+-)
++    PY_REGISTER(
++        fastbinary
++    )
++ENDIF()
+ 

@@ -1,0 +1,286 @@
+/******************************************************************************
+ * File:   ogrdxf_polyline_smooth.cpp
+ *
+ * Project:  Interpolation support for smooth POLYLINE and LWPOLYLINE entities.
+ * Purpose:  Implementation of classes for OGR .dxf driver.
+ * Author:   TJ Snider, timsn@thtree.com
+ *           Ray Gardener, Daylon Graphics Ltd.
+ *
+ ******************************************************************************
+ * Copyright (c) 2010 Daylon Graphics Ltd.
+ *
+ * SPDX-License-Identifier: MIT
+ ****************************************************************************/
+
+#include "stdlib.h"
+#include "math.h"
+#include "ogrdxf_polyline_smooth.h"
+
+/************************************************************************/
+/*                Local helper functions                                */
+/************************************************************************/
+
+static double GetRadius(double bulge, double length)
+{
+    const double h = (bulge * length) / 2;
+    return (h / 2) + (length * length / (8 * h));
+}
+
+static double GetLength(const DXFSmoothPolylineVertex &start,
+                        const DXFSmoothPolylineVertex &end)
+{
+    return sqrt(pow(end.x - start.x, 2) + pow(end.y - start.y, 2));
+}
+
+static double GetAngle(const DXFSmoothPolylineVertex &start,
+                       const DXFSmoothPolylineVertex &end)
+{
+    return atan2((start.y - end.y), (start.x - end.x)) * 180.0 / M_PI;
+}
+
+static double GetOGRangle(double angle)
+{
+    return angle > 0.0 ? -(angle - 180.0) : -(angle + 180.0);
+}
+
+/************************************************************************/
+/*                DXFSmoothPolyline::Tessellate()                        */
+/************************************************************************/
+
+OGRGeometry *DXFSmoothPolyline::Tessellate(bool bAsPolygon) const
+{
+    assert(!m_vertices.empty());
+
+    /* -------------------------------------------------------------------- */
+    /*      If polyline is one vertex, convert it to a point                */
+    /* -------------------------------------------------------------------- */
+
+    if (m_vertices.size() == 1)
+    {
+        OGRPoint *poPt =
+            new OGRPoint(m_vertices[0].x, m_vertices[0].y, m_vertices[0].z);
+        if (m_vertices[0].z == 0 || m_dim == 2)
+            poPt->flattenTo2D();
+        return poPt;
+    }
+
+    /* -------------------------------------------------------------------- */
+    /*      Otherwise, presume a line string                                */
+    /* -------------------------------------------------------------------- */
+
+    OGRLinearRing *poLR = m_bClosed && bAsPolygon ? new OGRLinearRing : nullptr;
+    OGRLineString *poLS = poLR ? poLR : new OGRLineString;
+
+    m_blinestringstarted = false;
+
+    std::vector<DXFSmoothPolylineVertex>::const_iterator oIter =
+        m_vertices.begin();
+    std::vector<DXFSmoothPolylineVertex>::const_iterator oEndIter =
+        m_vertices.end();
+
+    --oEndIter;
+
+    DXFSmoothPolylineVertex begin = *oIter;
+
+    while (oIter != oEndIter)
+    {
+        ++oIter;
+        DXFSmoothPolylineVertex end = *oIter;
+
+        const double len = GetLength(begin, end);
+
+        // Don't bother handling bulge for non-constant Z
+        if (len == 0 || begin.bulge == 0 || begin.z != end.z)
+        {
+            EmitLine(begin, end, poLS);
+        }
+        else
+        {
+            const double radius = GetRadius(begin.bulge, len);
+            EmitArc(begin, end, radius, len, begin.bulge, poLS, begin.z);
+        }
+
+        // Move to next vertex
+        begin = end;
+    }
+
+    /* -------------------------------------------------------------------- */
+    /*      Flatten to 2D if necessary                                      */
+    /* -------------------------------------------------------------------- */
+
+    if (m_dim == 2)
+        poLS->flattenTo2D();
+
+    if (poLR)
+    {
+        // Wrap as polygon.
+        OGRPolygon *poPoly = new OGRPolygon();
+        poPoly->addRingDirectly(poLR);
+
+        return poPoly;
+    }
+
+    return poLS;
+}
+
+/************************************************************************/
+/*                DXFSmoothPolyline::EmitArc()                        */
+/************************************************************************/
+
+void DXFSmoothPolyline::EmitArc(const DXFSmoothPolylineVertex &start,
+                                const DXFSmoothPolylineVertex &end,
+                                double radius, double len, double bulge,
+                                OGRLineString *poLS, double dfZ) const
+{
+    assert(poLS);
+
+    double ogrArcRotation = 0.0;
+    const double ogrArcRadius = fabs(radius);
+
+    /* -------------------------------------------------------------------- */
+    /*      Set arc's direction and keep bulge positive                     */
+    /* -------------------------------------------------------------------- */
+
+    const bool bClockwise = (bulge < 0);
+
+    if (bClockwise)
+        bulge *= -1;
+
+    /* -------------------------------------------------------------------- */
+    /*      Get arc's center point                                          */
+    /* -------------------------------------------------------------------- */
+
+    const double saggita = fabs(bulge * (len / 2.0));
+    const double apo =
+        bClockwise ? -(ogrArcRadius - saggita) : -(saggita - ogrArcRadius);
+
+    DXFSmoothPolylineVertex v;
+    v.x = start.x - end.x;
+    v.y = start.y - end.y;
+
+#ifdef notdef
+    const bool bMathissue = (v.x == 0.0 || v.y == 0.0);
+#endif
+
+    DXFSmoothPolylineVertex midpoint;
+    midpoint.x = end.x + 0.5 * v.x;
+    midpoint.y = end.y + 0.5 * v.y;
+
+    DXFSmoothPolylineVertex pperp;
+    pperp.x = v.y;
+    pperp.y = -v.x;
+    pperp.normalize();
+
+    DXFSmoothPolylineVertex ogrArcCenter;
+    ogrArcCenter.x = midpoint.x + (pperp.x * apo);
+    ogrArcCenter.y = midpoint.y + (pperp.y * apo);
+
+    /* -------------------------------------------------------------------- */
+    /*      Get the line's general vertical direction (-1 = down, +1 = up)  */
+    /* -------------------------------------------------------------------- */
+
+    const double linedir = end.y > start.y ? 1.0 : -1.0;
+
+    /* -------------------------------------------------------------------- */
+    /*      Get arc's starting angle.                                       */
+    /* -------------------------------------------------------------------- */
+
+    double a = GetAngle(ogrArcCenter, start);
+
+    if (bClockwise && (linedir == 1.0))
+        a += (linedir * 180.0);
+
+    double ogrArcStartAngle = GetOGRangle(a);
+
+    /* -------------------------------------------------------------------- */
+    /*      Get arc's ending angle.                                         */
+    /* -------------------------------------------------------------------- */
+
+    a = GetAngle(ogrArcCenter, end);
+
+    if (bClockwise && (linedir == 1.0))
+        a += (linedir * 180.0);
+
+    double ogrArcEndAngle = GetOGRangle(a);
+
+    if (!bClockwise && (ogrArcStartAngle < ogrArcEndAngle))
+        ogrArcEndAngle = -180.0 + (linedir * a);
+
+    if (bClockwise && (ogrArcStartAngle > ogrArcEndAngle))
+        ogrArcEndAngle += 360.0;
+
+    /* -------------------------------------------------------------------- */
+    /*      Flip arc's rotation if necessary.                               */
+    /* -------------------------------------------------------------------- */
+
+    if (bClockwise && (linedir == 1.0))
+        ogrArcRotation = linedir * 180.0;
+
+    /* -------------------------------------------------------------------- */
+    /*      Tessellate the arc segment and append to the linestring.        */
+    /* -------------------------------------------------------------------- */
+
+    if (fabs(ogrArcEndAngle - ogrArcStartAngle) <= 361.0)
+    {
+        auto poArc = std::unique_ptr<OGRLineString>(
+            OGRGeometryFactory::approximateArcAngles(
+                ogrArcCenter.x, ogrArcCenter.y, dfZ, ogrArcRadius, ogrArcRadius,
+                ogrArcRotation, ogrArcStartAngle, ogrArcEndAngle, 0.0,
+                m_bUseMaxGapWhenTessellatingArcs)
+                ->toLineString());
+
+        // Make sure extremities exactly match input start and end point.
+        // This is in particular important if the polyline is closed.
+        if (poArc->getNumPoints() >= 2)
+        {
+            poArc->setPoint(0, start.x, start.y);
+            poArc->setPoint(poArc->getNumPoints() - 1, end.x, end.y);
+        }
+
+        poLS->addSubLineString(poArc.get());
+    }
+    else
+    {
+        // TODO: emit error ?
+    }
+}
+
+/************************************************************************/
+/*                   DXFSmoothPolyline::EmitLine()                      */
+/************************************************************************/
+
+void DXFSmoothPolyline::EmitLine(const DXFSmoothPolylineVertex &start,
+                                 const DXFSmoothPolylineVertex &end,
+                                 OGRLineString *poLS) const
+{
+    assert(poLS);
+
+    if (!m_blinestringstarted)
+    {
+        poLS->addPoint(start.x, start.y, start.z);
+        m_blinestringstarted = true;
+    }
+
+    poLS->addPoint(end.x, end.y, end.z);
+}
+
+/************************************************************************/
+/*                DXFSmoothPolyline::Close()                            */
+/************************************************************************/
+
+void DXFSmoothPolyline::Close()
+{
+    assert(!m_bClosed);
+
+    if (m_vertices.size() >= 2)
+    {
+        const bool bVisuallyClosed =
+            (m_vertices.back().shares_2D_pos(m_vertices[0]));
+
+        if (!bVisuallyClosed)
+        {
+            m_vertices.push_back(m_vertices[0]);
+        }
+        m_bClosed = true;
+    }
+}

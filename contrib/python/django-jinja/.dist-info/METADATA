@@ -1,0 +1,69 @@
+Metadata-Version: 2.1
+Name: django-jinja
+Version: 2.11.0
+Summary: Jinja2 templating language integrated in Django.
+Home-page: https://github.com/niwinz/django-jinja
+Author: Andrey Antukh
+Author-email: niwi@niwi.be
+Maintainer: Asif Saif Uddin
+Maintainer-email: auvipy@gmail.com
+License: BSD
+Keywords: django,jinja2
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 3.2
+Classifier: Framework :: Django :: 4.0
+Classifier: Framework :: Django :: 4.1
+Classifier: Framework :: Django :: 4.2
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Internet :: WWW/HTTP
+Requires-Python: >=3.8
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: jinja2 >=3
+Requires-Dist: django >=3.2
+
+django-jinja
+============
+
+Simple and nonobstructive jinja2 integration with Django.
+
+
+.. image:: https://github.com/niwinz/django-jinja/actions/workflows/ci.yml/badge.svg?branch=master
+    :target: https://github.com/niwinz/django-jinja/actions
+
+.. image:: https://img.shields.io/pypi/v/django-jinja.svg?style=flat
+    :target: https://pypi.python.org/pypi/django-jinja
+
+
+**Documentation:** http://niwinz.github.io/django-jinja/latest/
+
+
+How to install?
+---------------
+
+You can install it with pip:
+
+.. code-block:: shell
+
+    pip install django-jinja
+
+How to run tests as a developer
+-------------------------------
+
+Install the Tox automation tool (outside a virtualenv), then
+
+.. code-block:: shell
+
+    tox
+
+Tox will create virtualenvs for different interpreter versions and run the test suite.

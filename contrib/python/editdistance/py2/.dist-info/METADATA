@@ -1,0 +1,17 @@
+Metadata-Version: 2.1
+Name: editdistance
+Version: 0.5.3
+Summary: Fast implementation of the edit distance(Levenshtein distance)
+Home-page: https://www.github.com/aflc/editdistance
+Author: Hiroyuki Tanaka
+Author-email: aflc0x@gmail.com
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+
+UNKNOWN
+
+

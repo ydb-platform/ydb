@@ -1,0 +1,22 @@
+#code|abbreviation|type|name|unit|scale|reference|width|crex_unit|crex_scale|crex_width
+005234|profileNumber|long|PROFILE NUMBER|Numeric|0|0|16|NA|0|5
+005236|observationIdentifier|long|OBSERVATION IDENTIFIER|Numeric|0|0|30|NA|0|10
+005237|receiverChannel|table|RECEIVER CHANNEL|CODE TABLE|0|0|2|NA|0|1
+007200|height|double|HEIGHT (high resolution)|m|3|-10000000|26|NA|3|8
+008201|coordinatesSignificance|table|COORDINATES SIGNIFICANCE|CODE TABLE|0|0|8|NA|0|3
+025192|confidenceFlag|table|CONFIDENCE FLAG|CODE TABLE|0|0|4|NA|0|2
+033192|scanLineQualityFlagForSaphirOrMadras|table|SCAN LINE QUALITY FLAG FOR SAPHIR/MADRAS|FLAG TABLE|0|0|10|FLAG TABLE|0|4
+033193|payloadModeForSaphir|table|PAYLOAD MODE FOR SAPHIR|CODE TABLE|0|0|3|CODE TABLE|0|1
+033194|payloadModeForMadras|table|PAYLOAD MODE FOR MADRAS|CODE TABLE|0|0|3|CODE TABLE|0|1
+033195|satelliteModeForSaphirOrMadras|table|SATELLITE MODE FOR SAPHIR/MADRAS|CODE TABLE|0|0|4|CODE TABLE|0|2
+033196|channelQualityFlagForSaphirOrMadras|table|CHANNEL QUALITY FLAG FOR SAPHIR/MADRAS|FLAG TABLE|0|0|11|FLAG TABLE|0|4
+033197|calibrationFlagsForSaphirOrMadras|table|CALIBRATION FLAGS FOR SAPHIR/MADRAS|CODE TABLE|0|0|3|CODE TABLE|0|1
+040214|lidarL2bClassificationType|table|LIDAR L2B CLASSIFICATION TYPE|CODE TABLE|0|0|4|NA|0|1
+040215|satelliteRange|long|SATELLITE RANGE|m|0|380000|18|NA|0|6
+040216|horizontalObservationIntegrationLength|long|HORIZONTAL OBSERVATION INTEGRATION LENGTH|m|0|0|26|NA|0|8
+040217|horizontalLineOfSightWind|double|HORIZONTAL LINE OF SIGHT WIND|m/s|2|-32767|16|NA|2|5
+040218|errorEstimateOfHorizontalLineOfSightWind|double|ERROR ESTIMATE OF HORIZONTAL LINE OF SIGHT WIND|m/s|2|0|15|NA|2|5
+040219|backscatterRatio|double|BACKSCATTER RATIO|Numeric|3|500|20|NA|3|7
+040220|derivativeWindToPressure|double|DERIVATIVE WIND TO PRESSURE|m s-1 Pa-1|3|-100000|18|NA|3|6
+040221|derivativeWindToTemperature|double|DERIVATIVE WIND TO TEMPERATURE|m s-1 K-1|3|-100000|18|NA|3|6
+040222|derivativeWindToBackscatterRatio|double|DERIVATIVE WIND TO BACKSCATTER RATIO|m/s|3|-200000|19|NA|3|6

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v2;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v2;datasphere";
+option java_package = "yandex.cloud.api.datasphere.v2";
+option java_outer_classname = "DsResourceTypes";
+
+enum ResourceType {
+  RESOURCE_TYPE_UNSPECIFIED = 0;
+  RESOURCE_TYPE_SECRET = 2;
+  RESOURCE_TYPE_DOCKER_IMAGE = 3;
+  RESOURCE_TYPE_DATASET = 4;
+  RESOURCE_TYPE_S3 = 5;
+  RESOURCE_TYPE_NODE = 6;
+  RESOURCE_TYPE_ALIAS = 8;
+
+  reserved 1, 7;
+}

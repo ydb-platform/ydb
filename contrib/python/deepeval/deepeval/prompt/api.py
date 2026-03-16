@@ -1,0 +1,271 @@
+from pydantic import (
+    BaseModel,
+    Field,
+    AliasChoices,
+    ConfigDict,
+    model_validator,
+    model_serializer,
+)
+from enum import Enum
+import uuid
+from typing import List, Optional, Dict, Any, Union, Type
+from pydantic import TypeAdapter
+
+from deepeval.utils import make_model_config
+
+###################################
+# Model Settings
+###################################
+
+
+class ReasoningEffort(Enum):
+    MINIMAL = "MINIMAL"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class Verbosity(Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class ModelProvider(Enum):
+    OPEN_AI = "OPEN_AI"
+    ANTHROPIC = "ANTHROPIC"
+    GEMINI = "GEMINI"
+    X_AI = "X_AI"
+    DEEPSEEK = "DEEPSEEK"
+    BEDROCK = "BEDROCK"
+    OPENROUTER = "OPENROUTER"
+
+
+class ToolMode(Enum):
+    ALLOW_ADDITIONAL = "ALLOW_ADDITIONAL"
+    NO_ADDITIONAL = "NO_ADDITIONAL"
+    STRICT = "STRICT"
+
+
+class ModelSettings(BaseModel):
+    provider: Optional[ModelProvider] = None
+    name: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = Field(
+        default=None,
+        serialization_alias="maxTokens",
+        validation_alias=AliasChoices("max_tokens", "maxTokens"),
+    )
+    top_p: Optional[float] = Field(
+        default=None,
+        serialization_alias="topP",
+        validation_alias=AliasChoices("top_p", "topP"),
+    )
+    frequency_penalty: Optional[float] = Field(
+        default=None,
+        serialization_alias="frequencyPenalty",
+        validation_alias=AliasChoices("frequency_penalty", "frequencyPenalty"),
+    )
+    presence_penalty: Optional[float] = Field(
+        default=None,
+        serialization_alias="presencePenalty",
+        validation_alias=AliasChoices("presence_penalty", "presencePenalty"),
+    )
+    stop_sequence: Optional[List[str]] = Field(
+        default=None,
+        serialization_alias="stopSequence",
+        validation_alias=AliasChoices("stop_sequence", "stopSequence"),
+    )
+    reasoning_effort: Optional[ReasoningEffort] = Field(
+        default=None,
+        serialization_alias="reasoningEffort",
+        validation_alias=AliasChoices("reasoning_effort", "reasoningEffort"),
+    )
+    verbosity: Optional[Verbosity] = Field(
+        default=None,
+        serialization_alias="verbosity",
+        validation_alias=AliasChoices("verbosity", "verbosity"),
+    )
+
+
+###################################
+# Output Settings
+###################################
+
+
+class OutputType(Enum):
+    TEXT = "TEXT"
+    JSON = "JSON"
+    SCHEMA = "SCHEMA"
+
+
+class SchemaDataType(Enum):
+    OBJECT = "OBJECT"
+    STRING = "STRING"
+    FLOAT = "FLOAT"
+    INTEGER = "INTEGER"
+    BOOLEAN = "BOOLEAN"
+    NULL = "NULL"
+
+
+class OutputSchemaField(BaseModel):
+    model_config = make_model_config(use_enum_values=True)
+
+    id: str
+    type: SchemaDataType
+    name: str
+    description: Optional[str] = None
+    required: Optional[bool] = False
+    parent_id: Optional[str] = Field(
+        default=None,
+        serialization_alias="parentId",
+        validation_alias=AliasChoices("parent_id", "parentId"),
+    )
+
+
+class OutputSchema(BaseModel):
+    id: Optional[str] = None
+    fields: Optional[List[OutputSchemaField]] = None
+    name: Optional[str] = None
+
+
+class Tool(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: str
+    mode: ToolMode
+    structured_schema: Optional[Union[Type[BaseModel], OutputSchema]] = Field(
+        serialization_alias="structuredSchema",
+        validation_alias=AliasChoices("structured_schema", "structuredSchema"),
+    )
+
+    @model_validator(mode="after")
+    def update_schema(self):
+        if not isinstance(self.structured_schema, OutputSchema):
+            from deepeval.prompt.utils import construct_output_schema
+
+            self.structured_schema = construct_output_schema(
+                self.structured_schema
+            )
+        return self
+
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        from deepeval.prompt.utils import output_schema_to_json_schema
+
+        return output_schema_to_json_schema(self.structured_schema)
+
+
+###################################
+# Prompt
+###################################
+
+
+class PromptInterpolationType(Enum):
+    MUSTACHE = "MUSTACHE"
+    MUSTACHE_WITH_SPACE = "MUSTACHE_WITH_SPACE"
+    FSTRING = "FSTRING"
+    DOLLAR_BRACKETS = "DOLLAR_BRACKETS"
+    JINJA = "JINJA"
+
+
+class PromptMessage(BaseModel):
+    role: str
+    content: str
+
+
+PromptMessageList = TypeAdapter(List[PromptMessage])
+
+
+class PromptType(Enum):
+    TEXT = "TEXT"
+    LIST = "LIST"
+
+
+class PromptVersion(BaseModel):
+    id: str
+    version: str
+
+
+class PromptCommit(BaseModel):
+    id: str
+    hash: str
+    message: str
+
+
+class PromptCommitsHttpResponse(BaseModel):
+    commits: List[PromptCommit]
+
+
+class PromptCreateVersion(BaseModel):
+    hash: Optional[str] = None
+
+
+class PromptVersionsHttpResponse(BaseModel):
+    text_versions: Optional[List[PromptVersion]] = Field(
+        None,
+        serialization_alias="textVersions",
+        validation_alias=AliasChoices("text_versions", "textVersions"),
+    )
+    messages_versions: Optional[List[PromptVersion]] = Field(
+        None,
+        serialization_alias="messagesVersions",
+        validation_alias=AliasChoices("messages_versions", "messagesVersions"),
+    )
+
+
+class PromptHttpResponse(BaseModel):
+    id: str
+    hash: str
+    version: Optional[str] = None
+    label: Optional[str] = None
+    text: Optional[str] = None
+    messages: Optional[List[PromptMessage]] = None
+    interpolation_type: PromptInterpolationType = Field(
+        serialization_alias="interpolationType"
+    )
+    type: PromptType
+    model_settings: Optional[ModelSettings] = Field(
+        default=None,
+        serialization_alias="modelSettings",
+        validation_alias=AliasChoices("model_settings", "modelSettings"),
+    )
+    output_type: Optional[OutputType] = Field(
+        default=None,
+        serialization_alias="outputType",
+        validation_alias=AliasChoices("output_type", "outputType"),
+    )
+    output_schema: Optional[OutputSchema] = Field(
+        default=None,
+        serialization_alias="outputSchema",
+        validation_alias=AliasChoices("output_schema", "outputSchema"),
+    )
+    tools: Optional[List[Tool]] = None
+
+
+class PromptPushRequest(BaseModel):
+    model_config = make_model_config(use_enum_values=True)
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    alias: str
+    text: Optional[str] = None
+    messages: Optional[List[PromptMessage]] = None
+    tools: Optional[List[Tool]] = None
+    interpolation_type: PromptInterpolationType = Field(
+        serialization_alias="interpolationType"
+    )
+    model_settings: Optional[ModelSettings] = Field(
+        default=None, serialization_alias="modelSettings"
+    )
+    output_schema: Optional[OutputSchema] = Field(
+        default=None, serialization_alias="outputSchema"
+    )
+    output_type: Optional[OutputType] = Field(
+        default=None, serialization_alias="outputType"
+    )
+
+
+class PromptApi(BaseModel):
+    id: str
+    type: PromptType

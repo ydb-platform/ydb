@@ -1,0 +1,10 @@
+--- a/magic/Magdir/riff
++++ b/magic/Magdir/riff
+@@ -553,6 +553,7 @@
+ >8      string          WEBP            \b, Web/P image
+ !:mime	image/webp
+ !:ext	webp
++!:strength + 50
+ >>12	use		riff-walk
+ # From:		Joerg Jenderek
+ # URL:		http://fileformats.archiveteam.org/wiki/RIFF_MIDS

@@ -1,0 +1,576 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 09c78531dc84bf902c24aa291ae3c240
+BELONGS ya.make
+    License text:
+        | Copyright (c) 1985-1988 by Supoj Sutanthavibul
+        | Parts Copyright (c) 1989-2000 by Brian V. Smith
+        | Parts Copyright (c) 1991 by Paul King
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [84:86]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0ec94c4cf9a79a514a29f1f5bb3475d8
+BELONGS ya.make
+    License text:
+        Copyright 1999 E. I. du Pont de Nemours and Company
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [25:25]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 12d7b1309d08e0e11644f1d3d9f1d565
+BELONGS ya.make
+    License text:
+        Copyright (c) 2006 Simon Brown                          si@sjbrown.co.uk
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [211:211]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1c5f2cfa8a95f388982ab76212f2f716
+BELONGS ya.make
+    License text:
+        %  Copyright @ 2018 ImageMagick Studio LLC, a non-profit organization         %
+        %  dedicated to making software imaging solutions freely available.           %
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        coders/heic.c [25:26]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2209619f376cde39baee6dd0ca5b8091
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [174:178]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4f9d79405b2f095ca31de8f02075894c
+BELONGS ya.make
+    License text:
+        1. ImageMagick copyright:
+        Copyright © 1999 ImageMagick Studio LLC, a non-profit organization dedicated
+        to making software imaging solutions freely available.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a03a1800f526b87b6aacb422026276c
+BELONGS ya.make
+    License text:
+        | Copyright (c) 1985-1988 by Supoj Sutanthavibul
+        | Parts Copyright (c) 1989-2000 by Brian V. Smith
+        | Parts Copyright (c) 1991 by Paul King
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [84:86]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5cc4006fa37750eb2148dec90ff405f2
+BELONGS Magick++/ya.make ya.make
+    License text:
+        Copyright 1999 - 2002 Bob Friesenhahn <bfriesen@simple.dallas.tx.us>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Magick++/LICENSE [2:2]
+        NOTICE [152:152]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6abf68e11238932f1239f85089f2006a
+BELONGS wand/ya.make ya.make
+    License text:
+        Copyright @ 1999 ImageMagick Studio LLC, a non-profit organization dedicated to making software imaging solutions freely available.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [44:44]
+        coders/bmp.c [21:22]
+        coders/bytebuffer-private.h [2:3]
+        coders/dds.c [22:23]
+        coders/dng.c [20:21]
+        coders/fax.c [20:21]
+        coders/ghostscript-private.h [2:3]
+        coders/gif.c [20:21]
+        coders/hdr.c [20:21]
+        coders/icon.c [20:21]
+        coders/jp2.c [20:21]
+        coders/jpeg.c [20:21]
+        coders/magick.c [20:21]
+        coders/miff.c [20:21]
+        coders/pcd.c [20:21]
+        coders/pcx.c [20:21]
+        coders/png.c [21:22]
+        coders/pnm.c [20:21]
+        coders/psd-private.h [2:3]
+        coders/psd.c [23:24]
+        coders/raw.c [20:21]
+        coders/rgb.c [20:21]
+        coders/sgi.c [20:21]
+        coders/sun.c [20:21]
+        coders/svg.c [21:22]
+        coders/tga.c [20:21]
+        coders/tiff.c [20:21]
+        coders/video.c [20:21]
+        coders/wbmp.c [20:21]
+        coders/webp.c [20:21]
+        coders/xbm.c [20:21]
+        coders/xc.c [20:21]
+        coders/xpm.c [20:21]
+        filters/analyze.c [18:19]
+        magick/ImageMagick.h [2:3]
+        magick/MagickCore.h [2:3]
+        magick/accelerate-kernels-private.h [2:3]
+        magick/accelerate-private.h [2:3]
+        magick/accelerate.c [24:25]
+        magick/animate-private.h [2:3]
+        magick/animate.c [20:21]
+        magick/animate.h [2:3]
+        magick/annotate.c [20:21]
+        magick/annotate.h [2:3]
+        magick/api.h [2:3]
+        magick/artifact.c [20:21]
+        magick/artifact.h [2:3]
+        magick/attribute.c [20:21]
+        magick/attribute.h [2:3]
+        magick/blob-private.h [2:3]
+        magick/blob.c [20:21]
+        magick/blob.h [2:3]
+        magick/cache-private.h [2:3]
+        magick/cache-view.c [26:27]
+        magick/cache-view.h [2:3]
+        magick/cache.c [20:21]
+        magick/cache.h [2:3]
+        magick/channel.c [20:21]
+        magick/channel.h [2:3]
+        magick/cipher.c [19:20]
+        magick/cipher.h [2:3]
+        magick/client.c [20:21]
+        magick/client.h [2:3]
+        magick/coder.c [20:21]
+        magick/coder.h [2:3]
+        magick/color-private.h [2:3]
+        magick/color.c [19:20]
+        magick/color.h [2:3]
+        magick/colormap-private.h [2:3]
+        magick/colormap.c [20:21]
+        magick/colormap.h [2:3]
+        magick/colorspace-private.h [2:3]
+        magick/colorspace.c [20:21]
+        magick/colorspace.h [2:3]
+        magick/compare-private.h [2:3]
+        magick/compare.c [20:21]
+        magick/compare.h [2:3]
+        magick/composite-private.h [2:3]
+        magick/composite.c [20:21]
+        magick/composite.h [2:3]
+        magick/compress.c [20:21]
+        magick/compress.h [2:3]
+        magick/configure.c [20:21]
+        magick/configure.h [2:3]
+        magick/constitute.c [20:21]
+        magick/constitute.h [2:3]
+        magick/decorate.c [20:21]
+        magick/decorate.h [2:3]
+        magick/delegate-private.h [2:3]
+        magick/delegate.c [19:20]
+        magick/delegate.h [2:3]
+        magick/deprecate.c [20:21]
+        magick/deprecate.h [2:3]
+        magick/display-private.h [2:3]
+        magick/display.c [20:21]
+        magick/display.h [2:3]
+        magick/distort.c [21:22]
+        magick/distort.h [2:3]
+        magick/distribute-cache-private.h [2:3]
+        magick/distribute-cache.c [25:26]
+        magick/distribute-cache.h [2:3]
+        magick/draw-private.h [2:3]
+        magick/draw.c [21:22]
+        magick/draw.h [2:3]
+        magick/effect.c [20:21]
+        magick/effect.h [2:3]
+        magick/enhance.c [20:21]
+        magick/enhance.h [2:3]
+        magick/exception-private.h [2:3]
+        magick/exception.c [20:21]
+        magick/exception.h [2:3]
+        magick/feature.c [20:21]
+        magick/feature.h [2:3]
+        magick/fourier.c [22:23]
+        magick/fourier.h [2:3]
+        magick/fx-private.h [2:3]
+        magick/fx.c [20:21]
+        magick/fx.h [2:3]
+        magick/gem-private.h [2:3]
+        magick/gem.c [20:21]
+        magick/gem.h [2:3]
+        magick/geometry-private.h [2:3]
+        magick/geometry.c [20:21]
+        magick/geometry.h [2:3]
+        magick/hashmap-private.h [2:3]
+        magick/hashmap.c [20:21]
+        magick/hashmap.h [2:3]
+        magick/histogram.c [21:22]
+        magick/histogram.h [2:3]
+        magick/identify.c [20:21]
+        magick/identify.h [2:3]
+        magick/image-private.h [2:3]
+        magick/image-view.c [25:26]
+        magick/image-view.h [2:3]
+        magick/image.c [20:21]
+        magick/image.h [2:3]
+        magick/layer.c [19:20]
+        magick/layer.h [2:3]
+        magick/list.c [20:21]
+        magick/list.h [2:3]
+        magick/locale-private.h [2:3]
+        magick/locale.c [20:21]
+        magick/locale_.h [2:3]
+        magick/log.c [20:21]
+        magick/log.h [2:3]
+        magick/mac.c [20:21]
+        magick/mac.h [2:3]
+        magick/magic.c [20:21]
+        magick/magic.h [2:3]
+        magick/magick-config.h [2:3]
+        magick/magick-private.h [2:3]
+        magick/magick-type.h [2:3]
+        magick/magick.c [21:22]
+        magick/magick.h [2:3]
+        magick/matrix.c [20:21]
+        magick/matrix.h [2:3]
+        magick/memory-private.h [2:3]
+        magick/memory.c [20:21]
+        magick/memory_.h [2:3]
+        magick/method-attribute.h [2:3]
+        magick/methods.h [2:3]
+        magick/mime-private.h [2:3]
+        magick/mime.c [18:19]
+        magick/mime.h [2:3]
+        magick/module.c [20:21]
+        magick/module.h [2:3]
+        magick/monitor-private.h [2:3]
+        magick/monitor.c [20:21]
+        magick/monitor.h [2:3]
+        magick/montage.c [20:21]
+        magick/montage.h [2:3]
+        magick/morphology-private.h [2:3]
+        magick/morphology.c [20:21]
+        magick/morphology.h [2:3]
+        magick/mutex.h [2:3]
+        magick/nt-base-private.h [2:3]
+        magick/nt-base.c [20:21]
+        magick/nt-base.h [2:3]
+        magick/nt-feature.c [21:22]
+        magick/nt-feature.h [2:3]
+        magick/opencl-private.h [2:3]
+        magick/opencl.c [20:21]
+        magick/opencl.h [2:3]
+        magick/option-private.h [2:3]
+        magick/option.c [20:21]
+        magick/option.h [2:3]
+        magick/paint.c [20:21]
+        magick/paint.h [2:3]
+        magick/pixel-accessor.h [2:3]
+        magick/pixel-private.h [2:3]
+        magick/pixel.c [19:20]
+        magick/pixel.h [2:3]
+        magick/policy-private.h [2:3]
+        magick/policy.c [19:20]
+        magick/policy.h [2:3]
+        magick/prepress.c [20:21]
+        magick/prepress.h [2:3]
+        magick/profile.c [20:21]
+        magick/profile.h [2:3]
+        magick/property.c [20:21]
+        magick/property.h [2:3]
+        magick/quantize.c [20:21]
+        magick/quantize.h [2:3]
+        magick/quantum-export.c [25:26]
+        magick/quantum-import.c [25:26]
+        magick/quantum-private.h [2:3]
+        magick/quantum.c [19:20]
+        magick/quantum.h [2:3]
+        magick/random-private.h [2:3]
+        magick/random.c [19:20]
+        magick/random_.h [2:3]
+        magick/registry.c [20:21]
+        magick/registry.h [2:3]
+        magick/resample-private.h [2:3]
+        magick/resample.c [21:22]
+        magick/resample.h [2:3]
+        magick/resize-private.h [2:3]
+        magick/resize.c [20:21]
+        magick/resize.h [2:3]
+        magick/resource.c [20:21]
+        magick/resource_.h [2:3]
+        magick/segment.c [20:21]
+        magick/segment.h [2:3]
+        magick/semaphore-private.h [2:3]
+        magick/semaphore.c [21:22]
+        magick/semaphore.h [2:3]
+        magick/shear.c [20:21]
+        magick/shear.h [2:3]
+        magick/signature-private.h [2:3]
+        magick/signature.c [19:20]
+        magick/signature.h [2:3]
+        magick/splay-tree.c [26:27]
+        magick/splay-tree.h [2:3]
+        magick/static.c [20:21]
+        magick/static.h [2:3]
+        magick/statistic-private.h [2:3]
+        magick/statistic.c [20:21]
+        magick/statistic.h [2:3]
+        magick/stream-private.h [2:3]
+        magick/stream.c [20:21]
+        magick/stream.h [2:3]
+        magick/string-private.h [2:3]
+        magick/string.c [20:21]
+        magick/string_.h [2:3]
+        magick/studio.h [2:3]
+        magick/thread-private.h [2:3]
+        magick/thread.c [19:20]
+        magick/thread_.h [2:3]
+        magick/threshold.c [20:21]
+        magick/threshold.h [2:3]
+        magick/timer-private.h [2:3]
+        magick/timer.c [20:21]
+        magick/timer.h [2:3]
+        magick/token-private.h [2:3]
+        magick/token.c [20:21]
+        magick/token.h [2:3]
+        magick/transform.c [20:21]
+        magick/transform.h [2:3]
+        magick/type.c [20:21]
+        magick/type.h [2:3]
+        magick/utility-private.h [2:3]
+        magick/utility.c [20:21]
+        magick/utility.h [2:3]
+        magick/version-private.h [2:3]
+        magick/version.c [20:21]
+        magick/version.h [2:3]
+        magick/vision.c [20:21]
+        magick/vision.h [2:3]
+        magick/visual-effects.c [26:27]
+        magick/visual-effects.h [2:3]
+        magick/widget.c [21:22]
+        magick/widget.h [2:3]
+        magick/xml-tree-private.h [2:3]
+        magick/xml-tree.c [26:27]
+        magick/xml-tree.h [2:3]
+        magick/xwindow-private.h [2:3]
+        magick/xwindow.c [20:21]
+        magick/xwindow.h [2:3]
+        utilities/animate.c [20:21]
+        utilities/compare.c [21:22]
+        utilities/composite.c [20:21]
+        utilities/conjure.c [20:21]
+        utilities/convert.c [20:21]
+        utilities/display.c [20:21]
+        utilities/identify.c [20:21]
+        utilities/import.c [20:21]
+        utilities/mogrify.c [20:21]
+        utilities/montage.c [20:21]
+        utilities/stream.c [20:21]
+        wand/MagickWand.h [2:3]
+        wand/animate.c [20:21]
+        wand/animate.h [2:3]
+        wand/compare.c [20:21]
+        wand/compare.h [2:3]
+        wand/composite.c [20:21]
+        wand/composite.h [2:3]
+        wand/conjure.c [20:21]
+        wand/conjure.h [2:3]
+        wand/convert.c [20:21]
+        wand/convert.h [2:3]
+        wand/deprecate.c [20:21]
+        wand/deprecate.h [2:3]
+        wand/display.c [20:21]
+        wand/display.h [2:3]
+        wand/drawing-wand.c [26:27]
+        wand/drawing-wand.h [2:3]
+        wand/identify.c [20:21]
+        wand/identify.h [2:3]
+        wand/import.c [20:21]
+        wand/import.h [2:3]
+        wand/magick-image.c [26:27]
+        wand/magick-image.h [2:3]
+        wand/magick-property.c [26:27]
+        wand/magick-property.h [2:3]
+        wand/magick-wand-private.h [2:3]
+        wand/magick-wand.c [26:27]
+        wand/magick-wand.h [2:3]
+        wand/method-attribute.h [2:3]
+        wand/mogrify-private.h [2:3]
+        wand/mogrify.c [20:21]
+        wand/mogrify.h [2:3]
+        wand/montage.c [20:21]
+        wand/montage.h [2:3]
+        wand/pixel-iterator.c [26:27]
+        wand/pixel-iterator.h [2:3]
+        wand/pixel-wand-private.h [2:3]
+        wand/pixel-wand.c [26:27]
+        wand/pixel-wand.h [2:3]
+        wand/stream.c [20:21]
+        wand/stream.h [2:3]
+        wand/studio.h [2:3]
+        wand/wand-view.c [25:26]
+        wand/wand-view.h [2:3]
+        wand/wand.c [20:21]
+        wand/wand.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 73ffba0711f74f698f7db5498292b820
+BELONGS ya.make
+    License text:
+        %                         Copyright 2018 Struktur AG                          %
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        coders/heic.c [18:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 817287b1cbab7f19154e802417f3413b
+BELONGS ya.make
+    License text:
+        %                      Copyright 2017-2018 YANDEX LLC.                        %
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        coders/heic.c [23:23]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 888befd99d5ca6da328d9c983fc1cb7c
+BELONGS ya.make
+    License text:
+        Copyright (c) 2000 Markus Friedl.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [55:55]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9eaa7ef3a30dbb0bc9704785e5269d61
+BELONGS ya.make
+    License text:
+        Copyright 2004-2006 Aaron Voisine <aaron@voisine.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [101:101]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a5e2647af590ead4e66048eb1275f1b3
+BELONGS ya.make
+    License text:
+        Copyright (C) 2002 - 2009 GraphicsMagick Group
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [127:127]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7fbe824f404fc746962e8ddbce71205
+BELONGS ya.make
+    License text:
+        Copyright (C) 2000-2002, Ghostgum Software Pty Ltd. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [190:190]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c27e62bf29e49a60bcdde9a863be3ce0
+BELONGS ya.make
+    License text:
+        | Copyright (c) 1985-1988 by Supoj Sutanthavibul
+        | Parts Copyright (c) 1989-2000 by Brian V. Smith
+        | Parts Copyright (c) 1991 by Paul King
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [84:86]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e9202aee3df675cd46db41f069fab5dd
+BELONGS ya.make
+    License text:
+        \#define MagickCopyright  "(C) 1999 ImageMagick Studio LLC"
+        \#define MagickLibVersion  0x69D
+        \#define MagickLibVersionText  "6.9.13"
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        magick/version.h [29:31]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe9a090888c9bc25058de0aab0f57a9d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [233:238]

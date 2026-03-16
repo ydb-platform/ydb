@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+</head>
+<body>
+    <h1>{{ title }}</h1>
+    <table border=1>
+    {% if header %}<thead><tr>
+        {% for h in header %}<th>{{ h }}</th>{% endfor %}</tr></thead>{% endif %}
+    <tbody>
+        {% for datum in data %}
+        <tr>{% for cell in datum %}<td>{{ cell|linebreaksbr }}</td>{% endfor %}</tr>
+        {% endfor %}
+    </tbody>
+    </table>
+</body>
+</html>

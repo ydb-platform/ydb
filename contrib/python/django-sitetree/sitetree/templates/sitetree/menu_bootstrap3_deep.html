@@ -1,0 +1,14 @@
+{% load sitetree %}
+<ul class="nav navbar-nav">
+    {% for item in sitetree_items %}
+        <li class="{% if item.has_children %}dropdown{% endif %} {% if item.is_current or item.in_current_branch %}active{% endif %}">
+            <a href="{% if item.has_children %}#{% else %}{% sitetree_url for item %}{% endif %}" {% if item.has_children %}class="dropdown-toggle" data-toggle="dropdown"{% endif %}>
+                {{ item.title_resolved }}
+                {% if item.has_children %}<b class="caret"></b>{% endif %}
+            </a>
+            {% if item.has_children %}
+                {% sitetree_children of item for menu template "sitetree/menu_bootstrap3_deep_dropdown.html" %}
+            {% endif %}
+        </li>
+    {% endfor %}
+</ul>

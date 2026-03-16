@@ -1,0 +1,77 @@
+Metadata-Version: 2.4
+Name: numcodecs
+Version: 0.16.5
+Summary: A Python package providing buffer compression and transformation codecs for use in data storage and communication applications.
+Maintainer-email: Alistair Miles <alimanfoo@googlemail.com>
+License-Expression: MIT
+Project-URL: Bug Tracker, https://github.com/zarr-developers/numcodecs/issues
+Project-URL: Changelog, https://numcodecs.readthedocs.io/en/stable/release.html
+Project-URL: Documentation, https://numcodecs.readthedocs.io/
+Project-URL: Homepage, https://github.com/zarr-developers/numcodecs
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: Science/Research
+Classifier: Programming Language :: Python
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Operating System :: Unix
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Requires-Python: >=3.11
+Description-Content-Type: text/x-rst
+License-File: LICENSE.txt
+License-File: c-blosc/LICENSE.txt
+License-File: c-blosc/LICENSES/BITSHUFFLE.txt
+License-File: c-blosc/LICENSES/FASTLZ.txt
+License-File: c-blosc/LICENSES/LZ4.txt
+License-File: c-blosc/LICENSES/SNAPPY.txt
+License-File: c-blosc/LICENSES/STDINT.txt
+License-File: c-blosc/LICENSES/ZLIB-NG.txt
+License-File: c-blosc/LICENSES/ZLIB.txt
+Requires-Dist: numpy>=1.24
+Requires-Dist: typing_extensions
+Provides-Extra: msgpack
+Requires-Dist: msgpack; extra == "msgpack"
+Provides-Extra: zfpy
+Requires-Dist: zfpy>=1.0.0; extra == "zfpy"
+Provides-Extra: pcodec
+Requires-Dist: pcodec<0.4,>=0.3; extra == "pcodec"
+Provides-Extra: crc32c
+Requires-Dist: crc32c>=2.7; extra == "crc32c"
+Provides-Extra: google-crc32c
+Requires-Dist: google-crc32c>=1.5; extra == "google-crc32c"
+Provides-Extra: docs
+Requires-Dist: sphinx; extra == "docs"
+Requires-Dist: sphinx-issues; extra == "docs"
+Requires-Dist: pydata-sphinx-theme; extra == "docs"
+Requires-Dist: numpydoc; extra == "docs"
+Provides-Extra: test
+Requires-Dist: coverage; extra == "test"
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Requires-Dist: pyzstd; extra == "test"
+Provides-Extra: test-extras
+Requires-Dist: importlib_metadata; extra == "test-extras"
+Requires-Dist: crc32c; extra == "test-extras"
+Dynamic: license-file
+
+Numcodecs
+=========
+
+Numcodecs is a Python package providing buffer compression and transformation
+codecs for use in data storage and communication applications.
+
+.. image:: https://readthedocs.org/projects/numcodecs/badge/?version=latest
+    :target: https://numcodecs.readthedocs.io/en/latest/?badge=latest
+
+.. image:: https://github.com/zarr-developers/numcodecs/workflows/Linux%20CI/badge.svg?branch=main
+    :target: https://github.com/zarr-developers/numcodecs/actions?query=workflow%3A%22Linux+CI%22
+
+.. image:: https://github.com/zarr-developers/numcodecs/workflows/OSX%20CI/badge.svg?branch=main
+    :target: https://github.com/zarr-developers/numcodecs/actions?query=workflow%3A%22OSX+CI%22
+
+.. image:: https://github.com/zarr-developers/numcodecs/workflows/Wheels/badge.svg?branch=main
+    :target: https://github.com/zarr-developers/numcodecs/actions?query=workflow%3AWheels
+
+.. image:: https://codecov.io/gh/zarr-developers/numcodecs/branch/main/graph/badge.svg
+    :target: https://codecov.io/gh/zarr-developers/numcodecs

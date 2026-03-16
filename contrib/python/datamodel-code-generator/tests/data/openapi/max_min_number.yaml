@@ -1,0 +1,30 @@
+openapi: 3.0.3
+info:
+  title: Product API
+  version: 1.0
+paths:
+  /product:
+    post:
+      operationId: createProduct
+      description: Create new product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/product'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/product'
+components:
+  schemas:
+    product:
+      type: object
+      properties:
+        price:
+          type: number
+          minimum: -999999.999999
+          maximum: 999999.999999

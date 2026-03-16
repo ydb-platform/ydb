@@ -1,0 +1,32 @@
+--- contrib/python/mlflow/mlflow/store/artifact/http_artifact_repo.py	(index)
++++ contrib/python/mlflow/mlflow/store/artifact/http_artifact_repo.py	(working tree)
+@@ -64,8 +64,27 @@ class HttpArtifactRepository(ArtifactRepository):
+         return sorted(file_infos, key=lambda f: f.path)
+ 
+     def _download_file(self, remote_file_path, local_path):
+-        endpoint = posixpath.join("/", remote_file_path)
+-        resp = http_request(self._host_creds, endpoint, "GET", stream=True)
++        ###-----------------------------------------------------------------###
++        from copy import deepcopy
++
++        _host_creds = deepcopy(self._host_creds)
++        base_host, tail = self._host_creds.host.split("/api/2.0/", maxsplit=1)
++
++        self._host_creds.host = base_host
++        _host_creds.host = base_host
++
++        try:
++            _, run_id_part, remote_dir = tail.split("/artifacts/")
++            full_path = f"{remote_dir}/{remote_file_path}"
++            run_id = run_id_part.split("/")[-1]
++        except ValueError:
++            run_id = tail.split("/")[-2]
++            full_path = remote_file_path
++
++        endpoint = f"/get-artifact?path={full_path}&run_uuid={run_id}"
++        resp = http_request(_host_creds, endpoint, "GET", stream=True)
++        ###-----------------------------------------------------------------###
++        
+         augmented_raise_for_status(resp)
+         with open(local_path, "wb") as f:
+             chunk_size = 1024 * 1024  # 1 MB

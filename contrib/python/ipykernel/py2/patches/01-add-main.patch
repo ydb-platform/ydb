@@ -1,0 +1,20 @@
+--- contrib/python/ipykernel/py2/ipykernel_launcher.py	(index)
++++ contrib/python/ipykernel/py2/ipykernel_launcher.py	(working tree)
+@@ -6,7 +6,8 @@ after removing the cwd from sys.path.
+ 
+ import sys
+ 
+-if __name__ == '__main__':
++
++def main():
+     # Remove the CWD from sys.path while we load stuff.
+     # This is added back by InteractiveShellApp.init_path()
+     if sys.path[0] == '':
+@@ -14,3 +15,7 @@ if __name__ == '__main__':
+ 
+     from ipykernel import kernelapp as app
+     app.launch_new_instance()
++
++
++if __name__ == '__main__':
++    main()

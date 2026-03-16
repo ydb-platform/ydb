@@ -1,0 +1,69 @@
+--- contrib/python/marshmallow/py3/tests/test_registry.py	(index)
++++ contrib/python/marshmallow/py3/tests/test_registry.py	(working tree)
+@@ -15,2 +15,2 @@ def test_serializer_has_class_registry():
+-    assert "tests.test_registry.MySchema" in class_registry._registry
+-    assert "tests.test_registry.MySubSchema" in class_registry._registry
++    assert "__tests__.test_registry.MySchema" in class_registry._registry
++    assert "__tests__.test_registry.MySubSchema" in class_registry._registry
+@@ -37,17 +37,17 @@ def test_register_class_meta_option():
+             register = False
+ 
+     assert "UnregisteredSchema" not in class_registry._registry
+-    assert "tests.test_registry.UnregisteredSchema" not in class_registry._registry
++    assert "__tests__.test_registry.UnregisteredSchema" not in class_registry._registry
+ 
+     assert "RegisteredSchema" in class_registry._registry
+-    assert "tests.test_registry.RegisteredSchema" in class_registry._registry
++    assert "__tests__.test_registry.RegisteredSchema" in class_registry._registry
+ 
+     assert "RegisteredOverrideSchema" in class_registry._registry
+-    assert "tests.test_registry.RegisteredOverrideSchema" in class_registry._registry
++    assert "__tests__.test_registry.RegisteredOverrideSchema" in class_registry._registry
+ 
+     assert "UnregisteredOverrideSchema" not in class_registry._registry
+     assert (
+-        "tests.test_registry.UnregisteredOverrideSchema" not in class_registry._registry
++        "__tests__.test_registry.UnregisteredOverrideSchema" not in class_registry._registry
+     )
+ 
+ 
+@@ -127,17 +127,17 @@ class C:
+ 
+ class ASchema(Schema):
+     id = fields.Integer()
+-    b = fields.Nested("tests.test_registry.BSchema", exclude=("a",))
++    b = fields.Nested("__tests__.test_registry.BSchema", exclude=("a",))
+ 
+ 
+ class BSchema(Schema):
+     id = fields.Integer()
+-    a = fields.Nested("tests.test_registry.ASchema")
++    a = fields.Nested("__tests__.test_registry.ASchema")
+ 
+ 
+ class CSchema(Schema):
+     id = fields.Integer()
+-    bs = fields.Nested("tests.test_registry.BSchema", many=True)
++    bs = fields.Nested("__tests__.test_registry.BSchema", many=True)
+ 
+ 
+ def test_two_way_nesting():
+@@ -176,1 +176,1 @@ class FooSerializer(Schema):
+-    from .foo_serializer import FooSerializer as FooSerializer1  # noqa: F401
++    from tests.foo_serializer import FooSerializer as FooSerializer1  # noqa: F401
+@@ -191,1 +191,1 @@ def test_multiple_classes_with_same_name_raises_error():
+-    from .foo_serializer import FooSerializer as FooSerializer1  # noqa: F401
++    from tests.foo_serializer import FooSerializer as FooSerializer1  # noqa: F401
+@@ -199,1 +199,1 @@ def test_multiple_classes_with_same_name_raises_error():
+-    from .foo_serializer import FooSerializer as FooSerializer1  # noqa: F401
++    from tests.foo_serializer import FooSerializer as FooSerializer1  # noqa: F401
+@@ -212,1 +212,1 @@ def test_can_use_full_module_path_to_class():
+-        foo = fields.Nested("tests.test_registry.FooSerializer")
++        foo = fields.Nested("__tests__.test_registry.FooSerializer")
+--- contrib/python/marshmallow/py3/tests/test_deserialization.py	(index)
++++ contrib/python/marshmallow/py3/tests/test_deserialization.py	(working tree)
+@@ -405,2 +405,2 @@ class TestFieldDeserialization:
+-            dt.datetime.now().strftime("%H:%M:%S %Y-%m-%d"),
+-            dt.datetime.now().strftime("%m-%d-%Y %H:%M:%S"),
++            dt.datetime(2021, 3, 1, 10, 20, 30).strftime("%H:%M:%S %Y-%m-%d"),
++            dt.datetime(2021, 3, 1, 10, 20, 30).strftime("%m-%d-%Y %H:%M:%S"),

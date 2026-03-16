@@ -1,0 +1,2 @@
+[console_scripts]
+progressbar = progressbar.__main__:main

@@ -1,0 +1,8 @@
+about_resource: interrupt.py
+name: Thread2
+author: Tomer Filiba
+homepage_url: http://tomerfiliba.com/recipes/Thread2/
+license: public-domain
+notes: Per http://tomerfiliba.com/recipes/
+ All of the following are published as "public domain", or, if you prefer, 
+ under the MIT license.

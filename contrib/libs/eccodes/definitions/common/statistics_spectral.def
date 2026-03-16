@@ -1,0 +1,16 @@
+# (C) Copyright 2005- ECMWF.
+
+meta dirty_statistics dirty(computeStatistics) ;
+when (changed(values)) { set dirty_statistics=1;}
+
+meta computeStatistics statistics_spectral(values,J,K,M,JS) : hidden;
+
+meta average vector(computeStatistics,0) : dump;
+meta energyNorm vector(computeStatistics,1) : dump;
+meta standardDeviation vector(computeStatistics,2) : dump;
+meta isConstant vector(computeStatistics,3) : dump;
+
+alias statistics.avg = average;
+alias statistics.enorm = energyNorm;
+alias statistics.sd = standardDeviation;
+alias statistics.const = isConstant;

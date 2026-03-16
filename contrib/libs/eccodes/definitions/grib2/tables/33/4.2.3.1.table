@@ -1,0 +1,38 @@
+# Product discipline 3 - Space products, parameter category 1: quantitative products
+0 0 Estimated precipitation (kg m-2)
+1 1 Instantaneous rain rate (kg m-2 s-1)
+2 2 Cloud top height (m)
+3 3 Cloud top height quality indicator (Code table 4.219)
+4 4 Estimated u-component of wind (m/s)
+5 5 Estimated v-component of wind (m/s)
+6 6 Number of pixel used (Numeric)
+7 7 Solar zenith angle (deg)
+8 8 Relative azimuth angle (deg)
+9 9 Reflectance in 0.6 micron channel (%)
+10 10 Reflectance in 0.8 micron channel (%)
+11 11 Reflectance in 1.6 micron channel (%)
+12 12 Reflectance in 3.9 micron channel (%)
+13 13 Atmospheric divergence (/s)
+14 14 Cloudy brightness temperature (K)
+15 15 Clear-sky brightness temperature (K)
+16 16 Cloudy radiance (with respect to wave number) (W m-1 sr-1)
+17 17 Clear-sky radiance (with respect to wave number) (W m-1 sr-1)
+18 18 Reserved
+19 19 Wind speed (m/s)
+20 20 Aerosol optical thickness at 0.635 um
+21 21 Aerosol optical thickness at 0.810 um
+22 22 Aerosol optical thickness at 1.640 um
+23 23 Angstrom coefficient
+# 24-26 Reserved
+27 27 Bidirectional reflectance factor (Numeric)
+28 28 Brightness temperature (K)
+29 29 Scaled radiance (Numeric)
+30 30 Reflectance in 0.4 micron channel (%)
+31 31 Cloudy reflectance (%)
+32 32 Clear reflectance (%)
+# 33-97 Reserved
+98 98 Correlation coefficient between MPE rain-rates for the co-located IR data and the microwave data rain-rates (Numeric)
+99 99 Standard deviation between MPE rain-rates for the co-located IR data and the microwave data rain-rates (kg m-2 s-1)
+# 100-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

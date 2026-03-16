@@ -1,0 +1,15 @@
+# author: Sebastien Villaume
+# created: 14 Feb 2014
+#
+constant g1conceptsMasterDir="grib1" : hidden;
+constant g1conceptsLocalDirAll="grib1/localConcepts/[centre:s]" : hidden;
+
+alias ls.dataType = marsType;
+
+if (localDefinitionNumber == 83 ) {
+  concept ls.timerepres (unknown,"timeRepresConcept.def",g1conceptsLocalDirAll,g1conceptsMasterDir);
+  concept ls.sort (unknown,"sortConcept.def",g1conceptsLocalDirAll,g1conceptsMasterDir);
+  concept ls.landtype (unknown,"landTypeConcept.def",g1conceptsLocalDirAll,g1conceptsMasterDir);
+  concept ls.aerosolbinnumber (unknown,"aerosolConcept.def",g1conceptsLocalDirAll,g1conceptsMasterDir);
+}
+

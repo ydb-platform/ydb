@@ -1,0 +1,256 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.idp;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/idp;idp";
+option java_package = "yandex.cloud.api.organizationmanager.v1.idp";
+
+// A userpool is a container for users in the Identity Provider system.
+message Userpool {
+  // Represents the current status of a userpool.
+  enum Status {
+    // The status is not specified.
+    STATUS_UNSPECIFIED = 0;
+    // The userpool is in the process of being created.
+    CREATING = 1;
+    // The userpool is active and operational.
+    ACTIVE = 2;
+    // The userpool is in the process of being deleted.
+    DELETING = 3;
+  }
+
+  // Unique identifier of the userpool.
+  string id = 1;
+  // ID of the organization this userpool belongs to.
+  string organization_id = 2;
+  // Name of the userpool.
+  string name = 3;
+  // Description of the userpool.
+  string description = 4;
+  // Resource labels as key:value pairs.
+  map<string, string> labels = 5;
+  // Timestamp when the userpool was created.
+  google.protobuf.Timestamp created_at = 6;
+  // Timestamp when the userpool was last updated.
+  google.protobuf.Timestamp updated_at = 7;
+  // List of domains associated with this userpool.
+  repeated string domains = 8;
+  // Current status of the userpool.
+  Status status = 9;
+  // User settings for this userpool.
+  UserSettings user_settings = 10;
+  // Password quality policy for this userpool.
+  PasswordQualityPolicy password_quality_policy = 11;
+  // Password lifetime policy for this userpool.
+  PasswordLifetimePolicy password_lifetime_policy = 12;
+  // Bruteforce protection policy for this userpool.
+  BruteforceProtectionPolicy bruteforce_protection_policy = 13;
+}
+
+// Settings that control user capabilities within a userpool.
+message UserSettings {
+  // Whether users can change their own passwords.
+  bool allow_edit_self_password = 1;
+  // Whether users can edit their own profile information.
+  bool allow_edit_self_info = 2;
+  // Whether users can edit their own contact information.
+  bool allow_edit_self_contacts = 3;
+  // Whether users can edit their own login information.
+  bool allow_edit_self_login = 4;
+}
+
+// A domain associated with a userpool.
+message Domain {
+  // Represents the current status of a domain.
+  enum Status {
+    // The status is not specified.
+    STATUS_UNSPECIFIED = 0;
+    // The domain needs to be validated.
+    NEED_TO_VALIDATE = 1;
+    // The domain is in the process of being validated.
+    VALIDATING = 2;
+    // The domain has been successfully validated.
+    VALID = 3;
+    // The domain validation has failed.
+    INVALID = 4;
+    // The domain is in the process of being deleted.
+    DELETING = 5;
+  }
+  // Domain name.
+  string domain = 1;
+  // Current status of the domain.
+  Status status = 2;
+  // Optional code providing details about validation errors.
+  string status_code = 3;
+  // Timestamp when the domain was created.
+  google.protobuf.Timestamp created_at = 4;
+  // Timestamp when the domain was validated.
+  google.protobuf.Timestamp validated_at = 5;
+  // List of challenges associated with this domain.
+  repeated DomainChallenge challenges = 7;
+  // Whether the domain is protected from deletion.
+  bool deletion_protection = 8;
+
+  reserved 6;
+}
+
+// A challenge used to validate domain ownership.
+message DomainChallenge {
+  // Type of domain challenge.
+  enum Type {
+    // The type is not specified.
+    TYPE_UNSPECIFIED = 0;
+    // DNS TXT record challenge.
+    DNS_TXT = 1;
+  }
+
+  // Status of the domain challenge.
+  enum Status {
+    // The status is not specified.
+    STATUS_UNSPECIFIED = 0;
+    // The challenge is pending verification.
+    PENDING = 1;
+    // The challenge verification is in progress.
+    PROCESSING = 2;
+    // The challenge has been successfully verified.
+    VALID = 3;
+    // The challenge verification has failed.
+    INVALID = 4;
+  }
+
+  // Timestamp when the challenge was created.
+  google.protobuf.Timestamp created_at = 1;
+  // Timestamp when the challenge was last updated.
+  google.protobuf.Timestamp updated_at = 2;
+  // Type of the challenge.
+  Type type = 4;
+  // Current status of the challenge.
+  Status status = 5;
+
+  reserved 3;
+
+  // Challenge details.
+  oneof challenge {
+    // DNS record challenge details.
+    DnsRecord dns_challenge = 6;
+  }
+
+  // DNS record information for domain validation.
+  message DnsRecord {
+    // Type of DNS record.
+    enum Type {
+      // The type is not specified.
+      TYPE_UNSPECIFIED = 0;
+      // TXT record type.
+      TXT = 1;
+    }
+
+    // Name of the DNS record.
+    string name = 1;
+    // Type of the DNS record.
+    Type type = 2;
+    // Value of the DNS record.
+    string value = 3;
+  }
+}
+
+// Policy that defines password quality requirements.
+message PasswordQualityPolicy {
+
+  // Deprecated. Use Fixed instead.
+  message RequiredClasses {
+    // Whether lowercase letters are required.
+    bool lowers = 1;
+    // Whether uppercase letters are required.
+    bool uppers = 2;
+    // Whether digits are required.
+    bool digits = 3;
+    // Whether special characters are required.
+    bool specials = 4;
+  }
+
+  // Deprecated. Use Smart instead.
+  message MinLengthByClassSettings {
+    // Minimum length for passwords with one character class.
+    int64 one = 1;
+    // Minimum length for passwords with two character classes.
+    int64 two = 2;
+    // Minimum length for passwords with three character classes.
+    int64 three = 3;
+  }
+
+  // Fixed complexity policy enforces uniform password rules with required character classes and minimum length.
+  message Fixed {
+    // Whether lowercase letters are required in the password.
+    bool lowers_required = 1;
+    // Whether uppercase letters are required in the password.
+    bool uppers_required = 2;
+    // Whether digits are required in the password.
+    bool digits_required = 3;
+    // Whether special characters are required in the password.
+    bool specials_required = 4;
+    // Minimum length required for all passwords.
+    int64 min_length = 5 [(value) = "0-1000"];
+  }
+
+  // Smart complexity policy applies adaptive requirements based on character class diversity.
+  // Zero value means passwords with this number of classes are forbidden.
+  message Smart {
+    // For passwords with one class of characters
+    int64 one_class = 1 [(value) = "0-1000"];
+    // For passwords with two classes of characters
+    int64 two_classes = 2 [(value) = "0-1000"];
+    // For passwords with three classes of characters
+    int64 three_classes = 3 [(value) = "0-1000"];
+    // For passwords with all four classes of characters
+    int64 four_classes = 4 [(value) = "0-1000"];
+  }
+
+  // Whether passwords similar to previous ones are allowed.
+  bool allow_similar = 1;
+  // Maximum password length. Zero means no maximum length is enforced.
+  int64 max_length = 2 [(value) = "0-1000"];
+
+  // Deprecated. Use Fixed instead.
+  int64 min_length = 3 [deprecated = true];
+
+  // Minimum length of substrings to check for similarity to vulnerable sequences.
+  int64 match_length = 4 [(value) = "0-1000"];
+
+  // Deprecated. Use Fixed instead.
+  RequiredClasses required_classes = 5 [deprecated = true];
+  // Deprecated. Use Smart instead.
+  MinLengthByClassSettings min_length_by_class_settings = 6 [deprecated = true];
+
+  // Defines password complexity policy.
+  oneof complexity_policy {
+    // Fixed complexity requirements. Exactly one of complexity requirements must be specified.
+    Fixed fixed = 7;
+    // Smart complexity requirements. Exactly one of complexity requirements must be specified.
+    Smart smart = 8;
+  }
+}
+
+// Policy that defines password lifetime requirements.
+message PasswordLifetimePolicy {
+  // Minimum number of days before a password can be changed.
+  int64 min_days_count = 1 [(value) = "0-730"];
+  // Maximum number of days a password remains valid.
+  // Zero means passwords never expire.
+  int64 max_days_count = 2 [(value) = "0-730"];
+}
+
+// Policy that defines protection against brute force attacks.
+// Zero or empty values disable bruteforce protection.
+message BruteforceProtectionPolicy {
+  // Time window for counting failed authentication attempts.
+  google.protobuf.Duration window = 1 [(value) = "0h-8760h"];
+  // Duration of the block after too many failed attempts.
+  google.protobuf.Duration block = 2 [(value) = "0h-8760h"];
+  // Number of failed attempts allowed within the window before blocking.
+  int64 attempts = 3 [(value) = "1-100"];
+}

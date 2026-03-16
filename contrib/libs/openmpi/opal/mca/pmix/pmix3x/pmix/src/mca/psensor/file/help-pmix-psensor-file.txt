@@ -1,0 +1,19 @@
+# -*- text -*-
+#
+# Copyright (c) 2009      Cisco Systems, Inc.  All rights reserved.
+#
+# Copyright (c) 2017      Intel, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for the file sensor
+#
+[file-stalled]
+A specified file is not changing, indicating a possibly stalled application:
+
+File:              %s
+Last size:         %lu
+Last access:       %sLast modification: %s

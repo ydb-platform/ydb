@@ -1,0 +1,212 @@
+--- contrib/python/odfpy/tests/teststyles.py	(index)
++++ contrib/python/odfpy/tests/teststyles.py	(working tree)
+@@ -88,2 +88,6 @@ class TestQattributes(unittest.TestCase):
+-        s.index(u'xmlns:ns44="http://foreignuri.com"')
+-        s.index(u'<style:paragraph-properties ns44:enable-numbering="true"/>')
++
++        # XXX: Python 2 and 3 have these entities inserted with slightly different numbers, try a broader substring
++        # XXX: Original test code: https://github.com/eea/odfpy/blob/master/tests/teststyles.py#L91-L92
++        s.index(u'"http://foreignuri.com"')
++        s.index(u'enable-numbering="true"')
++
+--- contrib/python/odfpy/tests/testcontextualspacing.py	(index)
++++ contrib/python/odfpy/tests/testcontextualspacing.py	(working tree)
+@@ -24,6 +24,8 @@ from odf.opendocument import OpenDocumentText, load
+ from odf import text
+ from odf.namespaces import TEXTNS
+ 
++import yatest.common as yc
++
+ if sys.version_info[0]==3:
+     unicode=str
+ 
+@@ -40,1 +42,1 @@ class TestConceptualspacing(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"contextualspacing.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"contextualspacing.odt")
+--- contrib/python/odfpy/tests/testload.py	(index)
++++ contrib/python/odfpy/tests/testload.py	(working tree)
+@@ -30,6 +30,8 @@ from .elementparser import ElementParser
+ 
+ from defusedxml import EntitiesForbidden
+ 
++import yatest.common as yc
++
+ 
+ if sys.version_info[0]==3:
+     unicode=str
+@@ -152,1 +154,1 @@ class TestQuadraticBlowup(BaseXMLVulnerabilities):
+-    simple_ods = os.path.join(os.path.dirname(__file__), "examples", "empty.ods")
++    simple_ods = os.path.join(os.path.dirname(yc.source_path(__file__)), "examples", "empty.ods")
+@@ -247,1 +249,1 @@ class TestXMLBomb(BaseXMLVulnerabilities):
+-    simple_ods = os.path.join(os.path.dirname(__file__), "examples", "empty.ods")
++    simple_ods = os.path.join(os.path.dirname(yc.source_path(__file__)), "examples", "empty.ods")
+@@ -325,1 +327,1 @@ class TestXXEFile(BaseXMLVulnerabilities):
+-    simple_ods = os.path.join(os.path.dirname(__file__), "examples", "empty.ods")
++    simple_ods = os.path.join(os.path.dirname(yc.source_path(__file__)), "examples", "empty.ods")
+@@ -414,1 +416,1 @@ class TestXXE(BaseXMLVulnerabilities):
+-    simple_ods = os.path.join(os.path.dirname(__file__), "examples", "empty.ods")
++    simple_ods = os.path.join(os.path.dirname(yc.source_path(__file__)), "examples", "empty.ods")
+@@ -480,1 +482,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), "examples", "parastyles.odt")
++            os.path.dirname(yc.source_path(__file__)), "examples", "parastyles.odt")
+@@ -488,1 +490,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"emb_spreadsheet.odp")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"emb_spreadsheet.odp")
+@@ -497,1 +499,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), "examples", "simplelist.odt")
++            os.path.dirname(yc.source_path(__file__)), "examples", "simplelist.odt")
+@@ -506,1 +508,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), "examples", "simpletable.odt")
++            os.path.dirname(yc.source_path(__file__)), "examples", "simpletable.odt")
+@@ -520,1 +522,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), "examples", "headerfooter.odt")
++            os.path.dirname(yc.source_path(__file__)), "examples", "headerfooter.odt")
+@@ -531,1 +533,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), "examples", "pythagoras.ods")
++            os.path.dirname(yc.source_path(__file__)), "examples", "pythagoras.ods")
+@@ -541,1 +543,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), "examples", "pythagoras-kspread.ods")
++            os.path.dirname(yc.source_path(__file__)), "examples", "pythagoras-kspread.ods")
+@@ -550,1 +552,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), "examples", "nasty.odt")
++            os.path.dirname(yc.source_path(__file__)), "examples", "nasty.odt")
+@@ -560,1 +562,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"emb_spreadsheet.odp")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"emb_spreadsheet.odp")
+@@ -570,1 +572,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"chinese_spreadsheet.ods")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"chinese_spreadsheet.ods")
+--- contrib/python/odfpy/tests/testmoinmoin.py	(index)
++++ contrib/python/odfpy/tests/testmoinmoin.py	(working tree)
+@@ -24,6 +24,8 @@ from odf import style, text
+ from odf.text import P, H, LineBreak
+ from odf import odf2moinmoin
+ 
++import yatest.common as yc
++
+ class TestSimple(unittest.TestCase):
+ 
+     def setUp(self):
+@@ -76,1 +78,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"twolevellist.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"twolevellist.odt")
+@@ -87,1 +89,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"simplestyles.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"simplestyles.odt")
+@@ -99,1 +101,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"parastyles.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"parastyles.odt")
+@@ -108,1 +110,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"simplelist.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"simplelist.odt")
+@@ -116,1 +118,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"simpletable.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"simpletable.odt")
+--- contrib/python/odfpy/tests/testtext.py	(index)
++++ contrib/python/odfpy/tests/testtext.py	(working tree)
+@@ -24,6 +24,8 @@ from odf.opendocument import OpenDocumentText, load
+ from odf import text
+ from odf.namespaces import TEXTNS
+ 
++import yatest.common as yc
++
+ if sys.version_info[0]==3:
+     unicode=str
+ 
+@@ -39,1 +41,1 @@ class TestText(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"serious_poem.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"serious_poem.odt")
+--- contrib/python/odfpy/tests/testtypes.py	(index)
++++ contrib/python/odfpy/tests/testtypes.py	(working tree)
+@@ -22,13 +22,15 @@ import unittest, os
+ from odf.opendocument import load
+ from odf import office, text
+ 
++import yatest.common as yc
++
+ class TestTypes(unittest.TestCase):
+ 
+ 
+     def test_paras(self):
+         """ Grab all paragraphs and check they are paragraphs """
+         poem_odt = os.path.join(
+-            os.path.dirname(__file__), u"examples", u"serious_poem.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"serious_poem.odt")
+         d = load(poem_odt)
+         allparas = d.getElementsByType(text.P)
+ 
+@@ -38,1 +40,1 @@ class TestTypes(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"serious_poem.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"serious_poem.odt")
+--- contrib/python/odfpy/tests/testuserfields.py	(index)
++++ contrib/python/odfpy/tests/testuserfields.py	(working tree)
+@@ -27,6 +27,8 @@ import zipfile
+ 
+ from io import BytesIO
+ 
++import yatest.common as yc
++
+ if sys.version_info[0]==3:
+     unicode=str
+ 
+@@ -40,1 +40,1 @@ class TestUserFields(unittest.TestCase):
+-    return os.path.join(os.path.dirname(__file__), "examples", file_name)
++    return os.path.join(os.path.dirname(yc.source_path(__file__)), "examples", file_name)
+@@ -55,1 +57,1 @@ class TestUserFields(unittest.TestCase):
+-        no_zip = odf.userfield.UserFields(unicode(__file__))
++        no_zip = odf.userfield.UserFields(unicode(yc.source_path(__file__)))
+--- contrib/python/odfpy/tests/testwhitespace.py	(index)
++++ contrib/python/odfpy/tests/testwhitespace.py	(working tree)
+@@ -26,6 +26,8 @@ from odf.opendocument import OpenDocumentText, load
+ from odf import style, text
+ from odf.text import P
+ 
++import yatest.common as yc
++
+ class TestWhite(unittest.TestCase):
+ 
+ 
+@@ -48,1 +50,1 @@ class TestWhite(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"serious_poem.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"serious_poem.odt")
+@@ -58,1 +60,1 @@ class TestWhite(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"simplestyles.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"simplestyles.odt")
+--- contrib/python/odfpy/tests/testxhtml.py	(index)
++++ contrib/python/odfpy/tests/testxhtml.py	(working tree)
+@@ -27,6 +27,8 @@ from odf.opendocument import OpenDocumentText
+ from odf import style
+ from odf.text import H, P, Span
+ 
++import yatest.common as yc
++
+ def has_rules(html, selector, rules):
+     """ Returns false if the selector or rule is not found in html
+     """
+@@ -145,1 +147,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"twolevellist.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"twolevellist.odt")
+@@ -153,1 +155,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"simplestyles.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"simplestyles.odt")
+@@ -166,1 +168,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"simplelist.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"simplelist.odt")
+@@ -177,1 +179,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"ol.odp")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"ol.odp")
+@@ -194,1 +196,1 @@ class TestExampleDocs(unittest.TestCase):
+-            os.path.dirname(__file__), u"examples", u"simpletable.odt")
++            os.path.dirname(yc.source_path(__file__)), u"examples", u"simpletable.odt")
+@@ -203,1 +205,1 @@ class TestExampleDocs(unittest.TestCase):
+-        odt = os.path.join(os.path.dirname(__file__), u"examples", u"images.odt")
++        odt = os.path.join(os.path.dirname(yc.source_path(__file__)), u"examples", u"images.odt")
+@@ -214,1 +216,1 @@ class TestExampleDocs(unittest.TestCase):
+-        odt = os.path.join(os.path.dirname(__file__), u"examples", u"imageslabels.odt")
++        odt = os.path.join(os.path.dirname(yc.source_path(__file__)), u"examples", u"imageslabels.odt")
+@@ -227,1 +229,1 @@ class TestExampleDocs(unittest.TestCase):
+-        odt = os.path.join(os.path.dirname(__file__), u"examples", u"imageslabels.odt")
++        odt = os.path.join(os.path.dirname(yc.source_path(__file__)), u"examples", u"imageslabels.odt")
+@@ -241,1 +243,1 @@ class TestExampleDocs(unittest.TestCase):
+-        odt = os.path.join(os.path.dirname(__file__), u"examples", u"cols.odp")
++        odt = os.path.join(os.path.dirname(yc.source_path(__file__)), u"examples", u"cols.odp")

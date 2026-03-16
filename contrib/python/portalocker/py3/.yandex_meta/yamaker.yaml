@@ -1,0 +1,4 @@
+keep:
+  - tests/*
+exclude:
+  - portalocker_tests/*

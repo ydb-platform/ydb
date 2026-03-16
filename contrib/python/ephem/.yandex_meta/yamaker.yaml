@@ -1,0 +1,6 @@
+copy:
+  - extensions/*
+  - libastro/*
+  - astro_export.h
+exclude:
+  - ephem/doc/*

@@ -1,0 +1,16 @@
+# author: Sebastien Villaume
+# created: 13 May 2013
+#
+"none"={matchAerosolBinNumber=0;}
+"bin1"={matchAerosolBinNumber=1;}
+"bin2"={matchAerosolBinNumber=2;}
+"bin3"={matchAerosolBinNumber=3;}
+"bin4"={matchAerosolBinNumber=4;}
+"bin5"={matchAerosolBinNumber=5;}
+"bin6"={matchAerosolBinNumber=6;}
+"bin7"={matchAerosolBinNumber=7;}
+"bin8"={matchAerosolBinNumber=8;}
+"bin9"={matchAerosolBinNumber=9;}
+"bin10"={matchAerosolBinNumber=10;}
+"all"={matchAerosolBinNumber=100;}
+"missing"={matchAerosolBinNumber=255;}

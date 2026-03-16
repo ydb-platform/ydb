@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/maintenance/v2/common.proto";
+import "yandex/cloud/operation/operation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+option java_outer_classname = "MaintenanceServiceProto";
+
+// A set of methods for managing maintenances in a service.
+service MaintenanceService {
+  // Lists maintenances by conditions, specified in request.
+  rpc List(yandex.cloud.maintenance.v2.ListMaintenancesRequest) returns (yandex.cloud.maintenance.v2.ListMaintenancesResponse) {
+    option (google.api.http) = {get: "/compute/v1/maintenances"};
+  }
+
+  // Retrieves the specific Maintenance by ID.
+  rpc Get(yandex.cloud.maintenance.v2.GetMaintenanceRequest) returns (yandex.cloud.maintenance.v2.Maintenance) {
+    option (google.api.http) = {get: "/compute/v1/maintenances/{maintenance_id}"};
+  }
+
+  // Allows user to reschedule Maintenance to another date and time.
+  rpc Reschedule(yandex.cloud.maintenance.v2.RescheduleMaintenanceRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/compute/v1/maintenances/{maintenance_id}:reschedule" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      response: "yandex.cloud.maintenance.v2.Maintenance"
+    };
+  }
+}

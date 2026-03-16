@@ -1,0 +1,14 @@
+{
+  "$id": "bar.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Bar",
+  "type": "object",
+  "definitions": {
+    "logLevels": {
+      "description": "Supported logging levels",
+      "type": "string",
+      "enum": ["DEBUG", "INFO", "WARN", "ERROR"],
+      "default": "INFO"
+    }
+  }
+}

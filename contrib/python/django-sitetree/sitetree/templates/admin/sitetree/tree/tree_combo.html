@@ -1,0 +1,3 @@
+{% load sitetree %}{% for item in sitetree_items %}
+{{ item.id }}:::{% for d in item.depth_range %}&nbsp;&nbsp;&nbsp;&nbsp;{% endfor %}{% if item.parent %}|- {% endif %}{{ item.title }}
+{% if item.has_children %}{% sitetree_children of item for sitetree template "admin/sitetree/tree/tree_combo.html" %}{% endif %}{% endfor %}

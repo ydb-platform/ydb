@@ -1,0 +1,269 @@
+syntax = "proto3";
+
+package yandex.cloud.smartwebsecurity.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/smartwebsecurity/v1;smartwebsecurity";
+option java_package = "yandex.cloud.api.smartwebsecurity.v1";
+
+// A SecurityProfile resource.
+message SecurityProfile {
+  // Action to perform if none of rules matched.
+  enum DefaultAction {
+    DEFAULT_ACTION_UNSPECIFIED = 0;
+
+    // Pass request to service.
+    ALLOW = 1;
+
+    // Deny request.
+    DENY = 2;
+  }
+
+  message AnalyzeRequestBody {
+    // Action to perform if maximum size of body exceeded.
+    enum Action {
+      ACTION_UNSPECIFIED = 0;
+
+      // Ignore body.
+      IGNORE = 1;
+
+      // Deny request.
+      DENY = 2;
+    }
+
+    // Maximum size of body to pass to analyzer. In kilobytes.
+    int64 size_limit = 1 [(value) = "0,8,16,32,64,128,256,512"];
+
+    // Action to perform if maximum size of body exceeded.
+    Action size_limit_action = 2;
+  }
+
+  // ID of the security profile.
+  string id = 1;
+
+  // ID of the folder that the security profile belongs to.
+  string folder_id = 2;
+
+  // Labels as `` key:value `` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 3 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // Name of the security profile. The name is unique within the folder. 1-50 characters long.
+  string name = 4 [(required) = true, (length) = "1-50", (pattern) = "[a-zA-Z0-9][a-zA-Z0-9-_.]*"];
+
+  // Optional description of the security profile.
+  string description = 5 [(length) = "<=512"];
+
+  // Action to perform if none of rules matched.
+  DefaultAction default_action = 6 [(required) = true];
+
+  // List of security rules.
+  repeated SecurityRule security_rules = 7;
+
+  // Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp created_at = 8;
+
+  reserved 9;
+
+  // ID of the cloud that the security profile belongs to.
+  string cloud_id = 10;
+
+  // Captcha ID to use with this security profile. Set empty to use default.
+  string captcha_id = 11;
+
+  // Advanced rate limiter profile ID to use with this security profile. Set empty to use default.
+  string advanced_rate_limiter_profile_id = 12;
+
+  // Parameters for request body analyzer.
+  AnalyzeRequestBody analyze_request_body = 13;
+}
+
+// A SecurityRule object, see [Rules](/docs/smartwebsecurity/concepts/rules).
+message SecurityRule {
+  // Name of the rule. The name is unique within the security profile. 1-50 characters long.
+  string name = 1 [(required) = true, (length) = "1-50", (pattern) = "[a-zA-Z0-9][a-zA-Z0-9-_.]*"];
+
+  // Determines the priority for checking the incoming traffic.
+  // Enter an integer within the range of 1 and 999999.
+  // The rule priority must be unique within the entire security profile.
+  // A lower numeric value means a higher priority.
+  // The default_action has the lowest priority.
+  int64 priority = 2 [(value) = "1-999999"];
+
+  // This mode allows you to test your security profile or a single rule.
+  // For example, you can have the number of alarms for a specific rule displayed.
+  // Note: if this option is true, no real action affecting your traffic regarding this rule will be taken.
+  bool dry_run = 3;
+
+  oneof rule_specifier {
+    // Rule actions, see [Rule actions](/docs/smartwebsecurity/concepts/rules#rule-action).
+    RuleCondition rule_condition = 4;
+
+    // Smart Protection rule, see [Smart Protection rules](/docs/smartwebsecurity/concepts/rules#smart-protection-rules).
+    SmartProtection smart_protection = 5;
+
+    // Web Application Firewall (WAF) rule, see [WAF rules](/docs/smartwebsecurity/concepts/rules#waf-rules).
+    Waf waf = 6;
+  }
+
+  // Optional description of the rule. 0-512 characters long.
+  string description = 7 [(length) = "<=512"];
+
+  // RuleCondition object.
+  message RuleCondition {
+    // Type of action to perform if this rule matched.
+    enum Action {
+      ACTION_UNSPECIFIED = 0;
+
+      // Pass request to service.
+      ALLOW = 1;
+
+      // Deny request.
+      DENY = 2;
+    }
+
+    // Action to perform if this rule matched.
+    Action action = 1;
+
+    // The condition for matching the rule.
+    Condition condition = 2;
+  }
+
+  // SmartProtection object.
+  message SmartProtection {
+    // Mode of protection.
+    enum Mode {
+      MODE_UNSPECIFIED = 0;
+
+      // Full protection means that the traffic will be checked based on ML models and behavioral analysis,
+      // with suspicious requests being sent to SmartCaptcha.
+      FULL = 1;
+
+      // API protection means checking the traffic based on ML models and behavioral analysis without sending suspicious
+      // requests to SmartCaptcha. The suspicious requests will be blocked.
+      API = 2;
+    }
+
+    // Mode of protection.
+    Mode mode = 1;
+
+    // The condition for matching the rule.
+    Condition condition = 2;
+  }
+
+  // Waf object.
+  message Waf {
+    // Mode of protection.
+    enum Mode {
+      MODE_UNSPECIFIED = 0;
+
+      // Full protection means that the traffic will be checked based on ML models and behavioral analysis,
+      // with suspicious requests being sent to SmartCaptcha.
+      FULL = 1;
+
+      // API protection means checking the traffic based on ML models and behavioral analysis without sending suspicious
+      // requests to SmartCaptcha. The suspicious requests will be blocked.
+      API = 2;
+    }
+
+    // Mode of protection.
+    Mode mode = 1;
+
+    // The condition for matching the rule.
+    Condition condition = 2;
+
+    // ID of WAF profile to use in this rule.
+    string waf_profile_id = 3 [(required) = true];
+  }
+}
+
+// Condition object. AND semantics implied.
+// See [documentation](/docs/smartwebsecurity/concepts/conditions) for matchers description.
+message Condition {
+  // Match authority (Host header).
+  AuthorityMatcher authority = 1;
+
+  // Match HTTP method.
+  HttpMethodMatcher http_method = 2;
+
+  // Match Request URI.
+  RequestUriMatcher request_uri = 3;
+
+  // Match HTTP headers.
+  repeated HeaderMatcher headers = 4 [(size) = "<=20"];
+
+  // Match IP.
+  IpMatcher source_ip = 5;
+
+  // StringMatcher object.
+  message StringMatcher {
+    oneof match {
+      string exact_match = 1 [(length) = "0-255"];
+      string exact_not_match = 2 [(length) = "0-255"];
+      string prefix_match = 3 [(length) = "0-255"];
+      string prefix_not_match = 4 [(length) = "0-255"];
+      string pire_regex_match = 5 [(length) = "0-255"];
+      string pire_regex_not_match = 6 [(length) = "0-255"];
+    }
+  }
+
+  // HttpMethodMatcher object.
+  message HttpMethodMatcher {
+    // List of HTTP methods. OR semantics implied.
+    repeated StringMatcher http_methods = 1 [(size) = "<=20"];
+  }
+
+  // AuthorityMatcher object.
+  message AuthorityMatcher {
+    // List of authorities. OR semantics implied.
+    repeated StringMatcher authorities = 1 [(size) = "<=20"];
+  }
+
+  // RequestUriMatcher object. AND semantics implied.
+  message RequestUriMatcher {
+    // Path of the URI [RFC3986](https://datatracker.ietf.org/doc/html/rfc3986#section-3.3).
+    StringMatcher path = 1;
+
+    // List of query matchers. AND semantics implied.
+    repeated QueryMatcher queries = 2 [(size) = "<=20"];
+  }
+
+  // QueryMatcher object.
+  message QueryMatcher {
+    // Key of the query parameter.
+    string key = 1 [(required) = true, (length) = "1-255"];
+
+    // Value of the query parameter.
+    StringMatcher value = 2 [(required) = true];
+  }
+
+  // HeaderMatcher object.
+  message HeaderMatcher {
+    // Name of header (case insensitive).
+    string name = 1 [(required) = true, (length) = "1-255"];
+
+    // Value of the header.
+    StringMatcher value = 2 [(required) = true];
+  }
+
+  // IpMatcher object. AND semantics implied.
+  message IpMatcher {
+    IpRangesMatcher ip_ranges_match = 1;
+    IpRangesMatcher ip_ranges_not_match = 2;
+    GeoIpMatcher geo_ip_match = 3;
+    GeoIpMatcher geo_ip_not_match = 4;
+  }
+
+  // IpRangesMatcher object.
+  message IpRangesMatcher {
+    // List of IP ranges. OR semantics implied.
+    repeated string ip_ranges = 1 [(size) = "<=10000"]; // v4/v6 - allow, exact IP == /32 or /128 range
+  }
+
+  // GeoIpMatcher object.
+  message GeoIpMatcher {
+    // ISO 3166-1 alpha 2. OR semantics implied.
+    repeated string locations = 1 [(size) = ">=1", (unique) = true, (length) = "2"];
+  }
+}

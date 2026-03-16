@@ -1,0 +1,387 @@
+syntax = "proto3";
+
+/*
+ * Definitions for commands from a workflow in lang SDK to core. While a workflow processes a batch
+ * of activation jobs, it accumulates these commands to be sent back to core to conclude that
+ * activation.
+ */
+package coresdk.workflow_commands;
+option ruby_package = "Temporalio::Internal::Bridge::Api::WorkflowCommands";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/api/sdk/v1/user_metadata.proto";
+import "temporal/sdk/core/child_workflow/child_workflow.proto";
+import "temporal/sdk/core/nexus/nexus.proto";
+import "temporal/sdk/core/common/common.proto";
+
+message WorkflowCommand {
+    // User metadata that may or may not be persisted into history depending on the command type.
+    // Lang layers are expected to expose the setting of the internals of this metadata on a
+    // per-command basis where applicable.
+    temporal.api.sdk.v1.UserMetadata user_metadata = 100;
+
+    oneof variant {
+        StartTimer start_timer = 1;
+        ScheduleActivity schedule_activity = 2;
+        QueryResult respond_to_query = 3;
+        RequestCancelActivity request_cancel_activity = 4;
+        CancelTimer cancel_timer = 5;
+        CompleteWorkflowExecution complete_workflow_execution = 6;
+        FailWorkflowExecution fail_workflow_execution = 7;
+        ContinueAsNewWorkflowExecution continue_as_new_workflow_execution = 8;
+        CancelWorkflowExecution cancel_workflow_execution = 9;
+        SetPatchMarker set_patch_marker = 10;
+        StartChildWorkflowExecution start_child_workflow_execution = 11;
+        CancelChildWorkflowExecution cancel_child_workflow_execution = 12;
+        RequestCancelExternalWorkflowExecution request_cancel_external_workflow_execution = 13;
+        SignalExternalWorkflowExecution signal_external_workflow_execution = 14;
+        CancelSignalWorkflow cancel_signal_workflow = 15;
+        ScheduleLocalActivity schedule_local_activity = 16;
+        RequestCancelLocalActivity request_cancel_local_activity = 17;
+        UpsertWorkflowSearchAttributes upsert_workflow_search_attributes = 18;
+        ModifyWorkflowProperties modify_workflow_properties = 19;
+        UpdateResponse update_response = 20;
+        ScheduleNexusOperation schedule_nexus_operation = 21;
+        RequestCancelNexusOperation request_cancel_nexus_operation = 22;
+    }
+}
+
+message StartTimer {
+    // Lang's incremental sequence number, used as the operation identifier
+    uint32 seq = 1;
+    google.protobuf.Duration start_to_fire_timeout = 2;
+}
+
+message CancelTimer {
+    // Lang's incremental sequence number as passed to `StartTimer`
+    uint32 seq = 1;
+}
+
+message ScheduleActivity {
+    // Lang's incremental sequence number, used as the operation identifier
+    uint32 seq = 1;
+    string activity_id = 2;
+    string activity_type = 3;
+    // The name of the task queue to place this activity request in
+    string task_queue = 5;
+    map<string, temporal.api.common.v1.Payload> headers = 6;
+    // Arguments/input to the activity. Called "input" upstream.
+    repeated temporal.api.common.v1.Payload arguments = 7;
+    // Indicates how long the caller is willing to wait for an activity completion. Limits how long
+    // retries will be attempted. Either this or start_to_close_timeout_seconds must be specified.
+    // When not specified defaults to the workflow execution timeout.
+    google.protobuf.Duration schedule_to_close_timeout = 8;
+    // Limits time an activity task can stay in a task queue before a worker picks it up. This
+    // timeout is always non retryable as all a retry would achieve is to put it back into the same
+    // queue. Defaults to schedule_to_close_timeout or workflow execution timeout if not specified.
+    google.protobuf.Duration schedule_to_start_timeout = 9;
+    // Maximum time an activity is allowed to execute after a pick up by a worker. This timeout is
+    // always retryable. Either this or schedule_to_close_timeout must be specified.
+    google.protobuf.Duration start_to_close_timeout = 10;
+    // Maximum time allowed between successful worker heartbeats.
+    google.protobuf.Duration heartbeat_timeout = 11;
+    // Activities are provided by a default retry policy controlled through the service dynamic
+    // configuration. Retries are happening up to schedule_to_close_timeout. To disable retries set
+    // retry_policy.maximum_attempts to 1.
+    temporal.api.common.v1.RetryPolicy retry_policy = 12;
+    // Defines how the workflow will wait (or not) for cancellation of the activity to be confirmed
+    ActivityCancellationType cancellation_type = 13;
+    // If set, the worker will not tell the service that it can immediately start executing this
+    // activity. When unset/default, workers will always attempt to do so if activity execution
+    // slots are available.
+    bool do_not_eagerly_execute = 14;
+    // Whether this activity should run on a worker with a compatible build id or not.
+    coresdk.common.VersioningIntent versioning_intent = 15;
+    // The Priority to use for this activity
+    temporal.api.common.v1.Priority priority = 16;
+}
+
+message ScheduleLocalActivity {
+    // Lang's incremental sequence number, used as the operation identifier
+    uint32 seq = 1;
+    string activity_id = 2;
+    string activity_type = 3;
+    // Local activities can start with a non-1 attempt, if lang has been told to backoff using
+    // a timer before retrying. It should pass the attempt number from a `DoBackoff` activity
+    // resolution.
+    uint32 attempt = 4;
+    // If this local activity is a retry (as per the attempt field) this needs to be the original
+    // scheduling time (as provided in `DoBackoff`)
+    google.protobuf.Timestamp original_schedule_time = 5;
+    map<string, temporal.api.common.v1.Payload> headers = 6;
+    // Arguments/input to the activity.
+    repeated temporal.api.common.v1.Payload arguments = 7;
+    // Indicates how long the caller is willing to wait for local activity completion. Limits how
+    // long retries will be attempted. When not specified defaults to the workflow execution
+    // timeout (which may be unset).
+    google.protobuf.Duration schedule_to_close_timeout = 8;
+    // Limits time the local activity can idle internally before being executed. That can happen if
+    // the worker is currently at max concurrent local activity executions. This timeout is always
+    // non retryable as all a retry would achieve is to put it back into the same queue. Defaults
+    // to `schedule_to_close_timeout` if not specified and that is set. Must be <=
+    // `schedule_to_close_timeout` when set, otherwise, it will be clamped down.
+    google.protobuf.Duration schedule_to_start_timeout = 9;
+    // Maximum time the local activity is allowed to execute after the task is dispatched. This
+    // timeout is always retryable. Either or both of `schedule_to_close_timeout` and this must be
+    // specified. If set, this must be <= `schedule_to_close_timeout`, otherwise, it will be
+    // clamped down.
+    google.protobuf.Duration start_to_close_timeout = 10;
+    // Specify a retry policy for the local activity. By default local activities will be retried
+    // indefinitely.
+    temporal.api.common.v1.RetryPolicy retry_policy = 11;
+    // If the activity is retrying and backoff would exceed this value, lang will be told to
+    // schedule a timer and retry the activity after. Otherwise, backoff will happen internally in
+    // core. Defaults to 1 minute.
+    google.protobuf.Duration local_retry_threshold = 12;
+    // Defines how the workflow will wait (or not) for cancellation of the activity to be
+    // confirmed. Lang should default this to `WAIT_CANCELLATION_COMPLETED`, even though proto
+    // will default to `TRY_CANCEL` automatically.
+    ActivityCancellationType cancellation_type = 13;
+}
+
+enum ActivityCancellationType {
+    // Initiate a cancellation request and immediately report cancellation to the workflow.
+    TRY_CANCEL = 0;
+    // Wait for activity cancellation completion. Note that activity must heartbeat to receive a
+    // cancellation notification. This can block the cancellation for a long time if activity
+    // doesn't heartbeat or chooses to ignore the cancellation request.
+    WAIT_CANCELLATION_COMPLETED = 1;
+    // Do not request cancellation of the activity and immediately report cancellation to the
+    // workflow
+    ABANDON = 2;
+}
+
+message RequestCancelActivity {
+    // Lang's incremental sequence number as passed to `ScheduleActivity`
+    uint32 seq = 1;
+}
+
+message RequestCancelLocalActivity {
+    // Lang's incremental sequence number as passed to `ScheduleLocalActivity`
+    uint32 seq = 1;
+}
+
+message QueryResult {
+    // Corresponds to the id provided in the activation job
+    string query_id = 1;
+    oneof variant {
+        QuerySuccess succeeded = 2;
+        temporal.api.failure.v1.Failure failed = 3;
+    }
+}
+
+message QuerySuccess {
+    temporal.api.common.v1.Payload response = 1;
+}
+
+// Issued when the workflow completes successfully
+message CompleteWorkflowExecution {
+    temporal.api.common.v1.Payload result = 1;
+}
+
+// Issued when the workflow errors out
+message FailWorkflowExecution {
+    temporal.api.failure.v1.Failure failure = 1;
+}
+
+// Continue the workflow as a new execution
+message ContinueAsNewWorkflowExecution {
+    // The identifier the lang-specific sdk uses to execute workflow code
+    string workflow_type = 1;
+    // Task queue for the new workflow execution
+    string task_queue = 2;
+    // Inputs to the workflow code. Should be specified. Will not re-use old arguments, as that
+    // typically wouldn't make any sense.
+    repeated temporal.api.common.v1.Payload arguments = 3;
+    // Timeout for a single run of the new workflow. Will not re-use current workflow's value.
+    google.protobuf.Duration workflow_run_timeout = 4;
+    // Timeout of a single workflow task. Will not re-use current workflow's value.
+    google.protobuf.Duration workflow_task_timeout = 5;
+    // If set, the new workflow will have this memo. If unset, re-uses the current workflow's memo
+    map<string, temporal.api.common.v1.Payload> memo = 6;
+    // If set, the new workflow will have these headers. Will *not* re-use current workflow's
+    // headers otherwise.
+    map<string, temporal.api.common.v1.Payload> headers = 7;
+    // If set, the new workflow will have these search attributes. If unset, re-uses the current
+    // workflow's search attributes.
+    map<string, temporal.api.common.v1.Payload> search_attributes = 8;
+    // If set, the new workflow will have this retry policy. If unset, re-uses the current
+    // workflow's retry policy.
+    temporal.api.common.v1.RetryPolicy retry_policy = 9;
+    // Whether the continued workflow should run on a worker with a compatible build id or not.
+    coresdk.common.VersioningIntent versioning_intent = 10;
+}
+
+// Indicate a workflow has completed as cancelled. Generally sent as a response to an activation
+// containing a cancellation job.
+message CancelWorkflowExecution {}
+
+// A request to set/check if a certain patch is present or not
+message SetPatchMarker {
+    // A user-chosen identifier for this patch. If the same identifier is used in multiple places in
+    // the code, those places are considered to be versioned as one unit. IE: The check call will
+    // return the same result for all of them
+    string patch_id = 1;
+    // Can be set to true to indicate that branches using this change are being removed, and all
+    // future worker deployments will only have the "with change" code in them.
+    bool deprecated = 2;
+}
+
+// Start a child workflow execution
+message StartChildWorkflowExecution {
+    // Lang's incremental sequence number, used as the operation identifier
+    uint32 seq = 1;
+    string namespace = 2;
+    string workflow_id = 3;
+    string workflow_type = 4;
+    string task_queue = 5;
+    repeated temporal.api.common.v1.Payload input = 6;
+    // Total workflow execution timeout including retries and continue as new.
+    google.protobuf.Duration workflow_execution_timeout = 7;
+    // Timeout of a single workflow run.
+    google.protobuf.Duration workflow_run_timeout = 8;
+    // Timeout of a single workflow task.
+    google.protobuf.Duration workflow_task_timeout = 9;
+    // Default: PARENT_CLOSE_POLICY_TERMINATE.
+    child_workflow.ParentClosePolicy parent_close_policy = 10;
+    // string control = 11; (unused from StartChildWorkflowExecutionCommandAttributes)
+    // Default: WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE.
+    temporal.api.enums.v1.WorkflowIdReusePolicy workflow_id_reuse_policy = 12;
+    temporal.api.common.v1.RetryPolicy retry_policy = 13;
+    string cron_schedule = 14;
+    // Header fields
+    map<string, temporal.api.common.v1.Payload> headers = 15;
+    // Memo fields
+    map<string, temporal.api.common.v1.Payload> memo = 16;
+    // Search attributes
+    map<string, temporal.api.common.v1.Payload> search_attributes = 17;
+    // Defines behaviour of the underlying workflow when child workflow cancellation has been requested.
+    child_workflow.ChildWorkflowCancellationType cancellation_type = 18;
+    // Whether this child should run on a worker with a compatible build id or not.
+    coresdk.common.VersioningIntent versioning_intent = 19;
+    // The Priority to use for this activity
+    temporal.api.common.v1.Priority priority = 20;
+}
+
+// Cancel a child workflow
+message CancelChildWorkflowExecution {
+    // Sequence number as given to the `StartChildWorkflowExecution` command
+    uint32 child_workflow_seq = 1;
+    // A reason for the cancellation
+    string reason = 2;
+}
+
+// Request cancellation of an external workflow execution. For cancellation of a child workflow,
+// prefer `CancelChildWorkflowExecution` instead, as it guards against cancel-before-start issues.
+message RequestCancelExternalWorkflowExecution {
+    // Lang's incremental sequence number, used as the operation identifier
+    uint32 seq = 1;
+    // The workflow instance being targeted
+    common.NamespacedWorkflowExecution workflow_execution = 2;
+    // A reason for the cancellation
+    string reason = 3;
+}
+
+// Send a signal to an external or child workflow
+message SignalExternalWorkflowExecution {
+    // Lang's incremental sequence number, used as the operation identifier
+    uint32 seq = 1;
+    // What workflow is being targeted
+    oneof target {
+        // A specific workflow instance
+        common.NamespacedWorkflowExecution workflow_execution = 2;
+        // The desired target must be a child of the issuing workflow, and this is its workflow id
+        string child_workflow_id = 3;
+    }
+    // Name of the signal handler
+    string signal_name = 4;
+    // Arguments for the handler
+    repeated temporal.api.common.v1.Payload args = 5;
+    // Headers to attach to the signal
+    map<string, temporal.api.common.v1.Payload> headers = 6;
+}
+
+// Can be used to cancel not-already-sent `SignalExternalWorkflowExecution` commands
+message CancelSignalWorkflow {
+    // Lang's incremental sequence number as passed to `SignalExternalWorkflowExecution`
+    uint32 seq = 1;
+}
+
+message UpsertWorkflowSearchAttributes {
+    // SearchAttributes fields - equivalent to indexed_fields on api. Key = search index, Value =
+    // value?
+    map<string, temporal.api.common.v1.Payload> search_attributes = 1;
+}
+
+message ModifyWorkflowProperties {
+    // If set, update the workflow memo with the provided values. The values will be merged with
+    // the existing memo. If the user wants to delete values, a default/empty Payload should be
+    // used as the value for the key being deleted.
+    temporal.api.common.v1.Memo upserted_memo = 1;
+}
+
+// A reply to a `DoUpdate` job - lang must run the update's validator if told to, and then
+// immediately run the handler, if the update was accepted.
+//
+// There must always be an accepted or rejected response immediately, in the same activation as
+// this job, to indicate the result of the validator. Accepted for ran and accepted or skipped, or
+// rejected for rejected.
+//
+// Then, in the same or any subsequent activation, after the update handler has completed, respond
+// with completed or rejected as appropriate for the result of the handler.
+message UpdateResponse {
+    // The protocol message instance ID
+    string protocol_instance_id = 1;
+    oneof response {
+        // Must be sent if the update's validator has passed (or lang was not asked to run it, and
+        // thus should be considered already-accepted, allowing lang to always send the same
+        // sequence on replay).
+        google.protobuf.Empty accepted = 2;
+        // Must be sent if the update's validator does not pass, or after acceptance if the update
+        // handler fails.
+        temporal.api.failure.v1.Failure rejected = 3;
+        // Must be sent once the update handler completes successfully.
+        temporal.api.common.v1.Payload completed = 4;
+    }
+}
+
+// A request to begin a Nexus operation
+message ScheduleNexusOperation {
+    // Lang's incremental sequence number, used as the operation identifier
+    uint32 seq = 1;
+    // Endpoint name, must exist in the endpoint registry or this command will fail.
+    string endpoint = 2;
+    // Service name.
+    string service = 3;
+    // Operation name.
+    string operation = 4;
+    // Input for the operation. The server converts this into Nexus request content and the
+    // appropriate content headers internally when sending the StartOperation request. On the
+    // handler side, if it is also backed by Temporal, the content is transformed back to the
+    // original Payload sent in this command.
+    temporal.api.common.v1.Payload input = 5;
+    // Schedule-to-close timeout for this operation.
+    // Indicates how long the caller is willing to wait for operation completion.
+    // Calls are retried internally by the server.
+    google.protobuf.Duration schedule_to_close_timeout = 6;
+    // Header to attach to the Nexus request.
+    // Users are responsible for encrypting sensitive data in this header as it is stored in
+    // workflow history and transmitted to external services as-is. This is useful for propagating
+    // tracing information. Note these headers are not the same as Temporal headers on internal
+    // activities and child workflows, these are transmitted to Nexus operations that may be
+    // external and are not traditional payloads.
+    map<string, string> nexus_header = 7;
+    // Defines behaviour of the underlying nexus operation when operation cancellation has been requested.
+    nexus.NexusOperationCancellationType cancellation_type = 8;
+}
+
+// Request cancellation of a nexus operation started via `ScheduleNexusOperation`
+message RequestCancelNexusOperation {
+    // Lang's incremental sequence number as passed to `ScheduleNexusOperation`
+    uint32 seq = 1;
+}

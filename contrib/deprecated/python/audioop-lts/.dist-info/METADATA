@@ -1,0 +1,60 @@
+Metadata-Version: 2.4
+Name: audioop-lts
+Version: 0.2.2
+Summary: LTS Port of Python audioop
+Maintainer-email: AbstractUmbra <umbra@abstractumbra.dev>
+License-Expression: PSF-2.0
+Project-URL: github, https://github.com/AbstractUmbra/audioop
+Project-URL: homepage, https://github.com/AbstractUmbra/audioop
+Project-URL: issues, https://github.com/AbstractUmbra/audioop/issues
+Project-URL: funding, https://github.com/sponsors/AbstractUmbra
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Requires-Python: >=3.13
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: license-file
+
+# audioop
+
+An LTS port of the Python builtin module `audioop` which was deprecated since version 3.11 and removed in 3.13.
+
+This project exists to maintain this module for future versions.
+
+## Using this project
+
+> [!WARNING]
+**This module only functions at Python versions of 3.13 or greater** due to being removed in this version.
+
+As such, you can conditionally add this project to your dependencies:
+
+#### pip-requirements
+```
+audioop-lts; python_version>='3.13'
+```
+
+#### Poetry-pyproject
+```toml
+[tool.poetry.dependencies]
+audioop-lts = { version = "...", python = "^3.13" }
+```
+Relevant documentation is [here](https://python-poetry.org/docs/dependency-specification/#python-restricted-dependencies), or alternatively use [`markers`](https://python-poetry.org/docs/dependency-specification/#using-environment-markers)
+
+#### pdm-pyproject / uv-pyproject / hatch-pyproject
+```toml
+[project]
+dependencies = [
+    "audioop-lts; python_version >= '3.13'",
+]
+```
+
+#### Pipenv-pipfile
+```toml
+[packages]
+audioop-lts = { version = "...", markers = "python_version >= 3.13" }
+```

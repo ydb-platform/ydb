@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+message KMSKey {
+  // ID of KMS symmetric key
+  string key_id = 1;
+
+  // Version of KMS symmetric key
+  string version_id = 2;
+}

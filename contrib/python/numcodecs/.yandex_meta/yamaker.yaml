@@ -1,0 +1,15 @@
+requirements:
+  - contrib/libs/lz4
+  - contrib/libs/zstd
+  - contrib/libs/snappy
+copy:
+  - c-blosc/*
+exclude:
+  - c-blosc/.git*
+  - c-blosc/bench/*
+  - c-blosc/cmake/*
+  - c-blosc/compat/*
+  - c-blosc/examples/*
+  - c-blosc/internal-complibs/*
+exclude_from_macros:
+  - c-blosc/blosc/win32/*

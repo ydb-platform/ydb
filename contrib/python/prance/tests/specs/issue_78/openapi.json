@@ -1,0 +1,17 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1"
+  },
+  "paths": {
+    "/endpoint": {
+      "post": {
+        "requestBody": {
+           "$ref": "tests/specs/issue_78/_schemas.json#/$defs/Body"
+        },
+        "responses": {}
+      }
+    }
+  }
+}

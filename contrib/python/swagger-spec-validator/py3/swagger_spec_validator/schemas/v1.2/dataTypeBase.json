@@ -1,0 +1,144 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "definitions": {
+        "itemsObject": {
+            "oneOf": [
+                {
+                    "additionalProperties": false,
+                    "properties": {
+                        "$ref": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "$ref"
+                    ],
+                    "type": "object"
+                },
+                {
+                    "allOf": [
+                        {
+                            "$ref": "#"
+                        },
+                        {
+                            "additionalProperties": false,
+                            "properties": {
+                                "format": {},
+                                "type": {}
+                            },
+                            "required": [
+                                "type"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "dependencies": {
+        "format": {
+            "oneOf": [
+                {
+                    "properties": {
+                        "format": {
+                            "enum": [
+                                "int32",
+                                "int64"
+                            ]
+                        },
+                        "type": {
+                            "enum": [
+                                "integer"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "format": {
+                            "enum": [
+                                "float",
+                                "double"
+                            ]
+                        },
+                        "type": {
+                            "enum": [
+                                "number"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "format": {
+                            "enum": [
+                                "byte",
+                                "date",
+                                "date-time"
+                            ]
+                        },
+                        "type": {
+                            "enum": [
+                                "string"
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    },
+    "description": "Data type fields (section 4.3.3)",
+    "oneOf": [
+        {
+            "required": [
+                "type"
+            ]
+        },
+        {
+            "required": [
+                "$ref"
+            ]
+        }
+    ],
+    "properties": {
+        "$ref": {
+            "type": "string"
+        },
+        "defaultValue": {
+            "not": {
+                "type": [
+                    "array",
+                    "object",
+                    "null"
+                ]
+            }
+        },
+        "enum": {
+            "items": {
+                "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+        },
+        "format": {
+            "type": "string"
+        },
+        "items": {
+            "$ref": "#/definitions/itemsObject"
+        },
+        "maximum": {
+            "type": "string"
+        },
+        "minimum": {
+            "type": "string"
+        },
+        "type": {
+            "type": "string"
+        },
+        "uniqueItems": {
+            "type": "boolean"
+        }
+    },
+    "type": "object"
+}

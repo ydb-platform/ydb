@@ -1,0 +1,15 @@
+# Product discipline 4 - Space weather products
+0 0 Temperature
+1 1 Momentum
+2 2 Charged particle mass and number
+3 3 Electric and magnetic fields
+4 4 Energetic particles
+5 5 Waves
+6 6 Solar electromagnetic emissions
+7 7 Terrestrial electromagnetic emissions
+8 8 Imagery
+9 9 Ion-neutral coupling
+10 10 Space weather indices
+# 11-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,191 @@
+# Brazilian portuguese translation strings for django-celery-results.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as django-celery-results.
+# Eduardo Oliveira <eduardo_y05@outlook.com>, 2022.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2022-01-04 19:52-0300\n"
+"PO-Revision-Date: 2022-01-04 19:52-0300\n"
+"Last-Translator: Eduardo Oliveira <eduardo_y05@outlook.com>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: admin.py:40
+msgid "Parameters"
+msgstr "Parâmetros"
+
+#: admin.py:47
+msgid "Result"
+msgstr "Resultado"
+
+#: apps.py:14
+msgid "Celery Results"
+msgstr "Resultados do celery"
+
+#: models.py:28
+msgid "Task ID"
+msgstr "Id da tarefa"
+
+#: models.py:29
+msgid "Celery ID for the Task that was run"
+msgstr "Id do celery em que a tarefa foi executada"
+
+#: models.py:32
+msgid "Periodic Task Name"
+msgstr "Nome da tarefa periódica"
+
+#: models.py:33
+msgid "Name of the Periodic Task which was run"
+msgstr "Nome da tarefa periódica que foi executada"
+
+#: models.py:36
+msgid "Task Name"
+msgstr "Nome da tarefa"
+
+#: models.py:37
+msgid "Name of the Task which was run"
+msgstr "Nome da tarefa que foi executada"
+
+#: models.py:40
+msgid "Task Positional Arguments"
+msgstr "Argumentos posicionais da tarefa"
+
+#: models.py:41
+msgid "JSON representation of the positional arguments used with the task"
+msgstr "Representação JSON dos argumentos posicionais usados pela tarefa"
+
+#: models.py:45
+msgid "Task Named Arguments"
+msgstr "Argumentos nomeados da tarefa"
+
+#: models.py:46
+msgid "JSON representation of the named arguments used with the task"
+msgstr "Representação JSON dos argumentos nomeados usados pela tarefa"
+
+#: models.py:51
+msgid "Task State"
+msgstr "Status da tarefa"
+
+#: models.py:52
+msgid "Current state of the task being run"
+msgstr "Status atual da tarefa em execução"
+
+#: models.py:55
+msgid "Worker"
+msgstr "Worker"
+
+#: models.py:55
+msgid "Worker that executes the task"
+msgstr "Worker que executa a tarefa"
+
+#: models.py:59 models.py:190
+msgid "Result Content Type"
+msgstr "Tipo de conteúdo do resultado"
+
+#: models.py:60 models.py:191
+msgid "Content type of the result data"
+msgstr "Tipo de conteúdo dos dados do resultado"
+
+#: models.py:63 models.py:195
+msgid "Result Encoding"
+msgstr "Codificação do resultado"
+
+#: models.py:64 models.py:196
+msgid "The encoding used to save the task result data"
+msgstr "A codificação usada para salvar os dados de resultado da tarefa"
+
+#: models.py:67 models.py:200
+msgid "Result Data"
+msgstr "Dados do resultado"
+
+#: models.py:68 models.py:201
+msgid ""
+"The data returned by the task.  Use content_encoding and content_type fields "
+"to read."
+msgstr "Os dados retornados pela tarefa. Use os campos content_encoding e content_type para ler."
+
+#: models.py:72 models.py:180
+msgid "Created DateTime"
+msgstr "Data/Horário de criação"
+
+#: models.py:73
+msgid "Datetime field when the task result was created in UTC"
+msgstr "Data/Horário em que o resultado da tarefa foi criado (em UTC)"
+
+#: models.py:76 models.py:185
+msgid "Completed DateTime"
+msgstr "Data/Horário em que foi concluída"
+
+#: models.py:77
+msgid "Datetime field when the task was completed in UTC"
+msgstr "Data/Horário em que a tarefa foi concluída (em UTC)"
+
+#: models.py:80
+msgid "Traceback"
+msgstr "Traceback"
+
+#: models.py:81
+msgid "Text of the traceback if the task generated one"
+msgstr "Texto de traceback se a tarefa gerou um"
+
+#: models.py:84
+msgid "Task Meta Information"
+msgstr "Meta informação da tarefa"
+
+#: models.py:85
+msgid ""
+"JSON meta information about the task, such as information on child tasks"
+msgstr "Meta informação JSON sobre a tarefa, como informações sobre as subtarefas"
+
+#: models.py:95
+msgid "task result"
+msgstr "resultado da tarefa"
+
+#: models.py:96
+msgid "task results"
+msgstr "resultados das tarefas"
+
+#: models.py:133 models.py:175
+msgid "Group ID"
+msgstr "Id do grupo"
+
+#: models.py:134
+msgid "Celery ID for the Chord header group"
+msgstr "Id do celery para o grupo de cabeçalho Chord"
+
+#: models.py:138
+msgid ""
+"JSON serialized list of task result tuples. use .group_result() to decode"
+msgstr "lista de tuplas de resultados de tarefas serializadas como JSON. Use .group_result() para decodificar"
+
+#: models.py:144
+msgid "Starts at len(chord header) and decrements after each task is finished"
+msgstr "Começa em len(chord header) e decaí após o término de cada tarefa"
+
+#: models.py:176
+msgid "Celery ID for the Group that was run"
+msgstr "Id do celery para o grupo que foi executado"
+
+#: models.py:181
+msgid "Datetime field when the group result was created in UTC"
+msgstr "Data/Horário em que o resultado do grupo foi criado (em UTC)"
+
+#: models.py:186
+msgid "Datetime field when the group was completed in UTC"
+msgstr "Data/Horário em que o grupo foi concluída (em UTC)"
+
+#: models.py:221
+msgid "group result"
+msgstr "resultado do grupo"
+
+#: models.py:222
+msgid "group results"
+msgstr "resultados dos grupos"

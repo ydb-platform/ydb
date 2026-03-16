@@ -1,0 +1,6 @@
+additional_requirements:
+- contrib/libs/grpc/src/proto/grpc/health/v1
+exclude:
+- '*_pb2.py'
+- '*_pb2_grpc.py'
+

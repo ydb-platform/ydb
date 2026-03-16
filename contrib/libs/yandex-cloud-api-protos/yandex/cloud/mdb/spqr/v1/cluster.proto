@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.spqr.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "google/type/timeofday.proto";
+import "yandex/cloud/mdb/spqr/v1/config.proto";
+import "yandex/cloud/mdb/spqr/v1/maintenance.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/spqr/v1;spqr";
+option java_package = "yandex.cloud.api.mdb.spqr.v1";
+
+// A managed SPQR cluster. For more information, see the [documentation](/docs/managed-spqr/concepts).
+message Cluster {
+  // Deployment environment.
+  enum Environment {
+    ENVIRONMENT_UNSPECIFIED = 0;
+
+    // Stable environment with a conservative update policy: only hotfixes
+    // are applied during regular maintenance.
+    PRODUCTION = 1;
+
+    // Environment with more aggressive update policy: new versions
+    // are rolled out irrespective of backward compatibility.
+    PRESTABLE = 2;
+  }
+
+  enum Health {
+
+    // State of the cluster is unknown ([Host.health] for every host in the cluster is UNKNOWN).
+    HEALTH_UNKNOWN = 0;
+
+    // Cluster is alive and well ([Host.health] for every host in the cluster is ALIVE).
+    ALIVE = 1;
+
+    // Cluster is inoperable ([Host.health] for every host in the cluster is DEAD).
+    DEAD = 2;
+
+    // Cluster is working below capacity ([Host.health] for at least one host in the cluster is not ALIVE).
+    DEGRADED = 3;
+  }
+
+  enum Status {
+
+    // Cluster state is unknown.
+    STATUS_UNKNOWN = 0;
+
+    // Cluster is being created.
+    CREATING = 1;
+
+    // Cluster is running normally.
+    RUNNING = 2;
+
+    // Cluster encountered a problem and cannot operate.
+    ERROR = 3;
+
+    // Cluster is being updated.
+    UPDATING = 4;
+
+    // Cluster is stopping.
+    STOPPING = 5;
+
+    // Cluster stopped.
+    STOPPED = 6;
+
+    // Cluster is starting.
+    STARTING = 7;
+  }
+
+  // ID of the SPQR cluster.
+  // This ID is assigned by MDB at creation time.
+  string id = 1;
+
+  // ID of the folder that the SPQR cluster belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the SPQR cluster.
+  // The name is unique within the folder. 1-63 characters long.
+  string name = 4;
+
+  // Description of the SPQR cluster. 0-256 characters long.
+  string description = 5;
+
+  // Custom labels for the SPQR cluster as `` key:value `` pairs. Maximum 64 per resource.
+  map<string, string> labels = 6;
+
+  // Deployment environment of the SPQR cluster.
+  Environment environment = 7;
+
+  // Description of monitoring systems relevant to the SPQR cluster.
+  repeated Monitoring monitoring = 8;
+
+  // Configuration of the SPQR cluster.
+  ClusterConfig config = 9;
+
+  // ID of the network that the cluster belongs to.
+  string network_id = 10;
+
+  // Aggregated cluster health.
+  Health health = 11;
+
+  // Current state of the cluster.
+  Status status = 12;
+
+  // Maintenance window for the cluster.
+  MaintenanceWindow maintenance_window = 13;
+
+  // Planned maintenance operation to be started for the cluster within the nearest [maintenance_window].
+  MaintenanceOperation planned_operation = 14;
+
+  // User security groups
+  repeated string security_group_ids = 15;
+
+  // Deletion Protection inhibits deletion of the cluster
+  bool deletion_protection = 16;
+}
+
+// Monitoring system.
+message Monitoring {
+  // Name of the monitoring system.
+  string name = 1;
+
+  // Description of the monitoring system.
+  string description = 2;
+
+  // Link to the monitoring system charts for the SPQR cluster.
+  string link = 3;
+}
+
+message ClusterConfig {
+  // Configuration for SPQR servers in the cluster.
+  SPQRConfig spqr_config = 1;
+
+  // Time to start the daily backup, in the UTC timezone.
+  google.type.TimeOfDay backup_window_start = 2;
+
+  // Retain period of automatically created backup in days
+  google.protobuf.Int64Value backup_retain_period_days = 3;
+
+  // Access policy to DB
+  Access access = 4;
+
+  google.protobuf.BoolValue sox_audit = 5;
+}
+
+message Access {
+  // Allow access for DataLens.
+  bool data_lens = 1;
+
+  // Allow access for Web SQL.
+  bool web_sql = 2;
+
+  // Allow access for DataTransfer.
+  bool data_transfer = 3;
+
+  // Allow access for Serverless.
+  // NOTE: Do not propagate to public API until Serverless integration is required.
+  bool serverless = 4;
+}

@@ -1,0 +1,4 @@
+# assert(=4)
+alias mars.hdate  = dataDate;
+alias mars.date   = referenceDate;
+alias mars.number = perturbationNumber;

@@ -1,0 +1,13 @@
+# assert(localDefinitionNumber == 1);
+alias mars.date   = dataDate;
+alias mars.time   = dataTime;
+
+if (class is "od") { alias mars.origin = centre; }
+if (class is "e2") { alias mars.origin = centre; }
+if (class is "em") { alias mars.origin = centre; }
+
+# We need this because 'jDirectionIncrementInDegrees,iDirectionIncrementInDegrees,' is defined later
+meta marsGrid sprintf("%g/%g",iDirectionIncrementInDegrees,jDirectionIncrementInDegrees) : dump;
+alias mars.grid = marsGrid;
+alias mars.number=perturbationNumber;
+

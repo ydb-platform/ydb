@@ -1,0 +1,22 @@
+{% extends '//builtin/pypi.ym' %}
+
+{% block pypi_package %}
+chdb
+{% endblock %}
+
+{% block current_version %}3.3.0{% endblock %}
+
+{% block keep_if_exists %}
+{{super()}}
+tests/ya.make
+{% endblock %}
+
+{% block original_yaml %}
+{% include 'yamaker.yaml' %}
+{% endblock %}
+
+{% block patch_after_pypi %}
+ls patches/*.diff | while read patch_file; do
+  patch --input=${patch_file} --strip 1 --no-backup-if-mismatch
+done
+{% endblock %}

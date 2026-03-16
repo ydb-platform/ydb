@@ -1,0 +1,5 @@
+--- contrib/python/factory-boy/py3/factory/fuzzy.py	(index)
++++ contrib/python/factory-boy/py3/factory/fuzzy.py	(working tree)
+@@ -152 +152 @@ class FuzzyInteger(BaseFuzzyAttribute):
+-        return random.randgen.randrange(self.low, self.high + 1, self.step)
++        return random.randgen.randrange(int(self.low), int(self.high + 1), self.step)

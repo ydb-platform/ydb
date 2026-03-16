@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package yandex.cloud.cloudapps.workload.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/cloudapps/workload/v1/cloud_application.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cloudapps/workload/v1;workload";
+option java_package = "yandex.cloud.api.cloudapps.workload.v1";
+
+// Cloud Application Service to be used by Workload software inside Cloud Application installations
+service CloudApplicationService {
+
+  // Get Current Application
+  rpc Get(google.protobuf.Empty) returns (CloudApplication) {
+    option (google.api.http) = {
+      get: "/cloudapps/workload/v1/cloud-applications"
+    };
+  }
+
+  // Resolve Cloud Application by workload
+  rpc ResolveByWorkload(ResolveByWorkloadRequest) returns (ResolveByWorkloadResponse) {
+    option (google.api.http) = {
+      post: "/cloudapps/workload/v1/cloud-applications:resolve-by-workload"
+      body: "*"
+    };
+  }
+}
+
+message ResolveByWorkloadRequest {
+
+  // Type of workload. See WorkloadType.
+  WorkloadType workload_type = 1 [(required) = true];
+
+  // Identifier of workload
+  string workload_id = 2 [(required) = true, (length) = "<=50"];
+
+  enum WorkloadType {
+    WORKLOAD_TYPE_UNSPECIFIED = 0;
+
+    // Compute Instance
+    COMPUTE_INSTANCE = 1;
+  }
+
+}
+
+message ResolveByWorkloadResponse {
+
+  // Details of cloud application
+  CloudApplication cloud_application = 1;
+
+}

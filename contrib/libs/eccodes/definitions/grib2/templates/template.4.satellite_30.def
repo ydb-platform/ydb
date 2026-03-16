@@ -1,0 +1,24 @@
+# (C) Copyright 2005- ECMWF.
+
+# This is specific to template 4.30 where instrumentType is only coded on 1 octet instead of 2
+# /!\ DO NOT INCLUDE this anywhere else
+
+# For grib2 to grib1 conversion
+constant dataRepresentationType = 90;
+
+unsigned[1] NB : dump;
+alias numberOfContributingSpectralBands=NB;
+
+if (new() || section4Length>14) {
+  listOfContributingSpectralBands list(numberOfContributingSpectralBands){
+    unsigned[2] satelliteSeries : dump;
+    unsigned[2] satelliteNumber : dump;
+    # this is specific to template 4.30
+    unsigned[1] instrumentType : dump;
+    unsigned[1] scaleFactorOfCentralWaveNumber = missing() : dump,can_be_missing ;
+    unsigned[4] scaledValueOfCentralWaveNumber = missing() : dump,can_be_missing ;
+  }
+}
+
+alias instrument = instrumentType;
+alias ident = satelliteNumber;

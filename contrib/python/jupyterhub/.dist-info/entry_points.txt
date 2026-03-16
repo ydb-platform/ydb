@@ -1,0 +1,18 @@
+[console_scripts]
+jupyterhub = jupyterhub.app:main
+jupyterhub-singleuser = jupyterhub.singleuser:main
+
+[jupyterhub.authenticators]
+default = jupyterhub.auth:PAMAuthenticator
+dummy = jupyterhub.auth:DummyAuthenticator
+pam = jupyterhub.auth:PAMAuthenticator
+
+[jupyterhub.proxies]
+configurable-http-proxy = jupyterhub.proxy:ConfigurableHTTPProxy
+default = jupyterhub.proxy:ConfigurableHTTPProxy
+
+[jupyterhub.spawners]
+default = jupyterhub.spawner:LocalProcessSpawner
+localprocess = jupyterhub.spawner:LocalProcessSpawner
+simple = jupyterhub.spawner:SimpleLocalProcessSpawner
+

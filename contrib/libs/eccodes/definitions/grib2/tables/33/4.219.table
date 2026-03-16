@@ -1,0 +1,8 @@
+# Code table 4.219 - Cloud top height quality indicator
+0 0 Nominal cloud top height quality
+1 1 Fog in segment
+2 2 Poor quality height estimation
+3 3 Fog in segment and poor quality height estimation
+# 4-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,5 @@
+--- a/horovod/common/message.cc
++++ b/horovod/common/message.cc
+@@ -18 +18 @@
+-#include "wire/message_generated.h"
++#include "wire/message.fbs.h"

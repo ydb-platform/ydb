@@ -1,0 +1,2 @@
+[opentelemetry_instrumentor]
+httpx = opentelemetry.instrumentation.httpx:HTTPXClientInstrumentor

@@ -1,0 +1,1 @@
+import{a8 as a}from"./index-Cp3b7MWQ.js";const e=[["path",{d:"M6 5v11",key:"mdvv1e"}],["path",{d:"M12 5v6",key:"14ar3b"}],["path",{d:"M18 5v14",key:"7ji314"}]],n=a("kanban",e);export{e as __iconNode,n as default};

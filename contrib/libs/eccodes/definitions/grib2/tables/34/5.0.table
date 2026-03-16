@@ -1,0 +1,22 @@
+# Code table 5.0 - Data representation template number
+0 0 Grid point data - simple packing
+1 1 Matrix value at grid point - simple packing
+2 2 Grid point data - complex packing
+3 3 Grid point data - complex packing and spatial differencing
+4 4 Grid point data - IEEE floating point data
+# 5-39 Reserved
+40 40 Grid point data - JPEG 2000 code stream format
+41 41 Grid point data - Portable Network Graphics (PNG)
+42 42 Grid point data - CCSDS recommended lossless compression
+# 43-49 Reserved
+50 50 Spectral data - simple packing
+51 51 Spherical harmonics data - complex packing
+# 52 Reserved
+53 53 Spectral data for limited area models - complex packing
+# 54-60 Reserved
+61 61 Grid point data - simple packing with logarithm pre-processing
+# 62-199 Reserved
+200 200 Run length packing with level values
+# 201-49151 Reserved
+# 49152-65534 Reserved for local use
+65535 65535 Missing

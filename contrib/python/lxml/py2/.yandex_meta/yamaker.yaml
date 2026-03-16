@@ -1,0 +1,8 @@
+requirements:
+  - contrib/libs/libexslt
+  - contrib/libs/libxml
+  - contrib/libs/libxslt
+mark_as_cython_c:
+  - lxml/objectify.pyx
+mark_as_cython_c_api_h:
+  - lxml/etree.pyx

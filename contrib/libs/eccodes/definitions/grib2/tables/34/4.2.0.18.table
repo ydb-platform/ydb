@@ -1,0 +1,31 @@
+# Product discipline 0 - Meteorological products, parameter category 18: nuclear/radiology
+0 0 Air activity concentration of caesium 137 (Bq m-3)
+1 1 Air activity concentration of iodine 131 (Bq m-3)
+2 2 Air activity concentration of radioactive pollutant (Bq m-3)
+3 3 Ground deposition activity of caesium 137 (Bq m-2)
+4 4 Ground deposition activity of iodine 131 (Bq m-2)
+5 5 Ground deposition activity of radioactive pollutant (Bq m-2)
+6 6 Time-integrated air activity concentration of caesium pollutant (Bq s m-3)
+7 7 Time-integrated air activity concentration of iodine pollutant (Bq s m-3)
+8 8 Time-integrated air activity concentration of radioactive pollutant (Bq s m-3)
+9 9 Reserved
+10 10 Air activity concentration (Bq m-3)
+11 11 Wet deposition activity (Bq m-2)
+12 12 Dry deposition activity (Bq m-2)
+13 13 Total deposition activity (wet + dry) (Bq m-2)
+14 14 Specific activity concentration (Bq kg-1)
+15 15 Maximum of air activity concentration in layer (Bq m-3)
+16 16 Height of maximum air activity concentration (m)
+17 17 Column-integrated air activity concentration (Bq m-2)
+18 18 Column-averaged air activity concentration in layer (Bq m-3)
+19 19 Deposition activity arrival (s)
+20 20 Deposition activity ended (s)
+21 21 Cloud activity arrival (s)
+22 22 Cloud activity ended (s)
+23 23 Effective dose rate (nSv h-1)
+24 24 Thyroid dose rate (adult) (nSv h-1)
+25 25 Gamma dose rate (adult) (nSv h-1)
+26 26 Activity emission (Bq s-1)
+# 27-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,3 @@
+unalias mars.param;
+unalias mars.levtype;
+alias mars.domain=globalDomain;

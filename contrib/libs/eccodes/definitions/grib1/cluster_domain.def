@@ -1,0 +1,7 @@
+'a' = { northernLatitudeOfDomain=70000; westernLongitudeOfDomain=332500; southernLatitudeOfDomain=40000; easternLongitudeOfDomain=10000;  }
+'b' = { northernLatitudeOfDomain=72500; westernLongitudeOfDomain=0;      southernLatitudeOfDomain=50000; easternLongitudeOfDomain=45000;  }
+'c' = { northernLatitudeOfDomain=57500; westernLongitudeOfDomain=345000; southernLatitudeOfDomain=32500; easternLongitudeOfDomain=17500;  }
+'d' = { northernLatitudeOfDomain=57500; westernLongitudeOfDomain=2500;   southernLatitudeOfDomain=32500; easternLongitudeOfDomain=42500;  }
+'e' = { northernLatitudeOfDomain=75000; westernLongitudeOfDomain=340000; southernLatitudeOfDomain=30000; easternLongitudeOfDomain=45000;  }
+'f' = { northernLatitudeOfDomain=60000; westernLongitudeOfDomain=310000; southernLatitudeOfDomain=40000; easternLongitudeOfDomain=0;  }
+

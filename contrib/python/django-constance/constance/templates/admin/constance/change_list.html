@@ -1,0 +1,74 @@
+{% extends "admin/base_site.html" %}
+{% load admin_list static i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" type="text/css" href="{% static 'admin/css/changelists.css' %}" />
+  <link rel="stylesheet" type="text/css" href="{% static 'admin/css/forms.css' %}" />
+  {{ media.css }}
+  <link rel="stylesheet" type="text/css" href="{% static 'admin/css/constance.css' %}" />
+{% endblock %}
+
+{% block extrahead %}
+{% url 'admin:jsi18n' as jsi18nurl %}
+<script type="text/javascript" src="{{ jsi18nurl|default:'../../jsi18n/' }}"></script>
+{{ block.super }}
+{{ media.js }}
+<script type="text/javascript" src="{% static 'admin/js/constance.js' %}"></script>
+<script type="text/javascript" src="{% static 'admin/js/collapse.js' %}"></script>
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} change-list{% endblock %}
+
+{% block content %}
+  <div id="content-main" class="constance">
+    <div class="module" id="changelist">
+        <form id="changelist-form" action="" method="post" enctype="multipart/form-data">{% csrf_token %}
+            {% if form.non_field_errors %}
+                <ul class="errorlist">
+                    {% for error in form.non_field_errors %}
+                      <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% if form.errors %}
+            <ul class="errorlist">
+            {% endif %}
+            {% for field in form.hidden_fields %}
+                {% for error in field.errors %}
+                  <li>{{ error }}</li>
+                {% endfor %}
+                {{ field }}
+            {% endfor %}
+            {% if form.errors %}
+            </ul>
+            {% endif %}
+
+            {% if fieldsets %}
+              {% for fieldset in fieldsets %}
+              <fieldset class="module{% if fieldset.collapse %} collapse{% endif %}">
+                  <h2>{{ fieldset.title }}</h2>
+                  {% with config_values=fieldset.config_values %}
+                    {% include "admin/constance/includes/results_list.html" %}
+                  {% endwith %}
+              </fieldset>
+              {% endfor %}
+            {% else %}
+              {% include "admin/constance/includes/results_list.html" %}
+            {% endif %}
+
+            <p class="paginator sticky-footer">
+              <input type="submit" name="_save" class="default" value="{% trans 'Save' %}"/>
+            </p>
+        </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; {{ opts.verbose_name_plural|capfirst }}
+</div>
+{% endblock %}

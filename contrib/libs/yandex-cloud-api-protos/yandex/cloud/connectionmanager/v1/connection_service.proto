@@ -1,0 +1,221 @@
+syntax = "proto3";
+
+package yandex.cloud.connectionmanager.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/connectionmanager/v1/connection.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/connectionmanager/v1;connectionmanager";
+option java_package = "yandex.cloud.api.connectionmanager.v1";
+
+// A set of methods for managing Connection resources.
+service ConnectionService {
+    // Returns the specified connection.
+    rpc Get(GetConnectionRequest) returns (Connection) {
+        option (google.api.http) = {
+            get: "/v1/connection/{connection_id}"
+        };
+    }
+
+    // Returns the connection with the resolved cluster; that is,
+    // * for connections to the on-premise clusters is identical to the Get RPC;
+    // * for connections to the managed clusters, resolves the cluster topology
+    //   and returns it in the `on_premise` field of the connection parameters.
+    // Requires `connection-manager.connections.resolveCluster` permission.
+    rpc ResolveCluster(ResolveClusterRequest) returns (Connection) {
+        option (google.api.http) = {
+            get: "/v1/connection/{connection_id}:resolve"
+        };
+    }
+
+    // Retrieves the list of connections in the specified folder.
+    rpc List(ListConnectionRequest) returns (ListConnectionResponse) {
+        option (google.api.http) = {
+            get: "/v1/connections"
+        };
+    }
+
+    // Creates a connection.
+    rpc Create(CreateConnectionRequest) returns (operation.Operation) {
+        option (google.api.http) = {
+            post: "/v1/connection"
+            body: "*"
+        };
+        option (yandex.cloud.api.operation) = {
+            metadata: "CreateConnectionMetadata"
+            response: "Connection"
+        };
+    }
+
+    // Updates the specified connection.
+    rpc Update(UpdateConnectionRequest) returns (operation.Operation) {
+        option (google.api.http) = {
+            patch: "/v1/connection/{connection_id}"
+            body: "*"
+        };
+        option (yandex.cloud.api.operation) = {
+            metadata: "UpdateConnectionMetadata"
+            response: "Connection"
+        };
+    }
+
+    // Deletes the specified connection.
+    rpc Delete(DeleteConnectionRequest)  returns (operation.Operation) {
+        option (google.api.http) = {
+            delete: "/v1/connection/{connection_id}"
+        };
+        option (yandex.cloud.api.operation) = {
+            metadata: "DeleteConnectionMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+
+    // Lists operations for the specified connection.
+    rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse) {
+        option (google.api.http) = {
+            get: "/v1/operations"
+        };
+    }
+}
+
+// Request message for creating a new connection.
+message CreateConnectionRequest {
+    reserved 6 to 10;
+    // ID of the folder to create the connection in.
+    string folder_id = 1;
+    // Name of the connection.
+    string name = 2;
+    // Description of the connection.
+    string description = 3;
+    // Connection labels as `key:value` pairs.
+    map<string, string> labels = 4;
+    // Connection parameters specific to the database or service type.
+    ConnectionParams params = 5;
+    // Secret specification for authentication.
+    oneof secret_spec {
+        // Specification for creating a new Lockbox secret.
+        LockboxSecretSpec lockbox_secret_spec = 11;
+    }
+}
+
+// Metadata for the connection creation operation.
+message CreateConnectionMetadata {
+    // ID of the connection being created.
+    string connection_id = 1;
+}
+
+// Request message for updating an existing connection.
+message UpdateConnectionRequest {
+    reserved 7 to 9;
+    // ID of the connection to update.
+    string connection_id = 1;
+    // Field mask specifying which fields to update.
+    google.protobuf.FieldMask update_mask = 2;
+    // New name for the connection.
+    string name = 3;
+    // New description for the connection.
+    string description = 4;
+    // New connection labels as `key:value` pairs.
+    map<string, string> labels = 5;
+    // New connection parameters specific to the database or service type.
+    ConnectionParams params = 6;
+}
+
+// Metadata for the connection update operation.
+message UpdateConnectionMetadata {
+    // ID of the connection being updated.
+    string connection_id = 1;
+}
+
+// Request message for deleting a connection.
+message DeleteConnectionRequest {
+    // ID of the connection to delete.
+    string connection_id = 1;
+}
+
+// Metadata for the connection deletion operation.
+message DeleteConnectionMetadata {
+}
+
+// Request message for listing connections.
+message ListConnectionRequest {
+    reserved 3;
+    // ID of the folder to list connections in.
+    string folder_id = 1;
+    // ID of the managed database cluster to filter connections.
+    string mdb_cluster_id = 2;
+    // Maximum number of results per page.
+    int64 page_size = 4;
+    // Page token. To get the next page of results, set `page_token` to the
+    // [ListConnectionResponse.next_page_token] returned by a previous list request.
+    string page_token = 5;
+    // Filter by connection name pattern or exact ID.
+    string name_pattern_or_id = 6;
+    // ID of the connection author to filter by.
+    string author_id = 7;
+    // Include only connections that the current user can use.
+    bool with_can_use = 8;
+    // Filter by whether connections are on-premise.
+    google.protobuf.BoolValue is_onpremise = 9;
+    // Filter by whether connections are manually configured.
+    google.protobuf.BoolValue is_manual = 10;
+    // Filter connections by database type.
+    DBType db_type = 11;
+ }
+
+// Response message for listing connections.
+message ListConnectionResponse {
+    // List of connections in the specified folder.
+    repeated Connection connection = 1;
+
+    // Token for getting the next page of the list. If the number of results is greater than
+    // the specified [ListConnectionRequest.page_size], use `next_page_token` as the value
+    // for the [ListConnectionRequest.page_token] parameter in the next list request.
+    //
+    // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}
+
+// Request message for getting a connection.
+message GetConnectionRequest {
+    reserved 2, 3;
+    // ID of the connection to retrieve.
+    string connection_id = 1;
+}
+
+// Request message for resolving cluster topology for a connection.
+message ResolveClusterRequest {
+    reserved 2;
+    // ID of the connection to resolve cluster topology for.
+    string connection_id = 1;
+}
+
+// Metadata for the version deletion operation.
+message DeleteVersionMetadata {
+  // ID of the connection.
+  string connection_id = 1;
+  // ID of the version being deleted.
+  string version_id = 2;
+}
+
+// Request message for listing operations of a connection.
+message ListOperationsRequest {
+    // ID of the connection to list operations for.
+    string connection_id = 1;
+    // Maximum number of results per page.
+    int64 page_size = 2;
+    // Token for getting the next page of results.
+    string page_token = 3;
+}
+
+// Response message for listing operations of a connection.
+message ListOperationsResponse {
+    // List of operations for the specified connection.
+    repeated operation.Operation operations = 1;
+    // Token for getting the next page of results.
+    string next_page_token = 2;
+}

@@ -1,0 +1,36 @@
+termPattern = indentation? name:name ?(name[0].isupper())
+              '(' expr?:patts ')' -> t.TermPattern(name, patts)
+
+subtransform = ws '@' name:n -> t.Bind(n, t.Apply('transform', self.rulename, []))
+
+wide_templatedValue = ws '-->' ' '* wideTemplateBits:contents -> t.StringTemplate(contents)
+tall_templatedValue = hspace? '{{{' (' ' | '\t')* vspace? tallTemplateBits:contents '}}}' -> t.StringTemplate(contents)
+
+tallTemplateBits = (exprHole | tallTemplateText)*
+tallTemplateText = <(~('}}}' | '$' | '\r' | '\n') anything | '$' '$')+ vspace*> | vspace
+
+wideTemplateBits = (exprHole | wideTemplateText)*
+wideTemplateText = <(~(vspace | end |'$') anything | '$' '$')+>
+
+exprHole = '$' name:n -> t.QuasiExprHole(n)
+
+expr1 = foreignApply
+       |termPattern
+       |subtransform
+       |application
+       |ruleValue
+       |wide_templatedValue
+       |tall_templatedValue
+       |semanticPredicate
+       |semanticAction
+       |number:n !(self.isTree()) -> n
+       |character
+       |string
+       |ws '(' expr?:e ws ')' -> e
+       |ws '[' expr?:e ws ']' -> t.TermPattern(".tuple.", e or t.And([]))
+
+grammar = rule*:rs ws -> t.Grammar(self.name, True, rs)
+rule = noindentation ~~(name:n) (termRulePart(n)+:rs | rulePart(n)+:rs)  -> t.Rule(n, t.Or(rs))
+
+termRulePart :requiredName =  noindentation !(setattr(self, "rulename", requiredName))
+                             termPattern:tt ?(tt.args[0].data == requiredName) token("=")? expr:tail -> t.And([tt, tail])

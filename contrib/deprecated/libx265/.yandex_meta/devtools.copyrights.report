@@ -1,0 +1,275 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3671b33fdd52109225664c84a835dcca
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2003-2017 x265 project
+         * Copyright (C) 2013-2017 MulticoreWare, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/arm/pixel.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4d7770f96d1ffa939a77beb63166e176
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2017 
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/lowpassdct.cpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a357f8013a151c7a5fee7e12379a9c8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        encoder/encoder.cpp [2288:2290]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 624d87207016f78b589f6d41b72c96e0
+BELONGS ya.make
+    License text:
+        ;* Copyright (C) 2003-2013 x264 project
+        ;* Copyright (C) 2013-2017 MulticoreWare, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/x86/const-a.asm [4:5]
+        common/x86/cpu-a.asm [4:5]
+        common/x86/intrapred.h [4:5]
+        common/x86/mc-a.asm [4:5]
+        common/x86/mc-a2.asm [4:5]
+        common/x86/pixel-32.asm [4:5]
+        common/x86/pixel-a.asm [4:5]
+        common/x86/pixel.h [4:5]
+        common/x86/sad-a.asm [4:5]
+        common/x86/sad16-a.asm [4:5]
+        common/x86/ssd-a.asm [4:5]
+        common/x86/x86inc.asm [4:5]
+        common/x86/x86util.asm [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8cf91579d8cb4087b6bd775cd2b2bbed
+BELONGS ya.make
+    License text:
+         Copyright (C) 1989, 1991 Free Software Foundation, Inc.
+             59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [251:256]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c3ca04d0a825cb64d33f32e00f0472e8
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2013-2017 MulticoreWare, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/arm/asm-primitives.cpp [2:2]
+        common/arm/blockcopy8.h [2:2]
+        common/arm/dct8.h [2:2]
+        common/arm/intrapred.h [4:4]
+        common/arm/ipfilter8.h [2:2]
+        common/arm/loopfilter.h [2:2]
+        common/arm/mc.h [2:2]
+        common/arm/pixel-util.h [2:2]
+        common/arm/pixel.h [4:5]
+        common/bitstream.h [2:2]
+        common/common.cpp [2:2]
+        common/common.h [2:2]
+        common/constants.cpp [2:2]
+        common/constants.h [2:2]
+        common/contexts.h [2:2]
+        common/cpu.cpp [2:2]
+        common/cpu.h [2:2]
+        common/cudata.cpp [2:2]
+        common/cudata.h [2:2]
+        common/dct.cpp [2:2]
+        common/deblock.cpp [2:2]
+        common/deblock.h [2:2]
+        common/frame.cpp [2:2]
+        common/frame.h [2:2]
+        common/framedata.cpp [2:2]
+        common/framedata.h [2:2]
+        common/intrapred.cpp [2:2]
+        common/ipfilter.cpp [2:2]
+        common/loopfilter.cpp [2:2]
+        common/lowres.cpp [2:2]
+        common/lowres.h [2:2]
+        common/md5.cpp [4:4]
+        common/md5.h [4:4]
+        common/mv.h [2:2]
+        common/param.cpp [2:2]
+        common/param.h [2:2]
+        common/piclist.cpp [2:2]
+        common/piclist.h [2:2]
+        common/picyuv.cpp [2:2]
+        common/picyuv.h [2:2]
+        common/pixel.cpp [2:2]
+        common/ppc/dct_altivec.cpp [2:2]
+        common/ppc/intrapred_altivec.cpp [2:2]
+        common/ppc/ipfilter_altivec.cpp [2:2]
+        common/ppc/pixel_altivec.cpp [2:2]
+        common/ppc/ppccommon.h [2:2]
+        common/predict.cpp [2:2]
+        common/predict.h [2:2]
+        common/primitives.cpp [2:2]
+        common/primitives.h [2:2]
+        common/quant.cpp [2:2]
+        common/quant.h [2:2]
+        common/scalinglist.cpp [2:2]
+        common/scalinglist.h [2:2]
+        common/shortyuv.cpp [2:2]
+        common/shortyuv.h [4:4]
+        common/slice.cpp [2:2]
+        common/slice.h [2:2]
+        common/threading.cpp [2:2]
+        common/threading.h [2:2]
+        common/threadpool.cpp [2:2]
+        common/threadpool.h [2:2]
+        common/vec/dct-sse3.cpp [2:2]
+        common/vec/dct-sse41.cpp [2:2]
+        common/vec/dct-ssse3.cpp [2:2]
+        common/vec/vec-primitives.cpp [2:2]
+        common/version.cpp [2:2]
+        common/wavefront.cpp [2:2]
+        common/wavefront.h [2:2]
+        common/winxp.cpp [2:2]
+        common/winxp.h [2:2]
+        common/x86/asm-primitives.cpp [2:2]
+        common/x86/blockcopy8.asm [2:2]
+        common/x86/blockcopy8.h [2:2]
+        common/x86/const-a.asm [4:5]
+        common/x86/cpu-a.asm [4:5]
+        common/x86/dct8.asm [2:2]
+        common/x86/dct8.h [2:2]
+        common/x86/intrapred.h [4:5]
+        common/x86/intrapred16.asm [2:2]
+        common/x86/intrapred8.asm [2:2]
+        common/x86/intrapred8_allangs.asm [2:2]
+        common/x86/ipfilter16.asm [2:2]
+        common/x86/ipfilter8.asm [2:2]
+        common/x86/ipfilter8.h [2:2]
+        common/x86/loopfilter.asm [2:2]
+        common/x86/loopfilter.h [2:2]
+        common/x86/mc-a.asm [4:5]
+        common/x86/mc-a2.asm [4:5]
+        common/x86/mc.h [2:2]
+        common/x86/pixel-32.asm [4:5]
+        common/x86/pixel-a.asm [4:5]
+        common/x86/pixel-util.h [2:2]
+        common/x86/pixel-util8.asm [2:2]
+        common/x86/pixel.h [4:5]
+        common/x86/pixeladd8.asm [2:2]
+        common/x86/sad-a.asm [4:5]
+        common/x86/sad16-a.asm [4:5]
+        common/x86/seaintegral.asm [2:2]
+        common/x86/seaintegral.h [2:2]
+        common/x86/ssd-a.asm [4:5]
+        common/x86/x86util.asm [4:5]
+        common/yuv.cpp [2:2]
+        common/yuv.h [2:2]
+        encoder/analysis.cpp [2:2]
+        encoder/analysis.h [2:2]
+        encoder/api.cpp [2:2]
+        encoder/bitcost.cpp [2:2]
+        encoder/bitcost.h [2:2]
+        encoder/dpb.cpp [2:2]
+        encoder/dpb.h [2:2]
+        encoder/encoder.cpp [2:2]
+        encoder/encoder.h [2:2]
+        encoder/entropy.cpp [2:2]
+        encoder/entropy.h [2:2]
+        encoder/frameencoder.cpp [2:2]
+        encoder/frameencoder.h [2:2]
+        encoder/framefilter.cpp [2:2]
+        encoder/framefilter.h [2:2]
+        encoder/level.cpp [2:2]
+        encoder/level.h [2:2]
+        encoder/motion.cpp [2:2]
+        encoder/motion.h [2:2]
+        encoder/nal.cpp [2:2]
+        encoder/nal.h [2:2]
+        encoder/ratecontrol.cpp [2:2]
+        encoder/ratecontrol.h [2:2]
+        encoder/rdcost.h [2:2]
+        encoder/reference.cpp [2:2]
+        encoder/reference.h [2:2]
+        encoder/sao.cpp [2:2]
+        encoder/sao.h [2:2]
+        encoder/search.cpp [2:2]
+        encoder/search.h [2:2]
+        encoder/sei.cpp [2:2]
+        encoder/sei.h [2:2]
+        encoder/slicetype.cpp [2:2]
+        encoder/slicetype.h [2:2]
+        encoder/weightPrediction.cpp [2:2]
+        x265.cpp [2:2]
+        x265.h [2:2]
+        x265_config.h [2:2]
+        x265cli.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eef568c7a9c833b2c70fe767f45be61b
+BELONGS ya.make
+    License text:
+        ;* Copyright (C) 2003-2013 x264 project
+        ;* Copyright (C) 2013-2017 MulticoreWarae, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/x86/x86inc.asm [4:5]

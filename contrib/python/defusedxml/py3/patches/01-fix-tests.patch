@@ -1,0 +1,41 @@
+--- contrib/python/defusedxml/py3/tests.py	(index)
++++ contrib/python/defusedxml/py3/tests.py	(working tree)
+@@ -51,8 +51,8 @@ except ImportError:
+ 
+ warnings.filterwarnings("error", category=DeprecationWarning, module=r"defusedxml\..*")
+ 
+-
+-HERE = os.path.dirname(os.path.abspath(__file__))
++import yatest.common
++HERE = yatest.common.test_source_path(os.path.join(".."))
+ 
+ # prevent web access
+ # based on Debian's rules, Port 9 is discard
+@@ -90,9 +90,17 @@ class BaseTests(DefusedTestCase):
+     dtd_external_ref = False
+ 
+     external_ref_exception = ExternalReferenceForbidden
+-    cyclic_error = None
++    cyclic_error = Exception
+     iterparse = None
+ 
++    @unittest.skip("skip base class")
++    def parse(*args, **kwargs):
++        pass
++
++    @unittest.skip("skip base class")
++    def parseString(*args, **kwargs):
++        pass
++
+     def test_simple_parse(self):
+         self.parse(self.xml_simple)
+         self.parseString(self.get_content(self.xml_simple))
+@@ -542,7 +552,7 @@ class TestDefusedGzip(DefusedTestCase):
+             self.decode_response(response, 4095, 8192)
+ 
+ 
+-def test_main():
++def _test_main():
+     suite = unittest.TestSuite()
+     suite.addTests(unittest.makeSuite(TestDefusedcElementTree))
+     suite.addTests(unittest.makeSuite(TestDefusedElementTree))

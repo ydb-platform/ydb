@@ -1,0 +1,6 @@
+exclude_from_macros:
+  - testcases/*
+mark_as_tests:
+  - dbfread/test_*.py
+keep:
+  - testcases/*

@@ -1,0 +1,20 @@
+--- contrib/python/webencodings/py2/webencodings/tests.py	(index)
++++ contrib/python/webencodings/py2/webencodings/tests.py	(working tree)
+@@ -13,7 +13,7 @@
+ 
+ from __future__ import unicode_literals
+ 
+-from . import (lookup, LABELS, decode, encode, iter_decode, iter_encode,
++from webencodings import (lookup, LABELS, decode, encode, iter_decode, iter_encode,
+                IncrementalDecoder, IncrementalEncoder, UTF8)
+ 
+ 
+@@ -45,7 +45,7 @@ def test_labels():
+     assert lookup('LATİN1') is None  # ASCII-only case insensitivity.
+ 
+ 
+-def test_all_labels():
++def _test_all_labels():
+     for label in LABELS:
+         assert decode(b'', label) == ('', lookup(label))
+         assert encode('', label) == b''

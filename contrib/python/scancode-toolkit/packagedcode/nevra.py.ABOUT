@@ -1,0 +1,8 @@
+about_resource: nevra.py
+name: rpmhelper.py
+home_url: https://github.com/sassoftware/conary
+download_url: https://raw.githubusercontent.com/sassoftware/conary/c26507001b62b0839539908cc5bf28893c45c0b4/conary/rpmhelper.py
+license_text_file: nevra.py.LICENSE
+notice_file: nevra.py.NOTICE
+copyright: Copyright (c) SAS Institute Inc.
+license_expression: apache-2.0

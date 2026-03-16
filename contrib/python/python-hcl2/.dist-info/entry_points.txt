@@ -1,0 +1,2 @@
+[console_scripts]
+hcl2tojson = hcl2.__main__:main

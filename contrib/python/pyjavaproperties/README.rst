@@ -1,0 +1,98 @@
+About
+-----
+
+This is a fork of "python replacement for java.util.Properties" recipe on ASPN:
+http://code.activestate.com/recipes/496795/ The project is maintained by Anand B Pillai
+anandpillai@letterboxes.org, anand@anvetsu.com .
+
+License
+-------
+
+The code is re-licensed under MIT License. See ``LICENSE`` file for more details.
+
+What this is
+------------
+
+This module is designed to be a python equivalent to the
+``java.util.Properties <http://java.sun.com/j2se/1.5.0/docs/api/java/util/Properties.html>``\ \_
+class.
+
+Currently, the basic input/output methods are supported.
+
+Fundamentally, this module is designed so that users can easily parse and manipulate Java Properties
+files - that's it. There's a fair number of us pythonistas who work in multi-language shops, and
+constantly writing your own parsing mechanism is just painful. Not to mention Java guys are
+notoriously unwilling to use anything which is cross-language for configuration, unless it's XML,
+which is a form of self-punishment. :)
+
+Python support
+--------------
+
+The module is cross Python2 and Python3 compatible.
+
+This module has basic support for Python3. It means the tests should pass under any version of
+Python3 though it has been tested only for versions >= Python 3.6.6.
+
+Due to the changes for Python3, this should work under any Python2 version >= Python 2.7.
+
+Caveats
+-------
+
+The code still uses Python2 type strings inside. In other words proper unicode support is still
+missing.
+
+Plans
+-----
+
+Here is a plan for the current version which runs under Python2 in approximate decreasing priority
+order.
+
+1. Keep/maintain blank lines and comments found in the original file
+2. Add unicode support
+3. Provide python property access on top of direct dictionary get/set
+4. Make the module compatible with the new methods in latest J2SE.
+
+Usage
+-----
+
+::
+
+        from pyjavaproperties import Properties
+        p = Properties()
+        p.load(open('test.properties'))
+        p.list()
+        print p
+        print p.items()
+        print p['name3']
+        p['name3'] = 'changed = value'
+        print p['name3']    
+        p['new key'] = 'new value'
+        p.store(open('test2.properties','w'))
+
+See also the Properties.list() method, which will return an iterator over the property keys
+
+Tests
+-----
+
+::
+
+    $ python pyjavaproperties_test.py
+
+Changes & News
+--------------
+
+version 0.7
+-----------
+
+-  Setup.py for release 0.7.
+-  Created CHANGELOG.txt
+-  Updated README.md showing tests, changes section and updates to author etc.
+-  Relicensed to MIT from PSF.
+-  Rewrote N.B's patch to relicense repo under MIT.
+-  Basic python3 support plus python2/3 cross compatibility.
+-  Absorbing TODO in README.md.
+-  README => README.md.
+-  Added support for referenced properties.
+-  Added tests for referenced properties and saving as well.
+-  Minor tweaks in code.
+-  Code moved to new git repo.

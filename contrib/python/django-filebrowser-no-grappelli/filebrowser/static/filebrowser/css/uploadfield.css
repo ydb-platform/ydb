@@ -1,0 +1,107 @@
+.fb-uploader-container {
+    position: relative;
+    display: inline-block;
+    width: 38px;
+    height: 19px;
+    vertical-align: middle;
+}
+.fb-uploader-container .fb-uploader {
+    display: inline-block;
+    height: 17px
+}
+.fb-uploader-container .fb-upload-drop-area {
+    display: none !important
+}
+.fb-uploader-container .fb-upload-button {
+    position: relative;
+    float: right;
+    display: inline-block;
+    width: 17px;
+    height: 17px;
+    font-size: 0;
+    line-height: 0;
+    border: 1px solid #ccc;
+    background-position: 0 0;
+    background-repeat: no-repeat;
+    background-attachment: scroll;
+    background-image: url("../img/fb-upload.png"), url('data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4gPHN2ZyB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJncmFkIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgeDE9IjUwJSIgeTE9IjAlIiB4Mj0iNTAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ViZjJmNSIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2UxZjBmNSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JhZCkiIC8+PC9zdmc+IA==');
+    background-size: 100%;
+    background-image: url("../img/fb-upload.png"), -webkit-gradient(linear, 50% 0%, 50% 100%, color-stop(0%, #ebf2f5), color-stop(100%, #e1f0f5));
+    background-image: url("../img/fb-upload.png"), -webkit-linear-gradient(#ebf2f5, #e1f0f5);
+    background-image: url("../img/fb-upload.png"), -moz-linear-gradient(#ebf2f5, #e1f0f5);
+    background-image: url("../img/fb-upload.png"), -o-linear-gradient(#ebf2f5, #e1f0f5);
+    background-image: url("../img/fb-upload.png"), linear-gradient(#ebf2f5, #e1f0f5)
+}
+.fb-uploader-container .fb-upload-button:hover {
+    background-image: url("../img/fb-upload_hover.png"), url('data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4gPHN2ZyB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJncmFkIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgeDE9IjUwJSIgeTE9IjAlIiB4Mj0iNTAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2UxZTFlMSIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2VlZWVlZSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JhZCkiIC8+PC9zdmc+IA==');
+    background-size: 100%;
+    background-image: url("../img/fb-upload_hover.png"), -webkit-gradient(linear, 50% 0%, 50% 100%, color-stop(0%, #e1e1e1), color-stop(100%, #eeeeee));
+    background-image: url("../img/fb-upload_hover.png"), -webkit-linear-gradient(#e1e1e1, #eeeeee);
+    background-image: url("../img/fb-upload_hover.png"), -moz-linear-gradient(#e1e1e1, #eeeeee);
+    background-image: url("../img/fb-upload_hover.png"), -o-linear-gradient(#e1e1e1, #eeeeee);
+    background-image: url("../img/fb-upload_hover.png"), linear-gradient(#e1e1e1, #eeeeee)
+}
+.fb-uploader-container .fb-upload-list {
+    position: relative;
+    float: left;
+    width: 19px;
+    height: 19px;
+    background: transparent
+}
+.fb-uploader-container .fb-upload-list .fb-upload-item {
+    position: relative
+}
+.fb-uploader-container .fb-upload-list .fb-upload-item span,
+.fb-uploader-container .fb-upload-list .fb-upload-item a {
+    position: absolute;
+    display: inline-block;
+    width: 19px;
+    height: 19px
+}
+.fb-uploader-container .fb-upload-list .fb-upload-item .fb-upload-file,
+.fb-uploader-container .fb-upload-list .fb-upload-item .fb-upload-size {
+    display: none !important
+}
+.fb-uploader-container .fb-upload-list .fb-upload-item .fb-upload-spinner {
+    background: transparent url("../img/fb-upload-spinner.gif") 50% 50% no-repeat
+}
+.fb-uploader-container .fb-upload-list .fb-upload-item .progress-bar {
+    position: absolute;
+    z-index: 1000;
+    padding: 1px;
+    margin-left: -8px; /* input borders + paddings */
+    height: 17px;
+    background: transparent
+}
+.fb-uploader-container .fb-upload-list .fb-upload-item .progress-bar .content {
+    width: 0;
+    height: 17px;
+    background: #fff url("../img/progress-bar-content.png") 0 0 repeat-x scroll
+}
+.fb-uploader-container+a.fb_show {
+    margin-bottom: 0 !important
+}
+.fb-uploadfield {
+    margin: 0;
+    padding: 0;
+    min-height: 25px
+}
+.fb-uploadfield.error input.vFileBrowseUploadField,
+.fb-uploadfield.error a.fb_show,
+.fb-uploadfield.error .fb-upload-button,
+.fb-uploadfield.error .fb-upload-spinner {
+    border-color: #BF3030 !important
+}
+.fb-uploadfield ul.errorlist {
+    margin-top: 5px !important
+}
+.fb-uploadfield ul.errorlist+p.preview {
+    margin-top: 2px !important
+}
+.fb-uploadfield .fb-uploadfield ul.errorlist+p.preview {
+    margin-top: 2px !important
+}
+.fb-uploadfield .progress-bar {
+    left: -20em;
+    width: 20em;
+}

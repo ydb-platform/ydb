@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mysql.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/mdb/mysql/v1/resource_preset.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mysql/v1;mysql";
+option java_package = "yandex.cloud.api.mdb.mysql.v1";
+
+// A set of methods for managing MySQL resource presets.
+//
+// See [the documentation](/docs/managed-mysql/concepts/instance-types) for details.
+service ResourcePresetService {
+
+  // Retrieves information about a resource preset.
+  rpc Get (GetResourcePresetRequest) returns (ResourcePreset) {
+    option (google.api.http) = { get: "/managed-mysql/v1/resourcePresets/{resource_preset_id}" };
+  }
+
+  // Retrieves the list of available resource presets.
+  rpc List (ListResourcePresetsRequest) returns (ListResourcePresetsResponse) {
+    option (google.api.http) = { get: "/managed-mysql/v1/resourcePresets" };
+  }
+}
+
+message GetResourcePresetRequest {
+
+  // ID of the resource preset to return information about.
+  //
+  // To get this ID, make a [ResourcePresetService.List] request.
+  string resource_preset_id = 1 [(required) = true];
+}
+
+message ListResourcePresetsRequest {
+
+  // The maximum number of results per page to return.
+  //
+  // If the number of available results is larger than [page_size], the API returns a [ListResourcePresetsResponse.next_page_token] that can be used to get the next page of results in the subsequent [ResourcePresetService.List] requests.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token that can be used to iterate through multiple pages of results.
+  //
+  // To get the next page of results, set [page_token] to the [ListResourcePresetsResponse.next_page_token] returned by the previous [ResourcePresetService.List] request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListResourcePresetsResponse {
+
+  // List of resource presets.
+  repeated ResourcePreset resource_presets = 1;
+
+  // The token that can be used to get the next page of results.
+  //
+  // If the number of results is larger than [ListResourcePresetsRequest.page_size], use the [next_page_token] as the value for the [ListResourcePresetsRequest.page_token] in the subsequent [ResourcePresetService.List] request to iterate through multiple pages of results.
+  //
+  // Each of the subsequent [ResourcePresetService.List] requests should use the [next_page_token] value returned by the previous request to continue paging through the results.
+  string next_page_token = 2 [(length) = "<=100"];
+}

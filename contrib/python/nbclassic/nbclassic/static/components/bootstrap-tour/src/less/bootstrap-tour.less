@@ -1,0 +1,39 @@
+.tour-backdrop {
+  position: absolute;
+  z-index: 1100;
+  background-color: #000;
+  opacity: 0.8;
+  filter: alpha(opacity=80);
+}
+
+.popover[class*="tour-"] {
+  z-index: 1102;
+
+  .popover-navigation {
+    padding: 9px 14px;
+    overflow: hidden;
+
+    *[data-role="end"] {
+      float: right;
+    }
+
+    *[data-role="prev"],
+    *[data-role="next"],
+    *[data-role="end"] {
+      cursor: pointer;
+
+      &.disabled {
+        cursor: default;
+      }
+    }
+  }
+
+  &.orphan {
+    position: fixed;
+    margin-top: 0;
+
+    .arrow {
+      display: none;
+    }
+  }
+}

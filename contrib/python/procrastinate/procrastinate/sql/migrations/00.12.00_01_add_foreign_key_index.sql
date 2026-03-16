@@ -1,0 +1,1 @@
+CREATE INDEX procrastinate_periodic_defers_job_id_fkey ON procrastinate_periodic_defers(job_id);

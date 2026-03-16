@@ -1,0 +1,2 @@
+[console_scripts]
+diagrams = diagrams.cli:main

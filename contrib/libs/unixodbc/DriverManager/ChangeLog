@@ -1,0 +1,22 @@
+1999-05-19  Peter Harvey <pharvey@codebydesign.com>
+
+	* ALL: Added logging for Top and Bottom of funcs... errors still need to go to log
+	* ALL: numcols now calced for catalog funcs
+
+1999-05-10  Peter Harvey <pharvey@codebydesign.com>
+
+	* SQLPrepare: Code, here and elsewhere, dependent upon num result cols being known before execute has been commented out.
+	* SQLConnect: Used to try to search-a-path for DSN but now lets odbcinst do this.
+
+1999-05-09  Nick Gorham <nick.gorham@easysoft.com>
+
+	* ALL: Total rewrite by Nick. Has much more functionality and compliance.
+
+1999-04-14  Peter Harvey <pharvey@codebydesign.com>
+
+	* sqltypes.h: Changed ODBCINT64 to long long
+
+1999-03-30  Peter Harvey <pharvey@codebydesign.com>
+
+	* SQLDrivers.c: added
+

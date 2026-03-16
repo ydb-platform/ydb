@@ -1,0 +1,3000 @@
+#Pressure
+'82001001' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 0 ;
+          }
+#Pressure reduced to MSL
+'82001002' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 1 ;
+          }
+#Pressure tendency
+'82001003' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 2 ;
+          }
+#Potential vorticity
+'82001004' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 14 ;
+          }
+#ICAO Standard Atmosphere reference height
+'82001005' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 3 ;
+          }
+#Geopotential
+'82001006' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 4 ;
+          }
+#Geopotential height
+'82001007' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 5 ;
+          }
+#Geometric height
+'82001008' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 6 ;
+          }
+#Standard deviation of height
+'82001009' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 7 ;
+          }
+#Total ozone
+'82001010' = {
+          discipline = 0 ;
+          parameterCategory = 14 ;
+          parameterNumber = 0 ;
+          }
+#Temperature
+'82001011' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 0 ;
+          }
+#Virtual temperature
+'82001012' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 1 ;
+          }
+#Potential temperature
+'82001013' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 2 ;
+          }
+#Pseudo-adiabatic potential temperature
+'82001014' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 3 ;
+          }
+#Maximum temperature
+'82001015' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 4 ;
+          }
+#Minimum temperature
+'82001016' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 5 ;
+          }
+#Dew point temperature
+'82001017' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 6 ;
+          }
+#Dew point depression (or deficit)
+'82001018' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 7 ;
+          }
+#Lapse rate
+'82001019' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 8 ;
+          }
+#Visibility
+'82001020' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 0 ;
+          }
+#Radar Spectra (1)
+'82001021' = {
+          discipline = 0 ;
+          parameterCategory = 15 ;
+          parameterNumber = 6 ;
+          }
+#Radar Spectra (2)
+'82001022' = {
+          discipline = 0 ;
+          parameterCategory = 15 ;
+          parameterNumber = 7 ;
+          }
+#Radar Spectra (3)
+'82001023' = {
+          discipline = 0 ;
+          parameterCategory = 15 ;
+          parameterNumber = 8 ;
+          }
+#Parcel lifted index (to 500 hPa)
+'82001024' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 0 ;
+          }
+#Temperature anomaly
+'82001025' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 9 ;
+          }
+#Pressure anomaly
+'82001026' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 8 ;
+          }
+#Geopotential height anomaly
+'82001027' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 9 ;
+          }
+#Wave Spectra (1)
+'82001028' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 0 ;
+          }
+#Wave Spectra (2)
+'82001029' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 1 ;
+          }
+#Wave Spectra (3)
+'82001030' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 2 ;
+          }
+#Wind direction
+'82001031' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 0 ;
+          }
+#Wind speed
+'82001032' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 1 ;
+          }
+#u-component of wind
+'82001033' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 2 ;
+          }
+#v-component of wind
+'82001034' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 3 ;
+          }
+#Stream function
+'82001035' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 4 ;
+          }
+#Velocity potential
+'82001036' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 5 ;
+          }
+#Montgomery stream function
+'82001037' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 6 ;
+          }
+#Sigma coord. vertical velocity
+'82001038' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 7 ;
+          }
+#Pressure Vertical velocity
+'82001039' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 8 ;
+          }
+#Geometric Vertical velocity
+'82001040' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 9 ;
+          }
+#Absolute vorticity
+'82001041' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 10 ;
+          }
+#Absolute divergence
+'82001042' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 11 ;
+          }
+#Relative vorticity
+'82001043' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 12 ;
+          }
+#Relative divergence
+'82001044' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 13 ;
+          }
+#Vertical u-component shear
+'82001045' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 15 ;
+          }
+#Vertical v-component shear
+'82001046' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 16 ;
+          }
+#Direction of current
+'82001047' = {
+          discipline = 10 ;
+          parameterCategory = 1 ;
+          parameterNumber = 0 ;
+          }
+#Speed of current
+'82001048' = {
+          discipline = 10 ;
+          parameterCategory = 1 ;
+          parameterNumber = 1 ;
+          }
+#u-component of current
+'82001049' = {
+          discipline = 10 ;
+          parameterCategory = 1 ;
+          parameterNumber = 2 ;
+          }
+#v-component of current
+'82001050' = {
+          discipline = 10 ;
+          parameterCategory = 1 ;
+          parameterNumber = 3 ;
+          }
+#Specific humidity
+'82001051' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 0 ;
+          }
+#Relative humidity
+'82001052' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 1 ;
+          }
+#Humidity mixing ratio
+'82001053' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 2 ;
+          }
+#Precipitable water
+'82001054' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 3 ;
+          }
+#Vapour pressure
+'82001055' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 4 ;
+          }
+#Saturation deficit
+'82001056' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 5 ;
+          }
+#Evaporation
+'82001057' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 6 ;
+          }
+#Cloud Ice
+'82001058' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 0 ;
+          }
+#Precipitation rate
+'82001059' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 7 ;
+          }
+#Thunderstorm probability
+'82001060' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 2 ;
+          }
+#Total precipitation
+'82001061' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 8 ;
+          }
+#Large scale precipitation
+'82001062' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 9 ;
+          }
+#Convective precipitation
+'82001063' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 10 ;
+          }
+#Snowfall rate water equivalent
+'82001064' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 12 ;
+          }
+#Water equiv. of accum. snow depth
+'82001065' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 13 ;
+          }
+#Snow depth
+'82001066' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 11 ;
+          }
+#Mixed layer depth
+'82001067' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 3 ;
+          }
+#Transient thermocline depth
+'82001068' = {
+          discipline = 10 ;
+          parameterCategory = 4 ;
+          parameterNumber = 2 ;
+          }
+#Main thermocline depth
+'82001069' = {
+          discipline = 10 ;
+          parameterCategory = 4 ;
+          parameterNumber = 0 ;
+          }
+#Main thermocline anomaly
+'82001070' = {
+          discipline = 10 ;
+          parameterCategory = 4 ;
+          parameterNumber = 1 ;
+          }
+#Total cloud cover
+'82001071' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 1 ;
+          }
+#Convective cloud cover
+'82001072' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 2 ;
+          }
+#Low cloud cover
+'82001073' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 3 ;
+          }
+#Medium cloud cover
+'82001074' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 4 ;
+          }
+#High cloud cover
+'82001075' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 5 ;
+          }
+#Cloud water
+'82001076' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 6 ;
+          }
+#Best lifted index (to 500 hPa)
+'82001077' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 1 ;
+          }
+#Convective snow
+'82001078' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 14 ;
+          }
+#Large scale snow
+'82001079' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 15 ;
+          }
+#Water Temperature
+'82001080' = {
+          discipline = 10 ;
+          parameterCategory = 3 ;
+          parameterNumber = 0 ;
+          }
+#Land-sea mask (1=land 0=sea) (see note)
+'82001081' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 0 ;
+          }
+#Deviation of sea level from mean
+'82001082' = {
+          discipline = 10 ;
+          parameterCategory = 3 ;
+          parameterNumber = 1 ;
+          }
+#Surface roughness
+'82001083' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 1 ;
+          }
+#Albedo
+'82001084' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 1 ;
+          }
+#Soil temperature
+'82001085' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 2 ;
+          }
+#Soil moisture content
+'82001086' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 3 ;
+          }
+#Vegetation
+'82001087' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 4 ;
+          }
+#Salinity
+'82001088' = {
+          discipline = 10 ;
+          parameterCategory = 4 ;
+          parameterNumber = 3 ;
+          }
+#Density
+'82001089' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 10 ;
+          }
+#Water run off
+'82001090' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 5 ;
+          }
+#Ice cover (ice=1 no ice=0)(see note)
+'82001091' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 0 ;
+          }
+#Ice thickness
+'82001092' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 1 ;
+          }
+#Direction of ice drift
+'82001093' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 2 ;
+          }
+#Speed of ice drift
+'82001094' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 3 ;
+          }
+#u-component of ice drift
+'82001095' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 4 ;
+          }
+#v-component of ice drift
+'82001096' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 5 ;
+          }
+#Ice growth rate
+'82001097' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 6 ;
+          }
+#Ice divergence
+'82001098' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 7 ;
+          }
+#Snow melt
+'82001099' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 16 ;
+          }
+#Significant height of combined wind waves and swell
+'82001100' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 3 ;
+          }
+#Direction of wind waves
+'82001101' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 4 ;
+          }
+#Significant height of wind waves
+'82001102' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 5 ;
+          }
+#Mean period of wind waves
+'82001103' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 6 ;
+          }
+#Direction of swell waves
+'82001104' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 7 ;
+          }
+#Significant height of swell waves
+'82001105' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 8 ;
+          }
+#Mean period of swell waves
+'82001106' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 9 ;
+          }
+#Primary wave direction
+'82001107' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 10 ;
+          }
+#Primary wave mean period
+'82001108' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 11 ;
+          }
+#Secondary wave direction
+'82001109' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 12 ;
+          }
+#Secondary wave mean period
+'82001110' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 13 ;
+          }
+#Net short wave radiation flux (surface)
+'82001111' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 0 ;
+          }
+#Net long wave radiation flux (surface)
+'82001112' = {
+          discipline = 0 ;
+          parameterCategory = 5 ;
+          parameterNumber = 0 ;
+          }
+#Net short wave radiation flux (top of atmos.)
+'82001113' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 1 ;
+          }
+#Net long wave radiation flux (top of atmos.)
+'82001114' = {
+          discipline = 0 ;
+          parameterCategory = 5 ;
+          parameterNumber = 1 ;
+          }
+#Long wave radiation flux
+'82001115' = {
+          discipline = 0 ;
+          parameterCategory = 5 ;
+          parameterNumber = 2 ;
+          }
+#Short wave radiation flux
+'82001116' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 2 ;
+          }
+#Global radiation flux
+'82001117' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 3 ;
+          }
+#Brightness temperature
+'82001118' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 4 ;
+          }
+#Radiance (with respect to wave number)
+'82001119' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 5 ;
+          }
+#Radiance (with respect to wave length)
+'82001120' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 6 ;
+          }
+#Latent heat net flux
+'82001121' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 10 ;
+          }
+#Sensible heat net flux
+'82001122' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 11 ;
+          }
+#Boundary layer dissipation
+'82001123' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 20 ;
+          }
+#Momentum flux, u component
+'82001124' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 17 ;
+          }
+#Momentum flux, v component
+'82001125' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 18 ;
+          }
+#Wind mixing energy
+'82001126' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 19 ;
+          }
+#Maximum wind
+'82001135' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 21 ;
+          }
+#Integrated cloud condensate
+'82001137' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 20 ;
+          }
+#Snow depth, cold snow
+'82001138' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 11 ;
+          }
+#Slope fraction
+'82001160' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 22 ;
+          }
+#Snow albedo
+'82001190' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 19 ;
+          }
+#Snow density
+'82001191' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 61 ;
+          }
+#Soil type
+'82001195' = {
+          discipline = 2 ;
+          parameterCategory = 3 ;
+          parameterNumber = 0 ;
+          }
+#Turbulent Kinetic Energy
+'82001200' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 11 ;
+          }
+#Convective inhibation
+'82001224' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 7 ;
+          }
+#CAPE
+'82001225' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 6 ;
+          }
+#Friction velocity
+'82001227' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 30 ;
+          }
+#Wind gust
+'82001228' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 22 ;
+          }
+# SO2/SO2
+'82128001' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 8 ;
+          }
+# SO4(2-)/SO4(2-) (sulphate)
+'82128002' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 22 ;
+          }
+# DMS/DMS
+'82128003' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10500 ;
+          }
+# NH42SO4/(NH4)2SO4
+'82128008' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63006 ;
+          }
+# SULFATE/SULFATE
+'82128009' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63008 ;
+          }
+# SOX_S/All oxidised sulphur compounds (as sulphur)
+'82128029' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63005 ;
+          }
+# NO
+'82128030' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 11 ;
+          }
+# NO2/NO2
+'82128031' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 5 ;
+          }
+# HNO3/HNO3
+'82128032' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 17 ;
+          }
+# NH4NO3/NH4NO3
+'82128034' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63007 ;
+          }
+# NITRATE/NITRATE
+'82128035' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63009 ;
+          }
+# NOX/NOX as NO2
+'82128044' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63001 ;
+          }
+# NOX_N/NO2+NO (NOx) as nitrogen
+'82128047' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 60003 ;
+          }
+# NOY_N/All oxidised N-compounds (as nitrogen)
+'82128048' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 60004 ;
+          }
+# NH3/NH3
+'82128050' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 9 ;
+          }
+# NH4(+1)/NH4
+'82128051' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10 ;
+          }
+# NHX_N/All reduced nitrogen (as nitrogen)
+'82128059' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63004 ;
+          }
+# O3
+'82128060' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 0 ;
+          }
+# H2O2/H2O2
+'82128061' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 19 ;
+          }
+# OH/OH
+'82128062' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10000 ;
+          }
+# CO/CO
+'82128071' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 4 ;
+          }
+# CO2/CO2
+'82128072' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 3 ;
+          }
+# CH4/CH4
+'82128073' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 2 ;
+          }
+# OC/Organic carbon (particles)
+'82128074' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63013 ;
+          }
+# EC/Elementary carbon (particles)
+'82128075' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63012 ;
+          }
+# Rn222/Rn222
+'82128093' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 23 ;
+          }
+# NACL
+'82128120' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 62008 ;
+          }
+# PMFINE
+'82128160' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 40009 ;
+          }
+# PMCOARSE/Coarse particles
+'82128161' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 40008 ;
+          }
+# DUST/Dust (particles)
+'82128162' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 62001 ;
+          }
+# PNUMBER/Number concentration
+'82128163' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63017 ;
+          }
+# PMASS/Particle mass conc
+'82128166' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63018 ;
+          }
+# PM10/PM10 particles
+'82128167' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 40008 ;
+          }
+# PSOX/Particulate sulfate
+'82128168' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63014 ;
+          }
+# PNOX/Particulate nitrate
+'82128169' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63015 ;
+          }
+# PNHX/Particulate ammonium
+'82128170' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63016 ;
+          }
+# SOA/Secondary Organic Aerosol
+'82128173' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 62012 ;
+          }
+# PM2.5/PM2.5 particles
+'82128174' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 40009 ;
+          }
+# PM/Total particulate matter
+'82128175' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 62000 ;
+          }
+# VIS/Visibility [m]
+'82128215' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 0 ;
+          }
+#Pressure reduced to MSL
+'82129001' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 1 ;
+          }
+#Maximum temperature
+'82129015' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 4 ;
+          }
+#Minimum temperature
+'82129016' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 5 ;
+          }
+#Visibility
+'82129020' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 0 ;
+          }
+#Wind gusts
+'82129032' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 22 ;
+          }
+#Relative humidity
+'82129052' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 1 ;
+          }
+#Total cloud cover
+'82129071' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 1 ;
+          }
+#Low cloud cover
+'82129073' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 3 ;
+          }
+#Medium cloud cove
+'82129074' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 4 ;
+          }
+#High cloud cover
+'82129075' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 5 ;
+          }
+#Cloud base of significant clouds
+'82129078' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 11 ;
+          }
+#Cloud top of significant clouds
+'82129079' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 12 ;
+          }
+#Virtual potential temperature
+'82129128' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 15 ;
+          }
+#Heat index
+'82129129' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 12 ;
+          }
+#Wind chill factor
+'82129130' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 13 ;
+          }
+#Snow phase change heat flux
+'82129131' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 16 ;
+          }
+#Skin temperature
+'82129132' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 17 ;
+          }
+#Snow age
+'82129133' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 17 ;
+          }
+#Absolute humidity
+'82129134' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 18 ;
+          }
+#Precipitation type
+'82129135' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 19 ;
+          }
+#Integrated liquid water
+'82129136' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 20 ;
+          }
+#Condensate
+'82129137' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 21 ;
+          }
+#Cloud mixing ratio
+'82129138' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 22 ;
+          }
+#Ice water mixing ratio
+'82129139' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 23 ;
+          }
+#Rain mixing ratio
+'82129140' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 24 ;
+          }
+#Snow mixing ratio
+'82129141' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 25 ;
+          }
+#Horizontal moisture convergence
+'82129142' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 26 ;
+          }
+#Precipitable water category
+'82129143' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 30 ;
+          }
+#Hail
+'82129144' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 31 ;
+          }
+#Graupel
+'82129150' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 32 ;
+          }
+#Categorical rain
+'82129151' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 33 ;
+          }
+#Categorical freezing rain
+'82129152' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 34 ;
+          }
+#Categorical ice pellets
+'82129153' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 35 ;
+          }
+#Categorical snow
+'82129154' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 36 ;
+          }
+#Convective precipitation rate
+'82129155' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 37 ;
+          }
+#Horizontal moisture divergence
+'82129156' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 38 ;
+          }
+#Percent frozen precipitation
+'82129157' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 39 ;
+          }
+#Potential evaporation
+'82129158' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 40 ;
+          }
+#Potential evaporation rate
+'82129159' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 41 ;
+          }
+#Snow cover
+'82129160' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 42 ;
+          }
+#Pressure reduced to MSL
+'82130001' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 1 ;
+          }
+#Visibility
+'82130020' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 0 ;
+          }
+#Relative humidity
+'82130052' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 1 ;
+          }
+#Probability thunderstorm
+'82130060' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 2 ;
+          }
+#Total cloud cover
+'82130071' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 1 ;
+          }
+#Convective cloud cover
+'82130072' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 2 ;
+          }
+#Low cloud cover
+'82130073' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 3 ;
+          }
+#Medium cloud cove
+'82130074' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 4 ;
+          }
+#High cloud cover
+'82130075' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 5 ;
+          }
+#cloud mask
+'82130077' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 7 ;
+          }
+#Wind gust
+'82130131' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 22 ;
+          }
+#Precipitation intensity total
+'82130140' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 52 ;
+          }
+#Precipitation intensity snow
+'82130141' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 53 ;
+          }
+#Downward short-wave radiation flux
+'82130150' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 7 ;
+          }
+#Upward short-wave radiation flux
+'82130151' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 8 ;
+          }
+#Net short wave radiation flux
+'82130152' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 9 ;
+          }
+#Photosynthetically active radiation
+'82130153' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 10 ;
+          }
+#Net short-wave radiation flux, clear sky
+'82130154' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 11 ;
+          }
+#Downward UV radiation
+'82130155' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 12 ;
+          }
+#UV index (under clear sky)
+'82130156' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 50 ;
+          }
+#UV index
+'82130157' = {
+          discipline = 0 ;
+          parameterCategory = 4 ;
+          parameterNumber = 51 ;
+          }
+#Downward long-wave radiation flux
+'82130158' = {
+          discipline = 0 ;
+          parameterCategory = 5 ;
+          parameterNumber = 3 ;
+          }
+#Upward long-wave radiation flux
+'82130159' = {
+          discipline = 0 ;
+          parameterCategory = 5 ;
+          parameterNumber = 4 ;
+          }
+#Net long wave radiation flux
+'82130160' = {
+          discipline = 0 ;
+          parameterCategory = 5 ;
+          parameterNumber = 5 ;
+          }
+#Net long-wave radiation flux, clear sky
+'82130161' = {
+          discipline = 0 ;
+          parameterCategory = 5 ;
+          parameterNumber = 6 ;
+          }
+#Cloud amount
+'82130162' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 7 ;
+          }
+#Cloud type
+'82130163' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 8 ;
+          }
+#Thunderstorm maximum tops
+'82130164' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 9 ;
+          }
+#Thunderstorm coverage
+'82130165' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 10 ;
+          }
+#Cloud base
+'82130166' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 11 ;
+          }
+#Cloud top
+'82130167' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 12 ;
+          }
+#Ceiling
+'82130168' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 13 ;
+          }
+#Non-convective cloud cover
+'82130169' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 14 ;
+          }
+#Cloud work function
+'82130170' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 15 ;
+          }
+#Convective cloud efficiency
+'82130171' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 16 ;
+          }
+#Total condensate
+'82130172' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 17 ;
+          }
+#Total column-integrated cloud water
+'82130173' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 18 ;
+          }
+#Total column-integrated cloud ice
+'82130174' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 19 ;
+          }
+#Total column-integrated condensate
+'82130175' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 20 ;
+          }
+#Ice fraction of total condensate
+'82130176' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 21 ;
+          }
+#Cloud cover
+'82130177' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 22 ;
+          }
+#Cloud ice mixing ratio
+'82130178' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 23 ;
+          }
+#Sunshine
+'82130179' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 24 ;
+          }
+#Horizontal extent of cumulunimbus (CB)
+'82130180' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 25 ;
+          }
+#Fraction of cloud cover
+'82130181' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 32 ;
+          }
+#Sunshine duration
+'82130182' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 33 ;
+          }
+#K index
+'82130183' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 2 ;
+          }
+#KO index
+'82130184' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 3 ;
+          }
+#Total totals index
+'82130185' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 4 ;
+          }
+#Sweat index
+'82130186' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 5 ;
+          }
+#Storm relative helicity
+'82130187' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 8 ;
+          }
+#Energy helicity index
+'82130188' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 9 ;
+          }
+#Surface lifted index
+'82130189' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 10 ;
+          }
+#Best (4-layer) lifted index
+'82130190' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 11 ;
+          }
+#Richardson number
+'82130191' = {
+          discipline = 0 ;
+          parameterCategory = 7 ;
+          parameterNumber = 12 ;
+          }
+#Aerosol type
+'82130192' = {
+          discipline = 0 ;
+          parameterCategory = 13 ;
+          parameterNumber = 0 ;
+          }
+#Ozone mixing ratio
+'82130193' = {
+          discipline = 0 ;
+          parameterCategory = 14 ;
+          parameterNumber = 1 ;
+          }
+#Total column integrated ozone
+'82130194' = {
+          discipline = 0 ;
+          parameterCategory = 14 ;
+          parameterNumber = 2 ;
+          }
+#Base spectrum width
+'82130200' = {
+          discipline = 0 ;
+          parameterCategory = 15 ;
+          parameterNumber = 0 ;
+          }
+#Base reflectivity
+'82130201' = {
+          discipline = 0 ;
+          parameterCategory = 15 ;
+          parameterNumber = 1 ;
+          }
+#Base radial velocity
+'82130202' = {
+          discipline = 0 ;
+          parameterCategory = 15 ;
+          parameterNumber = 2 ;
+          }
+#Vertically integrated liquid
+'82130203' = {
+          discipline = 0 ;
+          parameterCategory = 15 ;
+          parameterNumber = 3 ;
+          }
+#Layer-maximum base reflectivity
+'82130204' = {
+          discipline = 0 ;
+          parameterCategory = 15 ;
+          parameterNumber = 4 ;
+          }
+#Precipitation (radar)
+'82130205' = {
+          discipline = 0 ;
+          parameterCategory = 15 ;
+          parameterNumber = 5 ;
+          }
+#Equivalent radar reflectivity factor for rain
+'82130206' = {
+          discipline = 0 ;
+          parameterCategory = 16 ;
+          parameterNumber = 0 ;
+          }
+#Equivalent radar reflectivity factor for snow
+'82130207' = {
+          discipline = 0 ;
+          parameterCategory = 16 ;
+          parameterNumber = 1 ;
+          }
+#Equivalent radar reflectivity factor for paramterized convection
+'82130208' = {
+          discipline = 0 ;
+          parameterCategory = 16 ;
+          parameterNumber = 2 ;
+          }
+#Echo top (radar)
+'82130209' = {
+          discipline = 0 ;
+          parameterCategory = 16 ;
+          parameterNumber = 3 ;
+          }
+#Reflectivity (radar)
+'82130210' = {
+          discipline = 0 ;
+          parameterCategory = 16 ;
+          parameterNumber = 4 ;
+          }
+#Composite reflectivity (radar)
+'82130211' = {
+          discipline = 0 ;
+          parameterCategory = 16 ;
+          parameterNumber = 5 ;
+          }
+#Icing top
+'82130215' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 5 ;
+          }
+#Icing base
+'82130216' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 6 ;
+          }
+#Icing
+'82130217' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 7 ;
+          }
+#Turbulence top
+'82130218' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 8 ;
+          }
+#Turbulence base
+'82130219' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 9 ;
+          }
+#Turbulence
+'82130220' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 10 ;
+          }
+#Planetary boundary-layer regime
+'82130221' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 12 ;
+          }
+#Contrail intensity
+'82130222' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 13 ;
+          }
+#Contrail engine type
+'82130223' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 14 ;
+          }
+#Contrail top
+'82130224' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 15 ;
+          }
+#Contrail base
+'82130225' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 16 ;
+          }
+#Snow free albedo
+'82130226' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 18 ;
+          }
+#Icing
+'82130227' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 20 ;
+          }
+#In-cloud turbulence
+'82130228' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 21 ;
+          }
+#Clear air turbulence (CAT)
+'82130229' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 22 ;
+          }
+#Supercooled large droplet probability
+'82130230' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 23 ;
+          }
+#Arbitrary text string
+'82130235' = {
+          discipline = 0 ;
+          parameterCategory = 190 ;
+          parameterNumber = 0 ;
+          }
+#Seconds prior to initial reference time (defined in section1) (meteorology)
+'82130236' = {
+          discipline = 0 ;
+          parameterCategory = 191 ;
+          parameterNumber = 0 ;
+          }
+#Current east
+'82131049' = {
+          discipline = 10 ;
+          parameterCategory = 1 ;
+          parameterNumber = 2 ;
+          }
+#Current north
+'82131050' = {
+          discipline = 10 ;
+          parameterCategory = 1 ;
+          parameterNumber = 3 ;
+          }
+#Turbulent Kintetic Energy
+'82131251' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 11 ;
+          }
+#Pressure reduced to MSL
+'82133001' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 1 ;
+          }
+#Potential temperature
+'82133013' = {
+          discipline = 0 ;
+          parameterCategory = 0 ;
+          parameterNumber = 2 ;
+          }
+#Wave spectra (1)
+'82133028' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 0 ;
+          }
+#Wave spectra (2)
+'82133029' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 1 ;
+          }
+#Wave spectra (3)
+'82133030' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 2 ;
+          }
+#Wind direction
+'82133031' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 0 ;
+          }
+#Wind speed
+'82133032' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 1 ;
+          }
+#Stream function
+'82133035' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 4 ;
+          }
+#Velocity potential
+'82133036' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 5 ;
+          }
+#Montgomery stream function
+'82133037' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 6 ;
+          }
+#Direction of horizontal current
+'82133047' = {
+          discipline = 10 ;
+          parameterCategory = 1 ;
+          parameterNumber = 0 ;
+          }
+#Speed of horizontal current
+'82133048' = {
+          discipline = 10 ;
+          parameterCategory = 1 ;
+          parameterNumber = 1 ;
+          }
+#U-comp of Current
+'82133049' = {
+          discipline = 10 ;
+          parameterCategory = 1 ;
+          parameterNumber = 2 ;
+          }
+#V-comp of Current
+'82133050' = {
+          discipline = 10 ;
+          parameterCategory = 1 ;
+          parameterNumber = 3 ;
+          }
+#Specific humidity
+'82133051' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 0 ;
+          }
+#Snow Depth
+'82133066' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 11 ;
+          }
+#Mixed layer depth
+'82133067' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 3 ;
+          }
+#Transient thermocline depth
+'82133068' = {
+          discipline = 10 ;
+          parameterCategory = 4 ;
+          parameterNumber = 2 ;
+          }
+#Main thermocline depth
+'82133069' = {
+          discipline = 10 ;
+          parameterCategory = 4 ;
+          parameterNumber = 0 ;
+          }
+#Main thermocline anomaly
+'82133070' = {
+          discipline = 10 ;
+          parameterCategory = 4 ;
+          parameterNumber = 1 ;
+          }
+#Total Cloud Cover
+'82133071' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 1 ;
+          }
+#Water temperature
+'82133080' = {
+          discipline = 10 ;
+          parameterCategory = 3 ;
+          parameterNumber = 0 ;
+          }
+#Density
+'82133089' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 10 ;
+          }
+#Ice Cover
+'82133091' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 0 ;
+          }
+#Total ice thickness
+'82133092' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 1 ;
+          }
+#Direction of ice drift
+'82133093' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 2 ;
+          }
+#Speed of ice drift
+'82133094' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 3 ;
+          }
+#Ice growth rate
+'82133097' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 7 ;
+          }
+#Ice divergence
+'82133098' = {
+          discipline = 10 ;
+          parameterCategory = 2 ;
+          parameterNumber = 8 ;
+          }
+#Significant wave height
+'82133100' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 3 ;
+          }
+#Direction of Wind Waves
+'82133101' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 4 ;
+          }
+#Sign Height Wind Waves
+'82133102' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 5 ;
+          }
+#Mean Period Wind Waves
+'82133103' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 6 ;
+          }
+#Direction of Swell Waves
+'82133104' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 7 ;
+          }
+#Sign Height Swell Waves
+'82133105' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 8 ;
+          }
+#Mean Period Swell Waves
+'82133106' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 9 ;
+          }
+#Primary wave direction
+'82133107' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 10 ;
+          }
+#Primary wave mean period
+'82133108' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 11 ;
+          }
+#Secondary wave direction
+'82133109' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 12 ;
+          }
+#Secondary wave mean period
+'82133110' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 13 ;
+          }
+#Mean period of waves
+'82133111' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 15 ;
+          }
+#Mean direction of Waves
+'82133112' = {
+          discipline = 10 ;
+          parameterCategory = 0 ;
+          parameterNumber = 14 ;
+          }
+#Flash flood guidance
+'82133170' = {
+          discipline = 1 ;
+          parameterCategory = 0 ;
+          parameterNumber = 0 ;
+          }
+#Flash flood runoff
+'82133171' = {
+          discipline = 1 ;
+          parameterCategory = 0 ;
+          parameterNumber = 1 ;
+          }
+#Remotely-sensed snow cover
+'82133172' = {
+          discipline = 1 ;
+          parameterCategory = 0 ;
+          parameterNumber = 2 ;
+          }
+#Elevation of snow-covered terrain
+'82133173' = {
+          discipline = 1 ;
+          parameterCategory = 0 ;
+          parameterNumber = 3 ;
+          }
+#Snow water equivalent per cent of normal
+'82133174' = {
+          discipline = 1 ;
+          parameterCategory = 0 ;
+          parameterNumber = 4 ;
+          }
+#Baseflow-groundwater runoff
+'82133175' = {
+          discipline = 1 ;
+          parameterCategory = 0 ;
+          parameterNumber = 5 ;
+          }
+#Storm surface runoff
+'82133176' = {
+          discipline = 1 ;
+          parameterCategory = 0 ;
+          parameterNumber = 6 ;
+          }
+#Conditional per cent precipitation amount fractile for an overall period
+'82133180' = {
+          discipline = 1 ;
+          parameterCategory = 1 ;
+          parameterNumber = 0 ;
+          }
+#Per cent precipitation in a sub-period of an overall period
+'82133181' = {
+          discipline = 1 ;
+          parameterCategory = 1 ;
+          parameterNumber = 1 ;
+          }
+#Probability if 0.01 inch of precipitation
+'82133182' = {
+          discipline = 1 ;
+          parameterCategory = 1 ;
+          parameterNumber = 2 ;
+          }
+#Seconds prior to initial reference time (defined in section1) (oceonography)
+'82133190' = {
+          discipline = 10 ;
+          parameterCategory = 191 ;
+          parameterNumber = 0 ;
+          }
+#Meridional overturning stream function
+'82133191' = {
+          discipline = 10 ;
+          parameterCategory = 191 ;
+          parameterNumber = 1 ;
+          }
+#Turbulent Kinetic Energy
+'82133200' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 11 ;
+          }
+#C2H6/Ethane
+'82134001' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10008 ;
+          }
+#NC4H10/N-butane
+'82134002' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10016 ;
+          }
+#C2H4/Ethene
+'82134003' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10009 ;
+          }
+#C3H6/Propene
+'82134004' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10015 ;
+          }
+#OXYLENE/O-xylene
+'82134005' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10023 ;
+          }
+#HCHO/Formalydehyde
+'82134006' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 7 ;
+          }
+#C5H8/Isoprene
+'82134011' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10017 ;
+          }
+#C2H5OH/Ethanol
+'82134012' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10011 ;
+          }
+#CH3OH/Metanol
+'82134013' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10004 ;
+          }
+#NMVOC_C/Total NMVOC as C
+'82134019' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 60013 ;
+          }
+#PAN/Peroxy acetyl nitrate
+'82134021' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 63011 ;
+          }
+#NO3/Nitrate radical
+'82134022' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 13 ;
+          }
+#N2O5/Dinitrogen pentoxide
+'82134023' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 15 ;
+          }
+#HO2NO2/HO2NO2
+'82134026' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 18 ;
+          }
+#HONO
+'82134029' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 16 ;
+          }
+#HO2/Hydroperhydroxyl radical
+'82134031' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 14 ;
+          }
+#H2/Molecular hydrogen
+'82134032' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 20 ;
+          }
+#O/Oxygen atomic ground state (3P)
+'82134033' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 12 ;
+          }
+#CH3O2/Methyl peroxy radical
+'82134041' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10001 ;
+          }
+#CH3O2H/Methyl hydroperoxide
+'82134042' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10002 ;
+          }
+#C2H5OOH/Ethyl hydroperoxide
+'82134054' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10012 ;
+          }
+#BENZENE
+'82134070' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10021 ;
+          }
+#TOLUENE
+'82134092' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10022 ;
+          }
+#HCN/Vaetecyanid
+'82134111' = {
+          discipline = 0 ;
+          parameterCategory = 20 ;
+          atmosphericChemicalConsituentType = 10006 ;
+          }
+#Volcanic ash
+'82134128' = {
+          discipline = 0 ;
+          parameterCategory = 19 ;
+          parameterNumber = 4 ;
+          }
+#Aerosol optical thickness at 0.635 micro-m
+'82135180' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 20 ;
+          }
+#Aerosol optical thickness at 0.810 micro-m
+'82135181' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 21 ;
+          }
+#Aerosol optical thickness at 1.640 micro-m
+'82135182' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 22 ;
+          }
+#Angstrom coefficient
+'82135183' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 23 ;
+          }
+#Rain fraction of total cloud water
+'82135208' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 43 ;
+          }
+#Rain factor
+'82135209' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 44 ;
+          }
+#Total column integrated rain
+'82135210' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 45 ;
+          }
+#Total column integrated snow
+'82135211' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 46 ;
+          }
+#Total water precipitation
+'82135212' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 49 ;
+          }
+#Total snow precipitation
+'82135213' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 50 ;
+          }
+#Total column water (Vertically integrated total water)
+'82135214' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 51 ;
+          }
+#Large scale precipitation rate
+'82135215' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 54 ;
+          }
+#Convective snowfall rate water equivalent
+'82135216' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 55 ;
+          }
+#Large scale snowfall rate water equivalent
+'82135217' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 56 ;
+          }
+#Total snowfall rate
+'82135218' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 57 ;
+          }
+#Convective snowfall rate
+'82135219' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 58 ;
+          }
+#Large scale snowfall rate
+'82135220' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 59 ;
+          }
+#Snow depth water equivalent
+'82135221' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 60 ;
+          }
+#Snow evaporation
+'82135222' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 62 ;
+          }
+#Total column integrated water vapour
+'82135223' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 64 ;
+          }
+#Rain precipitation rate
+'82135224' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 65 ;
+          }
+#Snow precipitation rate
+'82135225' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 66 ;
+          }
+#Freezing rain precipitation rate
+'82135226' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 67 ;
+          }
+#Ice pellets precipitation rate
+'82135227' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 68 ;
+          }
+#Specific cloud liquid water content
+'82135228' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 83 ;
+          }
+#Specific cloud ice water content
+'82135229' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 84 ;
+          }
+#Specific rain water content
+'82135230' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 85 ;
+          }
+#Specific snow water content
+'82135231' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 86 ;
+          }
+#u-component of wind (gust)
+'82135232' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 23 ;
+          }
+#v-component of wind (gust)
+'82135233' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 24 ;
+          }
+#Vertical speed shear
+'82135234' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 25 ;
+          }
+#Horizontal momentum flux
+'82135235' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 26 ;
+          }
+#u-component storm motion
+'82135236' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 27 ;
+          }
+#v-component storm motion
+'82135237' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 28 ;
+          }
+#Drag coefficient
+'82135238' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 29 ;
+          }
+#Eta coordinate vertical velocity
+'82135239' = {
+          discipline = 0 ;
+          parameterCategory = 2 ;
+          parameterNumber = 32 ;
+          }
+#Altimeter setting
+'82135240' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 11 ;
+          }
+#Thickness
+'82135241' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 12 ;
+          }
+#Pressure altitude
+'82135242' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 13 ;
+          }
+#Density altitude
+'82135243' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 14 ;
+          }
+#5-wave geopotential height
+'82135244' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 15 ;
+          }
+#Zonal flux of gravity wave stress
+'82135245' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 16 ;
+          }
+#Meridional flux of gravity wave stress
+'82135246' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 17 ;
+          }
+#Planetary boundary layer height
+'82135247' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 18 ;
+          }
+#5-wave geopotential height anomaly
+'82135248' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 19 ;
+          }
+#Standard deviation of sub-gridscale orography
+'82135249' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 20 ;
+          }
+#Angle of sub-gridscale orography
+'82135250' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 21 ;
+          }
+#Slope of sub-gridscale orography
+'82135251' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 22 ;
+          }
+#Gravity wave dissipation
+'82135252' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 23 ;
+          }
+#Anisotropy of sub-gridscale orography
+'82135253' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 24 ;
+          }
+#Natural logarithm of pressure in Pa
+'82135254' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 25 ;
+          }
+#Pressure
+'82136001' = {
+          discipline = 0 ;
+          parameterCategory = 3 ;
+          parameterNumber = 0 ;
+          }
+#Specific humidity
+'82136051' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 0 ;
+          }
+#Precipitable water
+'82136054' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 3 ;
+          }
+#Snow depth
+'82136066' = {
+          discipline = 0 ;
+          parameterCategory = 1 ;
+          parameterNumber = 11 ;
+          }
+#Total cloud cover
+'82136071' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 1 ;
+          }
+#Low cloud cover
+'82136073' = {
+          discipline = 0 ;
+          parameterCategory = 6 ;
+          parameterNumber = 3 ;
+          }
+#Evapotranspiration
+'82136128' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 6 ;
+          }
+#Model terrain height
+'82136129' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 7 ;
+          }
+#Land use
+'82136130' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 8 ;
+          }
+#Volumetric soil moisture content
+'82136131' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 9 ;
+          }
+#Moisture availability
+'82136132' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 11 ;
+          }
+#Exchange coefficient
+'82136133' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 12 ;
+          }
+#Plant canopy surface water
+'82136134' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 13 ;
+          }
+#Blackadar mixing length scale
+'82136135' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 14 ;
+          }
+#Canopy conductance
+'82136136' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 15 ;
+          }
+#Minimal stomatal resistance
+'82136137' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 16 ;
+          }
+#Solar parameter in canopy conductance
+'82136138' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 18 ;
+          }
+#Temperature parameter in canopy conductance
+'82136139' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 19 ;
+          }
+#Humidity parameter in canopy conductance
+'82136140' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 20 ;
+          }
+#Soil moisture parameter in canopy conductance
+'82136141' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 21 ;
+          }
+#Soil moisture
+'82136142' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 22 ;
+          }
+#Column-integrated soil water
+'82136143' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 23 ;
+          }
+#Heat flux
+'82136144' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 24 ;
+          }
+#Volumetric soil moisture
+'82136145' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 25 ;
+          }
+#Wilting point
+'82136146' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 26 ;
+          }
+#Volumetric wilting point
+'82136147' = {
+          discipline = 2 ;
+          parameterCategory = 0 ;
+          parameterNumber = 27 ;
+          }
+#Number of soil layers in root zone
+'82136148' = {
+          discipline = 2 ;
+          parameterCategory = 3 ;
+          parameterNumber = 6 ;
+          }
+#Liquid volumetric soil moisture (non-frozen)
+'82136149' = {
+          discipline = 2 ;
+          parameterCategory = 3 ;
+          parameterNumber = 10 ;
+          }
+#Volumetric transpiration stress-onset (soil moisture)
+'82136150' = {
+          discipline = 2 ;
+          parameterCategory = 3 ;
+          parameterNumber = 11 ;
+          }
+#Transpiration stress-onset (soil moisture)
+'82136151' = {
+          discipline = 2 ;
+          parameterCategory = 3 ;
+          parameterNumber = 12 ;
+          }
+#Volumetric direct evaporation cease (soil moisture)
+'82136152' = {
+          discipline = 2 ;
+          parameterCategory = 3 ;
+          parameterNumber = 13 ;
+          }
+#Direct evaporation cease (soil moisture)
+'82136153' = {
+          discipline = 2 ;
+          parameterCategory = 3 ;
+          parameterNumber = 14 ;
+          }
+#Soil porosity
+'82136154' = {
+          discipline = 2 ;
+          parameterCategory = 3 ;
+          parameterNumber = 15 ;
+          }
+#Volumetric saturation of soil moisture
+'82136155' = {
+          discipline = 2 ;
+          parameterCategory = 3 ;
+          parameterNumber = 16 ;
+          }
+#Saturation of soil moisture
+'82136156' = {
+          discipline = 2 ;
+          parameterCategory = 3 ;
+          parameterNumber = 17 ;
+          }
+#Scaled radiance
+'82136180' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 0 ;
+          }
+#Scaled albedo
+'82136181' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 1 ;
+          }
+#Scaled brightness temperature
+'82136182' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 2 ;
+          }
+#Scaled precipitable water
+'82136183' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 3 ;
+          }
+#Scaled lifted index
+'82136184' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 4 ;
+          }
+#Scaled cloud top pressure
+'82136185' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 5 ;
+          }
+#Scaled skin temperature
+'82136186' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 6 ;
+          }
+#Cloud mask
+'82136187' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 7 ;
+          }
+#Pixel scene type
+'82136188' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 8 ;
+          }
+#Fire detection indicator
+'82136189' = {
+          discipline = 3 ;
+          parameterCategory = 0 ;
+          parameterNumber = 9 ;
+          }
+#Estimated precipitation
+'82136190' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 0 ;
+          }
+#Instananeous rain rate
+'82136191' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 1 ;
+          }
+#Cloud top height
+'82136192' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 2 ;
+          }
+#Cloud top height quality indicator
+'82136193' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 3 ;
+          }
+#Estimated u component of wind
+'82136194' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 4 ;
+          }
+#Estimated v component of wind
+'82136195' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 5 ;
+          }
+#Number of pixel used
+'82136196' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 6 ;
+          }
+#Solar zenith angle
+'82136197' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 7 ;
+          }
+#Relative azimuth angle
+'82136198' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 8 ;
+          }
+#Reflectance in 0.6 micron channel
+'82136199' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 9 ;
+          }
+#Reflectance in 0.8 micron channel
+'82136200' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 10 ;
+          }
+#Reflectance in 1.6 micron channel
+'82136201' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 11 ;
+          }
+#Reflectance in 3.9 micron channel
+'82136202' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 12 ;
+          }
+#Atmospheric divergence
+'82136210' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 13 ;
+          }
+#Wind speed (space)
+'82136211' = {
+          discipline = 3 ;
+          parameterCategory = 1 ;
+          parameterNumber = 19 ;
+          }

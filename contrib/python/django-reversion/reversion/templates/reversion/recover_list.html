@@ -1,0 +1,41 @@
+{% extends "admin/base_site.html" %}
+{% load i18n l10n admin_urls %}
+
+
+{% block breadcrumbs %}
+    <div class="breadcrumbs">
+        <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> &rsaquo;
+        <a href="{% url 'admin:app_list' opts.app_label %}">{{opts.app_config.verbose_name}}</a> &rsaquo;
+        <a href="{% url opts|admin_urlname:'changelist' %}">{{opts.verbose_name_plural|capfirst}}</a> &rsaquo;
+        {% blocktrans with opts.verbose_name_plural|escape as name %}Recover deleted {{name}}{% endblocktrans %}
+    </div>
+{% endblock %}
+
+
+{% block content %}
+    <div id="content-main">
+        <p>{% blocktrans %}Choose a date from the list below to recover a deleted version of an object.{% endblocktrans %}</p>
+        <div class="module">
+            {% if deleted %}
+                <table id="change-history" class="table table-striped table-bordered">
+                    <thead>
+                    <tr>
+                        <th scope="col">{% trans 'Date/time' %}</th>
+                        <th scope="col">{{opts.verbose_name|capfirst}}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                        {% for deletion in deleted %}
+                            <tr>
+                                <th scope="row"><a href="{% url opts|admin_urlname:'recover' deletion.pk|unlocalize %}">{{deletion.revision.date_created}}</a></th>
+                                <td>{{deletion.object_repr}}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>{% trans "There are no deleted objects to recover." %}</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

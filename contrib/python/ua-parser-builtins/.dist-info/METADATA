@@ -1,0 +1,41 @@
+Metadata-Version: 2.4
+Name: ua-parser-builtins
+Version: 202602
+Summary: Precompiled rules for User Agent Parser
+Project-URL: repository, https://github.com/ua-parser/uap-python
+Maintainer-email: masklinn <uap@masklinn.net>
+License: Apache 2.0
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: GraalPy
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+
+# Precompiled ruleset for [ua-parser]
+
+This project does not do anything on its own, nor does it have any
+actual API: it contains the dataset of [uap-core] pre-compiled for use
+by [ua-parser] to decrease
+initialisation times.
+
+The precompiled ruleset is released monthly based on whatever
+[uap-core]'s default branch is at that moment. The [uap-core] commit
+used for creating the compiled ruleset is stored in the `REVISION`
+file at the root of the wheel.
+
+[ua-parser]: https://pypi.org/project/ua-parser/
+[uap-core]: https://github.com/ua-parser/uap-core

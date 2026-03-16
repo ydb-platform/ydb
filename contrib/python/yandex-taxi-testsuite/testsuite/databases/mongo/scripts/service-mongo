@@ -1,0 +1,166 @@
+#!/bin/sh
+
+. "$TESTSUITE_LIB_UTILS"
+
+MONGO=$(choose_binaries_or_die mongo mongosh)
+MONGOD=$(find_binary_or_die mongod)
+MONGOS=$(find_binary_or_die mongos)
+
+MONGO_ARGS="--nounixsocket"
+MONGOS_ARGS=""
+
+if [ "x$MONGOS_PORT" = "x" ]; then
+    die "MONGOS_PORT must be set"
+fi
+if [ "x$CONFIG_SERVER_PORT" = "x" ]; then
+    die "CONFIG_SERVER_PORT must be set"
+fi
+if [ "x$SHARD_PORT" = "x" ]; then
+    die "SHARD_PORT must be set"
+fi
+if [ "x$MONGO_IPV4_ONLY" = "x" ]; then
+    MONGO_ARGS="$MONGO_ARGS --ipv6"
+fi
+if [ "$MONGO_BIND_IP_ALL" = "1" ]; then
+    MONGOS_ARGS="$MONGOS_ARGS --bind_ip_all"
+fi
+if [ "x$MONGO_RS_INSTANCE_COUNT" = "x" ]; then
+    MONGO_RS_INSTANCE_COUNT=1
+fi
+
+MONGO_RS_INSTANCE_INDEXES=`seq $MONGO_RS_INSTANCE_COUNT`
+
+# Use ramdisk for mongo if available
+RAMDISK=/mnt/ramdisk/$USER
+if mkdir -p $RAMDISK 2> /dev/null; then
+    MONGO_TMPDIR=$RAMDISK/_mongo${WORKER_SUFFIX_PATH}
+fi
+
+if [ "x$MONGO_TMPDIR" = "x" ]; then
+    die "MONGO_TMPDIR must be set or RAM-disk must be enabled"
+fi
+
+MONGO_SHARD_BASE_DIR=$MONGO_TMPDIR/taxi-shrd0-
+MONGOS_DIR=$MONGO_TMPDIR/taxi-mongos
+CONFIG_SERVER_DIR=$MONGO_TMPDIR/taxi-cfg
+
+MONGOS_PID_FILE="$(get_pidfile taxi-mongos/mongos)"
+CONFIG_SERVER_PID_FILE="$(get_pidfile taxi-cfg/mongo-cfg)"
+
+MONGOD_CONFIG_SERVER_LOG_FILE=$CONFIG_SERVER_DIR/mongo-cfg.log
+MONGOD_CONFIG_SERVER_ARGS="$MONGO_ARGS --configsvr --port $CONFIG_SERVER_PORT
+            --replSet crs0 --dbpath $CONFIG_SERVER_DIR
+            --pidfilepath $CONFIG_SERVER_PID_FILE
+            --logpath $MONGOD_CONFIG_SERVER_LOG_FILE"
+
+
+MONGOS_LOG_FILE=$MONGOS_DIR/mongos.log
+MONGOS_ARGS="$MONGO_ARGS --configdb crs0/localhost:$CONFIG_SERVER_PORT
+            --port $MONGOS_PORT
+            --pidfilepath $MONGOS_PID_FILE
+            --logpath $MONGOS_LOG_FILE $MONGOS_ARGS"
+
+
+start_sharded_cluster() {
+    for INSTANCE_INDEX in $MONGO_RS_INSTANCE_INDEXES; do
+        mkdir -p "$MONGO_SHARD_BASE_DIR$INSTANCE_INDEX"
+    done
+
+    mkdir -p "$MONGOS_DIR"
+    mkdir -p "$CONFIG_SERVER_DIR"
+
+    echo "Mongo data directory: $MONGO_TMPDIR"
+
+    echo "Starting sharded cluster's config server at $CONFIG_SERVER_DIR..."
+    nohup $MONGOD $MONGOD_CONFIG_SERVER_ARGS > /dev/null || {
+        dump_log_stderr "$MONGOD_CONFIG_SERVER_LOG_FILE"
+        exit 1
+    } &
+
+    sleep 1
+
+    echo "Initiating config server replica set..."
+    for i in $(seq 1 10); do
+        if ($MONGO --port $CONFIG_SERVER_PORT --eval 'rs.initiate({_id: "crs0", configsvr: true, members: [{_id: 0, host: "localhost:'"$CONFIG_SERVER_PORT"'"}]})'); then
+            break
+        fi
+
+        echo "retry config server replica set"
+        sleep 1
+    done
+
+    INSTANCES_LIST=""
+    for INSTANCE_INDEX in $MONGO_RS_INSTANCE_INDEXES; do
+        echo "Starting shard instance at $MONGO_SHARD_BASE_DIR$INSTANCE_INDEX..."
+
+        MONGOD_RS_INSTANCE_SERVER_LOG_FILE=$MONGO_SHARD_BASE_DIR$INSTANCE_INDEX/mongod-shrd.log
+
+        CURRENT_RS_INSTANCE_PORT=`expr $SHARD_PORT + $INSTANCE_INDEX - 1`
+
+        MONGO_RS_INSTANCE_PID_FILE="$(get_pidfile taxi-shrd0-$INSTANCE_INDEX/mongo-shard)"
+
+        MONGOD_RS_INSTANCE_SERVER_ARGS="$MONGO_ARGS --shardsvr
+            --replSet rs0
+            --port $CURRENT_RS_INSTANCE_PORT
+            --dbpath $MONGO_SHARD_BASE_DIR$INSTANCE_INDEX
+            --pidfilepath $MONGO_RS_INSTANCE_PID_FILE
+            --logpath $MONGOD_RS_INSTANCE_SERVER_LOG_FILE"
+
+        nohup $MONGOD $MONGOD_RS_INSTANCE_SERVER_ARGS > /dev/null || {
+            dump_log_stderr "$MONGOD_RS_INSTANCE_SERVER_LOG_FILE"
+            exit 1
+        } &
+
+        if [ "x$INSTANCES_LIST" = "x" ]; then
+            INSTANCES_LIST='{_id: '"$INSTANCE_INDEX"', host: "localhost:'"$CURRENT_RS_INSTANCE_PORT"'"}'
+        else
+            INSTANCES_LIST="$INSTANCES_LIST"',{_id: '"$INSTANCE_INDEX"', host: "localhost:'"$CURRENT_RS_INSTANCE_PORT"'"}'
+        fi
+    done
+
+    echo "Initiating shard0 replica set with members $INSTANCES_LIST..."
+    for i in $(seq 1 10); do
+        if ($MONGO --port $SHARD_PORT --eval 'rs.initiate({_id: "rs0", members: ['"$INSTANCES_LIST"']})'); then
+            break
+        fi
+
+        echo "retry shard0 replica set"
+        sleep 1
+    done
+
+    echo "Starting mongos..."
+    nohup $MONGOS $MONGOS_ARGS > /dev/null || {
+        dump_log_stderr "$MONGOS_LOG_FILE"
+        exit 1
+    } &
+
+    echo "Adding shard0..."
+
+    for i in $(seq 1 10); do
+        if ($MONGO --port $MONGOS_PORT --eval 'sh.addShard("rs0/localhost:'"$SHARD_PORT"'")'); then
+            break
+        fi
+
+        echo "retry adding shard0"
+        sleep 1
+    done
+}
+
+start() {
+    (ulimit_files && start_sharded_cluster)
+}
+
+stop() {
+    stop_daemon $MONGOD "$CONFIG_SERVER_PID_FILE"
+
+    for INSTANCE_INDEX in $MONGO_RS_INSTANCE_INDEXES; do
+        MONGO_RS_INSTANCE_PID_FILE="$(get_pidfile taxi-shrd0-$INSTANCE_INDEX/mongo-shard)"
+        stop_daemon $MONGOD "$MONGO_RS_INSTANCE_PID_FILE"
+    done
+
+    stop_daemon $MONGOS "$MONGOS_PID_FILE"
+    rm -rf "$MONGO_TMPDIR"
+}
+
+script_main "$@"
+

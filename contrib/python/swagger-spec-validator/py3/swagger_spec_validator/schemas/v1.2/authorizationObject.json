@@ -1,0 +1,95 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "additionalProperties": {
+        "oneOf": [
+            {
+                "$ref": "#/definitions/basicAuth"
+            },
+            {
+                "$ref": "#/definitions/apiKey"
+            },
+            {
+                "$ref": "#/definitions/oauth2"
+            }
+        ]
+    },
+    "definitions": {
+        "apiKey": {
+            "additionalProperties": false,
+            "properties": {
+                "keyname": {
+                    "type": "string"
+                },
+                "passAs": {
+                    "enum": [
+                        "header",
+                        "query"
+                    ]
+                },
+                "type": {
+                    "enum": [
+                        "apiKey"
+                    ]
+                }
+            },
+            "required": [
+                "type",
+                "passAs",
+                "keyname"
+            ]
+        },
+        "basicAuth": {
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "enum": [
+                        "basicAuth"
+                    ]
+                }
+            },
+            "required": [
+                "type"
+            ]
+        },
+        "oauth2": {
+            "additionalProperties": false,
+            "properties": {
+                "grantTypes": {
+                    "$ref": "oauth2GrantType.json#"
+                },
+                "scopes": {
+                    "items": {
+                        "$ref": "#/definitions/oauth2Scope"
+                    },
+                    "type": "array"
+                },
+                "type": {
+                    "enum": [
+                        "oauth2"
+                    ]
+                }
+            },
+            "required": [
+                "type",
+                "grantTypes"
+            ],
+            "type": "object"
+        },
+        "oauth2Scope": {
+            "additionalProperties": false,
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "scope"
+            ],
+            "type": "object"
+        }
+    },
+    "type": "object"
+}

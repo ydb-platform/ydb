@@ -1,0 +1,28 @@
+From c6717c40560cd8e675fc1dda2ab5461295657d07 Mon Sep 17 00:00:00 2001
+From: Dmitry Ustalov <dmitry.ustalov@gmail.com>
+Date: Mon, 13 Oct 2025 13:22:58 +0200
+Subject: [PATCH] Inherit from BaseEstimator
+
+---
+ crowdkit/aggregation/base/__init__.py | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/crowdkit/aggregation/base/__init__.py b/crowdkit/aggregation/base/__init__.py
+index 5b7b86ae..10004b91 100644
+--- a/crowdkit/aggregation/base/__init__.py
++++ b/crowdkit/aggregation/base/__init__.py
+@@ -10,12 +10,13 @@
+ 
+ import attr
+ import pandas as pd
++from sklearn.base import BaseEstimator
+ 
+ from ..utils import named_series_attrib
+ 
+ 
+ @attr.s
+-class BaseClassificationAggregator:
++class BaseClassificationAggregator(BaseEstimator):  # type: ignore[misc]
+     """This is a base class for all classification aggregators
+ 
+     Attributes:

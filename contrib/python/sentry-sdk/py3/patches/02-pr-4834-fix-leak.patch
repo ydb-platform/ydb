@@ -1,0 +1,42 @@
+From d24da87d318813c469328b213b36727ba4c0dbe3 Mon Sep 17 00:00:00 2001
+From: Neel Shah <neel.shah@sentry.io>
+Date: Mon, 22 Sep 2025 11:33:54 +0200
+Subject: [PATCH] Try simpler dedupe logic
+
+---
+ sentry_sdk/integrations/dedupe.py | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/sentry_sdk/integrations/dedupe.py b/sentry_sdk/integrations/dedupe.py
+index eab2764fcd..99ac6ce164 100644
+--- a/sentry_sdk/integrations/dedupe.py
++++ b/sentry_sdk/integrations/dedupe.py
+@@ -1,3 +1,5 @@
++import weakref
++
+ from sentry_sdk.hub import Hub
+ from sentry_sdk.utils import ContextVar
+ from sentry_sdk.integrations import Integration
+@@ -36,8 +38,20 @@ class DedupeIntegration(Integration):
+             if exc_info is None:
+                 return event
+
++            last_seen = integration._last_seen.get(None)
++            if last_seen is not None:
++                # last_seen is either a weakref or the original instance
++                last_seen = (
++                    last_seen() if isinstance(last_seen, weakref.ref) else last_seen
++                )
++
+             exc = exc_info[1]
+-            if integration._last_seen.get(None) is exc:
++            if last_seen is exc:
+                 return None
+-            integration._last_seen.set(exc)
++            # we can only weakref non builtin types
++            try:
++                integration._last_seen.set(weakref.ref(exc))
++            except TypeError:
++                integration._last_seen.set(exc)
++
+             return event

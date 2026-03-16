@@ -1,0 +1,90 @@
+                              IDAS
+                     Release 3.1.0, Feb 2019
+                           Radu Serban 
+           Center for Applied Scientific Computing, LLNL
+
+
+IDAS is a package for the solution of differential-algebraic equation (DAE) 
+systems with sensitivity analysis capabilities (both forward and adjoint modes). 
+It is written in ANSI standard C.
+
+IDAS can be used both on serial and parallel computers.  The main
+difference is in the NVECTOR module of vector kernels.  The desired
+version is obtained when compiling the example files by linking the
+appropriate library of NVECTOR kernels.  In the parallel versions,
+communication between processors is done with MPI, with OpenMP, 
+or with Pthreads.
+
+When used with the serial NVECTOR module, IDAS provides both direct 
+(dense and band) linear solvers and preconditioned Krylov (iterative) 
+linear solvers. Three different iterative solvers are available: scaled 
+preconditioned GMRES (SPGMR), scaled preconditioned BiCGStab (SPBCG), and 
+scaled preconditioned TFQMR (SPTFQMR). When IDAS is used with the parallel 
+NVECTOR module, only the Krylov linear solvers are available.  For the 
+latter case, in addition to the basic solver, the IDA package also contains 
+a preconditioner module called IDABBDPRE, which provides a band-block-diagonal 
+preconditioner.
+
+IDAS is part of a software family called SUNDIALS: SUite of Nonlinear and 
+DIfferential/ALgebraic equation Solvers [3].  This suite consists of CVODE, 
+CVODES, ARkode, IDA, IDAS, and KINSOL.  The directory structure of the 
+package supplied reflects this family relationship.
+
+Several examples problem programs are included, covering both serial
+and parallel cases, both small and large problem sizes, and both
+linear and nonlinear problems.
+
+The notes below provide the location of documentation, directions for the 
+installation of the IDAS package, and relevant references. Following that 
+is a brief history of revisions to the package.
+
+
+A. Documentation
+----------------
+
+/sundials/doc/idas/ contains PDF files for the IDAS User Guide [1] (idas_guide.pdf)
+and the IDAS Examples [2] (idas_examples.pdf) documents.
+
+
+B. Installation
+---------------
+
+For basic installation instructions see the file /sundials/INSTALL_GUIDE.pdf. 
+For complete installation instructions see the "Installation Procedure"
+chapter in the IDAS User Guide.
+
+
+C. References
+-------------
+
+[1] R. Serban, C. Petra,and A. C. Hindmarsh,  "User Documentation for IDAS v1.3.0," 
+    LLNL technical report UCRL-SM-234051, March 2016.
+
+[2] R. Serban and A.C. Hindmarsh, "Example Programs for IDAS v1.3.0," 
+    LLNL technical report LLNL-TR-437091, March 2016.
+
+[3] A. C. Hindmarsh, P. N. Brown, K. E. Grant, S. L. Lee, R. Serban, 
+    D. E. Shumaker, and C. S. Woodward, "SUNDIALS, Suite of Nonlinear and 
+    Differential/Algebraic Equation Solvers," ACM Trans. Math. Softw., 
+    31(3), pp. 363-396, 2005.
+
+
+D. Releases
+-----------
+
+v. 3.1.0       - Feb. 2019
+v. 3.0.2       - Jan. 2019
+v. 3.0.1       - Dec. 2018
+v. 3.0.0       - Dec. 2018
+v. 2.2.1       - Oct. 2018
+v. 2.2.0       - Sep. 2018
+v. 2.1.2       - Jul. 2018
+v. 2.1.1       - May  2018
+v. 2.1.0       - Nov. 2017
+v. 2.0.0       - Sep. 2017
+v. 1.3.0       - Sep. 2016
+v. 1.2.2       - Aug. 2015
+v. 1.2.1       - Mar. 2015
+v. 1.2.0       - Mar. 2015
+v. 1.1.0       - Mar. 2012
+v. 1.0.0       - May  2009

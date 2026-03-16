@@ -1,0 +1,103 @@
+--- contrib/python/starlette/starlette/responses.py	(index)
++++ contrib/python/starlette/starlette/responses.py	(working tree)
+@@ -11,6 +11,7 @@ from email.utils import format_datetime, formatdate
+ from secrets import token_hex
+ from typing import Any, Literal
+ from urllib.parse import quote
++import library.python.resource
+ 
+ import anyio
+ import anyio.to_thread
+@@ -322,7 +323,8 @@ class FileResponse(Response):
+         send_header_only: bool = scope["method"].upper() == "HEAD"
+         send_pathsend: bool = "http.response.pathsend" in scope.get("extensions", {})
+ 
+-        if self.stat_result is None:
++        binary_data = library.python.resource.find(self.path)
++        if self.stat_result is None and not binary_data:
+             try:
+                 stat_result = await anyio.to_thread.run_sync(os.stat, self.path)
+                 self.set_stat_headers(stat_result)
+@@ -344,6 +346,15 @@ class FileResponse(Response):
+-            async with await anyio.open_file(self.path, mode="rb") as file:
+-                more_body = True
+-                while more_body:
+-                    chunk = await file.read(self.chunk_size)
+-                    more_body = len(chunk) == self.chunk_size
+-                    await send({"type": "http.response.body", "body": chunk, "more_body": more_body})
++            if binary_data:
++                await send(
++                    {
++                        "type": "http.response.body",
++                        "body": binary_data,
++                        "more_body": False,
++                    }
++                )
++            else:
++                async with await anyio.open_file(self.path, mode="rb") as file:
++                    more_body = True
++                    while more_body:
++                        chunk = await file.read(self.chunk_size)
++                        more_body = len(chunk) == self.chunk_size
++                        await send({"type": "http.response.body", "body": chunk, "more_body": more_body})
+--- contrib/python/starlette/starlette/staticfiles.py	(index)
++++ contrib/python/starlette/starlette/staticfiles.py	(working tree)
+@@ -5,6 +5,7 @@ import os
+ import stat
+ from email.utils import parsedate
+ from typing import Union
++import library.python.resource
+ 
+ import anyio
+ import anyio.to_thread
+@@ -55,8 +56,6 @@ class StaticFiles:
+         self.html = html
+         self.config_checked = False
+         self.follow_symlink = follow_symlink
+-        if check_dir and directory is not None and not os.path.isdir(directory):
+-            raise RuntimeError(f"Directory '{directory}' does not exist")
+ 
+     def get_directories(
+         self,
+@@ -95,10 +94,6 @@ class StaticFiles:
+         """
+         assert scope["type"] == "http"
+ 
+-        if not self.config_checked:
+-            await self.check_config()
+-            self.config_checked = True
+-
+         path = self.get_path(scope)
+         response = await self.get_response(path, scope)
+         await response(scope, receive, send)
+@@ -127,6 +122,10 @@ class StaticFiles:
+                 raise HTTPException(status_code=404)
+             raise exc
+ 
++        resource_path = f'resfs/file/{self.directory}/{path}'
++        if library.python.resource.find(resource_path):
++            return FileResponse(resource_path, stat_result=stat_result)
++
+         if stat_result and stat.S_ISREG(stat_result.st_mode):
+             # We have a static file to serve.
+             return self.file_response(full_path, stat_result, scope)
+--- contrib/python/starlette/starlette/responses.py	(index)
++++ contrib/python/starlette/starlette/responses.py	(working tree)
+@@ -347,7 +347,7 @@ class FileResponse(Response):
+         http_if_range = headers.get("if-range")
+ 
+         if http_range is None or (http_if_range is not None and not self._should_use_range(http_if_range)):
+-            await self._handle_simple(send, send_header_only, send_pathsend)
++            await self._handle_simple(send, send_header_only, send_pathsend, binary_data)
+         else:
+             try:
+                 ranges = self._parse_range_header(http_range, stat_result.st_size)
+@@ -366,7 +366,7 @@ class FileResponse(Response):
+         if self.background is not None:
+             await self.background()
+ 
+-    async def _handle_simple(self, send: Send, send_header_only: bool, send_pathsend: bool) -> None:
++    async def _handle_simple(self, send: Send, send_header_only: bool, send_pathsend: bool, binary_data: bytes | None) -> None:
+         await send({"type": "http.response.start", "status": self.status_code, "headers": self.raw_headers})
+         if send_header_only:
+             await send({"type": "http.response.body", "body": b"", "more_body": False})

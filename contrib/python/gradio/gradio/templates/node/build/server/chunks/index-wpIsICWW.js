@@ -1,0 +1,219 @@
+/** @import { StandardSchemaV1 } from '@standard-schema/spec' */
+
+class HttpError {
+	/**
+	 * @param {number} status
+	 * @param {{message: string} extends App.Error ? (App.Error | string | undefined) : App.Error} body
+	 */
+	constructor(status, body) {
+		this.status = status;
+		if (typeof body === 'string') {
+			this.body = { message: body };
+		} else if (body) {
+			this.body = body;
+		} else {
+			this.body = { message: `Error: ${status}` };
+		}
+	}
+
+	toString() {
+		return JSON.stringify(this.body);
+	}
+}
+
+class Redirect {
+	/**
+	 * @param {300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308} status
+	 * @param {string} location
+	 */
+	constructor(status, location) {
+		this.status = status;
+		this.location = location;
+	}
+}
+
+/**
+ * An error that was thrown from within the SvelteKit runtime that is not fatal and doesn't result in a 500, such as a 404.
+ * `SvelteKitError` goes through `handleError`.
+ * @extends Error
+ */
+class SvelteKitError extends Error {
+	/**
+	 * @param {number} status
+	 * @param {string} text
+	 * @param {string} message
+	 */
+	constructor(status, text, message) {
+		super(message);
+		this.status = status;
+		this.text = text;
+	}
+}
+
+/**
+ * @template [T=undefined]
+ */
+class ActionFailure {
+	/**
+	 * @param {number} status
+	 * @param {T} data
+	 */
+	constructor(status, data) {
+		this.status = status;
+		this.data = data;
+	}
+}
+
+const text_encoder = new TextEncoder();
+new TextDecoder();
+
+/** @import { StandardSchemaV1 } from '@standard-schema/spec' */
+
+
+// TODO 3.0: remove these types as they are not used anymore (we can't remove them yet because that would be a breaking change)
+/**
+ * @template {number} TNumber
+ * @template {any[]} [TArray=[]]
+ * @typedef {TNumber extends TArray['length'] ? TArray[number] : LessThan<TNumber, [...TArray, TArray['length']]>} LessThan
+ */
+
+/**
+ * @template {number} TStart
+ * @template {number} TEnd
+ * @typedef {Exclude<TEnd | LessThan<TEnd>, LessThan<TStart>>} NumericRange
+ */
+
+// Keep the status codes as `number` because restricting to certain numbers makes it unnecessarily hard to use compared to the benefits
+// (we have runtime errors already to check for invalid codes). Also see https://github.com/sveltejs/kit/issues/11780
+
+// we have to repeat the JSDoc because the display for function overloads is broken
+// see https://github.com/microsoft/TypeScript/issues/55056
+
+/**
+ * Throws an error with a HTTP status code and an optional message.
+ * When called during request handling, this will cause SvelteKit to
+ * return an error response without invoking `handleError`.
+ * Make sure you're not catching the thrown error, which would prevent SvelteKit from handling it.
+ * @param {number} status The [HTTP status code](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status#client_error_responses). Must be in the range 400-599.
+ * @param {App.Error} body An object that conforms to the App.Error type. If a string is passed, it will be used as the message property.
+ * @overload
+ * @param {number} status
+ * @param {App.Error} body
+ * @return {never}
+ * @throws {HttpError} This error instructs SvelteKit to initiate HTTP error handling.
+ * @throws {Error} If the provided status is invalid (not between 400 and 599).
+ */
+/**
+ * Throws an error with a HTTP status code and an optional message.
+ * When called during request handling, this will cause SvelteKit to
+ * return an error response without invoking `handleError`.
+ * Make sure you're not catching the thrown error, which would prevent SvelteKit from handling it.
+ * @param {number} status The [HTTP status code](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status#client_error_responses). Must be in the range 400-599.
+ * @param {{ message: string } extends App.Error ? App.Error | string | undefined : never} [body] An object that conforms to the App.Error type. If a string is passed, it will be used as the message property.
+ * @overload
+ * @param {number} status
+ * @param {{ message: string } extends App.Error ? App.Error | string | undefined : never} [body]
+ * @return {never}
+ * @throws {HttpError} This error instructs SvelteKit to initiate HTTP error handling.
+ * @throws {Error} If the provided status is invalid (not between 400 and 599).
+ */
+/**
+ * Throws an error with a HTTP status code and an optional message.
+ * When called during request handling, this will cause SvelteKit to
+ * return an error response without invoking `handleError`.
+ * Make sure you're not catching the thrown error, which would prevent SvelteKit from handling it.
+ * @param {number} status The [HTTP status code](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status#client_error_responses). Must be in the range 400-599.
+ * @param {{ message: string } extends App.Error ? App.Error | string | undefined : never} body An object that conforms to the App.Error type. If a string is passed, it will be used as the message property.
+ * @return {never}
+ * @throws {HttpError} This error instructs SvelteKit to initiate HTTP error handling.
+ * @throws {Error} If the provided status is invalid (not between 400 and 599).
+ */
+function error(status, body) {
+	if ((isNaN(status) || status < 400 || status > 599)) {
+		throw new Error(`HTTP error status codes must be between 400 and 599 — ${status} is invalid`);
+	}
+
+	throw new HttpError(status, body);
+}
+
+/**
+ * Redirect a request. When called during request handling, SvelteKit will return a redirect response.
+ * Make sure you're not catching the thrown redirect, which would prevent SvelteKit from handling it.
+ *
+ * Most common status codes:
+ *  * `303 See Other`: redirect as a GET request (often used after a form POST request)
+ *  * `307 Temporary Redirect`: redirect will keep the request method
+ *  * `308 Permanent Redirect`: redirect will keep the request method, SEO will be transferred to the new page
+ *
+ * [See all redirect status codes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status#redirection_messages)
+ *
+ * @param {300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308 | ({} & number)} status The [HTTP status code](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status#redirection_messages). Must be in the range 300-308.
+ * @param {string | URL} location The location to redirect to.
+ * @throws {Redirect} This error instructs SvelteKit to redirect to the specified location.
+ * @throws {Error} If the provided status is invalid.
+ * @return {never}
+ */
+function redirect(status, location) {
+	if ((isNaN(status) || status < 300 || status > 308)) {
+		throw new Error('Invalid status code');
+	}
+
+	throw new Redirect(
+		// @ts-ignore
+		status,
+		location.toString()
+	);
+}
+
+/**
+ * Create a JSON `Response` object from the supplied data.
+ * @param {any} data The value that will be serialized as JSON.
+ * @param {ResponseInit} [init] Options such as `status` and `headers` that will be added to the response. `Content-Type: application/json` and `Content-Length` headers will be added automatically.
+ */
+function json(data, init) {
+	// TODO deprecate this in favour of `Response.json` when it's
+	// more widely supported
+	const body = JSON.stringify(data);
+
+	// we can't just do `text(JSON.stringify(data), init)` because
+	// it will set a default `content-type` header. duplicated code
+	// means less duplicated work
+	const headers = new Headers(init?.headers);
+	if (!headers.has('content-length')) {
+		headers.set('content-length', text_encoder.encode(body).byteLength.toString());
+	}
+
+	if (!headers.has('content-type')) {
+		headers.set('content-type', 'application/json');
+	}
+
+	return new Response(body, {
+		...init,
+		headers
+	});
+}
+
+/**
+ * Create a `Response` object from the supplied body.
+ * @param {string} body The value that will be used as-is.
+ * @param {ResponseInit} [init] Options such as `status` and `headers` that will be added to the response. A `Content-Length` header will be added automatically.
+ */
+function text(body, init) {
+	const headers = new Headers(init?.headers);
+	if (!headers.has('content-length')) {
+		const encoded = text_encoder.encode(body);
+		headers.set('content-length', encoded.byteLength.toString());
+		return new Response(encoded, {
+			...init,
+			headers
+		});
+	}
+
+	return new Response(body, {
+		...init,
+		headers
+	});
+}
+
+export { ActionFailure as A, HttpError as H, Redirect as R, SvelteKitError as S, error as e, json as j, redirect as r, text as t };
+//# sourceMappingURL=index-wpIsICWW.js.map

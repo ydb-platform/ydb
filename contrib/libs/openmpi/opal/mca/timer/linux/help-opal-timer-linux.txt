@@ -1,0 +1,17 @@
+# -*- text -*-
+#
+# Copyright (c) 2014      The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI's Linux timer support.
+#
+[monotonic not supported]
+A monotonic timer has been requested by the user, but could not be found on the
+system. Falling back to a non-monotonic timer (such as RDTSC).
+

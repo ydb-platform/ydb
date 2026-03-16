@@ -1,0 +1,34 @@
+fix ResourceWarning related to subprocesses
+
+Python issue #26741: BaseSubprocessTransport._process_exited() now
+copies the return code from the child watched to the returncode
+attribute of the Popen object. On Python 3.6, it is required to avoid
+a ResourceWarning.
+
+# Veuillez saisir le message de validation pour vos modifications. Les lignes
+# commençant par '#' seront ignorées, et un message vide abandonne la validation.
+# Sur la branche master
+# Votre branche est à jour avec 'origin/master'.
+#
+# Modifications qui seront validées :
+#	modifié :         asyncio/base_subprocess.py
+#
+# Fichiers non suivis non affichés
+# ------------------------ >8 ------------------------
+# Ne touchez pas à la ligne ci-dessus
+# Tout se qui suit sera éliminé.
+diff --git a/asyncio/base_subprocess.py b/asyncio/base_subprocess.py
+index 08080bd..8fc253c 100644
+--- a/asyncio/base_subprocess.py
++++ b/asyncio/base_subprocess.py
+@@ -210,6 +210,10 @@ def _process_exited(self, returncode):
+             logger.info('%r exited with return code %r',
+                         self, returncode)
+         self._returncode = returncode
++        if self._proc.returncode is None:
++            # asyncio uses a child watcher: copy the status into the Popen
++            # object. On Python 3.6, it is required to avoid a ResourceWarning.
++            self._proc.returncode = returncode
+         self._call(self._protocol.process_exited)
+         self._try_finish()
+

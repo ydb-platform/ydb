@@ -1,0 +1,31 @@
+#!Description				Octet		Code		Ksec1		Count
+#!-----------				-----	   	-----		-----		-----
+#!
+#class					    42		    I1		    38		    -
+#type					    43		    I1		    39		    -
+#stream					    44-45	    I2		    40		    -
+#experimentVersionNumber		    46-49	    A4		    41		    -
+#number					    50		    I1		    42		    -
+#total					    51		    I1		    43		    -
+#model   				    52		    I1		    44		    -
+#########################
+#
+# author: Sebastien Villaume
+# created: 6 Oct 2011
+# modified: 13 May 2013
+
+#
+# This piece of definition is common to all SMHI definitions
+# It is only accessed through "include" statement inside local.82.x.def
+#
+codetable[1]	marsClass	"mars/eswi/class.table"	    : dump,lowercase;
+codetable[1]	marsType	"mars/eswi/type.table"	    : dump,lowercase,string_type;
+codetable[2]	marsStream	"mars/eswi/stream.table"    : dump,lowercase,string_type;
+ksec1expver[4]	experimentVersionNumber	= "0000"            : dump;
+# For now, Ensemble stuff is desactivated because it is not used yet
+# instead we use a padding of 2
+#unsigned[1]	perturbationNumber                          : dump;
+#unsigned[1]	numberOfForecastsInEnsemble                 : dump;
+pad reservedNeedNotBePresent(2);
+codetable[1]	marsModel	"mars/eswi/model.table"	    : dump,lowercase,string_type;
+

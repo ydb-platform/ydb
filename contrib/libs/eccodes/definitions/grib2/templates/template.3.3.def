@@ -1,0 +1,9 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.3, Stretched and Rotated Latitude/longitude (or equidistant cylindrical, or Plate Carree)
+
+include "grib2/templates/template.3.shape_of_the_earth.def"
+include "grib2/templates/template.3.latlon.def"
+include "grib2/templates/template.3.rotation.def"
+include "grib2/templates/template.3.stretching.def"
+

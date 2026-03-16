@@ -1,0 +1,129 @@
+Metadata-Version: 2.4
+Name: stamina
+Version: 25.2.0
+Summary: Production-grade retries made easy.
+Project-URL: Documentation, https://stamina.hynek.me/
+Project-URL: GitHub, https://github.com/hynek/stamina
+Project-URL: Changelog, https://github.com/hynek/stamina/blob/main/CHANGELOG.md
+Project-URL: Funding, https://github.com/sponsors/hynek
+Project-URL: Mastodon, https://mastodon.social/@hynek
+Project-URL: Bluesky, https://bsky.app/profile/hynek.me
+Project-URL: Twitter, https://twitter.com/hynek
+Author-email: Hynek Schlawack <hs@ox.cx>
+License-Expression: MIT
+License-File: LICENSE
+Keywords: reliability,retries,retry
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: AsyncIO
+Classifier: Framework :: Trio
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Typing :: Typed
+Requires-Python: >=3.10
+Requires-Dist: tenacity
+Requires-Dist: typing-extensions; python_version < '3.10'
+Description-Content-Type: text/markdown
+
+# *stamina*: Production-grade Retries Made Easy
+
+Transient failures are common in distributed systems.
+To make your systems resilient, you need to **retry** failed operations.
+But bad retries can make things *much worse*.
+
+*stamina* is an opinionated wrapper around the great-but-unopinionated [Tenacity](https://tenacity.readthedocs.io/) package.
+Our goal is to be as **ergonomic** as possible, while doing the **right thing by default**, and minimizing the potential for **misuse**.
+It is the result of years of copy-pasting the same configuration over and over again:
+
+- Retry only on certain exceptions – or even a subset of them by introspecting them first using a backoff hook.
+- Exponential **backoff** with **jitter** between retries.
+- Limit the number of retries **and** total time.
+- Automatic **async** support – including [Trio](https://trio.readthedocs.io/).
+- Preserve **type hints** of the decorated callable.
+- Flexible **instrumentation** with [Prometheus](https://github.com/prometheus/client_python), [*structlog*](https://www.structlog.org/), and standard library's `logging` support out-of-the-box.
+- Dedicated support for **testing** that allows to _globally_ deactivate retries, or to limit the number of retries and to remove backoffs.
+
+For example:
+
+```python
+import httpx
+
+import stamina
+
+
+@stamina.retry(on=httpx.HTTPError, attempts=3)
+def do_it(code: int) -> httpx.Response:
+    resp = httpx.get(f"https://httpbin.org/status/{code}")
+    resp.raise_for_status()
+
+    return resp
+```
+
+<!-- end docs index -->
+
+**Async** callables work use the same API and it's possible to retry **arbitrary blocks**, too.
+Check out our [tutorial](https://stamina.hynek.me/en/latest/tutorial.html) for more examples!
+
+Or, if you prefer video, here's a brief introduction into retries and *stamina*:
+[![Watch the video](https://img.youtube.com/vi/BxikFuvaT1Y/maxresdefault.jpg)](https://youtu.be/BxikFuvaT1Y)
+
+
+
+## Release Information
+
+### Removed
+
+- Support for Python 3.8 and 3.9.
+
+
+### Added
+
+- The type hints for our public API are now also verified using [Pyrefly](https://pyrefly.org/) and [*ty*](https://docs.astral.sh/ty/).
+  [#124](https://github.com/hynek/stamina/pull/124)
+
+- `stamina.retry()` now retries wrapped generator functions and async generator functions.
+
+  **Warning**: Being able to `asend` and `athrow` into wrapped async generators introduced nontrivial complexity in the implementation and is therefore **provisional**.
+  If supporting these features causes problems, they may be removed again in a future version.
+  [#123](https://github.com/hynek/stamina/pull/123)
+
+- An *on* hook can now return a float or a `datetime.timedelta` to specify a custom backoff that overrides the default backoff.
+  [#103](https://github.com/hynek/stamina/discussions/103)
+  [#125](https://github.com/hynek/stamina/pull/125)
+
+
+### Fixed
+
+- Prevent unbounded stop condition when both *attempts* and *timeout* are non-`None` falsy values.
+  [#109](https://github.com/hynek/stamina/pull/109)
+
+- Default `wait_exp_base` parameter is now an integer to prevent an `OverflowError` after the 1023th retry.
+  [#104](https://github.com/hynek/stamina/pull/104)
+
+- `Attempt.next_wait` now returns the correct value.
+  [#115](https://github.com/hynek/stamina/pull/115)
+
+
+---
+
+[Full Changelog →](https://github.com/hynek/stamina/blob/main/CHANGELOG.md)
+
+
+## Credits
+
+*stamina* is written by [Hynek Schlawack](https://hynek.me/) and distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
+
+The development is kindly supported by my employer [Variomedia AG](https://www.variomedia.de/) and all my amazing [GitHub Sponsors](https://github.com/sponsors/hynek).
+
+This project would not be possible without the years of incredible work that went into [Tenacity](https://tenacity.readthedocs.io/).
+
+
+## *stamina* for Enterprise
+
+Available as part of the [Tidelift Subscription](https://tidelift.com/?utm_source=lifter&utm_medium=referral&utm_campaign=hynek).
+
+The maintainers of *stamina* and thousands of other packages are working with Tidelift to deliver commercial support and maintenance for the open-source packages you use to build your applications.
+Save time, reduce risk, and improve code health, while paying the maintainers of the exact packages you use.

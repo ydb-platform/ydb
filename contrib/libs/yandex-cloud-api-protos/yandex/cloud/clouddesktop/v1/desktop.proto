@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package yandex.cloud.clouddesktop.v1.api;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/clouddesktop/v1;clouddesktop";
+option java_package = "yandex.cloud.api.clouddesktop.v1";
+
+// A desktop resource.
+message Desktop {
+  reserved 12 to 20;
+  reserved 6 to 10;
+
+  // Desktop ID.
+  string id = 1;
+
+  // ID of the folder that the desktop belongs to.
+  string folder_id = 2;
+
+  // ID of the desktop group that the desktop belongs to.
+  string desktop_group_id = 3;
+
+  // Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp created_at = 4;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Desktop is being created.
+    CREATING = 1;
+
+    // Desktop is ready to be used.
+    ACTIVE = 2;
+
+    // Desktop is being deleted.
+    DELETING = 3;
+
+    // Desktop is restarting.
+    RESTARTING = 4;
+
+    // Desktop is updating.
+    UPDATING = 5;
+
+    // Desktop is starting.
+    STARTING = 6;
+
+    // Desktop is stopping.
+    STOPPING = 7;
+
+    // Desktop is stopped.
+    STOPPED = 8;
+
+    // Desktop did not manage start or restart.
+    ERROR = 9;
+
+    // Desktop did not manage to get created or updated.
+    CREATION_FAILED = 10;
+
+    // Desktop in the process of health check.
+    HEALTH_CHECK = 11;
+  }
+
+  // Status of the desktop.
+  Status status = 5;
+
+  // Name of the desktop.
+  string name = 11;
+
+  // Resources of the desktop.
+  Resources resources = 21;
+
+  // Network interfaces of the desktop.
+  repeated NetworkInterface network_interfaces = 22;
+
+  // Users of the desktop.
+  repeated User users = 23;
+
+  // Labels of the desktop.
+  map<string, string> labels = 24;
+
+  // Description of the desktop.
+  string description = 25;
+}
+
+message Resources {
+  // The amount of memory available to the desktop, specified in bytes.
+  int64 memory = 1 [(value) = ">=1"];
+
+  // The number of cores available to the desktop.
+  int64 cores = 2 [(value) = ">=1"];
+
+  // Baseline level of CPU performance with the ability to burst performance above that baseline level.
+  // This field sets baseline performance for each core.
+  //
+  // For example, if you need only 5% of the CPU performance, you can set core_fraction=5.
+  int64 core_fraction = 3 [(value) = "0-100"];
+}
+
+message User {
+  // Identity of the access binding.
+  string subject_id = 1 [(required) = true, (length) = "<=100"];
+
+  // Type of the access binding, e.g. userAccount, serviceAccount, system.
+  string subject_type = 2 [(required) = true, (length) = "<=100"];
+}
+
+message NetworkInterface {
+  // ID of the network.
+  string network_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the subnet.
+  string subnet_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}

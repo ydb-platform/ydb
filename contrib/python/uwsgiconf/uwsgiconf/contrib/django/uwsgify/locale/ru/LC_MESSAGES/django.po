@@ -1,0 +1,259 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-08-31 18:53+0700\n"
+"PO-Revision-Date: 2021-08-31 19:00+0700\n"
+"Last-Translator: Igor 'idle sign' Starikov <idlesign@yandex.ru>\n"
+"Language-Team: \n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+"%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || (n"
+"%100>=11 && n%100<=14)? 2 : 3);\n"
+"X-Generator: Poedit 2.3\n"
+
+#: admin/base.py:29
+msgid ""
+"This site is not served by uWSGI. Certain functionality or data may be "
+"unavailable."
+msgstr ""
+"Этот сайт работает не использует uWSGI. Некоторая функциональность или "
+"данные могут быть недоступны."
+
+#: admin/models.py:10 admin/models.py:11
+msgid "Summary"
+msgstr "Сводка"
+
+#: admin/models.py:19 admin/models.py:20
+msgid "Configuration"
+msgstr "Конфигурация"
+
+#: admin/models.py:28 admin/models.py:29 admin/realms.py:53
+msgid "Workers"
+msgstr "Рабочие"
+
+#: admin/models.py:37 admin/models.py:38
+msgid "Maintenance"
+msgstr "Обслуживание"
+
+#: admin/realms.py:44
+msgid "Version"
+msgstr "Версия"
+
+#: admin/realms.py:45
+msgid "Hostname"
+msgstr "Хост"
+
+#: admin/realms.py:46 admin/realms.py:116
+msgid "Serving since"
+msgstr "Работает с"
+
+#: admin/realms.py:47
+msgid "Serving for"
+msgstr "Время работы"
+
+#: admin/realms.py:48
+msgid "Clock"
+msgstr "Часы"
+
+#: admin/realms.py:49
+msgid "Master PID"
+msgstr "PID Мастера"
+
+#: admin/realms.py:50
+msgid "Memory (RSS, VSZ)"
+msgstr "Память (RSS, VSZ)"
+
+#: admin/realms.py:51
+msgid "Buffer size"
+msgstr "Размер буфера"
+
+#: admin/realms.py:52
+msgid "Cores"
+msgstr "Ядра"
+
+#: admin/realms.py:54
+msgid "Mules"
+msgstr "Мулы"
+
+#: admin/realms.py:55
+msgid "Farms"
+msgstr "Фермы"
+
+#: admin/realms.py:56
+msgid "Threads support"
+msgstr "Поддержка нитей"
+
+#: admin/realms.py:57
+msgid "Current worker"
+msgstr "Текущий рабочий"
+
+#: admin/realms.py:58
+msgid "Requests by worker"
+msgstr "Запросов на рабочем"
+
+#: admin/realms.py:59
+msgid "Requests total"
+msgstr "Запросов всего"
+
+#: admin/realms.py:60
+msgid "Socket queue size"
+msgstr "Размер очереди сокета"
+
+#: admin/realms.py:61
+msgid "Log size"
+msgstr "Размер журнала"
+
+#: admin/realms.py:62
+msgid "RPC"
+msgstr ""
+
+#: admin/realms.py:63
+msgid "Post fork hooks"
+msgstr "Хуки после fork"
+
+#: admin/realms.py:64 admin/realms.py:106
+msgid "Signals"
+msgstr "Сигналы"
+
+#: admin/realms.py:65
+msgid "Spoolers"
+msgstr ""
+
+#: admin/realms.py:97 admin/realms.py:115
+msgid "ID"
+msgstr ""
+
+#: admin/realms.py:98
+msgid "PID"
+msgstr ""
+
+#: admin/realms.py:99
+msgid "Status"
+msgstr "Статус"
+
+#: admin/realms.py:100
+msgid "Running for"
+msgstr "Время работы"
+
+#: admin/realms.py:101
+msgid "Spawned at"
+msgstr "Время порождения"
+
+#: admin/realms.py:102
+msgid "Respawns"
+msgstr "Порождения"
+
+#: admin/realms.py:103 admin/realms.py:122
+msgid "Requests"
+msgstr "Запросы"
+
+#: admin/realms.py:104
+msgid "Delta requests"
+msgstr "Разница запросов"
+
+#: admin/realms.py:105 admin/realms.py:123
+msgid "Exceptions"
+msgstr "Исключения"
+
+#: admin/realms.py:107
+msgid "RSS"
+msgstr ""
+
+#: admin/realms.py:108
+msgid "VSZ"
+msgstr ""
+
+#: admin/realms.py:109
+msgid "Transmitted"
+msgstr "Передано"
+
+#: admin/realms.py:110
+msgid "Avg. response"
+msgstr "На запрос (сред.)"
+
+#: admin/realms.py:117
+msgid "Interpreter"
+msgstr "Интерпретатор"
+
+#: admin/realms.py:118
+msgid "Modifier 1"
+msgstr "Модификатор 1"
+
+#: admin/realms.py:119
+msgid "Mountpoint"
+msgstr "Точка входа"
+
+#: admin/realms.py:120
+msgid "Callable"
+msgstr "Вызываемый объект"
+
+#: admin/realms.py:121
+msgid "Directory"
+msgstr "Директория"
+
+#: admin/realms.py:153
+msgid "Worker"
+msgstr "Рабочий"
+
+#: admin/realms.py:153
+msgid "Application"
+msgstr "Приложение"
+
+#: admin/realms.py:171
+msgid "Confirmation"
+msgstr "Подтверждение"
+
+#: admin/realms.py:172
+#, python-format
+msgid "Enter the word \"%(word)s\"."
+msgstr "Введите слово \"%(word)s\"."
+
+#: admin/realms.py:181
+#, python-format
+msgid "You need to enter \"%(word)s\" to proceed."
+msgstr "Для продолжения следует ввести слово \"%(word)s\"."
+
+#: admin/realms.py:196
+msgid "Maintenance mode is not supported in this setup."
+msgstr "Режим обслуживания недоступен для данного сайта."
+
+#: admin/realms.py:213
+msgid "Maintenance mode is scheduled."
+msgstr "Включение режима обслуживания запланировано."
+
+#: admin/realms.py:218
+#, python-format
+msgid "Unable to schedule maintenance: %(error)s."
+msgstr "Не удалось включить режим обслуживания: %(error)s."
+
+#: admin/realms.py:224
+msgid ""
+"Remember: maintenance mode can only be turned off from the filesystem. If "
+"the process is scheduled, your application, including this administration "
+"interface, will only become available after filesystem manipulation and "
+"uWSGI restart."
+msgstr ""
+"Помните: выйти из режима обслуживания можно только с использованием средств "
+"файловой системы. Если процесс обслуживания будет запущен, ваше приложение, "
+"включая данный административный интерфейс, станут доступны только лишь "
+"после внесения изменений в файловую систему и перезапуска uWSGI."
+
+#: config.py:11
+msgid "uWSGI Integration"
+msgstr "Интеграция с uWSGI"
+
+#: templates/admin/uwsgify/onepage.html:7
+msgid "Home"
+msgstr "Домой"
+
+#~ msgid "Available signal number"
+#~ msgstr "Доступный номер сигнала"

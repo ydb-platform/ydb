@@ -1,0 +1,94 @@
+Metadata-Version: 2.1
+Name: db-dtypes
+Version: 1.3.1
+Summary: Pandas Data Types for SQL systems (BigQuery, Spanner)
+Home-page: https://github.com/googleapis/python-db-dtypes-pandas
+Author: The db-dtypes Authors
+Author-email: googleapis-packages@google.com
+Keywords: sql,pandas
+Platform: Posix; MacOS X; Windows
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Database :: Front-Ends
+Requires-Python: >=3.7
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+License-File: AUTHORS
+Requires-Dist: packaging>=17.0
+Requires-Dist: pandas>=0.24.2
+Requires-Dist: pyarrow>=3.0.0
+Requires-Dist: numpy>=1.16.6
+
+Pandas Data Types for SQL systems (BigQuery, Spanner)
+=====================================================
+
+|ga| |pypi| |versions|
+
+`Pandas extension data types`_ for data from SQL systems such as `BigQuery`_.
+
+- `Library Documentation`_
+
+.. |ga| image:: https://img.shields.io/badge/support-GA-gold.svg
+   :target: https://github.com/googleapis/google-cloud-python/blob/main/README.rst#general-availability
+.. |pypi| image:: https://img.shields.io/pypi/v/db-dtypes.svg
+   :target: https://pypi.org/project/db-dtypes/
+.. |versions| image:: https://img.shields.io/pypi/pyversions/db-dtypes.svg
+   :target: https://pypi.org/project/db-dtypes/
+.. _Pandas extension data types: https://pandas.pydata.org/docs/development/extending.html#extension-types
+.. _BigQuery: https://cloud.google.com/bigquery/docs/
+.. _Library Documentation: https://googleapis.dev/python/db-dtypes/latest
+
+
+Installation
+------------
+
+Install this library in a `virtualenv`_ using pip. `virtualenv`_ is a tool to
+create isolated Python environments. The basic problem it addresses is one of
+dependencies and versions, and indirectly permissions.
+
+With `virtualenv`_, it's possible to install this library without needing system
+install permissions, and without clashing with the installed system
+dependencies.
+
+.. _`virtualenv`: https://virtualenv.pypa.io/en/latest/
+
+
+Supported Python Versions
+^^^^^^^^^^^^^^^^^^^^^^^^^
+Python >= 3.7
+
+Unsupported Python Versions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Python <= 3.6.
+
+
+Mac/Linux
+^^^^^^^^^
+
+.. code-block:: console
+
+    pip install virtualenv
+    virtualenv <your-env>
+    source <your-env>/bin/activate
+    <your-env>/bin/pip install db-dtypes
+
+
+Windows
+^^^^^^^
+
+.. code-block:: console
+
+    pip install virtualenv
+    virtualenv <your-env>
+    <your-env>\Scripts\activate
+    <your-env>\Scripts\pip.exe install db-dtypes

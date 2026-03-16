@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Window</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            height: 100%;
+        }
+
+
+        body {
+            background-color: #e8f5e9;
+            opacity: 1;
+            background-image: radial-gradient(farthest-corner at 100% 40%, #79ac89 0%, transparent 50%),
+            linear-gradient(#97be87, #aec791, #7eae8d);
+            background-size: auto auto, auto auto;
+            font-size: 14px;
+            color: #373737;
+        }
+
+        .bg, .bg2 {
+            z-index: -1;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml;utf8,<svg  width='44' height='44' xmlns='http://www.w3.org/2000/svg'><text x='11' y='22' fill='%2338573e' opacity='0.4' transform='rotate(15,0,10)'>☆</text></svg>");
+            background-size: 66px 66px;
+        }
+
+        .bg2 {
+            top: 33px;
+            left: 33px;
+            width: calc(100% - 33px);
+            height: calc(100% - 33px);
+        }
+
+        .message {
+            max-width: 480px;
+            position: relative;
+            margin-left: 64px;
+            margin-top: 8px;
+        }
+
+        .avatar {
+            position: absolute;
+            bottom: 0;
+            margin-left: -56px;
+            background-color: #c7a4ff;
+            color: #ffffff;
+            width: 40px;
+            height: 40px;
+            border-radius: 20px;
+            font-size: 18px;
+            font-weight: bolder;
+            text-align: center;
+            line-height: 40px;
+        }
+
+        .author {
+            position: absolute;
+            top: 0;
+            left: 0;
+            font-weight: bolder;
+            color: #65499c;
+            padding: 8px 12px;
+        }
+
+        .time {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            color: #9e9e9e;
+            padding: 4px 12px;
+        }
+
+        .body {
+            position: relative;
+            padding: 28px 12px 8px 12px;
+            background-color: #ffffff;
+            min-height: 72px;
+            border-radius: 8px;
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+        }
+
+        .body > img {
+            margin: 0 -12px 0 -12px;
+            padding-bottom: 8px;
+            width: calc(100% + 24px);
+            max-height: 256px;
+            object-fit: cover;
+        }
+
+        .body > .text {
+            padding-bottom: 8px;
+        }
+
+        .bottom:last-of-type {
+            border-bottom-left-radius: 16px;
+            border-bottom-right-radius: 16px;
+        }
+
+        .keyboard {
+        }
+        .reply-keyboard {
+            background-color: rgba(255, 255, 255, 0.25);
+            padding: 4px;
+            margin-top: 8px;
+            border-radius: 16px;
+        }
+        .reply-keyboard .title {
+            background-color: rgba(255, 255, 255, 0.25);
+            padding: 8px;
+            text-align: center;
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+        }
+
+        .keyboard-row {
+            margin-top: 4px;
+            height: auto;
+            width: 100%;
+            display: flex;
+        }
+
+        .keyboard-button {
+            display: inline-block;
+            height: auto;
+            padding: 8px 8px;
+            min-width: 72px;
+            text-align: center;
+            border-radius: 8px;
+            background-color: rgba(0, 32, 0, 0.3);
+            color: #ffffff;
+            transition: background-color 500ms;
+            width: 100%;
+            text-decoration: none;
+        }
+
+        .keyboard-button + .keyboard-button {
+            margin-left: 4px;
+        }
+
+        .keyboard-input, .keyboard-attachment {
+            color: #000000;
+            background-color: rgba(255, 255, 255, 0.5);
+            width: auto;
+            margin: 16px auto 0;
+            padding: 8px 16px;
+        }
+
+        .keyboard-button:hover, .start:hover {
+            background-color: rgba(64, 96, 64, 0.3);
+        }
+
+        .keyboard-row:last-of-type .keyboard-button {
+            border-bottom-left-radius: 16px;
+            border-bottom-right-radius: 16px;
+        }
+
+        .start-group {
+            display: inline-block;
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.25);
+            margin-left: 8px;
+            margin-right: 8px;
+            margin-top: 16px;
+            padding: 8px 8px;
+        }
+        .start-group .group {
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.25);
+            color: #001000;
+            margin: 0;
+            padding: 8px 16px;
+        }
+        .start {
+            text-align: center;
+            display: inline-block;
+            background-color: rgba(0, 32, 0, 0.4);
+            color: #ffffff;
+            text-decoration: none;
+            padding: 8px 16px;
+            min-width: 120px;
+            border-radius: 8px;
+            margin-left: 4px;
+            transition: background-color 500ms;
+        }
+
+        .message:target {
+            display: block;
+        }
+
+        .message:not(:target) {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="bg"></div>
+<div class="bg2"></div>
+
+<div>
+    <div class="start-group">
+        <a href="#" class="start">Home</a>
+    </div>
+    {% for dialog in dialogs %}
+        <div class="start-group">
+            <span class="group">{{ dialog.state_group }}</span>
+            {% for window in dialog.windows %}
+                <a href="#{{ window.state }}" class="start">{{ window.state_name }}</a>
+            {% endfor %}
+        </div>
+    {% endfor %}
+</div>
+<br>
+
+{% for dialog in dialogs %}
+    {% for window in dialog.windows %}
+        <div class="message" id="{{ window.state }}">
+            <div class="avatar">@</div>
+            <div class="body bottom">
+                <div class="author">Bot name</div>
+                <div class="time">{{ window.state }}</div>
+                {% if window.photo %}
+                    <img src="{{ window.photo }}" alt="{{ window.photo }}"/>
+                {% endif %}
+                <div class="text">{{ window.message|safe }}</div>
+            </div>
+            {% if window.keyboard %}
+                <div class="keyboard bottom">
+                    {% for row in window.keyboard %}
+                        <div class="keyboard-row">
+                            {% for button in row %}
+                                <a href="#{{ button.state }}"
+                                   class="keyboard-button">{{ button.title }}</a>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            {% if window.reply_keyboard %}
+                <div class="reply-keyboard bottom">
+                    <div class="title">Reply keyboard</div>
+                    {% for row in window.reply_keyboard %}
+                        <div class="keyboard-row">
+                            {% for button in row %}
+                                <a href="#{{ button.state }}"
+                                   class="keyboard-button">{{ button.title }}</a>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <div class="inputs">
+                {% if window.text_input %}
+                    <a href="#{{ window.text_input.state }}"
+                       class="keyboard-button keyboard-input">
+                        ⌨️ TextInput
+                    </a>
+                {% endif %}
+                {% if window.attachment_input %}
+                    <a href="#{{ window.attachment_input.state }}"
+                       class="keyboard-button keyboard-attachment">
+                        📎 MessageInput
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+{% endfor %}
+
+</body>
+</html>

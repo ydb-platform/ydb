@@ -1,0 +1,169 @@
+# -*- text -*-
+#
+# Copyright (c) 2009-2018 Cisco Systems, Inc.  All rights reserved
+# Copyright (c) 2015-2016 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2016      Research Organization for Information Science
+#                         and Technology (RIST). All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI's TCP support
+# (the openib BTL).
+#
+[invalid if_inexclude]
+WARNING: An invalid value was given for btl_tcp_if_%s.  This
+value will be ignored.
+
+  Local host: %s
+  Value:      %s
+  Message:    %s
+#
+[invalid minimum port]
+WARNING: An invalid value was given for the btl_tcp_port_min_%s. Legal
+values are in the range [1 .. 2^16-1]. This value will be ignored
+(reset to the default value of 1024).
+
+  Local host: %s
+  Value:      %d
+#
+[client connect fail]
+WARNING: Open MPI failed to TCP connect to a peer MPI process.  This
+should not happen.
+
+Your Open MPI job may now hang or fail.
+
+  Local host: %s
+  PID:        %d
+  Message:    %s
+  Error:      %s (%d)
+#
+[client handshake fail]
+WARNING: Open MPI failed to handshake with a connecting peer MPI
+process over TCP.  This should not happen.
+
+Your Open MPI job may now hang or fail.
+
+  Local host: %s
+  PID:        %d
+  Message:    %s
+#
+[accept failed]
+WARNING: The accept(3) system call failed on a TCP socket.  While this
+should generally never happen on a well-configured HPC system, the
+most common causes when it does occur are:
+
+  * The process ran out of file descriptors
+  * The operating system ran out of file descriptors
+  * The operating system ran out of memory
+
+Your Open MPI job will likely hang (or crash) until the failure
+resason is fixed (e.g., more file descriptors and/or memory becomes
+available), and may eventually timeout / abort.
+
+  Local host: %s
+  PID:        %d
+  Errno:      %d (%s)
+#
+[peer hung up]
+An MPI communication peer process has unexpectedly disconnected.  This
+usually indicates a failure in the peer process (e.g., a crash or
+otherwise exiting without calling MPI_FINALIZE first).
+
+Although this local MPI process will likely now behave unpredictably
+(it may even hang or crash), the root cause of this problem is the
+failure of the peer -- that is what you need to investigate.  For
+example, there may be a core file that you can examine.  More
+generally: such peer hangups are frequently caused by application bugs
+or other external events.
+
+  Local host: %s
+  Local PID:  %d
+  Peer host:  %s
+#
+[dropped inbound connection]
+Open MPI detected an inbound MPI TCP connection request from a peer
+that appears to be part of this MPI job (i.e., it identified itself as
+part of this Open MPI job), but it is from an IP address that is
+unexpected.  This is highly unusual.
+
+The inbound connection has been dropped, and the peer should simply
+try again with a different IP interface (i.e., the job should
+hopefully be able to continue).
+
+  Local host:          %s
+  Local PID:           %d
+  Peer hostname:       %s (%s)
+  Source IP of socket: %s
+  Known IPs of peer:   %s
+#
+[socket flag fail]
+WARNING: Open MPI failed to get or set flags on a TCP socket.  This
+should not happen.
+
+This may cause unpredictable behavior, and may end up hanging or
+aborting your job.
+
+  Local host: %s
+  PID:        %d
+  Flag:       %s
+  Error:      %s (%d)
+#
+[server did not get guid]
+WARNING: Open MPI accepted a TCP connection from what appears to be a
+another Open MPI process but the peer process did not complete the
+initial handshake properly.  This should not happen.
+
+This attempted connection will be ignored; your MPI job may or may not
+continue properly.
+
+  Local host: %s
+  PID:        %d
+#
+[server accept cannot find guid]
+WARNING: Open MPI accepted a TCP connection from what appears to be a
+another Open MPI process but cannot find a corresponding process
+entry for that peer.
+
+This attempted connection will be ignored; your MPI job may or may not
+continue properly.
+
+  Local host: %s
+  PID:        %d
+#
+[server getpeername failed]
+WARNING: Open MPI failed to look up the peer IP address information of
+a TCP connection that it just accepted.  This should not happen.
+
+This attempted connection will be ignored; your MPI job may or may not
+continue properly.
+
+  Local host: %s
+  PID:        %d
+  Error:      %s (%d)
+#
+[server cannot find endpoint]
+WARNING: Open MPI accepted a TCP connection from what appears to be a
+valid peer Open MPI process but cannot find a corresponding endpoint
+entry for that peer.  This should not happen.
+
+This attempted connection will be ignored; your MPI job may or may not
+continue properly.
+
+  Local host: %s
+  PID:        %d
+#
+[client connect fail]
+WARNING: Open MPI failed to TCP connect to a peer MPI process via
+TCP.  This should not happen.
+
+Your Open MPI job may now fail.
+
+  Local host: %s
+  PID:        %d
+  Message:    %s
+  Error:      %s (%d)

@@ -1,0 +1,13 @@
+name: "Trigger api-go publish release"
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  trigger-api-go-publish-release:
+    uses: temporalio/api-go/.github/workflows/publish-release.yml@master
+    with:
+      tag: ${{ github.event.release.tag_name }}
+      api_commit_sha: ${{ github.event.release.target_commitish }}
+    secrets: inherit

@@ -1,0 +1,15 @@
+TestNested:
+  type: object
+  properties:
+    test_string:
+      type: string
+    nested_nested:
+      $ref: "#/TestNestedNested"
+TestNestedNested:
+  type: object
+  properties:
+    test_nested_nested_string:
+      type: string
+Test:
+  allOf:
+    - $ref: "#/TestNested"

@@ -1,0 +1,394 @@
+[
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "GCVPKZ2A",
+    "bank_code": "009",
+    "name": "\u0420\u0413\u041a\u041f \u0413\u043e\u0441\u0443\u0434\u0430\u0440\u0441\u0442\u0432\u0435\u043d\u043d\u044b \u0446\u0435\u043d\u0442\u0440 \u043f\u043e \u0432\u044b\u043f\u043b\u0430\u0442\u0435 \u043f\u0435\u043d\u0441\u0438\u0439",
+    "short_name": "\u0420\u0413\u041a\u041f \u0413\u043e\u0441\u0443\u0434\u0430\u0440\u0441\u0442\u0432\u0435\u043d\u043d\u044b \u0446\u0435\u043d\u0442\u0440 \u043f\u043e \u0432\u044b\u043f\u043b\u0430\u0442\u0435 \u043f\u0435\u043d\u0441\u0438\u0439"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "KKMFKZ2A",
+    "bank_code": "070",
+    "name": "\u0413\u0423 \"\u041a\u043e\u043c\u0438\u0442\u0435\u0442 \u043a\u0430\u0437\u043d\u0430\u0447\u0435\u0439\u0441\u0442\u0432\u0430 \u041c\u0438\u043d\u0438\u0441\u0442\u0435\u0440\u0441\u0442\u0432\u0430 \u0444\u0438\u043d\u0430\u043d\u0441\u043e\u0432 \u0420\u041a\"",
+    "short_name": "\u0413\u0423 \"\u041a\u043e\u043c\u0438\u0442\u0435\u0442 \u043a\u0430\u0437\u043d\u0430\u0447\u0435\u0439\u0441\u0442\u0432\u0430 \u041c\u0438\u043d\u0438\u0441\u0442\u0435\u0440\u0441\u0442\u0432\u0430 \u0444\u0438\u043d\u0430\u043d\u0441\u043e\u0432 \u0420\u041a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "NBRKKZKX",
+    "bank_code": "125",
+    "name": "\u0413\u0423 \u041d\u0430\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0411\u0430\u043d\u043a \u0420\u041a",
+    "short_name": "\u0413\u0423 \u041d\u0430\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0411\u0430\u043d\u043a \u0420\u041a"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "KISCKZKX",
+    "bank_code": "224",
+    "name": "\u0420\u0413\u041f \"\u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0441\u043a\u0438\u0439 \u0446\u0435\u043d\u0442\u0440 \u043c\u0435\u0436\u0431\u0430\u043d\u043a\u043e\u0432\u0441\u043a\u0438\u0445 \u0440\u0430\u0441\u0447\u0435\u0442\u043e\u0432 \u041d\u0411\u0420\u041a\"",
+    "short_name": "\u0420\u0413\u041f \"\u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0441\u043a\u0438\u0439 \u0446\u0435\u043d\u0442\u0440 \u043c\u0435\u0436\u0431\u0430\u043d\u043a\u043e\u0432\u0441\u043a\u0438\u0445 \u0440\u0430\u0441\u0447\u0435\u0442\u043e\u0432 \u041d\u0411\u0420\u041a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "HLALKZKZ",
+    "bank_code": "246",
+    "name": "\u0410\u041e \"\u0418\u0441\u043b\u0430\u043c\u0441\u043a\u0438\u0439 \u0411\u0430\u043d\u043a \"Al Hilal\"",
+    "short_name": "\u0410\u041e \"\u0418\u0441\u043b\u0430\u043c\u0441\u043a\u0438\u0439 \u0411\u0430\u043d\u043a \"Al Hilal\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "NPCKKZKA",
+    "bank_code": "284",
+    "name": "\u0410\u041e \"\u041d\u0430\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u0438\u043d\u0433\u043e\u0432\u044b\u0439 \u0446\u0435\u043d\u0442\u0440\"",
+    "short_name": "\u0410\u041e \"\u041d\u0430\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u0438\u043d\u0433\u043e\u0432\u044b\u0439 \u0446\u0435\u043d\u0442\u0440\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "ABKZKZKX",
+    "bank_code": "319",
+    "name": "\u0410\u041e \"\u0411\u0422\u0410 \u0411\u0430\u043d\u043a\"",
+    "short_name": "\u0410\u041e \"\u0411\u0422\u0410 \u0411\u0430\u043d\u043a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "VTBAKZKZ",
+    "bank_code": "432",
+    "name": "\u0414\u041e \u0410\u041e \u0411\u0430\u043d\u043a \u0412\u0422\u0411 ",
+    "short_name": "\u0414\u041e \u0410\u041e \u0411\u0430\u043d\u043a \u0412\u0422\u0411 "
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "SHBKKZKA",
+    "bank_code": "435",
+    "name": "\u0410\u041e \"\u0428\u0438\u043d\u0445\u0430\u043d \u0411\u0430\u043d\u043a \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\"",
+    "short_name": "\u0410\u041e \"\u0428\u0438\u043d\u0445\u0430\u043d \u0411\u0430\u043d\u043a \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "ASFBKZKA",
+    "bank_code": "450",
+    "name": "\u0410\u041e \"\u0411\u0430\u043d\u043a \"\u0410\u0441\u0442\u0430\u043d\u0430",
+    "short_name": "\u0410\u041e \"\u0411\u0430\u043d\u043a \"\u0410\u0441\u0442\u0430\u043d\u0430"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "MSRBKZKA",
+    "bank_code": "473",
+    "name": "\u0410\u041e \"\u041c\u0430\u0441\u0442\u0435\u0440\u0431\u0430\u043d\u043a\"",
+    "short_name": "\u0410\u041e \"\u041c\u0430\u0441\u0442\u0435\u0440\u0431\u0430\u043d\u043a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "DEMIKZKA",
+    "bank_code": "492",
+    "name": "\u0410\u041e \"\u0411\u0430\u043d\u043a\u041f\u043e\u0437\u0438\u0442\u0438\u0432 \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d ",
+    "short_name": "\u0410\u041e \"\u0411\u0430\u043d\u043a\u041f\u043e\u0437\u0438\u0442\u0438\u0432 \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d "
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "SENIKZKA",
+    "bank_code": "549",
+    "name": "\u0410\u041e \"\u0421\u0435\u043d\u0438\u043c",
+    "short_name": "\u0410\u041e \"\u0421\u0435\u043d\u0438\u043c"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "INEARUMM",
+    "bank_code": "550",
+    "name": "\u0433",
+    "short_name": "\u0433"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "KSNVKZKA",
+    "bank_code": "551",
+    "name": "\u0410\u041e \"\u0411\u0430\u043d\u043a Kassa Nova\"",
+    "short_name": "\u0410\u041e \"\u0411\u0430\u043d\u043a Kassa Nova\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "NBPAKZKA",
+    "bank_code": "553",
+    "name": "\u0410\u041e \u0414\u0411 \"\u041d\u0430\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0411\u0430\u043d\u043a \u041f\u0430\u043a\u0438\u0441\u0442\u0430\u043d\u0430\" \u0432 \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0435",
+    "short_name": "\u0410\u041e \u0414\u0411 \"\u041d\u0430\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0411\u0430\u043d\u043a \u041f\u0430\u043a\u0438\u0441\u0442\u0430\u043d\u0430\" \u0432 \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0435"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "KPSTKZKA",
+    "bank_code": "563",
+    "name": "\u0410\u041e \"\u041a\u0410\u0417\u041f\u041e\u0427\u0422\u0410\"",
+    "short_name": "\u0410\u041e \"\u041a\u0410\u0417\u041f\u041e\u0427\u0422\u0410\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "KMGCKZKA",
+    "bank_code": "564",
+    "name": "\u0410\u041e \"\u0418\u043f\u043e\u0442\u0435\u0447\u043d\u0430\u044f \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u044f \"\u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0441\u043a\u0430\u044f \u0418\u043f\u043e\u0442\u0435\u0447\u043d\u0430\u044f \u041a\u043e\u043c\u043f\u0430\u043d\u0438\u044f\"",
+    "short_name": "\u0410\u041e \"\u0418\u043f\u043e\u0442\u0435\u0447\u043d\u0430\u044f \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u044f \"\u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0441\u043a\u0430\u044f \u0418\u043f\u043e\u0442\u0435\u0447\u043d\u0430\u044f \u041a\u043e\u043c\u043f\u0430\u043d\u0438\u044f\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "HSBKKZKX",
+    "bank_code": "601",
+    "name": "\u0410\u041e \"\u041d\u0430\u0440\u043e\u0434\u043d\u044b\u0439 \u0411\u0430\u043d\u043a \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0430\"",
+    "short_name": "\u0410\u041e \"\u041d\u0430\u0440\u043e\u0434\u043d\u044b\u0439 \u0411\u0430\u043d\u043a \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0430\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "NFBAKZ23",
+    "bank_code": "639",
+    "name": "\u0410\u041e \"Delta Bank\"",
+    "short_name": "\u0410\u041e \"Delta Bank\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "EABRKZKA",
+    "bank_code": "700",
+    "name": "\u0410\u041e \"\u0415\u0432\u0440\u0430\u0437\u0438\u0439\u0441\u043a\u0438\u0439 \u0431\u0430\u043d\u043a \u0440\u0430\u0437\u0432\u0438\u0442\u0438\u044f\"",
+    "short_name": "\u0410\u041e \"\u0415\u0432\u0440\u0430\u0437\u0438\u0439\u0441\u043a\u0438\u0439 \u0431\u0430\u043d\u043a \u0440\u0430\u0437\u0432\u0438\u0442\u0438\u044f\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "CASPKZKA",
+    "bank_code": "722",
+    "name": "\u0410\u041e \"KASPI BANK\"",
+    "short_name": "\u0410\u041e \"KASPI BANK\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "CEDUKZKA",
+    "bank_code": "766",
+    "name": "\u0410\u041e \"\u0426\u0415\u041d\u0422\u0420\u0410\u041b\u042c\u041d\u042b\u0419 \u0414\u0415\u041f\u041e\u0417\u0418\u0422\u0410\u0420\u0418\u0419 \u0426\u0415\u041d\u041d\u042b\u0425 \u0411\u0423\u041c\u0410\u0413\"",
+    "short_name": "\u0410\u041e \"\u0426\u0415\u041d\u0422\u0420\u0410\u041b\u042c\u041d\u042b\u0419 \u0414\u0415\u041f\u041e\u0417\u0418\u0422\u0410\u0420\u0418\u0419 \u0426\u0415\u041d\u041d\u042b\u0425 \u0411\u0423\u041c\u0410\u0413\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "LARIKZKA",
+    "bank_code": "774",
+    "name": "\u0410\u041e \"AsiaCredit Bank ",
+    "short_name": "\u0410\u041e \"AsiaCredit Bank "
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "JSRBKZKA",
+    "bank_code": "780",
+    "name": "\u0414\u041e \u0410\u041e \"\u0411\u0422\u0410 \u0411\u0410\u041d\u041a\" ",
+    "short_name": "\u0414\u041e \u0410\u041e \"\u0411\u0422\u0410 \u0411\u0410\u041d\u041a\" "
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "TBKBKZKA",
+    "bank_code": "781",
+    "name": "\u0410\u041e \u0414\u0411 \"\u0422\u0410\u0418\u0411 \u041a\u0410\u0417\u0410\u0425\u0421\u041a\u0418\u0419 \u0411\u0410\u041d\u041a\"",
+    "short_name": "\u0410\u041e \u0414\u0411 \"\u0422\u0410\u0418\u0411 \u041a\u0410\u0417\u0410\u0425\u0421\u041a\u0418\u0419 \u0411\u0410\u041d\u041a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "KINCKZKA",
+    "bank_code": "821",
+    "name": "\u0410\u041e \"\u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0441\u043a\u0438\u0439 \u0418\u043d\u043d\u043e\u0432\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439 \u041a\u043e\u043c\u043c\u0435\u0440\u0447\u0435\u0441\u043a\u0438\u0439 \u0411\u0430\u043d\u043a\"",
+    "short_name": "\u0410\u041e \"\u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0441\u043a\u0438\u0439 \u0418\u043d\u043d\u043e\u0432\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439 \u041a\u043e\u043c\u043c\u0435\u0440\u0447\u0435\u0441\u043a\u0438\u0439 \u0411\u0430\u043d\u043a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "ALMNKZKA",
+    "bank_code": "826",
+    "name": "\u0410\u041e \"\u0410\u0422\u0424\u0411\u0430\u043d\u043a\"",
+    "short_name": "\u0410\u041e \"\u0410\u0422\u0424\u0411\u0430\u043d\u043a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "CITIKZKA",
+    "bank_code": "832",
+    "name": "\u0410\u041e \"\u0421\u0438\u0442\u0438\u0431\u0430\u043d\u043a \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\"",
+    "short_name": "\u0410\u041e \"\u0421\u0438\u0442\u0438\u0431\u0430\u043d\u043a \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "NURSKZKX",
+    "bank_code": "849",
+    "name": "\u0410\u041e \"\u041d\u0443\u0440\u0431\u0430\u043d\u043a\"",
+    "short_name": "\u0410\u041e \"\u041d\u0443\u0440\u0431\u0430\u043d\u043a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "KCJBKZKX",
+    "bank_code": "856",
+    "name": "\u0410\u041e \"\u0411\u0430\u043d\u043a \u0426\u0435\u043d\u0442\u0440\u041a\u0440\u0435\u0434\u0438\u0442\"",
+    "short_name": "\u0410\u041e \"\u0411\u0430\u043d\u043a \u0426\u0435\u043d\u0442\u0440\u041a\u0440\u0435\u0434\u0438\u0442\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "KZIBKZKA",
+    "bank_code": "885",
+    "name": "\u0410\u041e \"\u0414\u0411 \"\u041a\u0410\u0417\u0410\u0425\u0421\u0422\u0410\u041d",
+    "short_name": "\u0410\u041e \"\u0414\u0411 \"\u041a\u0410\u0417\u0410\u0425\u0421\u0422\u0410\u041d"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "INLMKZKA",
+    "bank_code": "886",
+    "name": "\u0410\u041e \"\u0425\u043e\u0443\u043c \u041a\u0440\u0435\u0434\u0438\u0442 \u0411\u0430\u043d\u043a\"",
+    "short_name": "\u0410\u041e \"\u0425\u043e\u0443\u043c \u041a\u0440\u0435\u0434\u0438\u0442 \u0411\u0430\u043d\u043a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "ZAJSKZ22",
+    "bank_code": "896",
+    "name": "\u0410\u041e \"\u0417\u0430\u043c\u0430\u043d",
+    "short_name": "\u0410\u041e \"\u0417\u0430\u043c\u0430\u043d"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "DVKAKZKA",
+    "bank_code": "907",
+    "name": "\u0410\u041e \"\u0411\u0430\u043d\u043a \u0420\u0430\u0437\u0432\u0438\u0442\u0438\u044f \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0430\"",
+    "short_name": "\u0410\u041e \"\u0411\u0430\u043d\u043a \u0420\u0430\u0437\u0432\u0438\u0442\u0438\u044f \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0430\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "BKCHKZKA",
+    "bank_code": "913",
+    "name": "\u0410\u041e \u0414\u0411 \"\u0411\u0410\u041d\u041a \u041a\u0418\u0422\u0410\u042f \u0412 \u041a\u0410\u0417\u0410\u0425\u0421\u0422\u0410\u041d\u0415\"",
+    "short_name": "\u0410\u041e \u0414\u0411 \"\u0411\u0410\u041d\u041a \u041a\u0418\u0422\u0410\u042f \u0412 \u041a\u0410\u0417\u0410\u0425\u0421\u0422\u0410\u041d\u0415\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "SABRKZKA",
+    "bank_code": "914",
+    "name": "\u0414\u0411 \u0410\u041e \"\u0421\u0431\u0435\u0440\u0431\u0430\u043d\u043a \u0420\u043e\u0441\u0441\u0438\u0438\"",
+    "short_name": "\u0414\u0411 \u0410\u041e \"\u0421\u0431\u0435\u0440\u0431\u0430\u043d\u043a \u0420\u043e\u0441\u0441\u0438\u0438\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "KAZSKZKA",
+    "bank_code": "920",
+    "name": "\u0410\u041e \"\u041a\u0430\u0437\u0438\u043d\u0432\u0435\u0441\u0442\u0431\u0430\u043d\u043a\"",
+    "short_name": "\u0410\u041e \"\u041a\u0430\u0437\u0438\u043d\u0432\u0435\u0441\u0442\u0431\u0430\u043d\u043a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "ABNAKZKX",
+    "bank_code": "922",
+    "name": "\u0410\u041e \u0414\u0411 \"RBS ",
+    "short_name": "\u0410\u041e \u0414\u0411 \"RBS "
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "KICEKZKX",
+    "bank_code": "927",
+    "name": "\u0410\u041e \"\u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0441\u043a\u0430\u044f \u0444\u043e\u043d\u0434\u043e\u0432\u0430\u044f \u0431\u0438\u0440\u0436\u0430\"",
+    "short_name": "\u0410\u041e \"\u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0441\u043a\u0430\u044f \u0444\u043e\u043d\u0434\u043e\u0432\u0430\u044f \u0431\u0438\u0440\u0436\u0430\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "ICBKKZKX",
+    "bank_code": "930",
+    "name": "\u0410\u041e \"\u0422\u043e\u0440\u0433\u043e\u0432\u043e",
+    "short_name": "\u0410\u041e \"\u0422\u043e\u0440\u0433\u043e\u0432\u043e"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "EXKAKZKA",
+    "bank_code": "942",
+    "name": "\u0410\u041e \"\u042d\u041a\u0421\u0418\u041c\u0411\u0410\u041d\u041a \u041a\u0410\u0417\u0410\u0425\u0421\u0422\u0410\u041d\"",
+    "short_name": "\u0410\u041e \"\u042d\u041a\u0421\u0418\u041c\u0411\u0410\u041d\u041a \u041a\u0410\u0417\u0410\u0425\u0421\u0422\u0410\u041d\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "CABRKZKA",
+    "bank_code": "943",
+    "name": "\u0417\u0410\u041e\"\u0426\u0415\u041d\u0422\u0420",
+    "short_name": "\u0417\u0410\u041e\"\u0426\u0415\u041d\u0422\u0420"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "ALFAKZKA",
+    "bank_code": "947",
+    "name": "\u0410\u041e \"\u0414\u041e\u0427\u0415\u0420\u041d\u0418\u0419 \u0411\u0410\u041d\u041a \"\u0410\u041b\u042c\u0424\u0410",
+    "short_name": "\u0410\u041e \"\u0414\u041e\u0427\u0415\u0420\u041d\u0418\u0419 \u0411\u0410\u041d\u041a \"\u0410\u041b\u042c\u0424\u0410"
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "EURIKZKA",
+    "bank_code": "948",
+    "name": "\u0410\u041e \"\u0415\u0432\u0440\u0430\u0437\u0438\u0439\u0441\u043a\u0438\u0439 \u0411\u0430\u043d\u043a\"",
+    "short_name": "\u0410\u041e \"\u0415\u0432\u0440\u0430\u0437\u0438\u0439\u0441\u043a\u0438\u0439 \u0411\u0430\u043d\u043a\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "ATYNKZKA",
+    "bank_code": "949",
+    "name": "JSC ",
+    "short_name": "JSC "
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "IRTYKZKA",
+    "bank_code": "965",
+    "name": "\u0410\u041e \"ForteBank\"",
+    "short_name": "\u0410\u041e \"ForteBank\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "HCSKKZKA",
+    "bank_code": "972",
+    "name": "\u0410\u041e \"\u0416\u0438\u043b\u0441\u0442\u0440\u043e\u0439\u0441\u0431\u0435\u0440\u0431\u0430\u043d\u043a \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0430\"",
+    "short_name": "\u0410\u041e \"\u0416\u0438\u043b\u0441\u0442\u0440\u043e\u0439\u0441\u0431\u0435\u0440\u0431\u0430\u043d\u043a \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d\u0430\""
+  },
+  {
+    "country_code": "KZ",
+    "primary": true,
+    "bic": "TSESKZKA",
+    "bank_code": "998",
+    "name": "\u0410\u041e \"\u0426\u0435\u0441\u043d\u0430\u0431\u0430\u043d\u043a\"",
+    "short_name": "\u0410\u041e \"\u0426\u0435\u0441\u043d\u0430\u0431\u0430\u043d\u043a\""
+  }
+]

@@ -1,0 +1,11 @@
+--- contrib/python/prophet/prophet/models.py	(index)
++++ contrib/python/prophet/prophet/models.py	(working tree)
+@@ -282,6 +282,8 @@ class PyStanBackend(IStanBackend):
+ 
+     def load_model(self):
+         """Load compiled Stan model"""
++        import pystan
++        return pystan.StanModel('_prophet.stan_model.prophet_model')
+         model_file = pkg_resources.resource_filename(
+             'prophet',
+             'stan_model/prophet_model.pkl',

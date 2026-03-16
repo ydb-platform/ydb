@@ -1,0 +1,11 @@
+
+about_resource: public_suffix_list.dat
+name: Public Suffix List
+version: 2019-12-21T11:10:15
+download_url: https://publicsuffix.org/list/public_suffix_list.dat
+home_url: https://publicsuffix.org/
+
+owner: Mozilla
+copyright: Copyright (c) Mozilla and others
+license: mpl-2.0
+license_text_file: mpl-2.0.LICENSE

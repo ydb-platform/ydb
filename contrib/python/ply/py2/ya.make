@@ -2,8 +2,6 @@
 
 PY2_LIBRARY()
 
-SUBSCRIBER(g:python-contrib)
-
 VERSION(3.11)
 
 LICENSE(BSD-3-Clause)

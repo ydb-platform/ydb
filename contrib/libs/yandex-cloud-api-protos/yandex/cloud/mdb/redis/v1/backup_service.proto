@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.redis.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/redis/v1/backup.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/redis/v1;redis";
+option java_package = "yandex.cloud.api.mdb.redis.v1";
+
+// A set of methods for managing Redis backups.
+service BackupService {
+  // Returns the specified Redis backup.
+  //
+  // To get the list of available Redis backups, make a [List] request.
+  rpc Get (GetBackupRequest) returns (Backup) {
+    option (google.api.http) = { get: "/managed-redis/v1/backups/{backup_id}" };
+  }
+
+  // Retrieves the list of Redis backups available for the specified folder.
+  rpc List (ListBackupsRequest) returns (ListBackupsResponse) {
+    option (google.api.http) = { get: "/managed-redis/v1/backups" };
+  }
+
+  // Returns the list of available backups for the specified Redis cluster.
+  rpc Delete (DeleteBackupRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/managed-redis/v1/backups/{backup_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteBackupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+}
+
+message GetBackupRequest {
+  // ID of the Redis backup to return.
+  // To get the backup ID, use a [ClusterService.ListBackups] request.
+  string backup_id = 1 [(required) = true];
+}
+
+message ListBackupsRequest {
+  // ID of the folder to list backups in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListBackupsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the [ListBackupsResponse.next_page_token]
+  // returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListBackupsResponse {
+  // Requested list of backups.
+  repeated Backup backups = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListBackupsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListBackupsRequest.page_token] parameter in the next list request. Each subsequent
+  // list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+
+message DeleteBackupRequest {
+  // Required. ID of the backup to delete.
+  string backup_id = 1 [(required) = true];
+}
+
+message DeleteBackupMetadata {
+  // Required. ID of the deleting Redis backup.
+  string backup_id = 1;
+}

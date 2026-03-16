@@ -1,0 +1,34 @@
+# Code table 4.238 - Source or sink
+0 0 Other
+1 1 Aviation
+2 2 Lightning
+3 3 Biogenic sources
+4 4 Anthropogenic sources
+5 5 Wild fires
+6 6 Natural sources
+7 7 Volcanoes
+8 8 Bio-fuel
+9 9 Fossil-fuel
+10 10 Wetlands
+11 11 Oceans
+12 12 Elevated anthropogenic sources
+13 13 Surface anthropogenic sources
+14 14 Agriculture livestock
+15 15 Agriculture soils
+16 16 Agriculture waste burning
+17 17 Agriculture (all)
+18 18 Residential, commercial and other combustion
+19 19 Power generation
+20 20 Super power stations
+21 21 Fugitives
+22 22 Industrial process
+23 23 Solvents
+24 24 Ships
+25 25 Wastes (solid and water)
+26 26 Road transportation
+27 27 Off-road transportation
+28 28 Nuclear power plant
+29 29 Nuclear weapon
+# 30-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

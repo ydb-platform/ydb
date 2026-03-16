@@ -1,0 +1,148 @@
+Metadata-Version: 2.1
+Name: salt-lint
+Version: 0.9.2
+Summary: A command-line utility that checks for best practices in SaltStack.
+Home-page: https://github.com/warpnet/salt-lint
+Author: Warpnet B.V.
+Author-email: info@warpnet.nl
+License: MIT
+Keywords: salt,saltstack,lint,linter,checker
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: System Administrators
+Classifier: Operating System :: OS Independent
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Software Development :: Bug Tracking
+Classifier: Topic :: Software Development :: Quality Assurance
+Classifier: Topic :: Software Development :: Testing
+Classifier: Topic :: Utilities
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: LICENSE.ansible-lint
+Requires-Dist: pyyaml
+Requires-Dist: pathspec (>=0.6.0)
+
+
+<a href="https://github.com/warpnet/salt-lint" style="color: black;">
+    <h1 align="center">salt-lint</h1>
+</a>
+<p align="center">
+    <a href="https://pypi.org/project/salt-lint/">
+        <img src="https://img.shields.io/github/v/release/warpnet/salt-lint?style=for-the-badge"
+            alt="Latest release version">
+    </a>
+    <a href="https://pypi.org/project/salt-lint/">
+        <img src="https://img.shields.io/pypi/pyversions/salt-lint?style=for-the-badge"
+            alt="PyPI - Python Version">
+    </a>
+    <a href="https://raw.githubusercontent.com/warpnet/salt-lint/main/LICENSE">
+        <img src="https://img.shields.io/pypi/l/salt-lint?style=for-the-badge&color=blue"
+            alt="PyPI - License">
+    </a>
+    <a href="https://github.com/warpnet/salt-lint/actions">
+        <img src="https://img.shields.io/github/actions/workflow/status/warpnet/salt-lint/tox.yml?style=for-the-badge&color=blue&branch=main"
+            alt="GitHub Workflow Status">
+    </a>
+    <a href="https://github.com/warpnet/salt-lint/graphs/contributors">
+        <img src="https://img.shields.io/github/contributors/warpnet/salt-lint?style=for-the-badge&color=blue"
+            alt="GitHub contributors">
+    </a>
+    </br>
+    <b>salt-lint</b> checks Salt State files (SLS) for best practices and behavior that could potentially be improved.
+    <br />
+    <a href="https://salt-lint.readthedocs.io/en/latest/"><strong>Explore the docs »</strong></a>
+    <br />
+    <a href="https://salt-lint.readthedocs.io/en/latest/rules/">Check the Linting Rules</a>
+    ·
+    <a href="https://github.com/warpnet/salt-lint/issues/new?assignees=&labels=Type%3A%20Bug&template=bug_report.md&title=Bug%3A">Report Bug</a>
+    ·
+    <a href="https://github.com/warpnet/salt-lint/issues/new?assignees=&labels=Type%3A%20Enhancement&template=feature_request.md&title=Feature+Request%3A">Request Feature</a>
+</p>
+
+## Demo
+[![salt-lint demo](https://raw.githubusercontent.com/warpnet/salt-lint/main/demo.gif?raw=true)](https://asciinema.org/a/377244)
+
+## Acknowledgement
+The project is heavily based on [ansible-lint](https://github.com/ansible/ansible-lint), with the modified work by [Warpnet B.V.](https://github.com/warpnet).  [ansible-lint](https://github.com/ansible/ansible-lint) was created by [Will Thames](https://github.com/willthames) and is now maintained as part of the [Ansible](https://www.ansible.com/) by [Red Hat](https://www.redhat.com) project.
+# Changelog
+All notable changes in **salt-lint** are documented below.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.9.2] (2023-02-09)
+### Fixed
+- Ensure version identification adheres to [PEP440](https://peps.python.org/pep-0440/) ([!304](https://github.com/warpnet/salt-lint/issues/304))
+
+## [0.9.1] (2023-01-16)
+### Fixed
+- Revert changes to rule 210 ([!299](https://github.com/warpnet/salt-lint/issues/299))
+
+## [0.9.0] (2023-01-13)
+### Added
+- Rule 219 for catching missing over-indentation of nested dicts ([#284](https://github.com/warpnet/salt-lint/pull/284)).
+- Add Python 3.11 support ([#290](https://github.com/warpnet/salt-lint/pull/290)).
+- Add alternative typos of onchanges in rule 216 ([#286](https://github.com/warpnet/salt-lint/pull/286)).
+
+## [0.8.0] (2021-11-09)
+### Fixed
+- False positive when detecting missing spaces in Jinja variables when the Jinja statement is nested in literal braces ([#272](https://github.com/warpnet/salt-lint/pull/272)).
+- Ensure a single missing quote in the file mode is also detected as incorrect quotation of a file mode ([#273](https://github.com/warpnet/salt-lint/pull/273)).
+- Ignore non file mode arguments for the file mode quotation and leading zero checks ([#274](https://github.com/warpnet/salt-lint/pull/274)).
+
+## [0.7.0] (2021-11-01)
+### Added
+- Add Python 3.10 support ([#265](https://github.com/warpnet/salt-lint/pull/265)).
+- Add initial man page ([#270](https://github.com/warpnet/salt-lint/pull/270)).
+
+### Fixed
+- Close temporary file after writing to STDIN ([#263](https://github.com/warpnet/salt-lint/pull/263)).
+
+## [0.6.1] (2021-06-01)
+### Removed
+- Remove rule 218 because of a false positive
+
+## [0.6.0] (2021-06-01)
+### Deprecated
+- Drop Python 2.7 support ([#239](https://github.com/warpnet/salt-lint/pull/239)).
+
+### Added
+- Rule 216, 217 and 218 for catching common typographical errors ([#249](https://github.com/warpnet/salt-lint/pull/249)).
+
+## [0.5.2] (2021-01-29)
+### Fixed
+- Append the contents of the `CHANGELOG.md` file to the long description of the package instead of the duplicate `README.md` contents ([#234](https://github.com/warpnet/salt-lint/pull/234)).
+- Ignore Jinja specific rules in Jinja escaped blocks ([#236](https://github.com/warpnet/salt-lint/pull/236)).
+
+## [0.5.1] (2021-01-19)
+### Fixed
+- Ensure all excluded paths from both the CLI and configuration are passed to the runner ([#231](https://github.com/warpnet/salt-lint/pull/231)).
+
+## [0.5.0] (2021-01-17)
+### Added
+- Rule 213 to recommend using cmd.run together with onchanges ([#207](https://github.com/warpnet/salt-lint/pull/207)).
+- Rule 214 to check SLS file with a period in the name (besides the suffix period) as they can not be referenced by Salt ([#209](https://github.com/warpnet/salt-lint/pull/209)).
+- Rules 901-915 to check for deprecated states and state options ([#214](https://github.com/warpnet/salt-lint/pull/214)).
+- This `CHANGELOG.md` file to be able to list all notable changes for each version of **salt-lint** ([#223](https://github.com/warpnet/salt-lint/pull/223)).
+
+[Unreleased]: https://github.com/warpnet/salt-lint/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/warpnet/salt-lint/compare/v0.9.1...v0.9.2]
+[0.9.1]: https://github.com/warpnet/salt-lint/compare/v0.9.0...v0.9.1
+[0.9.0]: https://github.com/warpnet/salt-lint/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/warpnet/salt-lint/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/warpnet/salt-lint/compare/v0.6.1...v0.7.0
+[0.6.1]: https://github.com/warpnet/salt-lint/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/warpnet/salt-lint/compare/v0.5.2...v0.6.0
+[0.5.2]: https://github.com/warpnet/salt-lint/compare/v0.5.1...v0.5.2
+[0.5.1]: https://github.com/warpnet/salt-lint/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/warpnet/salt-lint/compare/v0.4.2...v0.5.0

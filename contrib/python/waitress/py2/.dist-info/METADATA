@@ -1,0 +1,237 @@
+Metadata-Version: 2.1
+Name: waitress
+Version: 1.4.4
+Summary: Waitress WSGI server
+Home-page: https://github.com/Pylons/waitress
+Author: Zope Foundation and Contributors
+Author-email: zope-dev@zope.org
+Maintainer: Pylons Project
+Maintainer-email: pylons-discuss@googlegroups.com
+License: ZPL 2.1
+Project-URL: Documentation, https://docs.pylonsproject.org/projects/waitress/en/latest/index.html
+Project-URL: Changelog, https://docs.pylonsproject.org/projects/waitress/en/latest/index.html#change-history
+Project-URL: Issue Tracker, https://github.com/Pylons/waitress/issues
+Keywords: waitress wsgi server http
+Platform: UNKNOWN
+Classifier: Development Status :: 6 - Mature
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Zope Public License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI
+Requires-Python: !=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,>=2.7
+Description-Content-Type: text/x-rst
+Provides-Extra: docs
+Requires-Dist: Sphinx (>=1.8.1) ; extra == 'docs'
+Requires-Dist: docutils ; extra == 'docs'
+Requires-Dist: pylons-sphinx-themes (>=1.0.9) ; extra == 'docs'
+Provides-Extra: testing
+Requires-Dist: pytest ; extra == 'testing'
+Requires-Dist: pytest-cover ; extra == 'testing'
+Requires-Dist: coverage (>=5.0) ; extra == 'testing'
+
+Waitress
+========
+
+.. image:: https://img.shields.io/pypi/v/waitress.svg
+    :target: https://pypi.org/project/waitress/
+    :alt: latest version of waitress on PyPI
+
+.. image:: https://github.com/Pylons/waitress/workflows/Build%20and%20test/badge.svg
+    :target: https://github.com/Pylons/waitress/actions?query=workflow%3A%22Build+and+test%22
+
+.. image:: https://readthedocs.org/projects/waitress/badge/?version=master
+        :target: https://docs.pylonsproject.org/projects/waitress/en/master
+        :alt: master Documentation Status
+
+.. image:: https://img.shields.io/badge/irc-freenode-blue.svg
+        :target: https://webchat.freenode.net/?channels=pyramid
+        :alt: IRC Freenode
+
+Waitress is meant to be a production-quality pure-Python WSGI server with very
+acceptable performance.  It has no dependencies except ones which live in the
+Python standard library.  It runs on CPython on Unix and Windows under Python
+2.7+ and Python 3.5+.  It is also known to run on PyPy 1.6.0+ on UNIX.  It
+supports HTTP/1.0 and HTTP/1.1.
+
+For more information, see the "docs" directory of the Waitress package or visit https://docs.pylonsproject.org/projects/waitress/en/latest/
+
+1.4.4 (2020-06-01)
+------------------
+
+- Fix an issue with keep-alive connections in which memory usage was higher
+  than expected because output buffers were being reused across requests on
+  a long-lived connection and each buffer would not be freed until it was full
+  or the connection was closed. Buffers are now rotated per-request to
+  stabilize their behavior.
+
+  See https://github.com/Pylons/waitress/pull/300
+
+- Waitress threads have been updated to contain their thread number. This will
+  allow loggers that use that information to print the thread that the log is
+  coming from.
+
+  See https://github.com/Pylons/waitress/pull/302
+
+1.4.3 (2020-02-02)
+------------------
+
+Security Fixes
+~~~~~~~~~~~~~~
+
+- In Waitress version 1.4.2 a new regular expression was added to validate the
+  headers that Waitress receives to make sure that it matches RFC7230.
+  Unfortunately the regular expression was written in a way that with invalid
+  input it leads to catastrophic backtracking which allows for a Denial of
+  Service and CPU usage going to a 100%.
+
+  This was reported by Fil Zembowicz to the Pylons Project. Please see
+  https://github.com/Pylons/waitress/security/advisories/GHSA-73m2-3pwg-5fgc
+  for more information.
+
+1.4.2 (2020-01-02)
+------------------
+
+Security Fixes
+~~~~~~~~~~~~~~
+
+- This is a follow-up to the fix introduced in 1.4.1 to tighten up the way
+  Waitress strips whitespace from header values. This makes sure Waitress won't
+  accidentally treat non-printable characters as whitespace and lead to a
+  potental HTTP request smuggling/splitting security issue.
+
+  Thanks to ZeddYu Lu for the extra test cases.
+
+  Please see the security advisory for more information:
+  https://github.com/Pylons/waitress/security/advisories/GHSA-m5ff-3wj3-8ph4
+
+  CVE-ID: CVE-2019-16789
+
+Bugfixes
+~~~~~~~~
+
+- Updated the regex used to validate header-field content to match the errata
+  that was published for RFC7230.
+
+  See: https://www.rfc-editor.org/errata_search.php?rfc=7230&eid=4189
+
+
+1.4.1 (2019-12-24)
+------------------
+
+Security Fixes
+~~~~~~~~~~~~~~
+
+- Waitress did not properly validate that the HTTP headers it received were
+  properly formed, thereby potentially allowing a front-end server to treat a
+  request different from Waitress. This could lead to HTTP request
+  smuggling/splitting.
+
+  Please see the security advisory for more information:
+  https://github.com/Pylons/waitress/security/advisories/GHSA-m5ff-3wj3-8ph4
+
+  CVE-ID: CVE-2019-16789
+
+1.4.0 (2019-12-20)
+------------------
+
+Bugfixes
+~~~~~~~~
+
+- Waitress used to slam the door shut on HTTP pipelined requests without
+  setting the ``Connection: close`` header as appropriate in the response. This
+  is of course not very friendly. Waitress now explicitly sets the header when
+  responding with an internally generated error such as 400 Bad Request or 500
+  Internal Server Error to notify the remote client that it will be closing the
+  connection after the response is sent.
+
+- Waitress no longer allows any spaces to exist between the header field-name
+  and the colon. While waitress did not strip the space and thereby was not
+  vulnerable to any potential header field-name confusion, it should have sent
+  back a 400 Bad Request. See https://github.com/Pylons/waitress/issues/273
+
+Security Fixes
+~~~~~~~~~~~~~~
+
+- Waitress implemented a "MAY" part of the RFC7230
+  (https://tools.ietf.org/html/rfc7230#section-3.5) which states:
+
+      Although the line terminator for the start-line and header fields is
+      the sequence CRLF, a recipient MAY recognize a single LF as a line
+      terminator and ignore any preceding CR.
+
+  Unfortunately if a front-end server does not parse header fields with an LF
+  the same way as it does those with a CRLF it can lead to the front-end and
+  the back-end server parsing the same HTTP message in two different ways. This
+  can lead to a potential for HTTP request smuggling/splitting whereby Waitress
+  may see two requests while the front-end server only sees a single HTTP
+  message.
+
+  For more information I can highly recommend the blog post by ZeddYu Lu
+  https://blog.zeddyu.info/2019/12/08/HTTP-Smuggling-en/
+
+  Please see the security advisory for more information:
+  https://github.com/Pylons/waitress/security/advisories/GHSA-pg36-wpm5-g57p
+
+  CVE-ID: CVE-2019-16785
+
+- Waitress used to treat LF the same as CRLF in ``Transfer-Encoding: chunked``
+  requests, while the maintainer doesn't believe this could lead to a security
+  issue, this is no longer supported and all chunks are now validated to be
+  properly framed with CRLF as required by RFC7230.
+
+- Waitress now validates that the ``Transfer-Encoding`` header contains only
+  transfer codes that it is able to decode. At the moment that includes the
+  only valid header value being ``chunked``.
+
+  That means that if the following header is sent:
+
+  ``Transfer-Encoding: gzip, chunked``
+
+  Waitress will send back a 501 Not Implemented with an error message stating
+  as such, as while Waitress supports ``chunked`` encoding it does not support
+  ``gzip`` and it is unable to pass that to the underlying WSGI environment
+  correctly.
+
+  Waitress DOES NOT implement support for ``Transfer-Encoding: identity``
+  eventhough ``identity`` was valid in RFC2616, it was removed in RFC7230.
+  Please update your clients to remove the ``Transfer-Encoding`` header if the
+  only transfer coding is ``identity`` or update your client to use
+  ``Transfer-Encoding: chunked`` instead of ``Transfer-Encoding: identity,
+  chunked``.
+
+  Please see the security advisory for more information:
+  https://github.com/Pylons/waitress/security/advisories/GHSA-g2xc-35jw-c63p
+
+  CVE-ID: CVE-2019-16786
+
+- While validating the ``Transfer-Encoding`` header, Waitress now properly
+  handles line-folded ``Transfer-Encoding`` headers or those that contain
+  multiple comma seperated values. This closes a potential issue where a
+  front-end server may treat the request as being a chunked request (and thus
+  ignoring the Content-Length) and Waitress using the Content-Length as it was
+  looking for the single value ``chunked`` and did not support comma seperated
+  values.
+
+- Waitress used to explicitly set the Content-Length header to 0 if it was
+  unable to parse it as an integer (for example if the Content-Length header
+  was sent twice (and thus folded together), or was invalid) thereby allowing
+  for a potential request to be split and treated as two requests by HTTP
+  pipelining support in Waitress. If Waitress is now unable to parse the
+  Content-Length header, a 400 Bad Request is sent back to the client.
+
+  Please see the security advisory for more information:
+  https://github.com/Pylons/waitress/security/advisories/GHSA-4ppp-gpcr-7qf6
+
+

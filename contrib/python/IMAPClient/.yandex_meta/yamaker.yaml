@@ -1,0 +1,4 @@
+exclude:
+  - imapclient/examples/*
+  - imapclient/imaplib_ssl_fix.py
+  - imapclient/livetest.py

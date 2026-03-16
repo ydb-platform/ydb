@@ -1,0 +1,53 @@
+Metadata-Version: 2.1
+Name: WebTest
+Version: 2.0.35
+Summary: Helper to test WSGI applications
+Home-page: https://docs.pylonsproject.org/projects/webtest/en/latest/
+Author: Ian Bicking
+Maintainer: Gael Pasgrimaud
+Maintainer-email: gael@gawel.org
+License: MIT
+Keywords: wsgi test unit tests web
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: Paste
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI :: Server
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Requires-Dist: six
+Requires-Dist: WebOb (>=1.2)
+Requires-Dist: waitress (>=0.8.5)
+Requires-Dist: beautifulsoup4
+Provides-Extra: docs
+Requires-Dist: Sphinx (>=1.8.1) ; extra == 'docs'
+Requires-Dist: docutils ; extra == 'docs'
+Requires-Dist: pylons-sphinx-themes (>=1.0.8) ; extra == 'docs'
+Provides-Extra: tests
+Requires-Dist: nose (<1.3.0) ; extra == 'tests'
+Requires-Dist: coverage ; extra == 'tests'
+Requires-Dist: mock ; extra == 'tests'
+Requires-Dist: PasteDeploy ; extra == 'tests'
+Requires-Dist: WSGIProxy2 ; extra == 'tests'
+Requires-Dist: pyquery ; extra == 'tests'
+
+=======
+WebTest
+=======
+
+This wraps any WSGI application and makes it easy to send test
+requests to that application, without starting up an HTTP server.
+
+This provides convenient full-stack testing of applications written
+with any WSGI-compatible framework.
+
+Full docs can be found at https://docs.pylonsproject.org/projects/webtest/en/latest/
+
+

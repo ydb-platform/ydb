@@ -1,0 +1,986 @@
+--- contrib/python/pycrypto/py3/Crypto/Cipher/ARC2.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Cipher/ARC2.py	(working tree)
+@@ -126,5 +126,5 @@ MODE_OPENPGP = 7
+ #: Size of a data block (in bytes)
+ block_size = 8
+ #: Size of a key (in bytes)
+-key_size = xrange(1,16+1)
++key_size = range(1,16+1)
+ 
+--- contrib/python/pycrypto/py3/Crypto/Cipher/ARC4.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Cipher/ARC4.py	(working tree)
+@@ -116,5 +116,5 @@ def new(key, *args, **kwargs):
+ #: Size of a data block (in bytes)
+ block_size = 1
+ #: Size of a key (in bytes)
+-key_size = xrange(1,256+1)
++key_size = range(1,256+1)
+ 
+--- contrib/python/pycrypto/py3/Crypto/Cipher/Blowfish.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Cipher/Blowfish.py	(working tree)
+@@ -117,5 +117,5 @@ MODE_OPENPGP = 7
+ #: Size of a data block (in bytes)
+ block_size = 8
+ #: Size of a key (in bytes)
+-key_size = xrange(4,56+1)
++key_size = range(4,56+1)
+ 
+--- contrib/python/pycrypto/py3/Crypto/Cipher/CAST.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Cipher/CAST.py	(working tree)
+@@ -120,4 +120,4 @@ MODE_OPENPGP = 7
+ #: Size of a data block (in bytes)
+ block_size = 8
+ #: Size of a key (in bytes)
+-key_size = xrange(5,16+1)
++key_size = range(5,16+1)
+--- contrib/python/pycrypto/py3/Crypto/Cipher/PKCS1_OAEP.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Cipher/PKCS1_OAEP.py	(working tree)
+@@ -49,7 +49,7 @@ the RSA key:
+ .. __: http://www.rsa.com/rsalabs/node.asp?id=2125.
+ """
+ 
+-from __future__ import nested_scopes
++
+ 
+ __revision__ = "$Id$"
+ __all__ = [ 'new', 'PKCS1OAEP_Cipher' ]
+--- contrib/python/pycrypto/py3/Crypto/Cipher/PKCS1_v1_5.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Cipher/PKCS1_v1_5.py	(working tree)
+@@ -132,7 +132,7 @@ class PKCS115_Cipher:
+             def __call__(self, c):
+                 while bord(c)==0x00: c=self.rf(1)[0]
+                 return c
+-        ps = tobytes(map(nonZeroRandByte(randFunc), randFunc(k-mLen-3)))
++        ps = tobytes(list(map(nonZeroRandByte(randFunc), randFunc(k-mLen-3))))
+         # Step 2b
+         em = b('\x00\x02') + ps + bchr(0x00) + message
+         # Step 3a (OS2IP), step 3b (RSAEP), part of step 3c (I2OSP)
+--- contrib/python/pycrypto/py3/Crypto/Cipher/XOR.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Cipher/XOR.py	(working tree)
+@@ -82,5 +82,5 @@ def new(key, *args, **kwargs):
+ #: Size of a data block (in bytes)
+ block_size = 1
+ #: Size of a key (in bytes)
+-key_size = xrange(1,32+1)
++key_size = range(1,32+1)
+ 
+--- contrib/python/pycrypto/py3/Crypto/Hash/HMAC.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Hash/HMAC.py	(working tree)
+@@ -98,7 +98,7 @@ class HMAC:
+             A hash module or object instantiated from `Crypto.Hash`
+         """
+         if digestmod is None:
+-            import MD5
++            from . import MD5
+             digestmod = MD5
+ 
+         self.digestmod = digestmod
+--- contrib/python/pycrypto/py3/Crypto/Hash/MD5.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Hash/MD5.py	(working tree)
+@@ -48,7 +48,7 @@ try:
+     hashFactory = hashlib.md5
+ 
+ except ImportError:
+-    import md5
++    from . import md5
+     hashFactory = md5
+ 
+ class MD5Hash(HashAlgo):
+--- contrib/python/pycrypto/py3/Crypto/Hash/SHA.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Hash/SHA.py	(working tree)
+@@ -48,7 +48,7 @@ try:
+     hashFactory = hashlib.sha1
+ 
+ except ImportError:
+-    import sha
++    from . import sha
+     hashFactory = sha
+ 
+ class SHA1Hash(HashAlgo):
+--- contrib/python/pycrypto/py3/Crypto/Protocol/AllOrNothing.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Protocol/AllOrNothing.py	(working tree)
+@@ -48,6 +48,7 @@ import operator
+ import sys
+ from Crypto.Util.number import bytes_to_long, long_to_bytes
+ from Crypto.Util.py3compat import *
++from functools import reduce
+ 
+ def isInt(x):
+     test = 0
+@@ -186,11 +187,11 @@ class AllOrNothing:
+         # better have at least 2 blocks, for the padbytes package and the hash
+         # block accumulator
+         if len(blocks) < 2:
+-            raise ValueError, "List must be at least length 2."
++            raise ValueError("List must be at least length 2.")
+ 
+         # blocks is a list of strings.  We need to deal with them as long
+         # integers
+-        blocks = map(bytes_to_long, blocks)
++        blocks = list(map(bytes_to_long, blocks))
+ 
+         # Calculate the well-known key, to which the hash blocks are
+         # encrypted, and create the hash cipher.
+@@ -271,15 +272,15 @@ Where:
+ 
+     def usage(code, msg=None):
+         if msg:
+-            print msg
+-        print usagemsg % {'program': sys.argv[0],
+-                          'ciphermodule': ciphermodule}
++            print(msg)
++        print(usagemsg % {'program': sys.argv[0],
++                          'ciphermodule': ciphermodule})
+         sys.exit(code)
+ 
+     try:
+         opts, args = getopt.getopt(sys.argv[1:],
+                                    'c:l', ['cipher=', 'aslong'])
+-    except getopt.error, msg:
++    except getopt.error as msg:
+         usage(1, msg)
+ 
+     if args:
+@@ -297,23 +298,23 @@ Where:
+     module = __import__('Crypto.Cipher.'+ciphermodule, None, None, ['new'])
+ 
+     x = AllOrNothing(module)
+-    print 'Original text:\n=========='
+-    print __doc__
+-    print '=========='
++    print('Original text:\n==========')
++    print(__doc__)
++    print('==========')
+     msgblocks = x.digest(b(__doc__))
+-    print 'message blocks:'
+-    for i, blk in zip(range(len(msgblocks)), msgblocks):
++    print('message blocks:')
++    for i, blk in zip(list(range(len(msgblocks))), msgblocks):
+         # base64 adds a trailing newline
+-        print '    %3d' % i,
++        print('    %3d' % i, end=' ')
+         if aslong:
+-            print bytes_to_long(blk)
++            print(bytes_to_long(blk))
+         else:
+-            print base64.encodestring(blk)[:-1]
++            print(base64.encodestring(blk)[:-1])
+     #
+     # get a new undigest-only object so there's no leakage
+     y = AllOrNothing(module)
+     text = y.undigest(msgblocks)
+     if text == b(__doc__):
+-        print 'They match!'
++        print('They match!')
+     else:
+-        print 'They differ!'
++        print('They differ!')
+--- contrib/python/pycrypto/py3/Crypto/Protocol/Chaffing.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Protocol/Chaffing.py	(working tree)
+@@ -106,9 +106,9 @@ class Chaff:
+         """
+ 
+         if not (0.0<=factor<=1.0):
+-            raise ValueError, "'factor' must be between 0.0 and 1.0"
++            raise ValueError("'factor' must be between 0.0 and 1.0")
+         if blocksper < 0:
+-            raise ValueError, "'blocksper' must be zero or more"
++            raise ValueError("'blocksper' must be zero or more")
+ 
+         self.__factor = factor
+         self.__blocksper = blocksper
+@@ -139,8 +139,8 @@ class Chaff:
+         # number of chaff blocks to add per message block that is being
+         # chaffed.
+         count = len(blocks) * self.__factor
+-        blocksper = range(self.__blocksper)
+-        for i, wheat in zip(range(len(blocks)), blocks):
++        blocksper = list(range(self.__blocksper))
++        for i, wheat in zip(list(range(len(blocks))), blocks):
+             # it shouldn't matter which of the n blocks we add chaff to, so for
+             # ease of implementation, we'll just add them to the first count
+             # blocks
+@@ -185,9 +185,9 @@ abolish it, and to institute new Government, laying its foundation on such
+ principles and organizing its powers in such form, as to them shall seem most
+ likely to effect their Safety and Happiness.
+ """
+-    print 'Original text:\n=========='
+-    print text
+-    print '=========='
++    print('Original text:\n==========')
++    print(text)
++    print('==========')
+ 
+     # first transform the text into packets
+     blocks = [] ; size = 40
+@@ -195,7 +195,7 @@ likely to effect their Safety and Happiness.
+         blocks.append( text[i:i+size] )
+ 
+     # now get MACs for all the text blocks.  The key is obvious...
+-    print 'Calculating MACs...'
++    print('Calculating MACs...')
+     from Crypto.Hash import HMAC, SHA
+     key = 'Jefferson'
+     macs = [HMAC.new(key, block, digestmod=SHA).digest()
+@@ -205,13 +205,13 @@ likely to effect their Safety and Happiness.
+ 
+     # put these into a form acceptable as input to the chaffing procedure
+     source = []
+-    m = zip(range(len(blocks)), blocks, macs)
+-    print m
++    m = list(zip(list(range(len(blocks))), blocks, macs))
++    print(m)
+     for i, data, mac in m:
+         source.append((i, data, mac))
+ 
+     # now chaff these
+-    print 'Adding chaff...'
++    print('Adding chaff...')
+     c = Chaff(factor=0.5, blocksper=2)
+     chaffed = c.chaff(source)
+ 
+@@ -221,7 +221,7 @@ likely to effect their Safety and Happiness.
+     # the chaff
+ 
+     wheat = []
+-    print 'chaffed message blocks:'
++    print('chaffed message blocks:')
+     for i, data, mac in chaffed:
+         # do the authentication
+         h = HMAC.new(key, data, digestmod=SHA)
+@@ -232,14 +232,14 @@ likely to effect their Safety and Happiness.
+         else:
+             tag = '   '
+         # base64 adds a trailing newline
+-        print tag, '%3d' % i, \
+-              repr(data), encodestring(mac)[:-1]
++        print(tag, '%3d' % i, \
++              repr(data), encodestring(mac)[:-1])
+ 
+     # now decode the message packets and check it against the original text
+-    print 'Undigesting wheat...'
++    print('Undigesting wheat...')
+     # PY3K: This is meant to be text, do not change to bytes (data)
+     newtext = "".join(wheat)
+     if newtext == text:
+-        print 'They match!'
++        print('They match!')
+     else:
+-        print 'They differ!'
++        print('They differ!')
+--- contrib/python/pycrypto/py3/Crypto/Protocol/KDF.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Protocol/KDF.py	(working tree)
+@@ -79,7 +79,7 @@ def PBKDF1(password, salt, dkLen, count=1000, hashAlgo=None):
+         raise ValueError("Selected hash algorithm has a too short digest (%d bytes)." % digest)
+     if len(salt)!=8:
+         raise ValueError("Salt is not 8 bytes long.")
+-    for i in xrange(count-1):
++    for i in range(count-1):
+         pHash = pHash.new(pHash.digest())
+     return pHash.digest()[:dkLen]
+ 
+@@ -114,7 +114,7 @@ def PBKDF2(password, salt, dkLen=16, count=1000, prf=None):
+     i = 1
+     while len(key)<dkLen:
+         U = previousU = prf(password,salt+struct.pack(">I", i))
+-        for j in xrange(count-1):
++        for j in range(count-1):
+             previousU = t = prf(password,previousU)
+             U = strxor(U,t)
+         key += U
+--- contrib/python/pycrypto/py3/Crypto/PublicKey/DSA.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/PublicKey/DSA.py	(working tree)
+@@ -219,7 +219,7 @@ class _DSAobj(pubkey.pubkey):
+             self.implementation = DSAImplementation()
+         t = []
+         for k in self.keydata:
+-            if not d.has_key(k):
++            if k not in d:
+                 break
+             t.append(d[k])
+         self.key = self.implementation._math.dsa_construct(*tuple(t))
+--- contrib/python/pycrypto/py3/Crypto/PublicKey/RSA.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/PublicKey/RSA.py	(working tree)
+@@ -288,7 +288,7 @@ class _RSAobj(pubkey.pubkey):
+             self.implementation = RSAImplementation()
+         t = []
+         for k in self.keydata:
+-            if not d.has_key(k):
++            if k not in d:
+                 break
+             t.append(d[k])
+         self.key = self.implementation._math.rsa_construct(*tuple(t))
+@@ -582,7 +582,7 @@ class RSAImplementation(object):
+                     if privateKey.isType('OCTET STRING'):
+                         return self._importKeyDER(privateKey.payload)
+ 
+-        except ValueError, IndexError:
++        except ValueError as IndexError:
+             pass
+ 
+         raise ValueError("RSA key format is not supported")
+--- contrib/python/pycrypto/py3/Crypto/PublicKey/_DSA.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/PublicKey/_DSA.py	(working tree)
+@@ -50,7 +50,7 @@ def generateQ(randfunc):
+         q=q*256+c
+     while (not isPrime(q)):
+         q=q+2
+-    if pow(2,159L) < q < pow(2,160L):
++    if pow(2,159) < q < pow(2,160):
+         return S, q
+     raise RuntimeError('Bad q value generated')
+ 
+@@ -80,7 +80,7 @@ def generate_py(bits, randfunc, progress_func=None):
+                 V[k]=bytes_to_long(SHA.new(S+bstr(N)+bstr(k)).digest())
+             W=V[n] % powb
+             for k in range(n-1, -1, -1):
+-                W=(W<<160L)+V[k]
++                W=(W<<160)+V[k]
+             X=W+powL1
+             p=X-(X%(2*obj.q)-1)
+             if powL1<=p and isPrime(p):
+--- contrib/python/pycrypto/py3/Crypto/PublicKey/_RSA.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/PublicKey/_RSA.py	(working tree)
+@@ -37,12 +37,12 @@ def generate_py(bits, randfunc, progress_func=None, e=65537):
+     if present, to display the progress of the key generation.
+     """
+     obj=RSAobj()
+-    obj.e = long(e)
++    obj.e = int(e)
+ 
+     # Generate the prime factors of n
+     if progress_func:
+         progress_func('p,q\n')
+-    p = q = 1L
++    p = q = 1
+     while number.size(p*q) < bits:
+         # Note that q might be one bit longer than p if somebody specifies an odd
+         # number of bits for the key. (Why would anyone do that?  You don't get
+--- contrib/python/pycrypto/py3/Crypto/PublicKey/_slowmath.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/PublicKey/_slowmath.py	(working tree)
+@@ -81,12 +81,12 @@ class _RSAKey(object):
+ 
+ def rsa_construct(n, e, d=None, p=None, q=None, u=None):
+     """Construct an RSAKey object"""
+-    assert isinstance(n, long)
+-    assert isinstance(e, long)
+-    assert isinstance(d, (long, type(None)))
+-    assert isinstance(p, (long, type(None)))
+-    assert isinstance(q, (long, type(None)))
+-    assert isinstance(u, (long, type(None)))
++    assert isinstance(n, int)
++    assert isinstance(e, int)
++    assert isinstance(d, (int, type(None)))
++    assert isinstance(p, (int, type(None)))
++    assert isinstance(q, (int, type(None)))
++    assert isinstance(u, (int, type(None)))
+     obj = _RSAKey()
+     obj.n = n
+     obj.e = e
+@@ -151,7 +151,7 @@ class _DSAKey(object):
+         # SECURITY TODO - We _should_ be computing SHA1(m), but we don't because that's the API.
+         if not self.has_private():
+             raise TypeError("No private key")
+-        if not (1L < k < self.q):
++        if not (1 < k < self.q):
+             raise ValueError("k is not between 2 and q-1")
+         inv_k = inverse(k, self.q)   # Compute k**-1 mod q
+         r = pow(self.g, k, self.p) % self.q  # r = (g**k mod p) mod q
+@@ -169,11 +169,11 @@ class _DSAKey(object):
+         return v == r
+ 
+ def dsa_construct(y, g, p, q, x=None):
+-    assert isinstance(y, long)
+-    assert isinstance(g, long)
+-    assert isinstance(p, long)
+-    assert isinstance(q, long)
+-    assert isinstance(x, (long, type(None)))
++    assert isinstance(y, int)
++    assert isinstance(g, int)
++    assert isinstance(p, int)
++    assert isinstance(q, int)
++    assert isinstance(x, (int, type(None)))
+     obj = _DSAKey()
+     obj.y = y
+     obj.g = g
+--- contrib/python/pycrypto/py3/Crypto/PublicKey/pubkey.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/PublicKey/pubkey.py	(working tree)
+@@ -45,7 +45,7 @@ class pubkey:
+         restoration."""
+         d=self.__dict__
+         for key in self.keydata:
+-            if d.has_key(key): d[key]=long(d[key])
++            if key in d: d[key]=int(d[key])
+         return d
+ 
+     def __setstate__(self, d):
+@@ -53,7 +53,7 @@ class pubkey:
+ number representation being used, whether that is Python long
+ integers, MPZ objects, or whatever."""
+         for key in self.keydata:
+-            if d.has_key(key): self.__dict__[key]=bignum(d[key])
++            if key in d: self.__dict__[key]=bignum(d[key])
+ 
+     def encrypt(self, plaintext, K):
+         """Encrypt a piece of data.
+@@ -68,9 +68,9 @@ integers, MPZ objects, or whatever."""
+          plaintext (string or long).
+         """
+         wasString=0
+-        if isinstance(plaintext, types.StringType):
++        if isinstance(plaintext, bytes):
+             plaintext=bytes_to_long(plaintext) ; wasString=1
+-        if isinstance(K, types.StringType):
++        if isinstance(K, bytes):
+             K=bytes_to_long(K)
+         ciphertext=self._encrypt(plaintext, K)
+         if wasString: return tuple(map(long_to_bytes, ciphertext))
+@@ -86,9 +86,9 @@ integers, MPZ objects, or whatever."""
+          of byte strings. A long otherwise.
+         """
+         wasString=0
+-        if not isinstance(ciphertext, types.TupleType):
++        if not isinstance(ciphertext, tuple):
+             ciphertext=(ciphertext,)
+-        if isinstance(ciphertext[0], types.StringType):
++        if isinstance(ciphertext[0], bytes):
+             ciphertext=tuple(map(bytes_to_long, ciphertext)) ; wasString=1
+         plaintext=self._decrypt(ciphertext)
+         if wasString: return long_to_bytes(plaintext)
+@@ -107,8 +107,8 @@ integers, MPZ objects, or whatever."""
+         """
+         if (not self.has_private()):
+             raise TypeError('Private key not available in this object')
+-        if isinstance(M, types.StringType): M=bytes_to_long(M)
+-        if isinstance(K, types.StringType): K=bytes_to_long(K)
++        if isinstance(M, bytes): M=bytes_to_long(M)
++        if isinstance(K, bytes): K=bytes_to_long(K)
+         return self._sign(M, K)
+ 
+     def verify (self, M, signature):
+@@ -122,7 +122,7 @@ integers, MPZ objects, or whatever."""
+ 
+         :Return: True if the signature is correct, False otherwise.
+         """
+-        if isinstance(M, types.StringType): M=bytes_to_long(M)
++        if isinstance(M, bytes): M=bytes_to_long(M)
+         return self._verify(M, signature)
+ 
+     # alias to compensate for the old validate() name
+@@ -142,9 +142,9 @@ integers, MPZ objects, or whatever."""
+         :Return: A byte string if M was so. A long otherwise.
+         """
+         wasString=0
+-        if isinstance(M, types.StringType):
++        if isinstance(M, bytes):
+             M=bytes_to_long(M) ; wasString=1
+-        if isinstance(B, types.StringType): B=bytes_to_long(B)
++        if isinstance(B, bytes): B=bytes_to_long(B)
+         blindedmessage=self._blind(M, B)
+         if wasString: return long_to_bytes(blindedmessage)
+         else: return blindedmessage
+@@ -159,9 +159,9 @@ integers, MPZ objects, or whatever."""
+         :Type B: byte string or long
+         """
+         wasString=0
+-        if isinstance(M, types.StringType):
++        if isinstance(M, bytes):
+             M=bytes_to_long(M) ; wasString=1
+-        if isinstance(B, types.StringType): B=bytes_to_long(B)
++        if isinstance(B, bytes): B=bytes_to_long(B)
+         unblindedmessage=self._unblind(M, B)
+         if wasString: return long_to_bytes(unblindedmessage)
+         else: return unblindedmessage
+--- contrib/python/pycrypto/py3/Crypto/Random/Fortuna/FortunaAccumulator.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Random/Fortuna/FortunaAccumulator.py	(working tree)
+@@ -34,9 +34,9 @@ import time
+ import warnings
+ 
+ from Crypto.pct_warnings import ClockRewindWarning
+-import SHAd256
++from . import SHAd256
+ 
+-import FortunaGenerator
++from . import FortunaGenerator
+ 
+ class FortunaPool(object):
+     """Fortuna pool type
+@@ -89,7 +89,7 @@ def which_pools(r):
+             retval.append(i)
+         else:
+             break   # optimization.  once this fails, it always fails
+-        mask = (mask << 1) | 1L
++        mask = (mask << 1) | 1
+     return retval
+ 
+ class FortunaAccumulator(object):
+--- contrib/python/pycrypto/py3/Crypto/Random/Fortuna/FortunaGenerator.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Random/Fortuna/FortunaGenerator.py	(working tree)
+@@ -35,7 +35,7 @@ from Crypto.Util.number import ceil_shift, exact_log2, exact_div
+ from Crypto.Util import Counter
+ from Crypto.Cipher import AES
+ 
+-import SHAd256
++from . import SHAd256
+ 
+ class AESGenerator(object):
+     """The Fortuna "generator"
+@@ -90,7 +90,7 @@ class AESGenerator(object):
+         remainder = bytes & ((1<<20)-1)
+ 
+         retval = []
+-        for i in xrange(num_full_blocks):
++        for i in range(num_full_blocks):
+             retval.append(self._pseudo_random_data(1<<20))
+         retval.append(self._pseudo_random_data(remainder))
+         
+@@ -123,7 +123,7 @@ class AESGenerator(object):
+             raise AssertionError("generator must be seeded before use")
+         assert 0 <= num_blocks <= self.max_blocks_per_request
+         retval = []
+-        for i in xrange(num_blocks >> 12):      # xrange(num_blocks / 4096)
++        for i in range(num_blocks >> 12):      # xrange(num_blocks / 4096)
+             retval.append(self._cipher.encrypt(self._four_kiblocks_of_zeros))
+         remaining_bytes = (num_blocks & 4095) << self.block_size_shift  # (num_blocks % 4095) * self.block_size
+         retval.append(self._cipher.encrypt(self._four_kiblocks_of_zeros[:remaining_bytes]))
+--- contrib/python/pycrypto/py3/Crypto/Random/OSRNG/fallback.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Random/OSRNG/fallback.py	(working tree)
+@@ -27,7 +27,7 @@ __all__ = ['PythonOSURandomRNG']
+ 
+ import os
+ 
+-from rng_base import BaseRNG
++from .rng_base import BaseRNG
+ 
+ class PythonOSURandomRNG(BaseRNG):
+ 
+--- contrib/python/pycrypto/py3/Crypto/Random/OSRNG/nt.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Random/OSRNG/nt.py	(working tree)
+@@ -26,7 +26,7 @@ __revision__ = "$Id$"
+ __all__ = ['WindowsRNG']
+ 
+ import winrandom
+-from rng_base import BaseRNG
++from .rng_base import BaseRNG
+ 
+ class WindowsRNG(BaseRNG):
+ 
+--- contrib/python/pycrypto/py3/Crypto/Random/OSRNG/posix.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Random/OSRNG/posix.py	(working tree)
+@@ -29,7 +29,7 @@ import errno
+ import os
+ import stat
+ 
+-from rng_base import BaseRNG
++from .rng_base import BaseRNG
+ from Crypto.Util.py3compat import b
+ 
+ class DevURandomRNG(BaseRNG):
+@@ -63,7 +63,7 @@ class DevURandomRNG(BaseRNG):
+         while len(data) < N:
+             try:
+                 d = self.__file.read(N - len(data))
+-            except IOError, e:
++            except IOError as e:
+                 # read(2) has been interrupted by a signal; redo the read
+                 if e.errno == errno.EINTR:
+                     continue
+--- contrib/python/pycrypto/py3/Crypto/Random/OSRNG/rng_base.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Random/OSRNG/rng_base.py	(working tree)
+@@ -67,7 +67,7 @@ class BaseRNG(object):
+         """Return N bytes from the RNG."""
+         if self.closed:
+             raise ValueError("I/O operation on closed file")
+-        if not isinstance(N, (long, int)):
++        if not isinstance(N, int):
+             raise TypeError("an integer is required")
+         if N < 0:
+             raise ValueError("cannot read to end of infinite stream")
+--- contrib/python/pycrypto/py3/Crypto/Random/_UserFriendlyRNG.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Random/_UserFriendlyRNG.py	(working tree)
+@@ -73,8 +73,8 @@ class _EntropyCollector(object):
+         t = time.time()
+         self._time_es.feed(struct.pack("@I", int(2**30 * (t - floor(t)))))
+ 
+-        # Add the fractional part of time.clock()
+-        t = time.clock()
++        # Add the fractional part of time.process_time()
++        t = time.process_time()
+         self._clock_es.feed(struct.pack("@I", int(2**30 * (t - floor(t)))))
+ 
+ 
+@@ -120,7 +120,7 @@ class _UserFriendlyRNG(object):
+         """Return N bytes from the RNG."""
+         if self.closed:
+             raise ValueError("I/O operation on closed file")
+-        if not isinstance(N, (long, int)):
++        if not isinstance(N, int):
+             raise TypeError("an integer is required")
+         if N < 0:
+             raise ValueError("cannot read to end of infinite stream")
+--- contrib/python/pycrypto/py3/Crypto/Random/random.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Random/random.py	(working tree)
+@@ -47,7 +47,7 @@ class StrongRandom(object):
+         """Return a python long integer with k random bits."""
+         if self._randfunc is None:
+             self._randfunc = Random.new().read
+-        mask = (1L << k) - 1
++        mask = (1 << k) - 1
+         return mask & bytes_to_long(self._randfunc(ceil_div(k, 8)))
+ 
+     def randrange(self, *args):
+@@ -64,9 +64,9 @@ class StrongRandom(object):
+             step = 1
+         else:
+             raise TypeError("randrange expected at most 3 arguments, got %d" % (len(args),))
+-        if (not isinstance(start, (int, long))
+-                or not isinstance(stop, (int, long))
+-                or not isinstance(step, (int, long))):
++        if (not isinstance(start, int)
++                or not isinstance(stop, int)
++                or not isinstance(step, int)):
+             raise TypeError("randrange requires integer arguments")
+         if step == 0:
+             raise ValueError("randrange step argument must not be zero")
+@@ -86,7 +86,7 @@ class StrongRandom(object):
+ 
+     def randint(self, a, b):
+         """Return a random integer N such that a <= N <= b."""
+-        if not isinstance(a, (int, long)) or not isinstance(b, (int, long)):
++        if not isinstance(a, int) or not isinstance(b, int):
+             raise TypeError("randint requires integer arguments")
+         N = self.randrange(a, b+1)
+         assert a <= N <= b
+@@ -108,7 +108,7 @@ class StrongRandom(object):
+ 
+         # Choose a random item (without replacement) until all the items have been
+         # chosen.
+-        for i in xrange(len(x)):
++        for i in range(len(x)):
+             x[i] = items.pop(self.randrange(len(items)))
+ 
+     def sample(self, population, k):
+@@ -120,9 +120,9 @@ class StrongRandom(object):
+ 
+         retval = []
+         selected = {}  # we emulate a set using a dict here
+-        for i in xrange(k):
++        for i in range(k):
+             r = None
+-            while r is None or selected.has_key(r):
++            while r is None or r in selected:
+                 r = self.randrange(num_choices)
+             retval.append(population[r])
+             selected[r] = 1
+--- contrib/python/pycrypto/py3/Crypto/Signature/PKCS1_PSS.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Signature/PKCS1_PSS.py	(working tree)
+@@ -61,7 +61,7 @@ the RSA key:
+ 
+ # Allow nested scopes in Python 2.1
+ # See http://oreilly.com/pub/a/python/2001/04/19/pythonnews.html
+-from __future__ import nested_scopes
++
+ 
+ __revision__ = "$Id$"
+ __all__ = [ 'new', 'PSS_SigScheme' ]
+@@ -201,7 +201,7 @@ class PSS_SigScheme:
+ def MGF1(mgfSeed, maskLen, hash):
+     """Mask Generation Function, described in B.2.1"""
+     T = b("")
+-    for counter in xrange(ceil_div(maskLen, hash.digest_size)):
++    for counter in range(ceil_div(maskLen, hash.digest_size)):
+         c = long_to_bytes(counter, 4)
+         T = T + hash.new(mgfSeed + c).digest()
+     assert(len(T)>=maskLen)
+@@ -241,7 +241,7 @@ def EMSA_PSS_ENCODE(mhash, emBits, randFunc, mgf, sLen):
+ 
+     # Bitmask of digits that fill up
+     lmask = 0
+-    for i in xrange(8*emLen-emBits):
++    for i in range(8*emLen-emBits):
+         lmask = lmask>>1 | 0x80
+ 
+     # Step 1 and 2 have been already done
+@@ -299,7 +299,7 @@ def EMSA_PSS_VERIFY(mhash, em, emBits, mgf, sLen):
+ 
+     # Bitmask of digits that fill up
+     lmask = 0
+-    for i in xrange(8*emLen-emBits):
++    for i in range(8*emLen-emBits):
+         lmask = lmask>>1 | 0x80
+ 
+     # Step 1 and 2 have been already done
+--- contrib/python/pycrypto/py3/Crypto/Util/Counter.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Util/Counter.py	(working tree)
+@@ -115,7 +115,7 @@ def new(nbits, prefix=b(""), suffix=b(""), initial_value=1, overflow=0, little_e
+ 
+ def _encode(n, nbytes, little_endian=False):
+     retval = []
+-    n = long(n)
++    n = int(n)
+     for i in range(nbytes):
+         if little_endian:
+             retval.append(bchr(n & 0xff))
+--- contrib/python/pycrypto/py3/Crypto/Util/RFC1751.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Util/RFC1751.py	(working tree)
+@@ -29,6 +29,7 @@ __revision__ = "$Id$"
+ 
+ import binascii
+ from Crypto.Util.py3compat import *
++from functools import reduce
+ 
+ binary={0:'0000', 1:'0001', 2:'0010', 3:'0011', 4:'0100', 5:'0101',
+         6:'0110', 7:'0111', 8:'1000', 9:'1001', 10:'1010', 11:'1011',
+@@ -36,8 +37,8 @@ binary={0:'0000', 1:'0001', 2:'0010', 3:'0011', 4:'0100', 5:'0101',
+ 
+ def _key2bin(s):
+     "Convert a key into a string of binary digits"
+-    kl=map(lambda x: bord(x), s)
+-    kl=map(lambda x: binary[x>>4]+binary[x&15], kl)
++    kl=[bord(x) for x in s]
++    kl=[binary[x>>4]+binary[x&15] for x in kl]
+     return ''.join(kl)
+ 
+ def _extract(key, start, length):
+@@ -95,7 +96,7 @@ def english_to_key (s):
+         p=0
+         for i in range(0, 64, 2): p=p+_extract(skbin, i, 2)
+         if (p&3) != _extract(skbin, 64, 2):
+-            raise ValueError, "Parity error in resulting key"
++            raise ValueError("Parity error in resulting key")
+         key=key+subkey[0:8]
+     return key
+ 
+@@ -352,13 +353,13 @@ if __name__=='__main__':
+            ]
+ 
+     for key, words in data:
+-        print 'Trying key', key
++        print('Trying key', key)
+         key=binascii.a2b_hex(key)
+         w2=key_to_english(key)
+         if w2!=words:
+-            print 'key_to_english fails on key', repr(key), ', producing', str(w2)
++            print('key_to_english fails on key', repr(key), ', producing', str(w2))
+         k2=english_to_key(words)
+         if k2!=key:
+-            print 'english_to_key fails on key', repr(key), ', producing', repr(k2)
++            print('english_to_key fails on key', repr(key), ', producing', repr(k2))
+ 
+ 
+--- contrib/python/pycrypto/py3/Crypto/Util/_number_new.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Util/_number_new.py	(working tree)
+@@ -37,11 +37,11 @@ def ceil_shift(n, b):
+     This is done by right-shifting n by b bits and incrementing the result by 1
+     if any '1' bits were shifted out.
+     """
+-    if not isinstance(n, (int, long)) or not isinstance(b, (int, long)):
++    if not isinstance(n, int) or not isinstance(b, int):
+         raise TypeError("unsupported operand type(s): %r and %r" % (type(n).__name__, type(b).__name__))
+ 
+     assert n >= 0 and b >= 0    # I haven't tested or even thought about negative values
+-    mask = (1L << b) - 1
++    mask = (1 << b) - 1
+     if n & mask:
+         return (n >> b) + 1
+     else:
+@@ -50,7 +50,7 @@ def ceil_shift(n, b):
+ def ceil_div(a, b):
+     """Return ceil(a / b) without performing any floating-point operations."""
+ 
+-    if not isinstance(a, (int, long)) or not isinstance(b, (int, long)):
++    if not isinstance(a, int) or not isinstance(b, int):
+         raise TypeError("unsupported operand type(s): %r and %r" % (type(a).__name__, type(b).__name__))
+ 
+     (q, r) = divmod(a, b)
+@@ -60,7 +60,7 @@ def ceil_div(a, b):
+         return q
+ 
+ def floor_div(a, b):
+-    if not isinstance(a, (int, long)) or not isinstance(b, (int, long)):
++    if not isinstance(a, int) or not isinstance(b, int):
+         raise TypeError("unsupported operand type(s): %r and %r" % (type(a).__name__, type(b).__name__))
+ 
+     (q, r) = divmod(a, b)
+@@ -72,10 +72,10 @@ def exact_log2(num):
+     If no such integer exists, this function raises ValueError.
+     """
+ 
+-    if not isinstance(num, (int, long)):
++    if not isinstance(num, int):
+         raise TypeError("unsupported operand type: %r" % (type(num).__name__,))
+ 
+-    n = long(num)
++    n = int(num)
+     if n <= 0:
+         raise ValueError("cannot compute logarithm of non-positive number")
+ 
+@@ -87,7 +87,7 @@ def exact_log2(num):
+         n >>= 1
+     i -= 1
+ 
+-    assert num == (1L << i)
++    assert num == (1 << i)
+     return i
+ 
+ def exact_div(p, d, allow_divzero=False):
+@@ -101,7 +101,7 @@ def exact_div(p, d, allow_divzero=False):
+     unless allow_divzero is true (default: False).
+     """
+ 
+-    if not isinstance(p, (int, long)) or not isinstance(d, (int, long)):
++    if not isinstance(p, int) or not isinstance(d, int):
+         raise TypeError("unsupported operand type(s): %r and %r" % (type(p).__name__, type(d).__name__))
+ 
+     if d == 0 and allow_divzero:
+--- contrib/python/pycrypto/py3/Crypto/Util/asn1.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Util/asn1.py	(working tree)
+@@ -187,7 +187,7 @@ class DerSequence(DerObject):
+ 
+         def hasInts(self):
+                 """Return the number of items in this sequence that are numbers."""
+-                return len(filter(isInt, self._seq))
++                return len(list(filter(isInt, self._seq)))
+ 
+         def hasOnlyInts(self):
+                 """Return True if all items in this sequence are numbers."""
+--- contrib/python/pycrypto/py3/Crypto/Util/number.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Util/number.py	(working tree)
+@@ -32,7 +32,7 @@ import math
+ import sys
+ from Crypto.Util.py3compat import *
+ 
+-bignum = long
++bignum = int
+ try:
+     from Crypto.PublicKey import _fastmath
+ except ImportError:
+@@ -57,7 +57,7 @@ if _fastmath is not None and not _fastmath.HAVE_DECL_MPZ_POWM_SEC:
+     _warn("Not using mpz_powm_sec.  You should rebuild using libgmp >= 5 to avoid timing attack vulnerability.", PowmInsecureWarning)
+ 
+ # New functions
+-from _number_new import *
++from ._number_new import *
+ 
+ # Commented out and replaced with faster versions below
+ ## def long2str(n):
+@@ -136,7 +136,7 @@ def getRandomNBitInteger(N, randfunc=None):
+     the future.
+     """
+     value = getRandomInteger (N-1, randfunc)
+-    value |= 2L ** (N-1)                # Ensure high bit is set
++    value |= 2 ** (N-1)                # Ensure high bit is set
+     assert size(value) >= N
+     return value
+ 
+@@ -153,8 +153,8 @@ def inverse(u, v):
+     """inverse(u:long, v:long):long
+     Return the inverse of u mod v.
+     """
+-    u3, v3 = long(u), long(v)
+-    u1, v1 = 1L, 0L
++    u3, v3 = int(u), int(v)
++    u1, v1 = 1, 0
+     while v3 > 0:
+         q=divmod(u3, v3)[0]
+         u1, v1 = v1, u1 - v1*q
+@@ -208,7 +208,7 @@ def _rabinMillerTest(n, rounds, randfunc=None):
+ 
+     tested = []
+     # we need to do at most n-2 rounds.
+-    for i in xrange (min (rounds, n-2)):
++    for i in range (min (rounds, n-2)):
+         # randomly choose a < n and make sure it hasn't been tested yet
+         a = getRandomRange (2, n, randfunc)
+         while a in tested:
+@@ -219,7 +219,7 @@ def _rabinMillerTest(n, rounds, randfunc=None):
+         if z == 1 or z == n_1:
+             continue
+         composite = 1
+-        for r in xrange (b):
++        for r in range (b):
+             z = (z * z) % n
+             if z == 1:
+                 return 0
+@@ -261,7 +261,7 @@ def getStrongPrime(N, e=0, false_positive_prob=1e-6, randfunc=None):
+ 
+     # Use the accelerator if available
+     if _fastmath is not None:
+-        return _fastmath.getStrongPrime(long(N), long(e), false_positive_prob,
++        return _fastmath.getStrongPrime(int(N), int(e), false_positive_prob,
+             randfunc)
+ 
+     if (N < 512) or ((N % 128) != 0):
+@@ -275,9 +275,9 @@ def getStrongPrime(N, e=0, false_positive_prob=1e-6, randfunc=None):
+     x = (N - 512) >> 7;
+     # We need to approximate the sqrt(2) in the lower_bound by an integer
+     # expression because floating point math overflows with these numbers
+-    lower_bound = divmod(14142135623730950489L * (2L ** (511 + 128*x)),
+-                         10000000000000000000L)[0]
+-    upper_bound = (1L << (512 + 128*x)) - 1
++    lower_bound = divmod(14142135623730950489 * (2 ** (511 + 128*x)),
++                         10000000000000000000)[0]
++    upper_bound = (1 << (512 + 128*x)) - 1
+     # Randomly choose X in calculated range
+     X = getRandomRange (lower_bound, upper_bound, randfunc)
+ 
+@@ -291,7 +291,7 @@ def getStrongPrime(N, e=0, false_positive_prob=1e-6, randfunc=None):
+         # sieve the field
+         for prime in sieve_base:
+             offset = y % prime
+-            for j in xrange ((prime - offset) % prime, len (field), prime):
++            for j in range ((prime - offset) % prime, len (field), prime):
+                 field[j] = 1
+ 
+         # look for suitable p[i] starting at y
+@@ -347,7 +347,7 @@ def getStrongPrime(N, e=0, false_positive_prob=1e-6, randfunc=None):
+         X += increment
+ 		# abort when X has more bits than requested
+ 		# TODO: maybe we shouldn't abort but rather start over.
+-        if X >= 1L << N:
++        if X >= 1 << N:
+             raise RuntimeError ("Couln't find prime in field. "
+                                 "Developer: Increase field_size")
+     return X
+@@ -365,7 +365,7 @@ def isPrime(N, false_positive_prob=1e-6, randfunc=None):
+     If randfunc is omitted, then Random.new().read is used.
+     """
+     if _fastmath is not None:
+-        return _fastmath.isPrime(long(N), false_positive_prob, randfunc)
++        return _fastmath.isPrime(int(N), false_positive_prob, randfunc)
+ 
+     if N < 3 or N & 1 == 0:
+         return N == 2
+@@ -394,10 +394,10 @@ def long_to_bytes(n, blocksize=0):
+     """
+     # after much testing, this algorithm was deemed to be the fastest
+     s = b('')
+-    n = long(n)
++    n = int(n)
+     pack = struct.pack
+     while n > 0:
+-        s = pack('>I', n & 0xffffffffL) + s
++        s = pack('>I', n & 0xffffffff) + s
+         n = n >> 32
+     # strip off leading zeros
+     for i in range(len(s)):
+@@ -420,7 +420,7 @@ def bytes_to_long(s):
+ 
+     This is (essentially) the inverse of long_to_bytes().
+     """
+-    acc = 0L
++    acc = 0
+     unpack = struct.unpack
+     length = len(s)
+     if length % 4:
+--- contrib/python/pycrypto/py3/Crypto/Util/py3compat.py	(index)
++++ contrib/python/pycrypto/py3/Crypto/Util/py3compat.py	(working tree)
+@@ -79,7 +79,7 @@ if sys.version_info[0] == 2:
+                 return ''.join(s)
+     else:
+         def tobytes(s):
+-            if isinstance(s, unicode):
++            if isinstance(s, str):
+                 return s.encode("latin-1")
+             else:
+                 return ''.join(s)

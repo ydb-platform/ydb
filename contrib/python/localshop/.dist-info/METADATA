@@ -1,0 +1,142 @@
+Metadata-Version: 2.1
+Name: localshop
+Version: 2.0.0a1
+Summary: A private pypi server including auto-mirroring of pypi.
+Home-page: http://github.com/mvantellingen/localshop
+Author: Michael van Tellingen
+Author-email: michaelvantellingen@gmail.com
+License: BSD
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: Django
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development
+Classifier: Topic :: System
+Classifier: Topic :: System :: Software Distribution
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Requires-Dist: celery (==4.3.0)
+Requires-Dist: django-braces (==1.13.0)
+Requires-Dist: django-celery-beat (==1.6.0)
+Requires-Dist: django-celery-results (==1.1.2)
+Requires-Dist: django-environ (==0.4.5)
+Requires-Dist: django-model-utils (==3.1.2)
+Requires-Dist: django-widget-tweaks (==1.4.5)
+Requires-Dist: Django (==1.11.29)
+Requires-Dist: docutils (==0.14)
+Requires-Dist: netaddr (==0.7.20)
+Requires-Dist: psycopg2 (==2.8.5)
+Requires-Dist: redis (==3.5.3)
+Provides-Extra: test
+Requires-Dist: django-webtest (==1.9.7) ; extra == 'test'
+Requires-Dist: factory-boy (==2.12.0) ; extra == 'test'
+Requires-Dist: mock (==4.0.2) ; extra == 'test'
+Requires-Dist: pytest-cov (==2.8.1) ; extra == 'test'
+Requires-Dist: pytest-django (==3.9.0) ; extra == 'test'
+Requires-Dist: pytest (==5.4.2) ; extra == 'test'
+Requires-Dist: requests-mock (==1.8.0) ; extra == 'test'
+Requires-Dist: requests-toolbelt (==0.9.1) ; extra == 'test'
+
+localshop
+
+=========
+
+
+
+.. image:: https://img.shields.io/pypi/v/localshop.svg
+
+    :target: https://pypi.python.org/pypi/localshop/
+
+    :alt: Latest Version
+
+
+
+.. image:: https://travis-ci.org/mvantellingen/localshop.svg?branch=master
+
+    :target: https://travis-ci.org/mvantellingen/localshop
+
+
+
+.. image:: http://codecov.io/github/mvantellingen/localshop/coverage.svg?branch=master
+
+    :target: http://codecov.io/github/mvantellingen/localshop?branch=master
+
+
+
+
+
+A PyPI server which automatically proxies and mirrors PyPI packages based
+
+upon packages requested. It has support for multiple indexes and team based
+
+access and also supports the uploading of local (private) packages.
+
+
+
+The full documentation is available on `Read The Docs`_
+
+
+
+.. _`Read The Docs`: http://localshop.readthedocs.org/
+
+
+
+
+
+
+
+Getting started
+
+---------------
+
+
+
+When you want to host it on AWS with the Azure AD oauth2 server use:
+
+
+
+    docker run \
+
+        -e DATABASE_URL=postgresql://user:password@host/database
+
+        -e SECRET_KEY=<secret-key-for-django>
+
+        -e LOCALSHOP_FILE_STORAGE=storages.backends.s3boto.S3BotoStorage
+
+        -e LOCALSHOP_FILE_BUCKET_NAME=<your-aws-s3-bucket>
+
+        -e OAUTH2_PROVIDER=azuread-oauth2 \
+
+        -e OAUTH2_APPLICATION_ID=<your-oauth2-app-id>
+
+        -e OAUTH2_SECRET_KEY=<your-oauth2-secret-key>
+
+        mvantellingen/localshop
+
+
+
+If you want more flexibility you can load your custom settings file by mounting
+
+a docker volume and creating a localshop.conf.py. This file will be loaded by
+
+localshop at the end of the settings file.
+
+
+
+    docker run \
+
+        -e DATABASE_URL=postgresql://user:password@host/database
+
+        -e SECRET_KEY=<secret-key-for-django>
+
+        -v $(PWD)/config:/home/localshop/conf/
+
+        mvantellingen/localshop

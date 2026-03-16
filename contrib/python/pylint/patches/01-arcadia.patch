@@ -1,0 +1,12 @@
+--- a/pylint/__init__.py	(index)
++++ b/pylint/__init__.py	(working tree)
+@@ -4,6 +4,9 @@
+     "run_pyreverse",
+ ]
+ 
++from pylint import arcadia
++arcadia.patch_all()
++
+ import os
+ import sys
+ from collections.abc import Sequence

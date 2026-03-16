@@ -1,0 +1,47 @@
+Metadata-Version: 2.4
+Name: pytils
+Version: 0.4.4
+Summary: Russian-specific string utils
+Home-page: https://github.com/last-partizan/pytils/
+Author: Yury Yurevich
+Author-email: yyurevich@jellycrystal.com
+License: MIT
+Platform: All
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Text Processing :: Linguistic
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Natural Language :: Russian
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: AUTHORS
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: platform
+Dynamic: summary
+
+Pytils
+------
+
+Pytils is a Russian-specific string utils
+(transliteration, numeral is words, russian dates, etc)
+
+-----
+
+Pytils это инструменты для работы 
+с русскими строками (транслитерация, числительные словами, русские даты и т.д.)

@@ -1,0 +1,130 @@
+From dlitz@dlitz.net Wed Aug 27 20:54:38 EDT 2008
+X-Maildir-Dup-Checked: Yes
+Return-Path: <dlitz@dlitz.net>
+X-Original-To: dwon@rivest.dlitz.net
+Delivered-To: dwon@rivest.dlitz.net
+Received: from goedel.dlitz.net (unknown [10.159.255.6])
+	by rivest.dlitz.net (Postfix) with ESMTP id ECFDFC6641D
+	for <dwon@rivest.dlitz.net>; Wed, 27 Aug 2008 20:45:06 -0400 (EDT)
+Received: from localhost (localhost [127.0.0.1])
+	by goedel.dlitz.net (Postfix) with QMQP id 99A9D100AA
+	for <dwon@rivest.dlitz.net>; Wed, 27 Aug 2008 18:45:05 -0600 (CST)
+Received: (vmailmgr-postfix 3270 invoked by uid 1003); 27 Aug 2008 18:45:05 -0600
+Delivered-To: m-dlitz-dlitz@dlitz.net
+Received-SPF: pass (goedel.dlitz.net: domain of dlitz@dlitz.net designates 193.201.42.13 as permitted sender)
+Received: from m14.itconsult.net (m14.itconsult.net [193.201.42.13])
+	by goedel.dlitz.net (Postfix) with ESMTP id 1D3B510088
+	for <dlitz@dlitz.net>; Wed, 27 Aug 2008 18:45:04 -0600 (CST)
+Received: from stamper.itconsult.co.uk (stamper.itconsult.co.uk
+ [193.201.42.31]) by m14.stamper.itconsult.co.uk (GMS
+ 15.01.3664/NT8923.00.54dca388) with SMTP id jfxsjqaa for dlitz@dlitz.net;
+ Thu, 28 Aug 2008 01:45:02 +0100
+To: crypt@bis.doc.gov,
+     enc@nsa.gov,
+     web_site@bis.doc.gov,
+     pycrypto@lists.dlitz.net,
+     PYTHON-CRYPTO@NIC.SURFNET.NL,
+     dlitz@dlitz.net
+Received-SPF: Pass (m14.stamper.itconsult.co.uk: domain of dlitz@dlitz.net
+ designates 64.5.53.201 as permitted sender) identity=mailfrom;
+ client-ip=64.5.53.201; receiver=m14.stamper.itconsult.co.uk;
+ helo=goedel.dlitz.net; mechanism=-all; envelope-from=dlitz@dlitz.net;
+Received: from goedel.dlitz.net (goedel.dlitz.net [64.5.53.201]) by
+ m14.stamper.itconsult.co.uk (GMS 15.01.3664/NT8923.00.54dca388) with ESMTP id
+ taxsjqaa for post@stamper.itconsult.co.uk; Thu, 28 Aug 2008 01:42:58 +0100
+Received: from rivest.dlitz.net (rivest.dlitz.net [IPv6:2002:4c0a:9133:1104::1])
+	by goedel.dlitz.net (Postfix) with ESMTP id 667C7100B1
+	for <post@stamper.itconsult.co.uk>; Wed, 27 Aug 2008 18:42:56 -0600 (CST)
+Received: by rivest.dlitz.net (Postfix, from userid 1000)
+	id B92F8C66420; Wed, 27 Aug 2008 20:42:55 -0400 (EDT)
+Received: by rivest.dlitz.net (tmda-sendmail, from uid 1000);
+	Wed, 27 Aug 2008 20:42:54 -0400
+Date: Wed, 27 Aug 2008 20:42:54 -0400
+Cc: post@stamper.itconsult.co.uk
+Subject: PyCrypto TSU NOTIFICATION
+Message-ID: <20080828004254.GA31214@rivest.dlitz.net>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=us-ascii; format=flowed
+Content-Disposition: inline
+X-Primary-Address: dlitz@dlitz.net
+X-Homepage: http://www.dlitz.net/
+X-OpenPGP: url=http://www.dlitz.net/go/gpgkey/;
+	id=19E11FE8B3CFF273ED174A24928CEC1339C25CF7 (only for key signing);
+	preference=unprotected
+X-OpenPGP: url=http://www.dlitz.net/go/gpgkey/;
+	id=4B2AFD82FC7D9E3838D9179F1C11B877E7804B45 (2008);
+	preference=signencrypt
+User-Agent: Mutt/1.5.16 (2007-06-11)
+X-Delivery-Agent: TMDA/1.1.9 (Jura)
+From: "Dwayne C. Litzenberger" <dlitz@dlitz.net>
+X-DNSBL: 0
+Status: O
+Content-Length: 2182
+Lines: 65
+
+-----BEGIN PGP SIGNED MESSAGE-----
+
+########################################################
+#
+# This is a proof of posting certificate from
+# stamper.itconsult.co.uk certifying that a user
+# claiming to be:-
+#     dlitz@dlitz.net
+# requested that this message be sent to:-
+#     crypt@bis.doc.gov
+#     enc@nsa.gov
+#     web_site@bis.doc.gov
+#     pycrypto@lists.dlitz.net
+#     PYTHON-CRYPTO@NIC.SURFNET.NL
+#     dlitz@dlitz.net
+#
+# This certificate was issued at 00:45 (GMT)
+# on Thursday 28 August 2008 with reference 0520978
+#
+# CAUTION: while the message may well be from the sender
+#          indicated in the "From:" header, the sender
+#          has NOT been authenticated by this service
+#
+# For information about the Stamper service see
+#        http://www.itconsult.co.uk/stamper.htm
+#
+########################################################
+
+SUBMISSION TYPE: TSU
+SUBMITTED BY: Dwayne C. Litzenberger
+SUBMITTED FOR: Dwayne C. Litzenberger
+POINT OF CONTACT: Dwayne C. Litzenberger
+PHONE and/or FAX: +1-613-693-1296
+MANUFACTURER: n/a
+PRODUCT NAME/MODEL #: The Python Cryptography Toolkit ("PyCrypto")
+ECCN: 5D002
+
+NOTIFICATION: http://www.pycrypto.org/
+
+Note: I am a Canadian citizen posting software to my website located in 
+Canada.  I am not certain whether PyCrypto contains enough US-origin 
+cryptography to be covered by U.S. export controls, but I am submitting 
+this anyway.
+
+(Sorry for spamming the lists, but I want there to be a record of this.)
+
+- -- 
+Dwayne C. Litzenberger <dlitz@dlitz.net>
+  Key-signing key   - 19E1 1FE8 B3CF F273 ED17  4A24 928C EC13 39C2 5CF7
+  Annual key (2008) - 4B2A FD82 FC7D 9E38 38D9  179F 1C11 B877 E780 4B45
+
+
+-----BEGIN PGP SIGNATURE-----
+Version: 2.6.3i
+Charset: noconv
+Comment: Stamper Reference Id: 0520978
+
+iQEVAgUBSLX1DYGVnbVwth+BAQEcuwf9EWnXLqSO5bPzR9K9QnTPcsKbTljKjPxr
+d+q0E7eE8VtnvvijUcTAR9o27yvzOPxdFT864MQA7OTSbPK39aGAgA4fgAgvYH9t
+UNjJ/kv8QLz/aq2fi/HNjyrwnqFnUl0uqwpOrQGbz8Y+SGpVh1gKqy1Ju45L+doq
+sxbzCOpjgRv2zDdNR/2SnFmDWQXv8dSeonwIHpQDft8/LVA/gHiTDmteQlOhJQ6o
+XYhY+HbRjsD741/GSpOt9IlN5ln0UgshFoLIndnNSAvWf4aPyh5KCN7ho+/BC0v/
+W/pqSSlPkwmbhlPHoOltTkNc0qKLAHXqMGJNhO8AkrYZOyJksb0HsA==
+=3oIX
+-----END PGP SIGNATURE-----
+

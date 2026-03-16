@@ -1,0 +1,52 @@
+{
+  "$def": {
+    "Type3": {
+      "properties": {
+        "type_": {
+          "const": "c",
+          "default": "c",
+          "title": "Type "
+        }
+      },
+      "title": "Type3",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "inner": {
+      "discriminator": {
+        "mapping": {
+          "a": "./artificial_folder/type-1.json",
+          "b": "./type-2.json",
+          "c": "#/$def/Type3",
+          "d": "../type-4.json",
+          "e": "../subfolder/type-5.json"
+        },
+        "propertyName": "type_"
+      },
+      "oneOf": [
+        {
+          "$ref": "./artificial_folder/type-1.json"
+        },
+        {
+          "$ref": "./type-2.json"
+        },
+        {
+          "$ref": "#/$def/Type3"
+        },
+        {
+          "$ref": "../type-4.json"
+        },
+        {
+          "$ref": "../subfolder/type-5.json"
+        }
+      ],
+      "title": "Inner"
+    }
+  },
+  "required": [
+    "inner"
+  ],
+  "title": "Response",
+  "type": "object"
+}

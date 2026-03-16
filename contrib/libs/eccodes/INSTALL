@@ -1,0 +1,59 @@
+How to build and install ecCodes library/tools
+================================================
+
+Building and installation has been tested on several platforms and with several compilers.
+However for some platforms modifications to the installation engine may be required.
+If you encounter any problems during the installation procedure, please visit our Support Portal:
+
+    https://support.ecmwf.int
+
+Installation using CMake
+------------------------
+This is the recommended method of installation.
+However it requires that cmake be installed on your system.
+
+1. Download ecCodes from https://confluence.ecmwf.int/display/ECC/Releases
+
+2. Unpack distribution:
+   > tar -xzf eccodes-x.y.z-Source.tar.gz
+
+3. Create a separate directory to build ecCodes:
+   > mkdir build
+   > cd build
+
+4. Run cmake pointing to the source and specify the installation location:
+   > cmake  ../eccodes-x.y.z-Source -DCMAKE_INSTALL_PREFIX=/path/to/where/you/install/eccodes
+
+   It is recommended that you always build in a clean directory and also install into a clean directory.
+
+5. Compile, test and install:
+   > make
+   > ctest
+   > make install
+
+To add the Python3 bindings, use pip3 install from PyPI as follows:
+   > pip3 install eccodes
+
+You can also pass options to the cmake command above. Some typical examples are:
+
+ -DENABLE_EXTRA_TESTS=ON         Enable extended regression testing
+ -DENABLE_NETCDF=ON              Enable GRIB to netCDF conversion
+ -DENABLE_ECCODES_THREADS=ON     Enable POSIX threads
+ -DENABLE_JPG=ON                 Enable JPEG encoding/decoding (for GRIB packing)
+ -DCMAKE_Fortran_COMPILER=pgf90  Set Fortran compiler to Portland Group F90 compiler
+ -DCMAKE_CXX_FLAGS="-O2 -Wall"   Prepend the specified flags at the front
+                                 of the compilation command for C++ source files
+
+By default the ctest step above does NOT require any data to be downloaded and only runs basic sanity tests.
+However if you wish to exercise more of the functionality of ecCodes, you are advised to configure the build with:
+
+  > cmake  ...  -DENABLE_EXTRA_TESTS=ON
+
+In this mode the tests will take longer and you need to be connected to the internet so data files can be downloaded
+for the tests.
+
+Also note that if you have several CPUs, you can invoke the "make" and "ctest" commands above in parallel
+(e.g. "make -j4", "ctest -j4"). This will speed up the whole build/test process significantly.
+
+For more details, please see:
+https://confluence.ecmwf.int/display/ECC/ecCodes+installation

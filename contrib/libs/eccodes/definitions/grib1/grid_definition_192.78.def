@@ -1,0 +1,45 @@
+# (C) Copyright 2005- ECMWF.
+
+# DWD local grid definition 192 - triangular grid base on icosahedron subdivision
+
+constant isGridded = true;
+
+#  n2 - exponent of 2 for the number of intervals on main triangle sides
+unsigned[2] n2  : dump ;
+
+#  n3 - exponent of 3 for the number of intervals on main triangle sides
+unsigned[2] n3 : dump ;
+
+#  nd - Number of diamonds
+unsigned[3] nd : dump ;
+alias numberOfDiamonds=nd;
+alias Nj=nd;
+
+#  Ni - number of intervals on main triangle sides of the icosahedron
+unsigned[3] Ni : dump ;
+
+#  Numbering order of diamonds
+flags[1] numberingOrderOfDiamonds 'grib1/grid.192.78.3.9.table';
+
+#  Latitude of the pole point of the icosahedron on the sphere
+signed[4] latitudeOfIcosahedronPole  : dump ;
+
+#  Longitude of the pole point of the icosahedron on the sphere
+unsigned[4] longitudeOfIcosahedronPole  : dump ;
+
+#  Longitude of the centre line of the first diamond of the icosahedron on the sphere
+unsigned[4] longitudeOfFirstDiamondCenterLine  : dump ;
+
+#  Reserved
+unsigned[1] reservedOctet;
+
+#  Scanning mode for one diamond
+flags[1] scanningModeForOneDiamond 'grib1/grid.192.78.3.10.table';
+
+transient numberOfPoints= nd *(Ni + 1) * (Ni + 1);
+alias numberOfDataPoints=numberOfPoints;
+
+meta numberOfValues
+number_of_values(
+    values,bitsPerValue,numberOfDataPoints,
+    bitmapPresent,bitmap,numberOfCodedValues) : dump;

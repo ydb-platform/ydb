@@ -1,0 +1,5 @@
+{% extends user.is_authenticated|yesno:"layout.main.html,layout.base.html" %}
+
+{% block content %}
+<h1>404 not found</h1>
+{% endblock %}

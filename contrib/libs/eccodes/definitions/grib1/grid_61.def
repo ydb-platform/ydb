@@ -1,0 +1,19 @@
+# (C) Copyright 2005- ECMWF.
+
+# Predefined grid 61
+
+constant Ni = 91;
+constant Nj = 46;
+
+constant longitudeOfFirstGridPoint = 0;
+constant longitudeOfLastGridPoint = 180000;
+
+constant latitudeOfFirstGridPoint = 0;
+constant latitudeOfLastGridPoint = 90000;
+
+constant iDirectionIncrement = 2000;
+constant jDirectionIncrement = 2000;
+
+constant numberOfDataPoints=4186;
+constant numberOfValues=4096 ;
+

@@ -1,0 +1,109 @@
+msgid ""
+msgstr ""
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: POEditor.com\n"
+"Project-Id-Version: dj-rest-auth\n"
+"Language: nl\n"
+
+#: registration/serializers.py:66
+msgid "View is not defined, pass it as a context variable"
+msgstr "Weergave is niet gedefinieerd, geef het door als een context variabele"
+
+#: registration/serializers.py:71
+msgid "Define adapter_class in view"
+msgstr "Definieer adapter_class in overzicht"
+
+#: registration/serializers.py:91
+msgid "Define callback_url in view"
+msgstr "Definieer callback_url in view"
+
+#: registration/serializers.py:95
+msgid "Define client_class in view"
+msgstr "Definieer client_class in view"
+
+#: registration/serializers.py:124
+msgid "Incorrect input. access_token or code is required."
+msgstr "Onjuiste invoer. access_token of code is vereist."
+
+#: registration/serializers.py:133
+msgid "Incorrect value"
+msgstr "Waarde is niet correct"
+
+#: registration/serializers.py:147
+msgid "User is already registered with this e-mail address."
+msgstr "De gebruiker is al geregistreerd met dit e-mailadres."
+
+#: registration/serializers.py:193
+msgid "A user is already registered with this e-mail address."
+msgstr "Er is al een gebruiker geregistreerd met dit e-mailadres."
+
+#: registration/serializers.py:201
+msgid "The two password fields didn't match."
+msgstr "De twee wachtwoordvelden kwamen niet overeen."
+
+#: registration/views.py:48
+msgid "Verification e-mail sent."
+msgstr "Verificatie email verzonden."
+
+#: registration/views.py:101
+msgid "ok"
+msgstr "OK"
+
+#: serializers.py:37
+msgid "Must include \"email\" and \"password\"."
+msgstr "Moet \"e-mail\" en \"wachtwoord\" bevatten."
+
+#: serializers.py:48
+msgid "Must include \"username\" and \"password\"."
+msgstr "Moet \"gebruikersnaam\" en \"wachtwoord\" bevatten."
+
+#: serializers.py:61
+msgid "Must include either \"username\" or \"email\" and \"password\"."
+msgstr "Moet ‘gebruikersnaam’ of ‘e-mail’ en ‘wachtwoord’ bevatten."
+
+#: serializers.py:106
+msgid "User account is disabled."
+msgstr "Gebruikersaccount is uitgeschakeld."
+
+#: serializers.py:114
+msgid "E-mail is not verified."
+msgstr "Email is niet geverifieerd."
+
+#: serializers.py:123
+msgid "Unable to log in with provided credentials."
+msgstr "Kan niet inloggen met de opgegeven inloggegevens."
+
+#: serializers.py:316
+msgid "Your old password was entered incorrectly. Please enter it again."
+msgstr "Uw oude wachtwoord is onjuist ingevoerd. Voer het opnieuw in."
+
+#: views.py:175
+msgid "Successfully logged out."
+msgstr "Uitgelogd."
+
+#: views.py:199
+msgid "Refresh token was not included in request data."
+msgstr "Het vernieuwingstoken is niet opgenomen in de aanvraaggegevens."
+
+#: views.py:207 views.py:211
+msgid "An error has occurred."
+msgstr "Er is een fout opgetreden."
+
+#: views.py:216
+msgid "Neither cookies or blacklist are enabled, so the token has not been deleted server side. Please make sure the token is deleted client side."
+msgstr "Noch cookies of zwarte lijst zijn ingeschakeld, dus het token is niet aan de serverzijde verwijderd. Zorg ervoor dat het token aan de clientzijde is verwijderd."
+
+#: views.py:268
+msgid "Password reset e-mail has been sent."
+msgstr "E-mail voor het opnieuw instellen van het wachtwoord is verzonden."
+
+#: views.py:295
+msgid "Password has been reset with the new password."
+msgstr "Wachtwoord is gereset met het nieuwe wachtwoord."
+
+#: views.py:318
+msgid "New password has been saved."
+msgstr "Nieuw wachtwoord is opgeslagen."
+

@@ -1,0 +1,23 @@
+openapi: 3.1.0
+info:
+  version: 1.0.0
+  title: testapi
+  license:
+    name: proprietary
+servers: []
+paths: {}
+components:
+  schemas:
+    Basket:
+      type: object
+      properties:
+        apples:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/Apple'
+      required:
+        - apples
+    Apple:
+      type: object

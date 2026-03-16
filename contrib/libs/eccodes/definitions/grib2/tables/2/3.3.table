@@ -1,0 +1,7 @@
+# FLAG TABLE 3.3, Resolution and Component Flags
+3 0 i direction increments not given
+3 1 i direction increments given
+4 0 j direction increments not given
+4 1 j direction increments given
+5 0 Resolved u- and v- components of vector quantities relative to easterly and northerly directions
+5 1 Resolved u- and v- components of vector quantities relative to the defined grid in the direction of increasing x and y (or i and j) coordinates respectively

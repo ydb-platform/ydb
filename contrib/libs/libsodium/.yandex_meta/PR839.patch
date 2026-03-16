@@ -1,0 +1,402 @@
+From bf810d1045b8c6bcd29850c2241968c10ffcc3c6 Mon Sep 17 00:00:00 2001
+From: Orivej Desh <orivej@gmx.fr>
+Date: Sat, 8 Jun 2019 18:53:45 +0000
+Subject: [PATCH 1/5] Make argon2 functions used in a single file static
+
+---
+ .../crypto_pwhash/argon2/argon2-core.c        | 27 ++++++++++++++++---
+ .../crypto_pwhash/argon2/argon2-core.h        | 27 -------------------
+ 2 files changed, 23 insertions(+), 31 deletions(-)
+
+diff --git a/src/libsodium/crypto_pwhash/argon2/argon2-core.c b/src/libsodium/crypto_pwhash/argon2/argon2-core.c
+index 2f1ebbfd7..35c58b25e 100644
+--- a/src/libsodium/crypto_pwhash/argon2/argon2-core.c
++++ b/src/libsodium/crypto_pwhash/argon2/argon2-core.c
+@@ -175,7 +175,10 @@ free_memory(block_region *region)
+     free(region);
+ }
+ 
+-void
++/*
++ * Deallocates memory. Used on error path.
++ */
++static void
+ free_instance(argon2_instance_t *instance, int flags)
+ {
+     /* Clear memory */
+@@ -369,7 +372,13 @@ validate_inputs(const argon2_context *context)
+     return ARGON2_OK;
+ }
+ 
+-void
++/*
++ * Function creates first 2 blocks per lane
++ * @param instance Pointer to the current instance
++ * @param blockhash Pointer to the pre-hashing digest
++ * @pre blockhash must point to @a PREHASH_SEED_LENGTH allocated values
++ */
++static void
+ fill_first_blocks(uint8_t *blockhash, const argon2_instance_t *instance)
+ {
+     uint32_t l;
+@@ -393,7 +402,17 @@ fill_first_blocks(uint8_t *blockhash, const argon2_instance_t *instance)
+     sodium_memzero(blockhash_bytes, ARGON2_BLOCK_SIZE);
+ }
+ 
+-void
++/*
++ * Hashes all the inputs into @a blockhash[PREHASH_DIGEST_LENGTH], clears
++ * password and secret if needed
++ * @param  context  Pointer to the Argon2 internal structure containing memory
++ * pointer, and parameters for time and space requirements.
++ * @param  blockhash Buffer for pre-hashing digest
++ * @param  type Argon2 type
++ * @pre    @a blockhash must have at least @a PREHASH_DIGEST_LENGTH bytes
++ * allocated
++ */
++static void
+ initial_hash(uint8_t *blockhash, argon2_context *context, argon2_type type)
+ {
+     crypto_generichash_blake2b_state BlakeHash;
+@@ -517,7 +536,7 @@ initialize(argon2_instance_t *instance, argon2_context *context)
+     return ARGON2_OK;
+ }
+ 
+-int
++static int
+ argon2_pick_best_implementation(void)
+ {
+ /* LCOV_EXCL_START */
+diff --git a/src/libsodium/crypto_pwhash/argon2/argon2-core.h b/src/libsodium/crypto_pwhash/argon2/argon2-core.h
+index caab10389..7c938a1bf 100644
+--- a/src/libsodium/crypto_pwhash/argon2/argon2-core.h
++++ b/src/libsodium/crypto_pwhash/argon2/argon2-core.h
+@@ -216,27 +216,6 @@ static uint32_t index_alpha(const argon2_instance_t *instance,
+  */
+ int validate_inputs(const argon2_context *context);
+ 
+-/*
+- * Hashes all the inputs into @a blockhash[PREHASH_DIGEST_LENGTH], clears
+- * password and secret if needed
+- * @param  context  Pointer to the Argon2 internal structure containing memory
+- * pointer, and parameters for time and space requirements.
+- * @param  blockhash Buffer for pre-hashing digest
+- * @param  type Argon2 type
+- * @pre    @a blockhash must have at least @a PREHASH_DIGEST_LENGTH bytes
+- * allocated
+- */
+-void initial_hash(uint8_t *blockhash, argon2_context *context,
+-                  argon2_type type);
+-
+-/*
+- * Function creates first 2 blocks per lane
+- * @param instance Pointer to the current instance
+- * @param blockhash Pointer to the pre-hashing digest
+- * @pre blockhash must point to @a PREHASH_SEED_LENGTH allocated values
+- */
+-void fill_first_blocks(uint8_t *blockhash, const argon2_instance_t *instance);
+-
+ /*
+  * Function allocates memory, hashes the inputs with Blake,  and creates first
+  * two blocks. Returns the pointer to the main memory with 2 blocks per lane
+@@ -249,11 +228,6 @@ void fill_first_blocks(uint8_t *blockhash, const argon2_instance_t *instance);
+  */
+ int initialize(argon2_instance_t *instance, argon2_context *context);
+ 
+-/*
+- * Deallocates memory. Used on error path.
+- */
+-void free_instance(argon2_instance_t *instance, int flags);
+-
+ /*
+  * XORing the last block of each lane, hashing it, making the tag. Deallocates
+  * the memory.
+@@ -276,7 +250,6 @@ void finalize(const argon2_context *context, argon2_instance_t *instance);
+  */
+ typedef void (*fill_segment_fn)(const argon2_instance_t *instance,
+                                 argon2_position_t        position);
+-int argon2_pick_best_implementation(void);
+ void fill_segment_avx512f(const argon2_instance_t *instance,
+                           argon2_position_t        position);
+ void fill_segment_avx2(const argon2_instance_t *instance,
+
+From d9be21056490fe7f00757d1d0478b645086758d1 Mon Sep 17 00:00:00 2001
+From: Orivej Desh <orivej@gmx.fr>
+Date: Sat, 8 Jun 2019 18:54:44 +0000
+Subject: [PATCH 2/5] Namespace argon2 symbols
+
+argon2 API is prefixed with crypto_pwhash__, argon2 internal functions are
+prefixed with crypto_pwhash_argon2__.
+---
+ src/libsodium/crypto_pwhash/argon2/argon2-core.h     |  9 +++++++++
+ src/libsodium/crypto_pwhash/argon2/argon2-encoding.h |  3 +++
+ src/libsodium/crypto_pwhash/argon2/argon2.h          | 10 ++++++++++
+ src/libsodium/crypto_pwhash/argon2/blake2b-long.h    |  2 ++
+ 4 files changed, 24 insertions(+)
+
+diff --git a/src/libsodium/crypto_pwhash/argon2/argon2-core.h b/src/libsodium/crypto_pwhash/argon2/argon2-core.h
+index 7c938a1bf..27ce17bf9 100644
+--- a/src/libsodium/crypto_pwhash/argon2/argon2-core.h
++++ b/src/libsodium/crypto_pwhash/argon2/argon2-core.h
+@@ -18,6 +18,15 @@
+ 
+ #include "argon2.h"
+ 
++#define validate_inputs crypto_pwhash_argon2__validate_inputs
++#define initialize crypto_pwhash_argon2__initialize
++#define finalize crypto_pwhash_argon2__finalize
++#define fill_segment_avx512f crypto_pwhash_argon2__fill_segment_avx512f
++#define fill_segment_avx2 crypto_pwhash_argon2__fill_segment_avx2
++#define fill_segment_ssse3 crypto_pwhash_argon2__fill_segment_ssse3
++#define fill_segment_ref crypto_pwhash_argon2__fill_segment_ref
++#define fill_memory_blocks crypto_pwhash_argon2__fill_memory_blocks
++
+ /*************************Argon2 internal
+  * constants**************************************************/
+ 
+diff --git a/src/libsodium/crypto_pwhash/argon2/argon2-encoding.h b/src/libsodium/crypto_pwhash/argon2/argon2-encoding.h
+index e929b31dc..4b9690640 100644
+--- a/src/libsodium/crypto_pwhash/argon2/argon2-encoding.h
++++ b/src/libsodium/crypto_pwhash/argon2/argon2-encoding.h
+@@ -3,6 +3,9 @@
+ 
+ #include "argon2.h"
+ 
++#define encode_string crypto_pwhash_argon2__encode_string
++#define decode_string crypto_pwhash_argon2__decode_string
++
+ /*
+  * encode an Argon2 hash string into the provided buffer. 'dst_len'
+  * contains the size, in characters, of the 'dst' buffer; if 'dst_len'
+diff --git a/src/libsodium/crypto_pwhash/argon2/argon2.h b/src/libsodium/crypto_pwhash/argon2/argon2.h
+index 85ca4dd37..6654ab5a4 100644
+--- a/src/libsodium/crypto_pwhash/argon2/argon2.h
++++ b/src/libsodium/crypto_pwhash/argon2/argon2.h
+@@ -16,6 +16,16 @@
+ #include <stddef.h>
+ #include <stdint.h>
+ 
++#define argon2_ctx crypto_pwhash__argon2_ctx
++#define argon2i_hash_encoded crypto_pwhash__argon2i_hash_encoded
++#define argon2id_hash_encoded crypto_pwhash__argon2id_hash_encoded
++#define argon2i_hash_raw crypto_pwhash__argon2i_hash_raw
++#define argon2id_hash_raw crypto_pwhash__argon2id_hash_raw
++#define argon2_hash crypto_pwhash__argon2_hash
++#define argon2i_verify crypto_pwhash__argon2i_verify
++#define argon2id_verify crypto_pwhash__argon2id_verify
++#define argon2_verify crypto_pwhash__argon2_verify
++
+ /*
+  * Argon2 input parameter restrictions
+  */
+diff --git a/src/libsodium/crypto_pwhash/argon2/blake2b-long.h b/src/libsodium/crypto_pwhash/argon2/blake2b-long.h
+index 3d6d77552..d8db17987 100644
+--- a/src/libsodium/crypto_pwhash/argon2/blake2b-long.h
++++ b/src/libsodium/crypto_pwhash/argon2/blake2b-long.h
+@@ -3,6 +3,8 @@
+ 
+ #include <stddef.h>
+ 
++#define blake2b_long crypto_pwhash_argon2__blake2b_long
++
+ int blake2b_long(void *pout, size_t outlen, const void *in, size_t inlen);
+ 
+ #endif
+
+From 7ccdb8590918505f6f546a4d81192c64b3584c30 Mon Sep 17 00:00:00 2001
+From: Orivej Desh <orivej@gmx.fr>
+Date: Sat, 8 Jun 2019 18:57:04 +0000
+Subject: [PATCH 3/5] Put blake2b symbols into crypto_generichash namespace
+
+This namespaces blake2b_compress_* and fixes inconsistent renaming of blake2b
+and blake2b_salt_personal.
+---
+ .../crypto_generichash/blake2b/ref/blake2.h   | 24 +++++++++++--------
+ 1 file changed, 14 insertions(+), 10 deletions(-)
+
+diff --git a/src/libsodium/crypto_generichash/blake2b/ref/blake2.h b/src/libsodium/crypto_generichash/blake2b/ref/blake2.h
+index 6ea2832ef..051991bd3 100644
+--- a/src/libsodium/crypto_generichash/blake2b/ref/blake2.h
++++ b/src/libsodium/crypto_generichash/blake2b/ref/blake2.h
+@@ -23,19 +23,23 @@
+ #include "crypto_generichash_blake2b.h"
+ #include "export.h"
+ 
+-#define blake2b_init_param crypto_generichash_blake2b__init_param
+-#define blake2b_init crypto_generichash_blake2b__init
++#define blake2b_init_param crypto_generichash__blake2b_init_param
++#define blake2b_init crypto_generichash__blake2b_init
+ #define blake2b_init_salt_personal \
+-    crypto_generichash_blake2b__init_salt_personal
+-#define blake2b_init_key crypto_generichash_blake2b__init_key
++    crypto_generichash__blake2b_init_salt_personal
++#define blake2b_init_key crypto_generichash__blake2b_init_key
+ #define blake2b_init_key_salt_personal \
+-    crypto_generichash_blake2b__init_key_salt_personal
+-#define blake2b_update crypto_generichash_blake2b__update
+-#define blake2b_final crypto_generichash_blake2b__final
+-#define blake2b crypto_generichash_blake2b__blake2b
+-#define blake2b_salt_personal crypto_generichash_blake2b__blake2b_salt_personal
++    crypto_generichash__blake2b_init_key_salt_personal
++#define blake2b_update crypto_generichash__blake2b_update
++#define blake2b_final crypto_generichash__blake2b_final
++#define blake2b crypto_generichash__blake2b
++#define blake2b_salt_personal crypto_generichash__blake2b_salt_personal
+ #define blake2b_pick_best_implementation \
+-    crypto_generichash_blake2b__pick_best_implementation
++    crypto_generichash__blake2b_pick_best_implementation
++#define blake2b_compress_ref crypto_generichash__blake2b_compress_ref
++#define blake2b_compress_ssse3 crypto_generichash__blake2b_compress_ssse3
++#define blake2b_compress_sse41 crypto_generichash__blake2b_compress_sse41
++#define blake2b_compress_avx2 crypto_generichash__blake2b_compress_avx2
+ 
+ enum blake2b_constant {
+     BLAKE2B_BLOCKBYTES    = 128,
+
+From 86023f0b54f8fb50fc27e43f259916f218829805 Mon Sep 17 00:00:00 2001
+From: Orivej Desh <orivej@gmx.fr>
+Date: Sat, 8 Jun 2019 19:03:34 +0000
+Subject: [PATCH 4/5] Namespace escrypt symbols
+
+---
+ .../scryptsalsa208sha256/crypto_scrypt.h              | 11 +++++++++++
+ .../scryptsalsa208sha256/pbkdf2-sha256.h              |  2 ++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/src/libsodium/crypto_pwhash/scryptsalsa208sha256/crypto_scrypt.h b/src/libsodium/crypto_pwhash/scryptsalsa208sha256/crypto_scrypt.h
+index 83101967c..6a8d0f6b8 100644
+--- a/src/libsodium/crypto_pwhash/scryptsalsa208sha256/crypto_scrypt.h
++++ b/src/libsodium/crypto_pwhash/scryptsalsa208sha256/crypto_scrypt.h
+@@ -34,6 +34,17 @@
+ #include <stddef.h>
+ #include <stdint.h>
+ 
++#define escrypt_kdf_sse crypto_pwhash__escrypt_kdf_sse
++#define escrypt_gensalt_r crypto_pwhash__escrypt_gensalt_r
++#define escrypt_parse_setting crypto_pwhash__escrypt_parse_setting
++#define escrypt_r crypto_pwhash__escrypt_r
++#define escrypt_kdf_nosse crypto_pwhash__escrypt_kdf_nosse
++#define escrypt_init_local crypto_pwhash__escrypt_init_local
++#define escrypt_free_local crypto_pwhash__escrypt_free_local
++
++#define alloc_region crypto_pwhash_escrypt__alloc_region
++#define free_region  crypto_pwhash_escrypt__free_region
++
+ #if SIZE_MAX > 0xffffffffULL
+ #define ARCH_BITS 64
+ #else
+diff --git a/src/libsodium/crypto_pwhash/scryptsalsa208sha256/pbkdf2-sha256.h b/src/libsodium/crypto_pwhash/scryptsalsa208sha256/pbkdf2-sha256.h
+index f9598c87a..03bc293a6 100644
+--- a/src/libsodium/crypto_pwhash/scryptsalsa208sha256/pbkdf2-sha256.h
++++ b/src/libsodium/crypto_pwhash/scryptsalsa208sha256/pbkdf2-sha256.h
+@@ -34,6 +34,8 @@
+ 
+ #include "crypto_auth_hmacsha256.h"
+ 
++#define PBKDF2_SHA256 crypto_pwhash__PBKDF2_SHA256
++
+ /**
+  * PBKDF2_SHA256(passwd, passwdlen, salt, saltlen, c, buf, dkLen):
+  * Compute PBKDF2(passwd, salt, c, dkLen) using HMAC-SHA256 as the PRF, and
+
+From 3747c68f72633a7dc8e7d3ee1d3df48221c327e8 Mon Sep 17 00:00:00 2001
+From: Orivej Desh <orivej@gmx.fr>
+Date: Sat, 8 Jun 2019 19:04:38 +0000
+Subject: [PATCH 5/5] Use crypto_stream_salsa20 private namespace for xmm6
+ implementation
+
+---
+ .../salsa20/xmm6/salsa20_xmm6-asm.S           | 32 +++++++++----------
+ .../crypto_stream/salsa20/xmm6/salsa20_xmm6.c | 16 +++++-----
+ 2 files changed, 24 insertions(+), 24 deletions(-)
+
+diff --git a/src/libsodium/crypto_stream/salsa20/xmm6/salsa20_xmm6-asm.S b/src/libsodium/crypto_stream/salsa20/xmm6/salsa20_xmm6-asm.S
+index 6d9f354e1..4505eb4ce 100644
+--- a/src/libsodium/crypto_stream/salsa20/xmm6/salsa20_xmm6-asm.S
++++ b/src/libsodium/crypto_stream/salsa20/xmm6/salsa20_xmm6-asm.S
+@@ -4,17 +4,17 @@
+ .p2align 5
+ 
+ #ifdef ASM_HIDE_SYMBOL
+-ASM_HIDE_SYMBOL stream_salsa20_xmm6
+-ASM_HIDE_SYMBOL _stream_salsa20_xmm6
++ASM_HIDE_SYMBOL crypto_stream_salsa20__xmm6
++ASM_HIDE_SYMBOL _crypto_stream_salsa20__xmm6
+ #endif
+-.globl  stream_salsa20_xmm6
+-.globl _stream_salsa20_xmm6
++.globl  crypto_stream_salsa20__xmm6
++.globl _crypto_stream_salsa20__xmm6
+ #ifdef __ELF__
+-.type  stream_salsa20_xmm6, @function
+-.type _stream_salsa20_xmm6, @function
++.type  crypto_stream_salsa20__xmm6, @function
++.type _crypto_stream_salsa20__xmm6, @function
+ #endif
+-stream_salsa20_xmm6:
+-_stream_salsa20_xmm6:
++crypto_stream_salsa20__xmm6:
++_crypto_stream_salsa20__xmm6:
+ mov %rsp,%r11
+ and $31,%r11
+ add $512,%r11
+@@ -44,17 +44,17 @@ jmp ._start
+ .p2align 5
+ 
+ #ifdef ASM_HIDE_SYMBOL
+-ASM_HIDE_SYMBOL stream_salsa20_xmm6_xor_ic
+-ASM_HIDE_SYMBOL _stream_salsa20_xmm6_xor_ic
++ASM_HIDE_SYMBOL crypto_stream_salsa20__xmm6_xor_ic
++ASM_HIDE_SYMBOL _crypto_stream_salsa20__xmm6_xor_ic
+ #endif
+-.globl  stream_salsa20_xmm6_xor_ic
+-.globl _stream_salsa20_xmm6_xor_ic
++.globl  crypto_stream_salsa20__xmm6_xor_ic
++.globl _crypto_stream_salsa20__xmm6_xor_ic
+ #ifdef __ELF__
+-.type  stream_salsa20_xmm6_xor_ic, @function
+-.type _stream_salsa20_xmm6_xor_ic, @function
++.type  crypto_stream_salsa20__xmm6_xor_ic, @function
++.type _crypto_stream_salsa20__xmm6_xor_ic, @function
+ #endif
+-stream_salsa20_xmm6_xor_ic:
+-_stream_salsa20_xmm6_xor_ic:
++crypto_stream_salsa20__xmm6_xor_ic:
++_crypto_stream_salsa20__xmm6_xor_ic:
+ 
+ mov %rsp,%r11
+ and $31,%r11
+diff --git a/src/libsodium/crypto_stream/salsa20/xmm6/salsa20_xmm6.c b/src/libsodium/crypto_stream/salsa20/xmm6/salsa20_xmm6.c
+index 0a6fee0f3..91052b82e 100644
+--- a/src/libsodium/crypto_stream/salsa20/xmm6/salsa20_xmm6.c
++++ b/src/libsodium/crypto_stream/salsa20/xmm6/salsa20_xmm6.c
+@@ -11,21 +11,21 @@
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+-extern int stream_salsa20_xmm6(unsigned char *c, unsigned long long clen,
+-                               const unsigned char *n, const unsigned char *k);
++extern int crypto_stream_salsa20__xmm6(unsigned char *c, unsigned long long clen,
++                                       const unsigned char *n, const unsigned char *k);
+ 
+-extern int stream_salsa20_xmm6_xor_ic(unsigned char *c, const unsigned char *m,
+-                                      unsigned long long mlen,
+-                                      const unsigned char *n,
+-                                      uint64_t ic, const unsigned char *k);
++extern int crypto_stream_salsa20__xmm6_xor_ic(unsigned char *c, const unsigned char *m,
++                                              unsigned long long mlen,
++                                              const unsigned char *n,
++                                              uint64_t ic, const unsigned char *k);
+ #ifdef __cplusplus
+ }
+ #endif
+ 
+ struct crypto_stream_salsa20_implementation
+     crypto_stream_salsa20_xmm6_implementation = {
+-        SODIUM_C99(.stream =) stream_salsa20_xmm6,
+-        SODIUM_C99(.stream_xor_ic =) stream_salsa20_xmm6_xor_ic,
++        SODIUM_C99(.stream =) crypto_stream_salsa20__xmm6,
++        SODIUM_C99(.stream_xor_ic =) crypto_stream_salsa20__xmm6_xor_ic,
+     };
+ 
+ #endif

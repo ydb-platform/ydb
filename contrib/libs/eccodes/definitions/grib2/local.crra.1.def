@@ -1,0 +1,4 @@
+# CARRA/CERRA local
+
+codetable[2] suiteName "grib2/crra_suiteName.table" : dump;
+alias crraSuiteID = suiteName;

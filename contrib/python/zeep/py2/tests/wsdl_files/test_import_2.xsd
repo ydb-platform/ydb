@@ -1,0 +1,60 @@
+<schema xmlns="http://www.w3.org/2001/XMLSchema" 
+        targetNamespace="http://example.com/stockquote.xsd"
+        xmlns:tns="http://example.com/stockquote.xsd" >
+  <complexType name="Address">
+    <sequence>
+      <element minOccurs="0" maxOccurs="1" name="NameFirst" type="string"/>
+      <element minOccurs="0" maxOccurs="1" name="NameLast" type="string"/>
+      <element minOccurs="0" maxOccurs="1" name="Email" type="string"/>
+    </sequence>
+  </complexType>
+  <element name="Fault1">
+    <complexType>
+      <sequence>
+        <element name="message" type="string"/>
+      </sequence>
+    </complexType>
+  </element>
+  <element name="Fault2">
+    <complexType>
+      <sequence>
+        <element name="message" type="string"/>
+      </sequence>
+    </complexType>
+  </element>
+  <element name="TradePriceRequest">
+    <complexType>
+      <all>
+        <element name="tickerSymbol" type="string"/>
+        <element name="account" type="tns:account" minOccurs="0" />
+        <element ref="tns:country"/>
+      </all>
+    </complexType>
+  </element>
+  <element name="TradePrice">
+    <complexType>
+      <all>
+        <element name="price" type="float"/>
+      </all>
+    </complexType>
+  </element>
+  <complexType name="account">
+    <sequence>
+      <element name="id" type="int"/>
+      <element name="user" type="string"/>
+    </sequence>
+  </complexType>
+  <complexType name="country">
+      <sequence>
+        <element name="code" type="string"/>
+      </sequence>
+  </complexType>
+  <element name="country">
+    <complexType>
+      <sequence>
+        <element name="name" type="string"/>
+        <element name="code" type="string"/>
+      </sequence>
+    </complexType>
+  </element>
+</schema>

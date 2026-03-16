@@ -1,0 +1,44 @@
+--- contrib/libs/nvidia/nccl/src/device/all_gather.h	(index)
++++ contrib/libs/nvidia/nccl/src/device/all_gather.h	(working tree)
+@@ -111,7 +111,7 @@ struct RunWorkColl<ncclFuncAllGather, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_LL128
+ template<typename T, typename RedOp>
+ struct RunWorkColl<ncclFuncAllGather, T, RedOp, NCCL_ALGO_PAT, NCCL_PROTO_SIMPLE> {
+   __device__ __forceinline__ void run(int tid, int nthreads, struct ncclDevWorkColl* work) {
+-#if __CUDA_ARCH__ >= 600
++#if __CUDA_ARCH__ >= 600 && (!defined(__CUDACC_VER_MAJOR__) || __CUDACC_VER_MAJOR__ > 11)
+     using Proto = ProtoSimple<1, 1>;
+     const int nranks = ncclShmem.comm.nRanks;
+     const int rank = ncclShmem.comm.rank;
+--- contrib/libs/nvidia/nccl/src/device/reduce_scatter.h	(index)
++++ contrib/libs/nvidia/nccl/src/device/reduce_scatter.h	(working tree)
+@@ -80,7 +80,7 @@ struct RunWorkColl<ncclFuncReduceScatter, T, RedOp, NCCL_ALGO_RING, NCCL_PROTO_L
+ template<typename T, typename RedOp>
+ struct RunWorkColl<ncclFuncReduceScatter, T, RedOp, NCCL_ALGO_PAT, NCCL_PROTO_SIMPLE> {
+   __device__ __forceinline__ void run(int tid, int nthreads, struct ncclDevWorkColl* work) {
+-#if __CUDA_ARCH__ >= 600
++#if __CUDA_ARCH__ >= 600 && (!defined(__CUDACC_VER_MAJOR__) || __CUDACC_VER_MAJOR__ > 11)
+     using Proto = ProtoSimple<1, 1>;
+     const int nranks = ncclShmem.comm.nRanks;
+     const int rank = ncclShmem.comm.rank;
+--- contrib/libs/nvidia/nccl/src/include/collectives.h	(index)
++++ contrib/libs/nvidia/nccl/src/include/collectives.h	(working tree)
+@@ -383,7 +383,7 @@ public:
+   ~RingBCAlgorithm() {}
+ };
+ 
+-#if !defined (__CUDA_ARCH__) || __CUDA_ARCH__ >= 600
++#if (!defined (__CUDA_ARCH__) || __CUDA_ARCH__ >= 600) && defined(__CUDACC__)
+ #include <cuda/atomic>
+ #endif
+ 
+--- contrib/libs/nvidia/nccl/src/device/symmetric/primitives.cuh	(index)
++++ contrib/libs/nvidia/nccl/src/device/symmetric/primitives.cuh	(working tree)
+@@ -7,7 +7,7 @@
+ #include "op128.h"
+ #include "reduce_kernel.h"
+ 
+-#if __CUDA_ARCH__ >= 700
++#if __CUDA_ARCH__ >= 700 && (!defined(__CUDACC_VER_MAJOR__) || __CUDACC_VER_MAJOR__ >= 12)
+ // __grid_constant__ appears to break cuda-gdb
+ #define NCCL_GRID_CONSTANT __grid_constant__
+ #else

@@ -1,0 +1,73 @@
+{% extends '//builtin/pycargo.ym' %}
+
+{% block init_bash %}
+{{super()}}
+
+WIN_LIB_DIR_RELPATH="x86_64-pc-windows-msvc/release"
+WIN_LIB_RELPATH="${WIN_LIB_DIR_RELPATH}/_pydantic_core.lib"
+BUILT_WIN_LIB="${BUILD}/${WIN_LIB_RELPATH}"
+{% endblock %}
+
+{% block mod_name %}
+_pydantic_core
+{% endblock %}
+
+{% block platforms %}
+aarch64-apple-darwin
+x86_64-apple-darwin
+aarch64-unknown-linux-gnu
+x86_64-unknown-linux-musl
+x86_64-unknown-linux-gnu
+x86_64-pc-windows-msvc
+{% endblock %}
+
+{% block current_version %}2.41.5{% endblock %}
+{% block current_url %}https://github.com/pydantic/pydantic-core/archive/refs/tags/v{{self.version().strip()}}.tar.gz{% endblock %}
+
+{# rust from pycargo.ym is too old #}
+{% block rust_version %}1.87.0{% endblock %}
+{% block rustup_verison %}1.28.2{% endblock %}
+
+{% block patch_source %}
+sed -e 's|cdylib|staticlib|' -i Cargo.toml
+{% endblock %}
+
+{% block build_source %}
+export PYO3_CROSS_PYTHON_VERSION=3.12
+{{super()}}
+
+# delete dep that is somehow not in deps dir
+find "${BUILD}/${WIN_LIB_DIR_RELPATH}" -name 'python312.lib' -type f -delete
+
+dlls_dir=$(extract_dlls_from_lib ${BUILT_WIN_LIB})
+
+(find ${BUILD} -type f -name '*.a'; find ${BUILD} -type f -name '*.lib') | grep -v "/deps/" | while read l; do
+    llvm-objcopy --redefine-sym "_PyInit__pydantic_core=_PyInit_13pydantic_core14_pydantic_core" ${l}
+    llvm-objcopy --redefine-sym "PyInit__pydantic_core=PyInit_13pydantic_core14_pydantic_core" ${l}
+done
+
+restore_dlls_to_lib ${BUILT_WIN_LIB} ${dlls_dir}
+unset dlls_dir
+{% endblock %}
+
+{% block move_to_output %}
+dlls_dir=$(extract_dlls_from_lib ${BUILT_WIN_LIB})
+
+{{super()}}
+
+out_win_lib="${OUTPUT}/a/${WIN_LIB_RELPATH}"
+restore_dlls_to_lib ${out_win_lib} ${dlls_dir}
+mv ${out_win_lib} $(dirname ${out_win_lib})/lib_pydantic_core.lib
+{% endblock %}
+
+{% block prepare_yamake %}
+:
+{% endblock %}
+
+{% block run_license_analyzer %}
+:
+{% endblock %}
+
+{% block step_install %}
+rsync --recursive --perms ${OUTPUT}/a ${DST_PATH}
+{% endblock %}

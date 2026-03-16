@@ -1,0 +1,30 @@
+# (C) Copyright 2005- ECMWF.
+# Brightness temperature
+
+constant GRIBEXSection1Problem = 1080 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber  : dump;
+alias number = perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble : dump ;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+unsigned[1] channelNumber : dump ;
+alias mars.channel = channelNumber;
+
+unsigned[4] scalingFactorForFrequencies : dump ;
+alias integerScalingFactorAppliedToFrequencies = scalingFactorForFrequencies ;
+
+unsigned[1] numberOfFrequencies : dump ;
+alias totalNumberOfFrequencies =  numberOfFrequencies ;
+alias Nf =  numberOfFrequencies ;
+
+# spareSetToZero
+pad padding_loc14_1(3);
+
+unsigned[4] listOfScaledFrequencies[numberOfFrequencies] : dump;
+
+# moreSpareSetToZero
+padto padding_loc14_2(offsetSection1 + 1080);

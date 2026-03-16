@@ -1,0 +1,119 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3af43c3228d92ca332f5da1a4e74c462
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999, Frank Warmerdam
+         * Copyright (c) 2018, Even Rouault <even.rouault at spatialys.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        geo_normalize.c [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c273cc20b9d99d16a6f25e05046fef8
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999, Frank Warmerdam
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [22:22]
+        geo_extra.c [9:9]
+        geo_normalize.c [9:10]
+        geo_normalize.h [10:10]
+        geo_trans.c [10:10]
+        geotiff_proj4.c [9:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6b4bbcb901ce923b414bc2a89ac2b9fc
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998, Frank Warmerdam
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cpl_serv.c [2:2]
+        cpl_serv.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8e2efc2cae1b7bcc82e149fcc165f30e
+BELONGS ya.make
+    License text:
+         *  copyright (c) 1995   Niles D. Ritter
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [48:48]
+        geo_free.c [7:7]
+        geo_get.c [7:7]
+        geo_keyp.h [7:7]
+        geo_names.c [9:9]
+        geo_new.c [7:7]
+        geo_print.c [7:7]
+        geo_set.c [7:7]
+        geo_tiffp.c [12:12]
+        geo_tiffp.h [14:14]
+        geo_write.c [7:7]
+        geokeys.h [7:7]
+        geonames.h [9:9]
+        geotiff.h [7:7]
+        geotiffio.h [7:7]
+        geovalues.h [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc0636bf1188a885410ec85c7445d572
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008, Frank Warmerdam
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        geo_simpletags.c [2:2]
+        geo_simpletags.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c68b750c17dec3aa1a63c3533ee446eb
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005, Frank Warmerdam <warmerdam@pobox.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        geo_ctrans.inc [9:9]

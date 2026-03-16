@@ -1,0 +1,12 @@
+if(class != 8) # ELDAS
+{
+	# We need this because 'N' is defined later
+	meta marsGrid sprintf("%d",N) : dump;
+	alias mars.grid = marsGrid;
+}
+else
+{
+	alias mars.origin = centre;
+}
+
+

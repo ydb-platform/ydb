@@ -1,0 +1,6 @@
+requirements:
+  - pydantic: null
+mark_as_sources:
+  - tortoise/contrib/test/*
+exclude:
+  - examples/*

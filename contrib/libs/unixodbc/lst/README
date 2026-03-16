@@ -1,0 +1,37 @@
+***************************************************************
+* This code is LGPL. You CAN make commercial solutions using  *
+* LGPL software.                                              *
+*                                                             *
+* Peter Harvey 04.APR.99 pharvey@codebydesign.com             *
+***************************************************************
+
++-------------------------------------------------------------+
+| unixODBC                                                    |
+| LST lib (liblst.so)                                         |
++-------------------------------------------------------------+
+
+README
+
+
+Description:
+
+	A linked list lib. Provides user with a set of very easy
+	to use and proven functions for a doubly-linked list.
+
+	Supports the creation of cursor sets which may, optionally,
+	be based upon a user supplied filter function.
+
+	Concurrency is handled to a certian extent but this lib
+	is no substitute for the fine concurrency handling of a
+	full DBMS.
+
+
++-------------------------------------------------------------+
+| Peter Harvey                                                |
+| pharvey@codebydesign.com                                    |
+| www.unixodbc.org                                            |
+| 16.APR.99                                                   |
++-------------------------------------------------------------+
+
+
+

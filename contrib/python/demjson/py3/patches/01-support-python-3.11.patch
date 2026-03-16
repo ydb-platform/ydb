@@ -1,0 +1,30 @@
+commit 64361778f42d88892ac471bb4156ca187ca38d68
+merge: ada6fbde9f04880e6c8954c98885571787443880 d7f5db6be33416b05c31f186e857199578610065
+author: shadchin
+date: 2022-03-04T07:40:23+03:00
+revision: 9202305
+
+    IGNIETFERRO-1816 Switch on collections.abc
+    
+    REVIEW: 2366867
+
+--- contrib/python/demjson/py3/tests/test_demjson.py	(ada6fbde9f04880e6c8954c98885571787443880)
++++ contrib/python/demjson/py3/tests/test_demjson.py	(64361778f42d88892ac471bb4156ca187ca38d68)
+@@ -12,7 +12,7 @@ import unittest
+ import string
+ import unicodedata
+ import codecs
+-import collections
++import collections.abc
+ import datetime
+ 
+ # Force PYTHONPATH to head of sys.path, as the easy_install (egg files) will
+@@ -115,7 +115,7 @@ try:
+ except ImportError:
+     # Python 3 has no UserDict. MutableMapping is close, but must
+     # supply own __iter__() and __len__() methods.
+-    dict_mixin = collections.MutableMapping
++    dict_mixin = collections.abc.MutableMapping
+ 
+ # A class that behaves like a dict, but is not a subclass of dict
+ class LetterOrdDict(dict_mixin):

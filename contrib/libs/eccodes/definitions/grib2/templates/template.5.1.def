@@ -1,0 +1,70 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.1, Matrix values at grid point - simple packing
+
+# This template was not validated at the time of publication and should be used with caution
+transient template_is_experimental = 1 : hidden;
+
+include "grib2/templates/template.5.packing.def"
+
+unsigned[1] matrixBitmapsPresent;
+# same as in edition 1
+alias secondaryBitmapPresent=matrixBitmapsPresent;
+
+# Number of data values encoded in Section 7
+unsigned[4] numberOfCodedValues;
+
+# NR - first dimension (rows)
+unsigned[2] firstDimension;
+
+alias NR = firstDimension;
+# NC - second dimension (columns)
+unsigned[2] secondDimension;
+
+alias NC = secondDimension;
+# First dimension coordinate value definition (Code Table 5.2)
+unsigned[1] firstDimensionCoordinateValueDefinition;
+
+# NC1 - number of coefficients or values used to specify first dimension coordinate function
+unsigned[1] NC1 : dump ;
+alias numberOfCoefficientsOrValuesUsedToSpecifyFirstDimensionCoordinateFunction=NC1;
+
+# Second dimension coordinate value definition (Code Table 5.2)
+unsigned[1] secondDimensionCoordinateValueDefinition ;
+
+# NC2 - number of coefficients or values used to specify second dimension coordinate function
+unsigned[1] NC2 : dump ;
+alias numberOfCoefficientsOrValuesUsedToSpecifySecondDimensionCoordinateFunction = NC2;
+
+# First dimension physical significance (Code Table 5.3)
+unsigned[1] firstDimensionPhysicalSignificance ;
+
+# Second dimension physical significance (Code Table 5.3)
+unsigned[1] secondDimensionPhysicalSignificance ;
+
+ieeefloat coefsFirst[NC1]; # TODO: find proper names
+ieeefloat coefsSecond[NC2]; # TODO: find proper names
+
+alias data.coefsFirst = coefsFirst;
+alias data.coefsSecond=coefsSecond;
+
+if (matrixBitmapsPresent == 1) {
+  constant datumSize             = NC*NR;
+  constant secondaryBitmapsCount = numberOfValues + 0;
+  constant secondaryBitmapsSize  = secondaryBitmapsCount/8;
+
+  transient numberOfDataMatrices = numberOfDataPoints/datumSize;
+
+  position offsetBBitmap;
+  meta secondaryBitmaps g2bitmap(
+          dummy,
+          missingValue,
+          offsetBSection5,
+          section5Length,
+          numberOfCodedValues ,
+          dummy) : read_only;
+
+  meta bitmap data_g2secondary_bitmap(primaryBitmap,
+      secondaryBitmaps,
+      missingValue,datumSize,numberOfDataPoints) : read_only;
+}

@@ -1,0 +1,11 @@
+{% extends '//builtin/pypi.ym' %}
+
+{% block pypi_package %}
+auth0-python
+{% endblock %}
+
+{% block current_version %}4.13.0{% endblock %}
+
+{% block original_yaml %}
+{% include 'yamaker.yaml' %}
+{% endblock %}

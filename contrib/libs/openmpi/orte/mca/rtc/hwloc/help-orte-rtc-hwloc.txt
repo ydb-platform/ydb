@@ -1,0 +1,30 @@
+# -*- text -*-
+#
+# Copyright (c) 2009-2014 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2010-2012 Los Alamos National Security, LLC.
+#                         All rights reserved.
+#
+# Copyright (c) 2017      Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for ORTE's hwloc support.
+#
+[sys call fail]
+A system call failed during shared memory initialization that should
+not have.
+
+  Local host:  %s
+  System call: %s %s
+  Error:       %s (errno %d)
+#
+[target full]
+It appears as if there is not enough space for %s (the shared-memory backing
+file for hwloc topology).
+
+  Local host:  %s
+  Space Requested: %lu B
+  Space Available: %llu B

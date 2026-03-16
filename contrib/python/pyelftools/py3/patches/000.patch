@@ -1,0 +1,13 @@
+--- contrib/python/pyelftools/py3/ya.make	(9ba67f3b28701688907f68511b9381feb62320ab)
++++ contrib/python/pyelftools/py3/ya.make	(index)
+@@ -6,7 +6,10 @@ SUBSCRIBER(g:python-contrib)
+ 
+ VERSION(0.32)
+ 
+-LICENSE(Public-Domain AND Unlicense)
++LICENSE(
++    Public-Domain OR
++    Unlicense
++)
+ 
+ NO_LINT()

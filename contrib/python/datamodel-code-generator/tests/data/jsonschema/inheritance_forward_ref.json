@@ -1,0 +1,100 @@
+{
+    "title": "PersonsBestFriend",
+    "description": "This is the main model.",
+    "type": "object",
+    "properties": {
+      "people": {
+        "title": "People",
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/Person"
+        }
+      },
+      "dogs": {
+        "title": "Dogs",
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/Dog"
+        }
+      },
+      "dog_base": {
+        "$ref": "#/definitions/DogBase"
+      },
+      "dog_relationships": {
+        "$ref": "#/definitions/DogRelationships"
+      },
+      "person_base": {
+        "$ref": "#/definitions/PersonBase"
+      },
+      "person_relationships": {
+        "$ref": "#/definitions/PersonRelationships"
+      }
+    },
+    "definitions": {
+      "Person": {
+        "title": "Person",
+        "allOf": [
+            {"$ref": "#/definitions/PersonBase"},
+            {"$ref": "#/definitions/PersonRelationships"}
+        ]
+      },
+      "Dog": {
+        "title": "Dog",
+        "allOf": [
+            {"$ref": "#/definitions/DogBase"},
+            {"$ref": "#/definitions/DogRelationships"}
+        ]
+      },
+      "DogBase": {
+        "title": "DogBase",
+        "type": "object",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "woof": {
+            "title": "Woof",
+            "default": true,
+            "type": "boolean"
+          }
+        }
+      },
+      "DogRelationships": {
+        "title": "DogRelationships",
+        "type": "object",
+        "properties": {
+          "people": {
+            "title": "People",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Person"
+            }
+          }
+        }
+      },
+      "PersonBase": {
+        "title": "PersonBase",
+        "type": "object",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        }
+      },
+      "PersonRelationships": {
+        "title": "PersonRelationships",
+        "type": "object",
+        "properties": {
+          "people": {
+            "title": "People",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Person"
+            }
+          }
+        }
+      }
+    }
+  }

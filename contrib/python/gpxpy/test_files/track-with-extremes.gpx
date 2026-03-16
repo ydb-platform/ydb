@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Track with two 2d Extreemes and 1 elevation extreeme -->
+<gpx
+  version="1.0"
+  creator="GPSBabel - http://www.gpsbabel.org"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns="http://www.topografix.com/GPX/1/0"
+  xsi:schemaLocation="http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd">
+<time>2011-07-05T04:11:41Z</time>
+<bounds minlat="45.479033517" minlon="13.507589780" maxlat="45.485465008" maxlon="13.520498463"/>
+<trk>
+  <name>Untitled Path</name>
+<trkseg>
+<trkpt lat="45.484591697" lon="13.507589780">
+  <ele>10.000000</ele>
+</trkpt>
+<trkpt lat="45.484886217" lon="13.508081658">
+  <ele>12.000000</ele>
+</trkpt>
+<trkpt lat="45.485073853" lon="13.508847010">
+  <ele>30.000000</ele>
+</trkpt>
+<trkpt lat="45.484917424" lon="13.509643191">
+  <ele>13.000000</ele>
+</trkpt>
+<trkpt lat="45.484707053" lon="13.510327969">
+  <ele>12.000000</ele>
+</trkpt>
+<trkpt lat="45.484363483" lon="13.510938816">
+  <ele>14.000000</ele>
+</trkpt>
+<trkpt lat="45.485465008" lon="13.513392241">
+  <ele>15.000000</ele>
+</trkpt>
+<trkpt lat="45.483940495" lon="13.511512125">
+  <ele>16.000000</ele>
+</trkpt>
+<trkpt lat="45.483518088" lon="13.512047331">
+  <ele>15.000000</ele>
+</trkpt>
+<trkpt lat="45.483095510" lon="13.512617597">
+  <ele>18.000000</ele>
+</trkpt>
+<trkpt lat="45.482700803" lon="13.513113531">
+  <ele>15.000000</ele>
+</trkpt>
+<trkpt lat="45.482174639" lon="13.513458506">
+  <ele>15.000000</ele>
+</trkpt>
+<trkpt lat="45.481543895" lon="13.513652540">
+  <ele>14.000000</ele>
+</trkpt>
+<trkpt lat="45.480522421" lon="13.511353506">
+  <ele>15.000000</ele>
+</trkpt>
+<trkpt lat="45.480991325" lon="13.513769838">
+  <ele>17.000000</ele>
+</trkpt>
+<trkpt lat="45.480304791" lon="13.513812425">
+  <ele>19.000000</ele>
+</trkpt>
+<trkpt lat="45.479768537" lon="13.513928747">
+  <ele>20.000000</ele>
+</trkpt>
+<trkpt lat="45.479286809" lon="13.514120802">
+  <ele>22.000000</ele>
+</trkpt>
+<trkpt lat="45.479080765" lon="13.514726474">
+  <ele>20.000000</ele>
+</trkpt>
+<trkpt lat="45.479033517" lon="13.515254625">
+  <ele>21.000000</ele>
+</trkpt>
+<trkpt lat="45.479732723" lon="13.518115900">
+  <ele>22.000000</ele>
+</trkpt>
+<trkpt lat="45.479893341" lon="13.518642714">
+  <ele>22.000000</ele>
+</trkpt>
+<trkpt lat="45.480157135" lon="13.519247902">
+  <ele>21.000000</ele>
+</trkpt>
+<trkpt lat="45.480342350" lon="13.519815783">
+  <ele>21.000000</ele>
+</trkpt>
+<trkpt lat="45.480369370" lon="13.520498463">
+  <ele>22.000000</ele>
+</trkpt>
+</trkseg>
+</trk>
+</gpx>

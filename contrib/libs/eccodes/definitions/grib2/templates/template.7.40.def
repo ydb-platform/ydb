@@ -1,0 +1,47 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.40, Grid point data - JPEG2000
+
+meta   codedValues data_jpeg2000_packing(
+    section7Length,
+    offsetBeforeData,
+    offsetSection7,
+
+    unitsFactor,
+    unitsBias,
+    changingPrecision,
+    numberOfCodedValues,
+    bitsPerValue,
+    referenceValue,
+    binaryScaleFactor,
+    decimalScaleFactor,
+    optimizeScaleFactor,
+
+    #numberOfValues,
+    #referenceValue,
+    #binaryScaleFactor,
+    #decimalScaleFactor,
+    #bitsPerValue,
+
+    # For encoding
+    typeOfCompressionUsed,
+    targetCompressionRatio,
+    Nx,
+    Ny,
+    interpretationOfNumberOfPoints,
+    numberOfDataPoints,
+    scanningMode
+): read_only;
+
+meta values data_apply_bitmap(
+    codedValues,
+    bitmap,
+    missingValue,
+    binaryScaleFactor,
+    numberOfDataPoints,
+    numberOfValues) : dump;
+
+alias data.packedValues = codedValues;
+
+template statistics "common/statistics_grid.def";
+template missing_values "common/missing_values_grid.def";

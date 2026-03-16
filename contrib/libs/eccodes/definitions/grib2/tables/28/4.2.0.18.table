@@ -1,0 +1,21 @@
+# Code table 4.2 - Parameter number by product discipline and parameter category
+0 0 Air concentration of caesium 137 (Bq m-3)
+1 1 Air concentration of iodine 131 (Bq m-3)
+2 2 Air concentration of radioactive pollutant (Bq m-3)
+3 3 Ground deposition of caesium 137 (Bq m-2)
+4 4 Ground deposition of iodine 131 (Bq m-2)
+5 5 Ground deposition of radioactive pollutant (Bq m-2)
+6 6 Time-integrated air concentration of caesium pollutant (Bq s m-3)
+7 7 Time-integrated air concentration of iodine pollutant (Bq s m-3)
+8 8 Time-integrated air concentration of radioactive pollutant (Bq s m-3)
+9 9 Reserved
+10 10 Air concentration (Bq m-3)
+11 11 Wet deposition (Bq m-2)
+12 12 Dry deposition (Bq m-2)
+13 13 Total deposition (wet + dry) (Bq m-2)
+14 14 Specific activity concentration (Bq kg-1)
+15 15 Maximum of air concentration in layer (Bq m-3)
+16 16 Height of maximum air concentration (m)
+17 17 Column-integrated air concentration (Bq m-2)
+18 18 Column-averaged air concentration in layer (Bq m-3)
+255 255 Missing

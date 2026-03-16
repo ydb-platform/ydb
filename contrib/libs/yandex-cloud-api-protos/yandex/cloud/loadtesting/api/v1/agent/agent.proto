@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.agent ;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/agent;agent";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.agent";
+
+import "yandex/cloud/loadtesting/api/v1/agent/status.proto";
+import "yandex/cloud/loadtesting/api/v1/agent/log_settings.proto";
+
+// Load testing agent on which tests are executed.
+message Agent {
+  // ID of the agent. Generated at creation time.
+  string id = 1;
+
+  // ID of the folder that the agent belongs to.
+  string folder_id = 2;
+
+  // Name of the agent.
+  string name = 3;
+
+  // Description of the agent.
+  string description = 4;
+
+  // ID of the compute instance managed by the agent.
+  //
+  // Empty if there is no such instance (i.e. the case of external agent).
+  string compute_instance_id = 5;
+  
+  reserved 6;
+
+  // Status of the agent.
+  Status status = 7;
+
+  // List of errors reported by the agent.
+  repeated string errors = 8;
+
+  // ID of the test that is currently being executed by the agent.
+  string current_job_id = 9;
+
+  // Version of the agent.
+  string agent_version_id = 10;
+  
+  reserved 11;
+  
+  // Agent labels as `key:value` pairs.
+  map<string, string> labels = 12;
+
+  // Agent log settings
+  agent.LogSettings log_settings = 13;
+}

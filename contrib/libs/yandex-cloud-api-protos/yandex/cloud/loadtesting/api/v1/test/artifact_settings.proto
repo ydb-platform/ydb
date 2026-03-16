@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.test;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/test;test";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.test";
+
+// Artifact upload settings.
+//
+// Defines where to upload test artifacts and which files should be included.
+message ArtifactSettings {
+  oneof upload_to {
+      // Name of output object storage bucket in test's folder.
+      string object_storage_bucket = 1;
+  }
+
+  reserved 2 to 5;
+  
+  // Setting which defines whether artifact files should be archived prior to uploading.
+  bool is_archive = 6;
+
+  // Filter strings defining which files should be included to artifacts. GLOB format.
+  //
+  // Example:
+  // - ['*'] - all files will be uploaded.
+  // - ['*.log', '*.yaml] - all `.log` and `.yaml` files will be uploaded.
+  repeated string filter_include = 7;
+  
+  // Filter strings defining which files should be excluded from artifacts. GLOB format.
+  //
+  // Example:
+  // - filter_include=['*'], filter_exclude=['phout.log'] - upload all `.log` files excluding `phout.log`.
+  repeated string filter_exclude = 8;
+}

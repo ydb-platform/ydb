@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+import "yandex/cloud/connectionmanager/v1/common.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/connectionmanager/v1;connectionmanager";
+option java_package = "yandex.cloud.api.connectionmanager.v1";
+
+package yandex.cloud.connectionmanager.v1;
+
+message KafkaSaslSecurity {
+    enum Mechanism {
+        MECHANISM_UNSPECIFIED = 0;
+        PLAIN = 1;
+        SCRAM_SHA256 = 2;
+        SCRAM_SHA512 = 3;
+    }
+    string user = 1;
+    Password password = 2;
+    repeated Mechanism supported_mechanisms = 3;
+}
+
+message KafkaAuth {
+    oneof security {
+        KafkaSaslSecurity sasl = 1;
+        google.protobuf.Empty disabled = 2;
+    }
+}
+
+message KafkaCluster {
+    message Host {
+        enum Health {
+          HEALTH_UNSPECIFIED = 0; // Host is in unknown state (we have no data)
+          ALIVE = 1; // Host is alive and well (all services are alive)
+          DEAD = 2; // Host is inoperable (it cannot perform any of its essential functions)
+          DEGRADED = 3; // Host is partially alive (it can perform some of its essential functions)
+        }
+
+        string host = 1;
+        int64 port = 2;
+        Health health = 3;
+    }
+
+    repeated Host hosts = 1;
+    TLSParams tls_params = 2;
+}
+
+message KafkaConnection {
+    // When creating/updating Connection, the field "cluster" is mutually
+    // exclusive with "managed_cluster_id".
+    KafkaCluster cluster = 1;
+    // When creating/updating Connection, the field "managed_cluster_id" is
+    // mutually exclusive with "cluster".
+    string managed_cluster_id = 2;
+    KafkaAuth auth = 3;
+}

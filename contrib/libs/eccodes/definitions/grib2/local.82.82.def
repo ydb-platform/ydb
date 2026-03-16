@@ -1,0 +1,9 @@
+# author: Sebastien Villaume
+# created: 14 Feb 2014
+#
+
+# base local definition
+include "grib2/local.82.0.def";
+
+unsigned[1] marsExperimentOffset = 0 : dump, long_type;
+

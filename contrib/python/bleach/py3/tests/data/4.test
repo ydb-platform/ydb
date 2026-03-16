@@ -1,0 +1,3 @@
+<scr<script></script>ipt type="text/javascript">alert("foo");</<script></script>script<del></del>>
+--
+&lt;scr&lt;script&gt;&lt;/script&gt;ipt type="text/javascript"&gt;alert("foo");&lt;/&lt;script&gt;&lt;/script&gt;script&lt;del&gt;&lt;/del&gt;&gt;

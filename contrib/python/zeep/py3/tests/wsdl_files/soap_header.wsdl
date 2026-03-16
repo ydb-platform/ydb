@@ -1,0 +1,91 @@
+<?xml version="1.0"?>
+<definitions 
+  xmlns:tns="http://example.com/stockquote.wsdl" 
+  xmlns:xsd1="http://example.com/stockquote.xsd" 
+  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" 
+  xmlns="http://schemas.xmlsoap.org/wsdl/" 
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+  name="StockQuote" 
+  targetNamespace="http://example.com/stockquote.wsdl">
+  <types>
+    <schema 
+      xmlns="http://www.w3.org/2001/XMLSchema" 
+      targetNamespace="http://example.com/stockquote.xsd">
+      <complexType name="Address">
+        <sequence>
+          <element minOccurs="0" maxOccurs="1" name="NameFirst" type="string"/>
+          <element minOccurs="0" maxOccurs="1" name="NameLast" type="string"/>
+          <element minOccurs="0" maxOccurs="1" name="Email" type="string"/>
+        </sequence>
+      </complexType>
+      <element name="TradePriceRequest">
+        <complexType>
+          <all>
+            <element name="tickerSymbol" type="string"/>
+          </all>
+        </complexType>
+      </element>
+      <element name="TradePrice">
+        <complexType>
+          <all>
+            <element name="price" type="float"/>
+          </all>
+        </complexType>
+      </element>
+      <element name="Authentication">
+        <complexType>
+          <sequence>
+            <element name="username" type="string"/>
+            <element name="password" type="string"/>
+          </sequence>
+        </complexType>
+      </element>
+      <element name="Token">
+        <complexType>
+          <sequence>
+            <element name="value" type="string"/>
+          </sequence>
+        </complexType>
+      </element>
+    </schema>
+  </types>
+  <message name="GetLastTradePriceInput">
+    <part name="header" element="xsd1:Authentication"/>
+    <part name="token" element="xsd1:Token"/>
+    <part name="body" element="xsd1:TradePriceRequest"/>
+  </message>
+  <message name="GetLastTradePriceOutput">
+    <part name="body" element="xsd1:TradePrice"/>
+  </message>
+  <message name="OptionalResponseHeader">
+    <part name="body" type="xsd:string"/>
+  </message>
+
+  <portType name="StockQuotePortType">
+    <operation name="GetLastTradePrice">
+      <input message="tns:GetLastTradePriceInput"/>
+      <output message="tns:GetLastTradePriceOutput"/>
+    </operation>
+  </portType>
+  <binding name="StockQuoteBinding" type="tns:StockQuotePortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="GetLastTradePrice">
+      <soap:operation soapAction="http://example.com/GetLastTradePrice"/>
+      <input>
+        <soap:header message="tns:GetLastTradePriceInput" part="header" use="literal"/>
+        <soap:header message="tns:GetLastTradePriceInput" part="token" use="literal"/>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+        <soap:header message="tns:OptionalResponseHeader" part="body" use="literal"/>
+      </output>
+    </operation>
+  </binding>
+  <service name="StockQuoteService">
+    <documentation>My first service</documentation>
+    <port name="StockQuotePort" binding="tns:StockQuoteBinding">
+      <soap:address location="http://example.com/stockquote"/>
+    </port>
+  </service>
+</definitions>

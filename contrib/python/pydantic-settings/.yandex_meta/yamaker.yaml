@@ -1,0 +1,9 @@
+keep:
+  - .arcignore
+  - .idea/*
+exclude_from_macros:
+  - .arcignore
+  - .idea/*
+requirements:
+  - pydantic: contrib/python/pydantic/pydantic-2
+

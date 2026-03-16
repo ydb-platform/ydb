@@ -1,0 +1,213 @@
+Metadata-Version: 2.4
+Name: python-can
+Version: 4.6.1
+Summary: Controller Area Network interface module for Python
+Author: python-can contributors
+License-Expression: LGPL-3.0-only
+Project-URL: homepage, https://github.com/hardbyte/python-can
+Project-URL: documentation, https://python-can.readthedocs.io
+Project-URL: repository, https://github.com/hardbyte/python-can
+Project-URL: changelog, https://github.com/hardbyte/python-can/blob/develop/CHANGELOG.md
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Education
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: Manufacturing
+Classifier: Intended Audience :: Telecommunications Industry
+Classifier: Natural Language :: English
+Classifier: Operating System :: MacOS
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Embedded Systems
+Classifier: Topic :: Software Development :: Embedded Systems :: Controller Area Network (CAN)
+Classifier: Topic :: System :: Hardware :: Hardware Drivers
+Classifier: Topic :: System :: Logging
+Classifier: Topic :: System :: Monitoring
+Classifier: Topic :: System :: Networking
+Classifier: Topic :: Utilities
+Requires-Python: >=3.9
+Description-Content-Type: text/x-rst
+License-File: LICENSE.txt
+Requires-Dist: wrapt~=1.10
+Requires-Dist: packaging>=23.1
+Requires-Dist: typing_extensions>=3.10.0.0
+Provides-Extra: pywin32
+Requires-Dist: pywin32>=305; (platform_system == "Windows" and platform_python_implementation == "CPython") and extra == "pywin32"
+Provides-Extra: seeedstudio
+Requires-Dist: pyserial>=3.0; extra == "seeedstudio"
+Provides-Extra: serial
+Requires-Dist: pyserial~=3.0; extra == "serial"
+Provides-Extra: neovi
+Requires-Dist: filelock; extra == "neovi"
+Requires-Dist: python-ics>=2.12; extra == "neovi"
+Provides-Extra: canalystii
+Requires-Dist: canalystii>=0.1.0; extra == "canalystii"
+Provides-Extra: cantact
+Requires-Dist: cantact>=0.0.7; extra == "cantact"
+Provides-Extra: cvector
+Requires-Dist: python-can-cvector; extra == "cvector"
+Provides-Extra: gs-usb
+Requires-Dist: gs-usb>=0.2.1; extra == "gs-usb"
+Provides-Extra: nixnet
+Requires-Dist: nixnet>=0.3.2; extra == "nixnet"
+Provides-Extra: pcan
+Requires-Dist: uptime~=3.0.1; extra == "pcan"
+Provides-Extra: remote
+Requires-Dist: python-can-remote; extra == "remote"
+Provides-Extra: sontheim
+Requires-Dist: python-can-sontheim>=0.1.2; extra == "sontheim"
+Provides-Extra: canine
+Requires-Dist: python-can-canine>=0.2.2; extra == "canine"
+Provides-Extra: zlgcan
+Requires-Dist: zlgcan; extra == "zlgcan"
+Provides-Extra: candle
+Requires-Dist: python-can-candle>=1.2.2; extra == "candle"
+Provides-Extra: viewer
+Requires-Dist: windows-curses; (platform_system == "Windows" and platform_python_implementation == "CPython") and extra == "viewer"
+Provides-Extra: mf4
+Requires-Dist: asammdf>=6.0.0; extra == "mf4"
+Provides-Extra: multicast
+Requires-Dist: msgpack~=1.1.0; extra == "multicast"
+Dynamic: license-file
+
+python-can
+==========
+
+|pypi| |conda| |python_implementation| |downloads| |downloads_monthly|
+
+|docs| |github-actions| |coverage| |formatter|
+
+.. |pypi| image:: https://img.shields.io/pypi/v/python-can.svg
+   :target: https://pypi.python.org/pypi/python-can/
+   :alt: Latest Version on PyPi
+
+.. |conda| image:: https://img.shields.io/conda/v/conda-forge/python-can
+   :target: https://github.com/conda-forge/python-can-feedstock
+   :alt: Latest Version on conda-forge
+
+.. |python_implementation| image:: https://img.shields.io/pypi/implementation/python-can
+   :target: https://pypi.python.org/pypi/python-can/
+   :alt: Supported Python implementations
+
+.. |downloads| image:: https://static.pepy.tech/badge/python-can
+   :target: https://pepy.tech/project/python-can
+   :alt: Downloads on PePy
+
+.. |downloads_monthly| image:: https://static.pepy.tech/badge/python-can/month
+   :target: https://pepy.tech/project/python-can
+   :alt: Monthly downloads on PePy
+
+.. |formatter| image:: https://img.shields.io/badge/code%20style-black-000000.svg
+   :target: https://github.com/python/black
+   :alt: This project uses the black formatter.
+
+.. |docs| image:: https://readthedocs.org/projects/python-can/badge/?version=stable
+   :target: https://python-can.readthedocs.io/en/stable/
+   :alt: Documentation
+
+.. |github-actions| image:: https://github.com/hardbyte/python-can/actions/workflows/ci.yml/badge.svg
+   :target: https://github.com/hardbyte/python-can/actions/workflows/ci.yml
+   :alt: Github Actions workflow status
+
+.. |coverage| image:: https://coveralls.io/repos/github/hardbyte/python-can/badge.svg?branch=main
+   :target: https://coveralls.io/github/hardbyte/python-can?branch=main
+   :alt: Test coverage reports on Coveralls.io
+
+The **C**\ ontroller **A**\ rea **N**\ etwork is a bus standard designed
+to allow microcontrollers and devices to communicate with each other. It
+has priority based bus arbitration and reliable deterministic
+communication. It is used in cars, trucks, boats, wheelchairs and more.
+
+The ``can`` package provides controller area network support for
+Python developers; providing common abstractions to
+different hardware devices, and a suite of utilities for sending and receiving
+messages on a can bus.
+
+The library currently supports CPython as well as PyPy and runs on Mac, Linux and Windows.
+
+==============================  ===========
+Library Version                 Python
+------------------------------  -----------
+  2.x                           2.6+, 3.4+
+  3.x                           2.7+, 3.5+
+  4.0+                          3.7+
+  4.3+                          3.8+
+  4.6+                          3.9+
+==============================  ===========
+
+
+Features
+--------
+
+- common abstractions for CAN communication
+- support for many different backends (see the `docs <https://python-can.readthedocs.io/en/stable/interfaces.html>`__)
+- receiving, sending, and periodically sending messages
+- normal and extended arbitration IDs
+- `CAN FD <https://en.wikipedia.org/wiki/CAN_FD>`__ support
+- many different loggers and readers supporting playback: ASC (CANalyzer format), BLF (Binary Logging Format by Vector), MF4 (Measurement Data Format v4 by ASAM), TRC, CSV, SQLite, and Canutils log
+- efficient in-kernel or in-hardware filtering of messages on supported interfaces
+- bus configuration reading from a file or from environment variables
+- command line tools for working with CAN buses (see the `docs <https://python-can.readthedocs.io/en/stable/scripts.html>`__)
+- more
+
+
+Example usage
+-------------
+
+``pip install python-can``
+
+.. code:: python
+
+    # import the library
+    import can
+
+    # create a bus instance using 'with' statement,
+    # this will cause bus.shutdown() to be called on the block exit;
+    # many other interfaces are supported as well (see documentation)
+    with can.Bus(interface='socketcan',
+                  channel='vcan0',
+                  receive_own_messages=True) as bus:
+
+       # send a message
+       message = can.Message(arbitration_id=123, is_extended_id=True,
+                             data=[0x11, 0x22, 0x33])
+       bus.send(message, timeout=0.2)
+
+       # iterate over received messages
+       for msg in bus:
+           print(f"{msg.arbitration_id:X}: {msg.data}")
+
+       # or use an asynchronous notifier
+       notifier = can.Notifier(bus, [can.Logger("recorded.log"), can.Printer()])
+
+You can find more information in the documentation, online at
+`python-can.readthedocs.org <https://python-can.readthedocs.org/en/stable/>`__.
+
+
+Discussion
+----------
+
+If you run into bugs, you can file them in our
+`issue tracker <https://github.com/hardbyte/python-can/issues>`__ on GitHub.
+
+`Stackoverflow <https://stackoverflow.com/questions/tagged/can+python>`__ has several
+questions and answers tagged with ``python+can``.
+
+Wherever we interact, we strive to follow the
+`Python Community Code of Conduct <https://www.python.org/psf/codeofconduct/>`__.
+
+
+Contributing
+------------
+
+See `doc/development.rst <doc/development.rst>`__ for getting started.

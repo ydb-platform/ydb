@@ -1,0 +1,40 @@
+{
+  "title": "Model",
+  "allOf": [
+    {
+      "type": "object",
+      "properties": {
+        "first": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "first"
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "second": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "second"
+          ]
+        },
+        {
+          "properties": {
+            "third": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "third"
+          ]
+        }
+      ]
+    }
+  ]
+}

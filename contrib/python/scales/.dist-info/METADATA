@@ -1,0 +1,22 @@
+Metadata-Version: 2.1
+Name: scales
+Version: 1.0.9
+Summary: Stats for Python processes
+Home-page: https://www.github.com/Cue/scales
+Author: Greplin, Inc.
+Author-email: opensource@greplin.com
+License: Apache
+Platform: UNKNOWN
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.2
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Requires-Dist: six
+
+UNKNOWN
+
+

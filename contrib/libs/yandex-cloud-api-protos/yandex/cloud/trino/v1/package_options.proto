@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+
+package yandex.cloud.trino.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/trino/v1;trino";

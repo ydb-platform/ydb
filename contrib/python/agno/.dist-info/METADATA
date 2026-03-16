@@ -1,0 +1,592 @@
+Metadata-Version: 2.4
+Name: agno
+Version: 2.3.26
+Summary: Agno: a lightweight library for building Multi-Agent Systems
+Author-email: Ashpreet Bedi <ashpreet@agno.com>
+Project-URL: homepage, https://agno.com
+Project-URL: documentation, https://docs.agno.com
+Keywords: agent,reasoning,llm,large-language-model,framework
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: <4,>=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: docstring-parser
+Requires-Dist: gitpython
+Requires-Dist: h11>=0.16.0
+Requires-Dist: httpx[http2]
+Requires-Dist: packaging
+Requires-Dist: pydantic-settings
+Requires-Dist: pydantic
+Requires-Dist: python-dotenv
+Requires-Dist: python-multipart
+Requires-Dist: pyyaml
+Requires-Dist: rich
+Requires-Dist: typer
+Requires-Dist: typing-extensions
+Provides-Extra: dev
+Requires-Dist: mypy==1.18.2; extra == "dev"
+Requires-Dist: ruff==0.14.3; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-asyncio; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: pytest-mock; extra == "dev"
+Requires-Dist: timeout-decorator; extra == "dev"
+Requires-Dist: types-pyyaml; extra == "dev"
+Requires-Dist: types-aiofiles; extra == "dev"
+Requires-Dist: fastapi; extra == "dev"
+Requires-Dist: uvicorn; extra == "dev"
+Requires-Dist: PyJWT; extra == "dev"
+Requires-Dist: mcp; extra == "dev"
+Requires-Dist: openai; extra == "dev"
+Requires-Dist: fakeredis; extra == "dev"
+Provides-Extra: os
+Requires-Dist: fastapi; extra == "os"
+Requires-Dist: uvicorn; extra == "os"
+Requires-Dist: PyJWT; extra == "os"
+Provides-Extra: opentelemetry
+Requires-Dist: opentelemetry-sdk; extra == "opentelemetry"
+Requires-Dist: opentelemetry-exporter-otlp; extra == "opentelemetry"
+Provides-Extra: weave
+Requires-Dist: weave; extra == "weave"
+Provides-Extra: openlit
+Requires-Dist: openlit; extra == "openlit"
+Requires-Dist: agno[opentelemetry]; extra == "openlit"
+Provides-Extra: arize
+Requires-Dist: arize-phoenix; extra == "arize"
+Requires-Dist: agno[opentelemetry]; extra == "arize"
+Requires-Dist: opentelemetry-exporter-otlp-proto-grpc; extra == "arize"
+Requires-Dist: opentelemetry-distro; extra == "arize"
+Provides-Extra: langfuse
+Requires-Dist: langfuse; extra == "langfuse"
+Provides-Extra: aws-bedrock
+Requires-Dist: boto3; extra == "aws-bedrock"
+Requires-Dist: aioboto3; extra == "aws-bedrock"
+Provides-Extra: anthropic
+Requires-Dist: anthropic; extra == "anthropic"
+Provides-Extra: azure
+Requires-Dist: azure-ai-inference; extra == "azure"
+Requires-Dist: aiohttp; extra == "azure"
+Provides-Extra: cerebras
+Requires-Dist: cerebras-cloud-sdk; extra == "cerebras"
+Provides-Extra: cohere
+Requires-Dist: cohere; extra == "cohere"
+Provides-Extra: infinity
+Requires-Dist: infinity_client; extra == "infinity"
+Provides-Extra: google
+Requires-Dist: google-genai>=1.52.0; extra == "google"
+Provides-Extra: groq
+Requires-Dist: groq; extra == "groq"
+Provides-Extra: ibm
+Requires-Dist: ibm-watsonx-ai; extra == "ibm"
+Provides-Extra: litellm
+Requires-Dist: litellm; extra == "litellm"
+Provides-Extra: lmstudio
+Requires-Dist: lmstudio; extra == "lmstudio"
+Provides-Extra: meta
+Requires-Dist: llama-api-client; extra == "meta"
+Provides-Extra: mistral
+Requires-Dist: mistralai; extra == "mistral"
+Provides-Extra: ollama
+Requires-Dist: ollama; extra == "ollama"
+Provides-Extra: openai
+Requires-Dist: openai; extra == "openai"
+Provides-Extra: portkey
+Requires-Dist: portkey-ai; extra == "portkey"
+Provides-Extra: tokenizers
+Requires-Dist: tiktoken; extra == "tokenizers"
+Requires-Dist: tokenizers; extra == "tokenizers"
+Provides-Extra: agentql
+Requires-Dist: agentql; extra == "agentql"
+Provides-Extra: apify
+Requires-Dist: apify-client; extra == "apify"
+Provides-Extra: arxiv
+Requires-Dist: arxiv; extra == "arxiv"
+Provides-Extra: brave
+Requires-Dist: brave-search; extra == "brave"
+Provides-Extra: browserbase
+Requires-Dist: browserbase; extra == "browserbase"
+Requires-Dist: playwright; extra == "browserbase"
+Provides-Extra: cartesia
+Requires-Dist: cartesia; extra == "cartesia"
+Provides-Extra: confluence
+Requires-Dist: atlassian-python-api; extra == "confluence"
+Provides-Extra: ddg
+Requires-Dist: ddgs; extra == "ddg"
+Provides-Extra: duckdb
+Requires-Dist: duckdb; extra == "duckdb"
+Provides-Extra: elevenlabs
+Requires-Dist: elevenlabs; extra == "elevenlabs"
+Provides-Extra: evm
+Requires-Dist: web3; extra == "evm"
+Provides-Extra: exa
+Requires-Dist: exa_py; extra == "exa"
+Provides-Extra: fal
+Requires-Dist: fal_client; extra == "fal"
+Provides-Extra: firecrawl
+Requires-Dist: firecrawl-py==3.4.0; extra == "firecrawl"
+Provides-Extra: tavily
+Requires-Dist: tavily-python; extra == "tavily"
+Provides-Extra: crawl4ai
+Requires-Dist: crawl4ai>=0.6.3; extra == "crawl4ai"
+Provides-Extra: github
+Requires-Dist: PyGithub; extra == "github"
+Provides-Extra: gmail
+Requires-Dist: google-api-python-client; extra == "gmail"
+Requires-Dist: google-auth-httplib2; extra == "gmail"
+Requires-Dist: google-auth-oauthlib; extra == "gmail"
+Provides-Extra: google-bigquery
+Requires-Dist: google-cloud-bigquery; extra == "google-bigquery"
+Provides-Extra: googlemaps
+Requires-Dist: googlemaps; extra == "googlemaps"
+Requires-Dist: google-maps-places; extra == "googlemaps"
+Provides-Extra: matplotlib
+Requires-Dist: matplotlib; extra == "matplotlib"
+Provides-Extra: mcp
+Requires-Dist: mcp>=1.9.2; extra == "mcp"
+Provides-Extra: mem0
+Requires-Dist: mem0ai; extra == "mem0"
+Provides-Extra: memori
+Requires-Dist: memori>=3.0.5; extra == "memori"
+Provides-Extra: newspaper
+Requires-Dist: newspaper4k; extra == "newspaper"
+Requires-Dist: lxml_html_clean; extra == "newspaper"
+Provides-Extra: notion
+Requires-Dist: notion-client; extra == "notion"
+Provides-Extra: opencv
+Requires-Dist: opencv-python; extra == "opencv"
+Provides-Extra: parallel
+Requires-Dist: parallel-web; extra == "parallel"
+Provides-Extra: psycopg
+Requires-Dist: psycopg-binary; extra == "psycopg"
+Requires-Dist: psycopg; extra == "psycopg"
+Provides-Extra: redshift
+Requires-Dist: redshift-connector; extra == "redshift"
+Provides-Extra: reportlab
+Requires-Dist: reportlab; extra == "reportlab"
+Provides-Extra: scrapegraph
+Requires-Dist: scrapegraph-py; extra == "scrapegraph"
+Provides-Extra: todoist
+Requires-Dist: todoist-api-python; extra == "todoist"
+Provides-Extra: valyu
+Requires-Dist: valyu; extra == "valyu"
+Provides-Extra: webex
+Requires-Dist: webexpythonsdk; extra == "webex"
+Provides-Extra: yfinance
+Requires-Dist: yfinance; extra == "yfinance"
+Provides-Extra: youtube
+Requires-Dist: youtube_transcript_api; extra == "youtube"
+Provides-Extra: zep
+Requires-Dist: zep-cloud; extra == "zep"
+Provides-Extra: daytona
+Requires-Dist: daytona; extra == "daytona"
+Provides-Extra: oxylabs
+Requires-Dist: oxylabs; extra == "oxylabs"
+Provides-Extra: trafilatura
+Requires-Dist: trafilatura; extra == "trafilatura"
+Provides-Extra: neo4j
+Requires-Dist: neo4j; extra == "neo4j"
+Provides-Extra: sql
+Requires-Dist: sqlalchemy; extra == "sql"
+Provides-Extra: postgres
+Requires-Dist: psycopg-binary; extra == "postgres"
+Provides-Extra: async-postgres
+Requires-Dist: asyncpg; extra == "async-postgres"
+Provides-Extra: async-mongo
+Requires-Dist: pymongo>=4.9; extra == "async-mongo"
+Requires-Dist: motor; extra == "async-mongo"
+Provides-Extra: sqlite
+Requires-Dist: sqlalchemy; extra == "sqlite"
+Provides-Extra: gcs
+Requires-Dist: google-cloud-storage; extra == "gcs"
+Provides-Extra: firestore
+Requires-Dist: google-cloud-firestore; extra == "firestore"
+Provides-Extra: redis
+Requires-Dist: redis; extra == "redis"
+Requires-Dist: redisvl>=0.12.1; extra == "redis"
+Provides-Extra: mysql
+Requires-Dist: pymysql; extra == "mysql"
+Requires-Dist: asyncmy; extra == "mysql"
+Provides-Extra: pgvector
+Requires-Dist: pgvector; extra == "pgvector"
+Provides-Extra: chromadb
+Requires-Dist: chromadb; extra == "chromadb"
+Provides-Extra: lancedb
+Requires-Dist: lancedb==0.24.0; extra == "lancedb"
+Requires-Dist: tantivy; extra == "lancedb"
+Provides-Extra: pylance
+Requires-Dist: pylance; extra == "pylance"
+Provides-Extra: qdrant
+Requires-Dist: qdrant-client; extra == "qdrant"
+Provides-Extra: couchbase
+Requires-Dist: couchbase; extra == "couchbase"
+Provides-Extra: cassandra
+Requires-Dist: cassio; extra == "cassandra"
+Provides-Extra: mongodb
+Requires-Dist: pymongo[srv]; extra == "mongodb"
+Provides-Extra: singlestore
+Requires-Dist: sqlalchemy; extra == "singlestore"
+Provides-Extra: weaviate
+Requires-Dist: weaviate-client; extra == "weaviate"
+Provides-Extra: milvusdb
+Requires-Dist: pymilvus>=2.5.10; extra == "milvusdb"
+Provides-Extra: clickhouse
+Requires-Dist: clickhouse-connect; extra == "clickhouse"
+Provides-Extra: pinecone
+Requires-Dist: pinecone==5.4.2; extra == "pinecone"
+Provides-Extra: surrealdb
+Requires-Dist: surrealdb>=1.0.4; extra == "surrealdb"
+Provides-Extra: upstash
+Requires-Dist: upstash-vector; extra == "upstash"
+Provides-Extra: pdf
+Requires-Dist: pypdf; extra == "pdf"
+Requires-Dist: rapidocr_onnxruntime; extra == "pdf"
+Provides-Extra: docx
+Requires-Dist: python-docx; extra == "docx"
+Provides-Extra: pptx
+Requires-Dist: python-pptx; extra == "pptx"
+Provides-Extra: text
+Requires-Dist: aiofiles; extra == "text"
+Provides-Extra: csv
+Requires-Dist: aiofiles; extra == "csv"
+Provides-Extra: markdown
+Requires-Dist: unstructured; extra == "markdown"
+Requires-Dist: markdown; extra == "markdown"
+Requires-Dist: aiofiles; extra == "markdown"
+Provides-Extra: chonkie
+Requires-Dist: chonkie[semantic]; extra == "chonkie"
+Requires-Dist: chonkie[code]; extra == "chonkie"
+Requires-Dist: chonkie; extra == "chonkie"
+Provides-Extra: agui
+Requires-Dist: ag-ui-protocol; extra == "agui"
+Provides-Extra: a2a
+Requires-Dist: a2a-sdk; extra == "a2a"
+Provides-Extra: huggingface
+Requires-Dist: huggingface-hub; extra == "huggingface"
+Provides-Extra: performance
+Requires-Dist: memory_profiler; extra == "performance"
+Provides-Extra: cookbooks
+Requires-Dist: inquirer; extra == "cookbooks"
+Requires-Dist: email_validator; extra == "cookbooks"
+Provides-Extra: docker
+Requires-Dist: agno-infra[docker]; extra == "docker"
+Provides-Extra: aws
+Requires-Dist: agno-infra[aws]; extra == "aws"
+Requires-Dist: agno-infra[docker]; extra == "aws"
+Provides-Extra: infra
+Requires-Dist: agno-infra; extra == "infra"
+Provides-Extra: models
+Requires-Dist: agno[aws-bedrock]; extra == "models"
+Requires-Dist: agno[anthropic]; extra == "models"
+Requires-Dist: agno[azure]; extra == "models"
+Requires-Dist: agno[cerebras]; extra == "models"
+Requires-Dist: agno[cohere]; extra == "models"
+Requires-Dist: agno[google]; extra == "models"
+Requires-Dist: agno[groq]; extra == "models"
+Requires-Dist: agno[ibm]; extra == "models"
+Requires-Dist: agno[litellm]; extra == "models"
+Requires-Dist: agno[meta]; extra == "models"
+Requires-Dist: agno[mistral]; extra == "models"
+Requires-Dist: agno[ollama]; extra == "models"
+Requires-Dist: agno[openai]; extra == "models"
+Requires-Dist: agno[portkey]; extra == "models"
+Provides-Extra: tools
+Requires-Dist: agno[apify]; extra == "tools"
+Requires-Dist: agno[arxiv]; extra == "tools"
+Requires-Dist: agno[exa]; extra == "tools"
+Requires-Dist: agno[cartesia]; extra == "tools"
+Requires-Dist: agno[ddg]; extra == "tools"
+Requires-Dist: agno[duckdb]; extra == "tools"
+Requires-Dist: agno[newspaper]; extra == "tools"
+Requires-Dist: agno[youtube]; extra == "tools"
+Requires-Dist: agno[firecrawl]; extra == "tools"
+Requires-Dist: agno[tavily]; extra == "tools"
+Requires-Dist: agno[crawl4ai]; extra == "tools"
+Requires-Dist: agno[github]; extra == "tools"
+Requires-Dist: agno[gmail]; extra == "tools"
+Requires-Dist: agno[googlemaps]; extra == "tools"
+Requires-Dist: agno[todoist]; extra == "tools"
+Requires-Dist: agno[matplotlib]; extra == "tools"
+Requires-Dist: agno[elevenlabs]; extra == "tools"
+Requires-Dist: agno[evm]; extra == "tools"
+Requires-Dist: agno[fal]; extra == "tools"
+Requires-Dist: agno[webex]; extra == "tools"
+Requires-Dist: agno[mcp]; extra == "tools"
+Requires-Dist: agno[browserbase]; extra == "tools"
+Requires-Dist: agno[agentql]; extra == "tools"
+Requires-Dist: agno[opencv]; extra == "tools"
+Requires-Dist: agno[parallel]; extra == "tools"
+Requires-Dist: agno[scrapegraph]; extra == "tools"
+Requires-Dist: agno[valyu]; extra == "tools"
+Requires-Dist: agno[yfinance]; extra == "tools"
+Requires-Dist: agno[confluence]; extra == "tools"
+Requires-Dist: agno[notion]; extra == "tools"
+Requires-Dist: agno[oxylabs]; extra == "tools"
+Requires-Dist: agno[zep]; extra == "tools"
+Requires-Dist: agno[mem0]; extra == "tools"
+Requires-Dist: agno[memori]; extra == "tools"
+Requires-Dist: agno[google_bigquery]; extra == "tools"
+Requires-Dist: agno[psycopg]; extra == "tools"
+Requires-Dist: agno[redshift]; extra == "tools"
+Requires-Dist: agno[reportlab]; extra == "tools"
+Requires-Dist: agno[trafilatura]; extra == "tools"
+Requires-Dist: agno[neo4j]; extra == "tools"
+Provides-Extra: storage
+Requires-Dist: agno[sql]; extra == "storage"
+Requires-Dist: agno[postgres]; extra == "storage"
+Requires-Dist: agno[async_postgres]; extra == "storage"
+Requires-Dist: agno[async_mongo]; extra == "storage"
+Requires-Dist: agno[sqlite]; extra == "storage"
+Requires-Dist: agno[gcs]; extra == "storage"
+Requires-Dist: agno[firestore]; extra == "storage"
+Requires-Dist: agno[redis]; extra == "storage"
+Provides-Extra: vectordbs
+Requires-Dist: agno[pgvector]; extra == "vectordbs"
+Requires-Dist: agno[chromadb]; extra == "vectordbs"
+Requires-Dist: agno[lancedb]; extra == "vectordbs"
+Requires-Dist: agno[qdrant]; extra == "vectordbs"
+Requires-Dist: agno[couchbase]; extra == "vectordbs"
+Requires-Dist: agno[cassandra]; extra == "vectordbs"
+Requires-Dist: agno[mongodb]; extra == "vectordbs"
+Requires-Dist: agno[singlestore]; extra == "vectordbs"
+Requires-Dist: agno[weaviate]; extra == "vectordbs"
+Requires-Dist: agno[milvusdb]; extra == "vectordbs"
+Requires-Dist: agno[clickhouse]; extra == "vectordbs"
+Requires-Dist: agno[pinecone]; extra == "vectordbs"
+Requires-Dist: agno[surrealdb]; extra == "vectordbs"
+Requires-Dist: agno[upstash]; extra == "vectordbs"
+Requires-Dist: agno[pylance]; extra == "vectordbs"
+Requires-Dist: agno[redis]; extra == "vectordbs"
+Provides-Extra: knowledge
+Requires-Dist: agno[pdf]; extra == "knowledge"
+Requires-Dist: agno[docx]; extra == "knowledge"
+Requires-Dist: agno[pptx]; extra == "knowledge"
+Requires-Dist: agno[text]; extra == "knowledge"
+Requires-Dist: agno[csv]; extra == "knowledge"
+Requires-Dist: agno[markdown]; extra == "knowledge"
+Requires-Dist: agno[chonkie]; extra == "knowledge"
+Provides-Extra: embedders
+Requires-Dist: agno[huggingface]; extra == "embedders"
+Requires-Dist: agno[vllm]; extra == "embedders"
+Provides-Extra: tests
+Requires-Dist: agno[a2a]; extra == "tests"
+Requires-Dist: agno[dev]; extra == "tests"
+Requires-Dist: agno[models]; extra == "tests"
+Requires-Dist: agno[tools]; extra == "tests"
+Requires-Dist: agno[storage]; extra == "tests"
+Requires-Dist: agno[vectordbs]; extra == "tests"
+Requires-Dist: agno[knowledge]; extra == "tests"
+Requires-Dist: agno[embedders]; extra == "tests"
+Requires-Dist: agno[performance]; extra == "tests"
+Requires-Dist: agno[cookbooks]; extra == "tests"
+Requires-Dist: agno[agui]; extra == "tests"
+Requires-Dist: agno[integration-tests]; extra == "tests"
+Requires-Dist: twine; extra == "tests"
+Requires-Dist: build; extra == "tests"
+Requires-Dist: grpcio==1.74.0; extra == "tests"
+Provides-Extra: integration-tests
+Requires-Dist: exa_py; extra == "integration-tests"
+Requires-Dist: ddgs; extra == "integration-tests"
+Requires-Dist: yfinance; extra == "integration-tests"
+Requires-Dist: sqlalchemy; extra == "integration-tests"
+Requires-Dist: Pillow; extra == "integration-tests"
+Requires-Dist: fastmcp; extra == "integration-tests"
+Provides-Extra: demo
+Requires-Dist: anthropic; extra == "demo"
+Requires-Dist: chromadb; extra == "demo"
+Requires-Dist: ddgs; extra == "demo"
+Requires-Dist: fastapi[standard]; extra == "demo"
+Requires-Dist: google-genai; extra == "demo"
+Requires-Dist: mcp; extra == "demo"
+Requires-Dist: nest_asyncio; extra == "demo"
+Requires-Dist: openai; extra == "demo"
+Requires-Dist: openinference-instrumentation-agno; extra == "demo"
+Requires-Dist: opentelemetry-api; extra == "demo"
+Requires-Dist: opentelemetry-sdk; extra == "demo"
+Requires-Dist: pandas; extra == "demo"
+Requires-Dist: parallel-web; extra == "demo"
+Requires-Dist: pgvector; extra == "demo"
+Requires-Dist: pillow; extra == "demo"
+Requires-Dist: psycopg[binary]; extra == "demo"
+Requires-Dist: pypdf; extra == "demo"
+Requires-Dist: sqlalchemy; extra == "demo"
+Requires-Dist: yfinance; extra == "demo"
+Requires-Dist: youtube-transcript-api; extra == "demo"
+Dynamic: license-file
+
+<div align="center" id="top">
+  <a href="https://agno.com">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://agno-public.s3.us-east-1.amazonaws.com/assets/logo-dark.svg">
+      <source media="(prefers-color-scheme: light)" srcset="https://agno-public.s3.us-east-1.amazonaws.com/assets/logo-light.svg">
+      <img src="https://agno-public.s3.us-east-1.amazonaws.com/assets/logo-light.svg" alt="Agno">
+    </picture>
+  </a>
+</div>
+
+<div align="center">
+  <a href="https://docs.agno.com">Documentation</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+  <a href="https://github.com/agno-agi/agno/tree/main/cookbook">Cookbook</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+  <a href="https://www.agno.com/?utm_source=github&utm_medium=readme&utm_campaign=agno-github">Website</a>
+  <br />
+</div>
+
+## What is Agno?
+
+Agno is a multi-agent framework, runtime, and control plane. Use it to build private and secure AI products that run in your cloud.
+
+- **Build** agents, teams, and workflows with memory, knowledge, guardrails and 100+ integrations.
+- **Run** in production with a stateless FastAPI runtime. Horizontally scalable.
+- **Manage** with a control plane that connects directly to your runtime — no data leaves your environment.
+
+## Why Agno?
+
+- **Your cloud, your data:** Runs entirely in your infrastructure. Nothing leaves your environment.
+- **Ready for production on day one:** Pre-built FastAPI runtime with SSE endpoints, ready to deploy.
+- **Incredibly fast:** 529× faster than LangGraph, 24× lower memory.
+
+## Getting Started
+
+Start with the [getting started guide](https://github.com/agno-agi/agno/tree/main/cookbook/00_getting_started), then:
+
+- Browse the [cookbooks](https://github.com/agno-agi/agno/tree/main/cookbook) for real-world examples
+- Read the [docs](https://docs.agno.com) to learn more
+
+## Resources
+
+- Docs: <a href="https://docs.agno.com" target="_blank" rel="noopener noreferrer">docs.agno.com</a>
+- Cookbook: <a href="https://github.com/agno-agi/agno/tree/main/cookbook" target="_blank" rel="noopener noreferrer">Cookbook</a>
+- Community forum: <a href="https://community.agno.com/" target="_blank" rel="noopener noreferrer">community.agno.com</a>
+- Discord: <a href="https://discord.gg/4MtYHHrgA8" target="_blank" rel="noopener noreferrer">discord</a>
+
+## Example
+
+Here's an example of an Agent that connects to an MCP server, manages conversation state in a database, is served using a FastAPI application that you can chat with using the [AgentOS UI](https://os.agno.com).
+
+```python agno_agent.py
+from agno.agent import Agent
+from agno.db.sqlite import SqliteDb
+from agno.models.anthropic import Claude
+from agno.os import AgentOS
+from agno.tools.mcp import MCPTools
+
+# ************* Create Agent *************
+agno_agent = Agent(
+    name="Agno Agent",
+    model=Claude(id="claude-sonnet-4-5"),
+    # Add a database to the Agent
+    db=SqliteDb(db_file="agno.db"),
+    # Add the Agno MCP server to the Agent
+    tools=[MCPTools(transport="streamable-http", url="https://docs.agno.com/mcp")],
+    # Add the previous session history to the context
+    add_history_to_context=True,
+    markdown=True,
+)
+
+
+# ************* Create AgentOS *************
+agent_os = AgentOS(agents=[agno_agent])
+# Get the FastAPI app for the AgentOS
+app = agent_os.get_app()
+
+# ************* Run AgentOS *************
+if __name__ == "__main__":
+    agent_os.serve(app="agno_agent:app", reload=True)
+```
+
+## AgentOS - Production Runtime for Multi-Agent Systems
+
+Building Agents is easy, running them as a secure, scalable service is hard. AgentOS solves this by providing a high performance runtime for serving multi-agent systems in production. Key features include:
+
+1. **Pre-built FastAPI app**: AgentOS includes a ready-to-use FastAPI app for running your agents, teams and workflows. This gives you a significant head start when building an AI product.
+
+2. **Integrated Control Plane**: The [AgentOS UI](https://os.agno.com) connects directly to your runtime, so you can test, monitor and manage your system in real time with full operational visibility.
+
+3. **Private by Design**: AgentOS runs entirely in your cloud, ensuring complete data privacy. No data leaves your environment, making it ideal for security conscious enterprises..
+
+When you run the example script shared above, you get a FastAPI app that you can connect to the [AgentOS UI](https://os.agno.com). Here's what it looks like in action:
+
+https://github.com/user-attachments/assets/feb23db8-15cc-4e88-be7c-01a21a03ebf6
+
+## Private by Design
+
+This is the part we care most about.
+
+AgentOS runs in **your** cloud. The control plane UI connects directly to your runtime from your browser. Your data never touches our servers. No retention costs, no vendor lock-in, no compliance headaches.
+
+This isn't a privacy mode or enterprise add-on. It's how Agno works.
+
+## Features
+
+### Core:
+- Model agnostic — works with OpenAI, Anthropic, Google, local models, whatever
+- Type-safe I/O with `input_schema` and `output_schema`
+- Async-first, built for long-running tasks
+- Natively multimodal (text, images, audio, video, files)
+
+### Memory & Knowledge:
+- Persistent storage for session history and state
+- User memory that persists across sessions
+- Agentic RAG with 20+ vector stores, hybrid search, reranking
+- Culture — shared long-term memory across agents
+
+### Execution:
+- Human-in-the-loop (confirmations, approvals, overrides)
+- Guardrails for validation and security
+- Pre/post hooks for the agent lifecycle
+- First-class MCP and A2A support
+- 100+ built-in toolkits
+
+### Production:
+- Ready-to-use FastAPI runtime
+- Integrated control plane UI
+- Evals for accuracy, performance, latency
+- Durable execution for resumable workflows
+- RBAC and per-agent permissions
+
+## Performance
+
+We're obsessive about performance because agent workloads spawn hundreds of instances and run long tasks. Stateless, horizontal scalability isn't optional.
+
+**Benchmarks** (Apple M4 MacBook Pro, Oct 2025):
+
+| Metric | Agno | LangGraph | PydanticAI | CrewAI |
+|--------|------|-----------|------------|--------|
+| Instantiation | **3μs** | 1,587μs (529× slower) | 170μs (57× slower) | 210μs (70× slower) |
+| Memory | **6.6 KiB** | 161 KiB (24× higher) | 29 KiB (4× higher) | 66 KiB (10× higher) |
+
+Run the benchmarks yourself: [`cookbook/12_evals/performance`](https://github.com/agno-agi/agno/tree/main/cookbook/12_evals/performance)
+
+https://github.com/user-attachments/assets/54b98576-1859-4880-9f2d-15e1a426719d
+
+## IDE Integration
+
+For AI-assisted development, add our docs to your IDE:
+
+**Cursor:** Settings → Indexing & Docs → Add `https://docs.agno.com/llms-full.txt`
+
+Works with VSCode, Windsurf, and other AI-enabled editors too.
+
+## Contributing
+
+We welcome contributions. See the [contributing guide](https://github.com/agno-agi/agno/blob/v2.0/CONTRIBUTING.md).
+
+## Telemetry
+
+Agno logs which model providers are used so we can prioritize updates. Disable with `AGNO_TELEMETRY=false`.
+
+<p align="left">
+  <a href="#top">⬆️ Back to Top</a>
+</p>

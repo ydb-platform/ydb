@@ -1,0 +1,59 @@
+#!/bin/sh
+
+. "$TESTSUITE_LIB_UTILS"
+. "$(dirname "$0")/find-rabbitmq.sh"
+
+# use ramdisk for rabbitmq if available
+RAMDISK="/mnt/ramdisk/$USER"
+if mkdir -p "$RAMDISK" 2> /dev/null; then
+    RABBITMQ_TMPDIR=$RAMDISK/_rabbitmq${WORKER_SUFFIX_PATH}
+fi
+
+if [ "x$RABBITMQ_TMPDIR" = "x" ]; then
+    die "RABBITMQ_TMPDIR must be set or RAM-disk must be enabled"
+fi
+if [ "x$RABBITMQ_TCP_PORT" = "x" ]; then
+    die "RABBITMQ_TCP_PORT must be set"
+fi
+if [ "x$RABBITMQ_EPMD_PORT" = "x" ]; then
+    die "RABBITMQ_EPMD_PORT must be set"
+fi
+if [ "x$RABBITMQ_SERVER" = "x" ]; then
+    die "RABBITMQ_SERVER must be set"
+fi
+if [ "x$RABBITMQ_CTL" = "x" ]; then
+    die "RABBITMQ_CTL must be set"
+fi
+
+RABBITMQ_DATA_DIR=$RABBITMQ_TMPDIR/mnesia
+RABBITMQ_LOG_DIR=$RABBITMQ_TMPDIR/log
+RABBITMQ_STARTUP_LOG=$RABBITMQ_LOG_DIR/startup.log
+RABBITMQ_NODENAME='testsuite@localhost'
+V_RABBITMQ_ERLANG_COOKIE='testsuite'
+
+export ERL_EPMD_PORT="$RABBITMQ_EPMD_PORT"
+export RABBITMQ_MNESIA_BASE="$RABBITMQ_DATA_DIR"
+export RABBITMQ_LOG_BASE="$RABBITMQ_LOG_DIR"
+export RABBITMQ_NODE_PORT="$RABBITMQ_TCP_PORT"
+export RABBITMQ_NODENAME="$RABBITMQ_NODENAME"
+export RABBITMQ_ERLANG_COOKIE="$V_RABBITMQ_ERLANG_COOKIE"
+
+start_rabbitmq() {
+    mkdir -p "$RABBITMQ_DATA_DIR"
+    mkdir -p "$RABBITMQ_LOG_DIR"
+    # '-detached' doesn't work with systemwide installation for some reason
+    "$RABBITMQ_SERVER" &
+}
+
+start() {
+    (ulimit_files && start_rabbitmq)
+}
+
+stop() {
+    unset RABBITMQ_ERLANG_COOKIE
+    "$RABBITMQ_CTL" shutdown -n "$RABBITMQ_NODENAME" --erlang-cookie="$V_RABBITMQ_ERLANG_COOKIE"
+    epmd -kill
+    rm -rf "$RABBITMQ_TMPDIR"
+}
+
+script_main "$@"

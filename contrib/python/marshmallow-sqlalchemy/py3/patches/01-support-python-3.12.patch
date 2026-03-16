@@ -1,0 +1,10 @@
+--- contrib/python/marshmallow-sqlalchemy/py3/marshmallow_sqlalchemy/convert.py	(index)
++++ contrib/python/marshmallow-sqlalchemy/py3/marshmallow_sqlalchemy/convert.py	(working tree)
+@@ -1,6 +1,7 @@
+ import inspect
+ import functools
+ import warnings
++import setuptools
+ from distutils.version import LooseVersion
+ 
+ import uuid

@@ -1,0 +1,27 @@
+# (C) Copyright 2005- ECMWF.
+#
+# This software is licensed under the terms of the Apache Licence Version 2.0
+# which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+#
+# In applying this licence, ECMWF does not waive the privileges and immunities granted to it by
+# virtue of its status as an intergovernmental organisation nor does it submit to any jurisdiction.
+#
+
+position startOfHeaders;
+ascii[4] identifier = `WRAP`: dump;
+alias ls.identifier=identifier;
+
+uint64  totalLength : dump;
+uint8   version  = 1 : dump;
+uint8   spare;
+
+template metadata "wrap/metadata.[version].def";
+
+position endOfHeadersMarker;
+
+constant dataLength = (totalLength - endOfHeadersMarker - 4);
+blob data[dataLength]  : dump;
+
+ascii[4] endMark = `7777`  : dump;
+
+position totalLength;

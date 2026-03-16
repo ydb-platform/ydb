@@ -1,0 +1,11 @@
+--- contrib/python/iso8601/py3/iso8601/test_iso8601.py	(index)
++++ contrib/python/iso8601/py3/iso8601/test_iso8601.py	(working tree)
+@@ -10,7 +10,7 @@ import hypothesis.extra.pytz
+ import hypothesis.strategies
+ import pytest
+ 
+-from . import iso8601
++from iso8601 import iso8601
+ 
+ 
+ def test_iso8601_regex() -> None:

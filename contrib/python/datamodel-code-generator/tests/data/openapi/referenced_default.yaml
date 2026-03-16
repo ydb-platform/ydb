@@ -1,0 +1,22 @@
+openapi: 3.1.0
+info:
+  title: Title
+  description: Title
+  version: 1.0.0
+components:
+  schemas:
+    Model:
+      type: "object"
+      properties:
+        settingA:
+          type: "number"
+          default: 5
+          minimum: 0
+          maximum: 10
+        settingB:
+          $ref: "#/components/schemas/ModelSettingB"
+    ModelSettingB:
+      type: "number"
+      default: 5
+      minimum: 0
+      maximum: 10

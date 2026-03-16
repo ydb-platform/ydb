@@ -1,0 +1,100 @@
+Metadata-Version: 2.4
+Name: absl-py
+Version: 2.4.0
+Summary: Abseil Python Common Libraries, see https://github.com/abseil/abseil-py.
+Project-URL: Changelog, https://github.com/abseil/abseil-py/blob/main/CHANGELOG.md
+Project-URL: Documentation, https://abseil.io/docs/python/
+Project-URL: Issues, https://github.com/abseil/abseil-py/issues
+Project-URL: Source, https://github.com/abseil/abseil-py
+Author: The Abseil Authors
+License-Expression: Apache-2.0
+License-File: AUTHORS
+License-File: LICENSE
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+
+[![Package version](https://img.shields.io/pypi/v/absl-py)](https://pypi.org/project/absl-py)
+[![Supported Python versions](https://img.shields.io/pypi/pyversions/absl-py.svg?style=flat-square)](https://pypi.org/project/absl-py)
+[![License](https://img.shields.io/github/license/abseil/abseil-py)](https://github.com/abseil/abseil-py/blob/main/LICENSE)
+[![Build Status](https://github.com/abseil/abseil-py/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/abseil/abseil-py/actions)
+[![Overall downloads](https://pepy.tech/badge/absl-py)](https://pepy.tech/project/absl-py)
+[![Last month downloads](https://pepy.tech/badge/absl-py/month)](https://pepy.tech/project/absl-py)
+
+# Abseil Python Common Libraries
+
+This repository is a collection of Python library code for building Python
+applications. The code is collected from Google's own Python code base, and has
+been extensively tested and used in production.
+
+## Features
+
+* Simple application startup
+* Distributed commandline flags system
+* Custom logging module with additional features
+* Testing utilities
+
+## Getting Started
+
+### Installation
+
+To install the package, simply run:
+
+```bash
+pip install absl-py
+```
+
+Or install from source:
+
+```bash
+pip install .
+```
+
+### Running Tests
+
+To run Abseil tests, you can clone the git repo and run
+[bazel](https://bazel.build/):
+
+```bash
+git clone https://github.com/abseil/abseil-py.git
+cd abseil-py
+bazel test absl/...
+```
+
+Please also validate the type annotations against the latest mypy:
+
+```bash
+pip install mypy
+mypy absl
+```
+
+### Example Code
+
+Please refer to
+[smoke_tests/sample_app.py](https://github.com/abseil/abseil-py/blob/main/smoke_tests/sample_app.py)
+as an example to get started.
+
+## Documentation
+
+See the [Abseil Python Developer Guide](https://abseil.io/docs/python/).
+
+## Future Releases
+
+The current repository includes an initial set of libraries for early adoption.
+More components and interoperability with Abseil C++ Common Libraries
+will come in future releases.
+
+## License
+
+The Abseil Python library is licensed under the terms of the Apache
+license. See [LICENSE](LICENSE) for more information.

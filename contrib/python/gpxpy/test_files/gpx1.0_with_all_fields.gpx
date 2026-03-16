@@ -1,0 +1,112 @@
+<gpx version="1.0" creator="..." xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.topografix.com/GPX/1/0" xsi:schemaLocation="http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd">
+    <name>example name</name>
+    <desc>example description</desc>
+    <author>example author</author>
+    <email>example@email.com</email>
+    <url>http://example.url</url>
+    <urlname>example urlname</urlname>
+    <time>2013-01-01T12:00:00</time>
+    <keywords>example keywords</keywords>
+    <bounds minlat="1.2" minlon="3.4" maxlat="5.6" maxlon="7.8" />
+    <wpt lat="12.3" lon="45.6">
+        <ele>75.1</ele>
+        <time>2013-01-02T02:03:00Z</time>
+        <magvar>1.1</magvar>
+        <geoidheight>2.0</geoidheight>
+        <name>example name</name>
+        <cmt>example cmt</cmt>
+        <desc>example desc</desc>
+        <src>example src</src>
+        <url>example url</url>
+        <urlname>example urlname</urlname>
+        <sym>example sym</sym>
+        <type>example type</type>
+        <fix>2d</fix>
+        <sat>5</sat>
+        <hdop>6</hdop>
+        <vdop>7</vdop>
+        <pdop>8</pdop>
+        <ageofdgpsdata>9</ageofdgpsdata>
+        <dgpsid>45</dgpsid>
+    </wpt>
+    <wpt lat="13.4" lon="46.7">
+    </wpt>
+    <rte>
+        <name>example name</name>
+        <cmt>example cmt</cmt>
+        <desc>example desc</desc>
+        <src>example src</src>
+        <url>example url</url>
+        <urlname>example urlname</urlname>
+        <number>7</number>
+        <rtept lat="10" lon="20">
+            <ele>75.1</ele>
+            <time>2013-01-02T02:03:03Z</time>
+            <magvar>1.2</magvar>
+            <geoidheight>2.1</geoidheight>
+            <name>example name r</name>
+            <cmt>example cmt r</cmt>
+            <desc>example desc r</desc>
+            <src>example src r</src>
+            <url>example url r</url>
+            <urlname>example urlname r</urlname>
+            <sym>example sym r</sym>
+            <type>example type r</type>
+            <fix>3d</fix>
+            <sat>6</sat>
+            <hdop>7</hdop>
+            <vdop>8</vdop>
+            <pdop>9</pdop>
+            <ageofdgpsdata>10</ageofdgpsdata>
+            <dgpsid>99</dgpsid>
+        </rtept>
+        <rtept lat="11" lon="21">
+        </rtept>
+        <rtept lat="12" lon="22">
+        </rtept>
+    </rte>
+    <rte>
+        <name>second route</name>
+        <desc>example desc 2</desc>
+        <rtept lat="13" lon="23">
+        </rtept>
+        <rtept lat="14" lon="24">
+        </rtept>
+    </rte>
+    <trk>
+        <name>example name t</name>
+        <cmt>example cmt t</cmt>
+        <desc>example desc t</desc>
+        <src>example src t</src>
+        <url>example url t</url>
+        <urlname>example urlname t</urlname>
+        <number>1</number>
+        <trkseg>
+            <trkpt lat="10.1" lon="-20.2">
+                <ele>11.1</ele>
+                <time>2013-01-01T12:00:04</time>
+                <magvar>12</magvar>
+                <geoidheight>13</geoidheight>
+                <name>example name t</name>
+                <cmt>example cmt t</cmt>
+                <desc>example desc t</desc>
+                <src>example src t</src>
+                <url>example url t</url>
+                <urlname>example urlname t</urlname>
+                <sym>example sym t</sym>
+                <type>example type t</type>
+                <fix>3d</fix>
+                <sat>100</sat>
+                <hdop>101</hdop>
+                <vdop>102</vdop>
+                <pdop>103</pdop>
+                <ageofdgpsdata>104</ageofdgpsdata>
+                <dgpsid>99</dgpsid>
+            </trkpt>
+        </trkseg>
+        <trkseg>
+        </trkseg>
+    </trk>
+    <trk>
+    </trk>
+</gpx>

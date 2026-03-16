@@ -1,0 +1,12 @@
+alias  mars.number = perturbationNumber;
+unalias mars.step;
+
+# Old GRIBS do not have forecast forecastMonth set. It is computed from verifyingMonth
+
+meta forecastPeriodFrom evaluate(verifyingMonth/1000) : no_copy;
+meta forecastPeriodTo   evaluate(verifyingMonth%1000) : no_copy;
+meta forecastPeriod     sprintf("%d-%d",forecastPeriodFrom,forecastPeriodTo) : dump;
+alias mars.fcperiod = forecastPeriod;
+
+alias mars.method   = methodNumber;
+if (class is "od") { alias mars.system = systemNumber; }

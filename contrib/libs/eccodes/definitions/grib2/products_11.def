@@ -1,0 +1,7 @@
+# (C) Copyright 2005- ECMWF.
+
+# Copernicus regional reanalysis test (CARRA/CERRA)
+if (!defined(marsExpver)) {
+  constant marsExpver = 'test';
+}
+include "grib2/products_crra.def"

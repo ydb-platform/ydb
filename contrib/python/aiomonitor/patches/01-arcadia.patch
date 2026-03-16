@@ -1,0 +1,17 @@
+--- contrib/python/aiomonitor/aiomonitor/webui/app.py	(index)
++++ contrib/python/aiomonitor/aiomonitor/webui/app.py	(working tree)
+@@ -2,6 +2,7 @@ from __future__ import annotations
+ 
+ import asyncio
+ import dataclasses
++import importlib.resources
+ import sys
+ from importlib.metadata import version
+ from pathlib import Path
+@@ -264,5 +265,5 @@ async def init_webui(monitor: Monitor) -> web.Application:
+     app.router.add_route("POST", "/api/live-tasks", get_live_task_list)
+     app.router.add_route("POST", "/api/terminated-tasks", get_terminated_task_list)
+     app.router.add_route("DELETE", "/api/task", cancel_task)
+-    app.router.add_static("/static", Path(__file__).parent / "static")
++    app.router.add_static("/static", importlib.resources.files(__package__) / "static")
+     return app

@@ -1,0 +1,4 @@
+keep:
+  - LICENSE.txt
+exclude_from_macros:
+  - LICENSE.txt

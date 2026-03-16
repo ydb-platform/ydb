@@ -1,0 +1,136 @@
+# Translation of django-reversion into Ukrainian.
+# This file is distributed under the same license as the django-reversion package.
+# Illia Volochii <illia.volochii@gmail.com>, 2017.
+msgid ""
+msgstr ""
+"Project-Id-Version: django-reversion\n"
+"Report-Msgid-Bugs-To: https://github.com/etianen/django-reversion/issues\n"
+"POT-Creation-Date: 2017-11-03 12:02+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Illia Volochii <illia.volochii@gmail.com>\n"
+"Language-Team: Ukrainian\n"
+"Language: uk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n % 1 == 0 && n % 10 == 1 && n % 100 != "
+"11 ? 0 : n % 1 == 0 && n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % "
+"100 > 14) ? 1 : n % 1 == 0 && (n % 10 ==0 || (n % 10 >=5 && n % 10 <=9) || "
+"(n % 100 >=11 && n % 100 <=14 )) ? 2: 3);\n"
+#: reversion/admin.py:83
+msgid "Initial version."
+msgstr "Початкова версія."
+
+#: reversion/admin.py:197
+#, python-format
+msgid "Reverted to previous version, saved on %(datetime)s"
+msgstr "Повернуто до попередньої версії, яка збережена %(datetime)s"
+
+#: reversion/admin.py:221
+#, python-format
+msgid "Recover %(name)s"
+msgstr "Відновити %(name)s"
+
+#: reversion/admin.py:237
+#, python-format
+msgid "Revert %(name)s"
+msgstr "Повернути %(name)s"
+
+#: reversion/admin.py:272 reversion/templates/reversion/change_list.html:7
+#: reversion/templates/reversion/recover_form.html:10
+#: reversion/templates/reversion/recover_list.html:10
+#, python-format
+msgid "Recover deleted %(name)s"
+msgstr "Відновити видалені %(name)s"
+
+#: reversion/models.py:31
+#, python-format
+msgid "Could not save %(object_repr)s version - missing dependency."
+msgstr "Неможливо зберегти версію \"%(object_repr)s\" - відсутня залежність."
+
+#: reversion/models.py:45
+msgid "date created"
+msgstr "дата створення"
+
+#: reversion/models.py:54
+msgid "user"
+msgstr "користувач"
+
+#: reversion/models.py:60
+msgid "comment"
+msgstr "коментар"
+
+#: reversion/models.py:242
+#, python-format
+msgid "Could not load %(object_repr)s version - incompatible version data."
+msgstr ""
+"Неможливо завантажити версію \"%(object_repr)s\" - несумісні дані версій."
+
+#: reversion/models.py:246
+#, python-format
+msgid "Could not load %(object_repr)s version - unknown serializer %(format)s."
+msgstr ""
+"Неможливо завантажити версію \"%(object_repr)s\" - невідомий серіалізатор "
+"%(format)s."
+
+#: reversion/templates/reversion/object_history.html:8
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr ""
+"Виберіть дату із списку нижче, щоб повернутися до попередньої версії цього "
+"об'єкта."
+
+#: reversion/templates/reversion/object_history.html:15
+#: reversion/templates/reversion/recover_list.html:23
+msgid "Date/time"
+msgstr "Дата/час"
+
+#: reversion/templates/reversion/object_history.html:16
+msgid "User"
+msgstr "Користувач"
+
+#: reversion/templates/reversion/object_history.html:17
+msgid "Action"
+msgstr "Дія"
+
+#: reversion/templates/reversion/object_history.html:38
+msgid ""
+"This object doesn't have a change history. It probably wasn't added via this "
+"admin site."
+msgstr ""
+"Цей об'єкт не має історії змін. Напевно, він був доданий не через цей сайт "
+"адміністрування."
+
+#: reversion/templates/reversion/recover_form.html:7
+#: reversion/templates/reversion/recover_list.html:7
+#: reversion/templates/reversion/revision_form.html:7
+msgid "Home"
+msgstr "Домівка"
+
+#: reversion/templates/reversion/recover_form.html:20
+msgid "Press the save button below to recover this version of the object."
+msgstr "Натисніть кнопку \"Зберегти\" нижче, щоб відновити цю версію об'єкта."
+
+#: reversion/templates/reversion/recover_list.html:17
+msgid ""
+"Choose a date from the list below to recover a deleted version of an object."
+msgstr "Виберіть дату із списку нижче, щоб відновити видалену версію об'єкта."
+
+#: reversion/templates/reversion/recover_list.html:37
+msgid "There are no deleted objects to recover."
+msgstr "Не знайдено видалених об'єктів для відновлення."
+
+#: reversion/templates/reversion/revision_form.html:11
+msgid "History"
+msgstr "Історія"
+
+#: reversion/templates/reversion/revision_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Повернути %(verbose_name)s"
+
+#: reversion/templates/reversion/revision_form.html:21
+msgid "Press the save button below to revert to this version of the object."
+msgstr ""
+"Натисніть кнопку \"Зберегти\" нижче, щоб повернутися до цієї версії об'єкта."

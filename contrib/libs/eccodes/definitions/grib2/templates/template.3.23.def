@@ -1,0 +1,5 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.23 Polar stereographic with modelling subdomains definition
+include "grib2/templates/template.3.20.def"
+include "grib2/templates/template.3.lam.def"

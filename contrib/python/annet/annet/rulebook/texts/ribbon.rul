@@ -1,0 +1,77 @@
+# Операторы:
+#   *  Один аргумент в undo
+#   ~  Несколько аргументов (минимум один) в undo
+#
+# Параметры:
+#   %global         Команда действует на любом уровне ниже
+#   %logic=...      Кастомная функция обработки правила
+#   %diff_logic=... Кастомная функция построения диффа.
+#                   данная функция работает для подблоков (в отличие от %logic)
+#   %comment=...    Добавить коммент после строки который будет видно с опцией patch --add-comments
+#                   Сделано в основном для того чтобы генерировать специальные команды для наливки
+# -----
+
+system
+    host-name
+
+    time-zone
+
+    tacplus-server
+        * secret
+
+    event-log
+        files
+        size
+
+    ntp
+        server ~
+
+    services
+        ssh
+            root-login
+
+    management-network
+        network-bridge
+            allow-6to4-tunnel-packets
+
+    root-authentication
+        encrypted-password
+
+    login
+        user *
+            authentication
+                user-encrypted-password
+            class
+            full-name
+
+interfaces
+    *
+        description
+
+chassis
+    slot * *
+        port *
+            port-type
+            otuc-options
+                line-rate
+            transceiver-options
+                exp-transceiver-type
+                tx-wavelength
+            fiber-connectivity (internal|external) (uni-in|uni-out|bidirectional)
+                peer-ne
+                peer-slot
+                peer-port
+                fiber-length
+                input-fiber-loss
+                output-fiber-loss
+            ots-options
+                los-threshold
+        oa-options (booster|preamp|amp)
+            edfa-mode
+            initial-gain
+            exp-raman-gain
+            max-number-channels
+            output-pwr-per-channel
+            tilt
+
+~ %global

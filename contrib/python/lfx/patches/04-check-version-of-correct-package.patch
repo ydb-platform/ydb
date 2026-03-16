@@ -1,0 +1,11 @@
+--- contrib/python/lfx/lfx/interface/components.py	(30adebc345874209bc77e2dfc3cc329c1f918fe0)
++++ contrib/python/lfx/lfx/interface/components.py	(index)
+@@ -145,7 +145,7 @@ def _read_component_index(custom_path: str | None = None) -> dict | None:
+         # Version check: ensure index matches installed langflow version
+         from importlib.metadata import version
+ 
+-        installed_version = version("langflow")
++        installed_version = version("lfx")
+         if blob.get("version") != installed_version:
+             logger.debug(
+                 f"Component index version mismatch: index={blob.get('version')}, installed={installed_version}"

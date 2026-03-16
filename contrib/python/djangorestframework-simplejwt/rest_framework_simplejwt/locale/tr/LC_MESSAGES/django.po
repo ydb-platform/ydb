@@ -1,0 +1,162 @@
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <suayip.541@gmail.com>, 2022.
+msgid ""
+msgstr ""
+"Project-Id-Version: djangorestframework_simplejwt\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-02-28 15:09-0300\n"
+"Last-Translator: Şuayip Üzülmez <suayip.541@gmail.com>\n"
+"Language: tr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: authentication.py:89
+msgid "Authorization header must contain two space-delimited values"
+msgstr ""
+"Yetkilendirme header'i boşlukla sınırlandırılmış iki değer bulundurmak "
+"zorunda"
+
+#: authentication.py:115
+msgid "Given token not valid for any token type"
+msgstr "Verilen token hiçbir token tipi için geçerli değil"
+
+#: authentication.py:128 authentication.py:166
+msgid "Token contained no recognizable user identification"
+msgstr "Token tanınabilir bir kullanıcı kimliği içermiyor"
+
+#: authentication.py:135
+msgid "User not found"
+msgstr "Kullanıcı bulunamadı"
+
+#: authentication.py:139
+msgid "User is inactive"
+msgstr "Kullanıcı etkin değil"
+
+#: authentication.py:146
+msgid "The user's password has been changed."
+msgstr ""
+
+#: backends.py:90
+msgid "Unrecognized algorithm type '{}'"
+msgstr "Tanınmayan algortima tipi '{}'"
+
+#: backends.py:96
+msgid "You must have cryptography installed to use {}."
+msgstr "{} kullanmak için cryptography yüklemeniz gerekiyor."
+
+#: backends.py:111
+msgid ""
+"Unrecognized type '{}', 'leeway' must be of type int, float or timedelta."
+msgstr ""
+
+#: backends.py:125 backends.py:177 tokens.py:69
+#, fuzzy
+#| msgid "Token is invalid or expired"
+msgid "Token is invalid"
+msgstr "Token geçersiz veya süresi geçmiş"
+
+#: backends.py:173
+msgid "Invalid algorithm specified"
+msgstr "Geçersiz algoritma belirtildi"
+
+#: backends.py:175 tokens.py:67
+#, fuzzy
+#| msgid "Token is invalid or expired"
+msgid "Token is expired"
+msgstr "Token geçersiz veya süresi geçmiş"
+
+#: exceptions.py:55
+msgid "Token is invalid or expired"
+msgstr "Token geçersiz veya süresi geçmiş"
+
+#: serializers.py:35
+msgid "No active account found with the given credentials"
+msgstr "Verilen kimlik bilgileriyle aktif bir hesap bulunamadı"
+
+#: serializers.py:108
+#, fuzzy
+#| msgid "No active account found with the given credentials"
+msgid "No active account found for the given token."
+msgstr "Verilen kimlik bilgileriyle aktif bir hesap bulunamadı"
+
+#: serializers.py:178 tokens.py:280
+msgid "Token is blacklisted"
+msgstr "Token kara listeye alınmış"
+
+#: settings.py:74
+msgid ""
+"The '{}' setting has been removed. Please refer to '{}' for available "
+"settings."
+msgstr "'{}' ayarı kaldırıldı. Mevcut ayarlar için '{}' adresini ziyaret edin."
+
+#: token_blacklist/admin.py:79
+msgid "jti"
+msgstr "jti"
+
+#: token_blacklist/admin.py:85
+msgid "user"
+msgstr "kullanıcı"
+
+#: token_blacklist/admin.py:91
+msgid "created at"
+msgstr "oluşturulma tarihi"
+
+#: token_blacklist/admin.py:97
+msgid "expires at"
+msgstr "sona erme tarihi"
+
+#: token_blacklist/apps.py:7
+msgid "Token Blacklist"
+msgstr "Token Kara Listesi"
+
+#: token_blacklist/models.py:19
+msgid "Outstanding Token"
+msgstr ""
+
+#: token_blacklist/models.py:20
+msgid "Outstanding Tokens"
+msgstr ""
+
+#: token_blacklist/models.py:32
+#, python-format
+msgid "Token for %(user)s (%(jti)s)"
+msgstr ""
+
+#: token_blacklist/models.py:45
+msgid "Blacklisted Token"
+msgstr ""
+
+#: token_blacklist/models.py:46
+msgid "Blacklisted Tokens"
+msgstr ""
+
+#: token_blacklist/models.py:57
+#, python-format
+msgid "Blacklisted token for %(user)s"
+msgstr ""
+
+#: tokens.py:53
+msgid "Cannot create token with no type or lifetime"
+msgstr "Tipi veya geçerlilik süresi olmayan token oluşturulamaz"
+
+#: tokens.py:127
+msgid "Token has no id"
+msgstr "Token'in id'si yok"
+
+#: tokens.py:139
+msgid "Token has no type"
+msgstr "Token'in tipi yok"
+
+#: tokens.py:142
+msgid "Token has wrong type"
+msgstr "Token'in tipi yanlış"
+
+#: tokens.py:201
+msgid "Token has no '{}' claim"
+msgstr "Token'in '{}' claim'i yok"
+
+#: tokens.py:206
+msgid "Token '{}' claim has expired"
+msgstr "Token'in '{}' claim'i sona erdi"

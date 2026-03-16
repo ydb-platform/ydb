@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.postgresql.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/postgresql/v1;postgresql";
+option java_package = "yandex.cloud.api.mdb.postgresql.v1";
+
+// A ResourcePreset resource for describing hardware configuration presets.
+message ResourcePreset {
+  // ID of the ResourcePreset resource.
+  string id = 1;
+
+  // IDs of availability zones where the resource preset is available.
+  repeated string zone_ids = 2;
+
+  // Number of CPU cores for a PostgreSQL host created with the preset.
+  int64 cores = 3;
+
+  // RAM volume for a PostgreSQL host created with the preset, in bytes.
+  int64 memory = 4;
+}

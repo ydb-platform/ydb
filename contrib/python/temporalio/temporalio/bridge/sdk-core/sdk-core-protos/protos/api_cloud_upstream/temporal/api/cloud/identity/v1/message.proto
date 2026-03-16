@@ -1,0 +1,296 @@
+syntax = "proto3";
+
+package temporal.api.cloud.identity.v1;
+
+option go_package = "go.temporal.io/api/cloud/identity/v1;identity";
+option java_package = "io.temporal.api.cloud.identity.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Cloud::Identity::V1";
+option csharp_namespace = "Temporalio.Api.Cloud.Identity.V1";
+
+import "temporal/api/cloud/resource/v1/message.proto";
+import "google/protobuf/timestamp.proto";
+
+message AccountAccess {
+    // The role on the account, should be one of [owner, admin, developer, financeadmin, read, metricsread]
+    // owner - gives full access to the account, including users, namespaces, and billing
+    // admin - gives full access the account, including users and namespaces
+    // developer - gives access to create namespaces on the account
+    // financeadmin - gives read only access and write access for billing
+    // read - gives read only access to the account
+    // metricsread - gives read only access to all namespace metrics
+    // Deprecated: Not supported after v0.3.0 api version. Use role instead.
+    // temporal:versioning:max_version=v0.3.0
+    string role_deprecated = 1 [deprecated = true];
+    // The role on the account.
+    // temporal:versioning:min_version=v0.3.0
+    // temporal:enums:replaces=role_deprecated
+    Role role = 2;
+
+    enum Role {
+        ROLE_UNSPECIFIED = 0;
+        ROLE_OWNER = 1; // Gives full access to the account, including users, namespaces, and billing.
+        ROLE_ADMIN = 2; // Gives full access to the account, including users and namespaces.
+        ROLE_DEVELOPER = 3; // Gives access to create namespaces on the account.
+        ROLE_FINANCE_ADMIN = 4; // Gives read only access and write access for billing.
+        ROLE_READ = 5; // Gives read only access to the account.
+        ROLE_METRICS_READ = 6; // Gives read only access to the account metrics.
+    }
+}
+
+message NamespaceAccess {
+    // The permission to the namespace, should be one of [admin, write, read]
+    // admin - gives full access to the namespace, including assigning namespace access to other users
+    // write - gives write access to the namespace configuration and workflows within the namespace
+    // read - gives read only access to the namespace configuration and workflows within the namespace
+    // Deprecated: Not supported after v0.3.0 api version. Use permission instead.
+    // temporal:versioning:max_version=v0.3.0
+    string permission_deprecated = 1 [deprecated = true];
+
+    // The permission to the namespace.
+    // temporal:versioning:min_version=v0.3.0
+    // temporal:enums:replaces=permission_deprecated
+    Permission permission = 2;
+
+    enum Permission {
+    	PERMISSION_UNSPECIFIED = 0;
+        PERMISSION_ADMIN = 1; // Gives full access to the namespace, including assigning namespace access to other users.
+        PERMISSION_WRITE = 2; // Gives write access to the namespace configuration and workflows within the namespace.
+        PERMISSION_READ = 3; // Gives read only access to the namespace configuration and workflows within the namespace.
+    }
+}
+
+enum OwnerType {
+    OWNER_TYPE_UNSPECIFIED = 0;
+    OWNER_TYPE_USER = 1; // The owner is a user.
+    OWNER_TYPE_SERVICE_ACCOUNT = 2; // The owner is a service account.
+}
+
+message Access {
+    // The account access
+    AccountAccess account_access = 1;
+    // The map of namespace accesses
+    // The key is the namespace name and the value is the access to the namespace
+    map<string, NamespaceAccess> namespace_accesses = 2;
+}
+
+message NamespaceScopedAccess {
+    // The namespace the service account is assigned to - immutable.
+    string namespace = 1;
+    // The namespace access assigned to the service account - mutable.
+    NamespaceAccess access = 2;
+}
+
+message UserSpec {
+    // The email address associated to the user
+    string email = 1;
+    // The access to assigned to the user
+    Access access = 2;
+}
+
+message Invitation {
+    // The date and time when the user was created
+    google.protobuf.Timestamp created_time = 1;
+    // The date and time when the invitation expires or has expired
+    google.protobuf.Timestamp expired_time = 2;
+}
+
+message User {
+    // The id of the user
+    string id = 1;
+    // The current version of the user specification
+    // The next update operation will have to include this version
+    string resource_version = 2;
+    // The user specification
+    UserSpec spec = 3;
+    // The current state of the user
+    // Deprecated: Not supported after v0.3.0 api version. Use state instead.
+    // temporal:versioning:max_version=v0.3.0
+    string state_deprecated = 4 [deprecated = true];
+    // The current state of the user.
+    // For any failed state, reach out to Temporal Cloud support for remediation.
+    // temporal:versioning:min_version=v0.3.0
+    // temporal:enums:replaces=state_deprecated
+    temporal.api.cloud.resource.v1.ResourceState state = 9;
+    // The id of the async operation that is creating/updating/deleting the user, if any
+    string async_operation_id = 5;
+    // The details of the open invitation sent to the user, if any
+    Invitation invitation = 6;
+    // The date and time when the user was created
+    google.protobuf.Timestamp created_time = 7;
+    // The date and time when the user was last modified
+    // Will not be set if the user has never been modified
+    google.protobuf.Timestamp last_modified_time = 8;
+}
+
+message GoogleGroupSpec {
+    // The email address of the Google group.
+    // The email address is immutable. Once set during creation, it cannot be changed.
+    string email_address = 1;
+}
+
+message SCIMGroupSpec {
+    // The id used in the upstream identity provider.
+    string idp_id = 1;
+}
+
+message CloudGroupSpec {
+}
+
+message UserGroupSpec {
+    // The display name of the group.
+    string display_name = 1;
+    // The access assigned to the group.
+    Access access = 2;
+    oneof group_type {
+        // The specification of the google group that this group is associated with.
+        GoogleGroupSpec google_group = 3;
+        // The specification of the SCIM group that this group is associated with.
+        // SCIM groups cannot be created or deleted directly, but their access can be managed.
+        SCIMGroupSpec scim_group = 4;
+        // The specification for a Cloud group. Cloud groups can manage members using
+        // the add and remove member APIs.
+        CloudGroupSpec cloud_group = 5;
+    }
+}
+
+message UserGroup {
+    // The id of the group
+    string id = 1;
+    // The current version of the group specification
+    // The next update operation will have to include this version
+    string resource_version = 2;
+    // The group specification
+    UserGroupSpec spec = 3;
+    // The current state of the group.
+    // Deprecated: Not supported after v0.3.0 api version. Use state instead.
+    // temporal:versioning:max_version=v0.3.0
+    string state_deprecated = 4 [deprecated = true];
+    // The current state of the group.
+    // For any failed state, reach out to Temporal Cloud support for remediation.
+    // temporal:versioning:min_version=v0.3.0
+    // temporal:enums:replaces=state_deprecated
+    temporal.api.cloud.resource.v1.ResourceState state = 8;
+    // The id of the async operation that is creating/updating/deleting the group, if any
+    string async_operation_id = 5;
+    // The date and time when the group was created
+    google.protobuf.Timestamp created_time = 6;
+    // The date and time when the group was last modified
+    // Will not be set if the group has never been modified
+    google.protobuf.Timestamp last_modified_time = 7;
+}
+
+message UserGroupMemberId {
+    oneof member_type {
+        string user_id = 1;
+    }
+}
+
+message UserGroupMember {
+    UserGroupMemberId member_id = 1;
+    google.protobuf.Timestamp created_time = 2;
+}
+
+message ServiceAccount {
+    // The id of the service account.
+    string id = 1;
+    // The current version of the service account specification.
+    // The next update operation will have to include this version.
+    string resource_version = 2;
+    // The service account specification.
+    ServiceAccountSpec spec = 3;
+    // The current state of the service account.
+    // Possible values: activating, activationfailed, active, updating, updatefailed, deleting, deletefailed, deleted, suspending, suspendfailed, suspended.
+    // For any failed state, reach out to Temporal Cloud support for remediation.
+    // Deprecated: Not supported after v0.3.0 api version. Use state instead.
+    // temporal:versioning:max_version=v0.3.0
+    string state_deprecated = 4 [deprecated = true];
+    // The current state of the service account.
+    // For any failed state, reach out to Temporal Cloud support for remediation.
+    // temporal:versioning:min_version=v0.3.0
+    // temporal:enums:replaces=state_deprecated
+    temporal.api.cloud.resource.v1.ResourceState state = 8;
+    // The id of the async operation that is creating/updating/deleting the service account, if any.
+    string async_operation_id = 5;
+    // The date and time when the service account was created.
+    google.protobuf.Timestamp created_time = 6;
+    // The date and time when the service account was last modified
+    // Will not be set if the service account has never been modified.
+    google.protobuf.Timestamp last_modified_time = 7;
+}
+
+message ServiceAccountSpec {
+    // The name associated with the service account.
+    // The name is mutable, but must be unique across all your active service accounts.
+    string name = 1;
+
+    // Note: one of `Access` or `NamespaceScopedAccess` must be provided, but not both.
+    // The access assigned to the service account.
+    // If set, creates an account scoped service account.
+    // The access is mutable.
+    Access access = 2;
+    // The namespace scoped access assigned to the service account.
+    // If set, creates a namespace scoped service account (limited to a single namespace).
+    // The namespace scoped access is partially mutable.
+    // Refer to `NamespaceScopedAccess` for details.
+    NamespaceScopedAccess namespace_scoped_access = 4;
+
+    // The description associated with the service account - optional.
+    // The description is mutable.
+    string description = 3;
+}
+
+
+message ApiKey {
+    // The id of the API Key.
+    string id = 1;
+    // The current version of the API key specification.
+    // The next update operation will have to include this version.
+    string resource_version = 2;
+    // The API key specification.
+    ApiKeySpec spec = 3;
+    // The current state of the API key.
+    // Possible values: activating, activationfailed, active, updating, updatefailed, deleting, deletefailed, deleted, suspending, suspendfailed, suspended.
+    // For any failed state, reach out to Temporal Cloud support for remediation.
+    // Deprecated: Not supported after v0.3.0 api version. Use state instead.
+    // temporal:versioning:max_version=v0.3.0
+    string state_deprecated = 4 [deprecated = true];
+    // The current state of the API key.
+    // temporal:versioning:min_version=v0.3.0
+    // temporal:enums:replaces=state_deprecated
+    temporal.api.cloud.resource.v1.ResourceState state = 8;
+    // The id of the async operation that is creating/updating/deleting the API key, if any.
+    string async_operation_id = 5;
+    // The date and time when the API key was created.
+    google.protobuf.Timestamp created_time = 6;
+    // The date and time when the API key was last modified.
+    // Will not be set if the API key has never been modified.
+    google.protobuf.Timestamp last_modified_time = 7;
+}
+
+message ApiKeySpec {
+    // The id of the owner to create the API key for.
+    // The owner id is immutable. Once set during creation, it cannot be changed.
+    // The owner id is the id of the user when the owner type is user.
+    // The owner id is the id of the service account when the owner type is service account.
+    string owner_id = 1;
+    // The type of the owner to create the API key for.
+    // The owner type is immutable. Once set during creation, it cannot be changed.
+    // Possible values: user, service-account.
+    // Deprecated: Not supported after v0.3.0 api version. Use owner_type instead.
+    // temporal:versioning:max_version=v0.3.0
+    string owner_type_deprecated = 2 [deprecated = true];
+    // The type of the owner to create the API key for.
+    // temporal:versioning:min_version=v0.3.0
+    // temporal:enums:replaces=owner_type_deprecated
+    OwnerType owner_type = 7;
+    // The display name of the API key.
+    string display_name = 3;
+    // The description of the API key.
+    string description = 4;
+    // The expiry time of the API key.
+    google.protobuf.Timestamp expiry_time = 5;
+    // True if the API key is disabled.
+    bool disabled = 6;
+}

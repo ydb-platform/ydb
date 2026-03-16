@@ -1,0 +1,14 @@
+# Code table 4.9 - Probability type
+0 0 Probability of event below lower limit
+1 1 Probability of event above upper limit
+2 2 Probability of event between lower and upper limits (the range includes the lower limit but not the upper limit)
+3 3 Probability of event above lower limit
+4 4 Probability of event below upper limit
+5 5 Probability of event equal to lower limit
+6 6 Probability of event in above normal category
+7 7 Probability of event in near normal category
+8 8 Probability of event in below normal category
+9 9 Probability based on counts of categorical boolean
+# 10-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

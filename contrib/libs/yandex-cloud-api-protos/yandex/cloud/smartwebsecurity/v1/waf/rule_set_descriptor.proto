@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package yandex.cloud.smartwebsecurity.v1.waf;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/smartwebsecurity/v1/waf;smartwebsecurity";
+option java_package = "yandex.cloud.api.smartwebsecurity.v1.waf";
+
+message RuleSetDescriptor {
+  // Name of the rule set
+  string name = 1 [(required) = true];
+
+  // Version of the rule set
+  string version = 2 [(required) = true];
+
+  // ID of the rule set
+  string id = 3 [(required) = true];
+
+  // List of rules
+  repeated RuleDescription rules = 4;
+
+  message RuleDescription {
+    // ID of the rule
+    string id = 1;
+
+    reserved 2, 3, 4, 5, 6, 7;
+
+    // Numeric anomaly value, i.e., a potential attack indicator.
+    // The higher this value, the more likely it is that the request that satisfies the rule is an attack.
+    // See [documentation](/docs/smartwebsecurity/concepts/waf#anomaly).
+    int64 anomaly_score = 8;
+
+    // Paranoia level classifies rules according to their aggression.
+    // The higher the paranoia level, the better your protection, but also the higher the probability of WAF false positives.
+    // See [documentation](/docs/smartwebsecurity/concepts/waf#paranoia).
+    int64 paranoia_level = 9;
+
+    reserved 10;
+  }
+}

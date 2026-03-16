@@ -1,0 +1,10 @@
+# Code table 4.11 - Type of time intervals
+0 0 Reserved
+1 1 Successive times processed have same forecast time, start time of forecast is incremented
+2 2 Successive times processed have same start time of forecast, forecast time is incremented
+3 3 Successive times processed have start time of forecast incremented and forecast time decremented so that valid time remains constant
+4 4 Successive times processed have start time of forecast decremented and forecast time incremented so that valid time remains constant
+5 5 Floating subinterval of time between forecast time and end of overall time interval
+# 6-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

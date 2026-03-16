@@ -1,0 +1,13 @@
+--- contrib/python/Office365-REST-Python-Client/office365/runtime/auth/providers/saml_token_provider.py	(index)
++++ contrib/python/Office365-REST-Python-Client/office365/runtime/auth/providers/saml_token_provider.py	(working tree)
+@@ -301,7 +301,6 @@ class SamlTokenProvider(AuthenticationProvider, office365.logger.LoggerContext):
+ 
+-        template_path = os.path.join(
+-            os.path.dirname(__file__), "templates", template_name
+-        )
++        import importlib.resources
++        template_path = importlib.resources.files(__package__) / "templates" / template_name
+ 
+-        with open(template_path, encoding="utf8") as f:
++        with template_path.open(encoding="utf8") as f:
+             data = f.read()

@@ -1,0 +1,6 @@
+[console_scripts]
+can_bridge = can.bridge:main
+can_logconvert = can.logconvert:main
+can_logger = can.logger:main
+can_player = can.player:main
+can_viewer = can.viewer:main

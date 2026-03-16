@@ -1,0 +1,5 @@
+# Product discipline 0 - Meteorological products, parameter category 190: CCITT IA5 string
+0 0 Arbitrary text string (CCITT IA5)
+# 1-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,73 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 01887143a2fd3c2bae8b1d95261d55ef
+BELONGS ya.make
+    License text:
+        Copyright (c) 1990 Jorge Nocedal
+        Copyright (c) 2007-2010 Naoaki Okazaki
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:4]
+        include/lbfgs.h [4:6]
+        lib/arithmetic_ansi.h [4:5]
+        lib/arithmetic_sse_double.h [4:5]
+        lib/arithmetic_sse_float.h [4:5]
+        lib/lbfgs.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 05083fc508c96a27f7612e0aa67e647b
+BELONGS ya.make
+    License text:
+        Copyright (c) 1990 Jorge Nocedal
+        Copyright (c) 2007-2010 Naoaki Okazaki
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d66121496a724bdebb1c67b5997a737b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990, Jorge Nocedal
+         * Copyright (c) 2007-2010 Naoaki Okazaki
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/lbfgs.h [4:6]
+        lib/lbfgs.c [4:6]

@@ -1,0 +1,3 @@
+"synopLand" = { unexpandedDescriptors = 307080; }
+"airep" = { unexpandedDescriptors = 311001 ; }
+"airepWithSecondsAndPressure" = { unexpandedDescriptors = [301051, 4006,7002, 10004,12001, 11001, 11002, 11031, 11032, 11033, 20041] ; }

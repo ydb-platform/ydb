@@ -1,0 +1,16 @@
+# Local definition 39: 4DVar model errors for long window 4Dvar system (inspired by local def 25)
+
+unsigned[1] componentIndex  : dump;
+alias mars.number=componentIndex;
+unsigned[1] numberOfComponents  : dump;
+alias totalNumber=numberOfComponents;
+unsigned[1] modelErrorType  : dump;
+
+alias local.componentIndex=componentIndex;
+alias local.numberOfComponents=numberOfComponents;
+alias local.modelErrorType=modelErrorType;
+
+# Hours
+unsigned[2] offsetToEndOf4DvarWindow : dump;
+unsigned[2] lengthOf4DvarWindow : dump;
+alias anoffset=offsetToEndOf4DvarWindow;

@@ -1,0 +1,116 @@
+Metadata-Version: 2.1
+Name: marshmallow-union
+Version: 0.1.15.post1
+Summary: Union fields for marshmallow.
+Home-page: https://github.com/adamboche/python-marshmallow-union
+Author: Adam Boche
+Author-email: adamboche@users.noreply.github.com
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: Unix
+Classifier: Operating System :: POSIX
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Utilities
+Requires-Dist: marshmallow (>=3.0.0)
+
+========
+Overview
+========
+
+
+
+Union fields for marshmallow.
+
+* Free software: MIT license
+
+
+Warning
+===========
+
+   This library works by trying a list of fields one by one, and (de)serializing with the first one not to raise an error.
+   The type of the values is not taken into account, so if one of the fields in the union accepts values of an unexpected type,
+   they will be used for serialization. This can lead to a surprising behavior, because :
+
+   .. code-block:: python
+
+       u = Union(fields=[fields.Integer(), fields.String()]) # the Integer field accepts string representations of integers
+       type(u.deserialize('0')) # -> int
+
+   If you want to have precise control of which field will be used for which value, you can use `marshmallow-polyfield <https://github.com/Bachmann1234/marshmallow-polyfield/>`_ instead of this library.
+
+
+
+Documentation
+=============
+
+
+https://python-marshmallow-union.readthedocs.io/
+
+0.1.15 (2020-05-30)
+-------------------
+
+Changes
+^^^^^^^
+
+- Fix `#32 <https://github.com/adamboche/python-marshmallow-union/issues/32>`_ : Never ignore the value passed to `_serialize`. Notably, this fixes the serialization of lists of unions, such as ``List(Union([Int(), String()]))``
+
+0.1.12 (2019-10-24)
+-------------------
+
+
+Backward-incompatible Changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- On serialization, ``marshmallow_union.ExceptionGroup`` is raised if all candidate fields fail.
+  `#24 <https://github.com/adamboche/python-marshmallow-union/issues/24>`_
+
+
+----
+
+
+0.1.11 (2019-06-19)
+-------------------
+
+
+Changes
+^^^^^^^
+
+- Override the underscore-prefixed methods instead of the plain ones
+  `#22 <https://github.com/adamboche/python-marshmallow-union/issues/22>`_
+
+
+----
+
+
+Changelog
+=========
+
+0.1.10 (2019-06-08)
+-------------------
+
+
+Changes
+^^^^^^^
+
+- Use Towncrier for changelog.
+  `#18 <https://github.com/adamboche/python-marshmallow-union/issues/18>`_
+
+
+----
+
+
+0.1.0 (2019-06-07)
+------------------
+
+* First release on PyPI.
+
+

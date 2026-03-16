@@ -1,0 +1,107 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     MIT                  3cf5d9857d60424a6bf68c4c293728f6
+BELONGS ya.make
+# SMHasher is released under the MIT license, but SMHasher isn't included
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [3:3]
+
+KEEP     Public-Domain        4364b0fe48ff1582f5b0ef1163db6465
+BELONGS ya.make
+    License text:
+        // MurmurHash3 was written by Austin Appleby, and is placed in the public
+        // domain. The author hereby disclaims copyright to this source code.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        MurmurHash3.cpp [2:3]
+        MurmurHash3.h [2:3]
+
+KEEP     Public-Domain        9a232b986093fd097f28b3594cdf2d66
+BELONGS ya.make
+    License text:
+        // MurmurHash1 was written by Austin Appleby, and is placed in the public
+        // domain. The author hereby disclaims copyright to this source code.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        MurmurHash1.h [2:3]
+
+KEEP     Public-Domain        c6449d0b34e748d6351273320a5bfcbd
+BELONGS ya.make
+    License text:
+        // MurmurHash2 was written by Austin Appleby, and is placed in the public
+        // domain. The author hereby disclaims copyright to this source code.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        MurmurHash2.cpp [2:3]
+        MurmurHash2.h [2:3]
+
+KEEP     Public-Domain        d9b8d77da9bcb98aab2b4ea296bc15bc
+BELONGS ya.make
+    License text:
+        // MurmurHash was written by Austin Appleby, and is placed in the public
+        // domain. The author hereby disclaims copyright to this source code.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        MurmurHash1.cpp [2:3]
+
+KEEP     Public-Domain        fca5e5e2c26aab89bcee26e1c0615f9d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        README.md [3:3]

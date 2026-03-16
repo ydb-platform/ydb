@@ -1,0 +1,25 @@
+[spacy_architectures]
+spacy-legacy.CharacterEmbed.v1 = spacy_legacy.architectures.tok2vec:CharacterEmbed_v1
+spacy-legacy.EntityLinker.v1 = spacy_legacy.architectures.entity_linker:EntityLinker_v1
+spacy-legacy.HashEmbedCNN.v1 = spacy_legacy.architectures.tok2vec:HashEmbedCNN_v1
+spacy-legacy.MaxoutWindowEncoder.v1 = spacy_legacy.architectures.tok2vec:MaxoutWindowEncoder_v1
+spacy-legacy.MishWindowEncoder.v1 = spacy_legacy.architectures.tok2vec:MishWindowEncoder_v1
+spacy-legacy.MultiHashEmbed.v1 = spacy_legacy.architectures.tok2vec:MultiHashEmbed_v1
+spacy-legacy.Tagger.v1 = spacy_legacy.architectures.tagger:Tagger_v1
+spacy-legacy.TextCatBOW.v1 = spacy_legacy.architectures.textcat:TextCatBOW_v1
+spacy-legacy.TextCatCNN.v1 = spacy_legacy.architectures.textcat:TextCatCNN_v1
+spacy-legacy.TextCatEnsemble.v1 = spacy_legacy.architectures.textcat:TextCatEnsemble_v1
+spacy-legacy.Tok2Vec.v1 = spacy_legacy.architectures.tok2vec:Tok2Vec_v1
+spacy-legacy.TransitionBasedParser.v1 = spacy_legacy.architectures.parser:TransitionBasedParser_v1
+
+[spacy_loggers]
+spacy-legacy.ConsoleLogger.v1 = spacy_legacy.loggers:console_logger_v1
+spacy-legacy.ConsoleLogger.v2 = spacy_legacy.loggers:console_logger_v2
+spacy-legacy.WandbLogger.v1 = spacy_legacy.loggers:wandb_logger_v1
+
+[spacy_scorers]
+spacy-legacy.textcat_multilabel_scorer.v1 = spacy_legacy.scorers:make_textcat_multilabel_scorer_v1
+spacy-legacy.textcat_scorer.v1 = spacy_legacy.scorers:make_textcat_scorer_v1
+
+[thinc_layers]
+spacy-legacy.StaticVectors.v1 = spacy_legacy.layers.staticvectors_v1:StaticVectors_v1

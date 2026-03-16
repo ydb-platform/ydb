@@ -1,0 +1,314 @@
+syntax = "proto3";
+
+package yandex.cloud.cic.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/wrappers.proto";
+
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+
+import "yandex/cloud/cic/v1/common/transceiver_type.proto";
+import "yandex/cloud/cic/v1/common/lag_allocation_settings.proto";
+import "yandex/cloud/cic/v1/trunk_connection.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cic/v1;cic";
+option java_package = "yandex.cloud.api.cic.v1";
+
+// A set of methods for managing TrunkConnection resources.
+service TrunkConnectionService {
+
+  // Returns the specified TrunkConnection resource.
+  //
+  // To get the list of available TrunkConnection resources, make a [List] request.
+  rpc Get (GetTrunkConnectionRequest) returns (TrunkConnection) {
+    option (google.api.http) = { get: "/cic/v1/trunkConnections/{trunk_connection_id}" };
+  }
+
+  // Retrieves the list of TrunkConnection resources in the specified folder.
+  rpc List (ListTrunkConnectionsRequest) returns (ListTrunkConnectionsResponse) {
+    option (google.api.http) = { get: "/cic/v1/trunkConnections" };
+  }
+
+  // Creates a TrunkConnection resource in the specified folder using the data specified in the request.
+  // Method starts an asynchronous operation that can be cancelled while it is in progress.
+  rpc Create (CreateTrunkConnectionRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateTrunkConnectionMetadata"
+      response: "TrunkConnection"
+    };
+    option (google.api.http) = { post: "/cic/v1/trunkConnections" body: "*" };
+  }
+
+  // Updates a TrunkConnection resource using the data specified in the request.
+  // Method starts an asynchronous operation that can be cancelled while it is in progress.
+  rpc Update (UpdateTrunkConnectionRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateTrunkConnectionMetadata"
+      response: "TrunkConnection"
+    };
+    option (google.api.http) = { patch: "/cic/v1/trunkConnections/{trunk_connection_id}" body: "*" };
+  }
+
+  // Deletes a TrunkConnection resource.
+  // Method starts an asynchronous operation that can be cancelled while it is in progress.
+  rpc Delete (DeleteTrunkConnectionRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteTrunkConnectionMetadata"
+      response: "google.protobuf.Empty"
+    };
+    option (google.api.http) = { delete: "/cic/v1/trunkConnections/{trunk_connection_id}" };
+  }
+
+  // Moves the specified TrunkConnection to another folder.
+  rpc Move(MoveTrunkConnectionRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/cic/v1/trunkConnections/{trunk_connection_id}:move"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveTrunkConnectionMetadata"
+      response: "TrunkConnection"
+    };
+  }
+
+  // Lists operations for the specified TrunkConnection.
+  rpc ListOperations (ListTrunkConnectionOperationsRequest) returns (ListTrunkConnectionOperationsResponse) {
+    option (google.api.http) = { get: "/cic/v1/trunkConnections/{trunk_connection_id}/operations" };
+  }
+}
+
+message GetTrunkConnectionRequest {
+  // ID of the TrunkConnection resource to return.
+  // To get the trunkConnection ID use a [TrunkConnectionService.List] request.
+  string trunk_connection_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListTrunkConnectionsRequest {
+  // ID of the folder to list TrunkConnection resources.
+  // To get the folder ID use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListTrunkConnectionsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests. Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListTrunkConnectionsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on [Subnet.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListTrunkConnectionsResponse {
+  // List of TrunkConnection resources.
+  repeated TrunkConnection trunk_connections = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListTrunkConnectionsRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListTrunkConnectionsRequest.page_token] query parameter
+  // in the next list request. Subsequent list requests will have their own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateTrunkConnectionRequest {
+  // Name of the trunkConnection.
+  // The name must be unique within the folder.
+  // Value must match the regular expression ``\|[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?``.
+  string name = 1 [(pattern) = "|[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?"];
+  
+  // Optional description of the trunkConnection. 0-256 characters long.
+  string description = 2 [(length) = "<=256"];
+
+  reserved 3;
+
+  // ID of the folder that the trunkConnection belongs to.
+  string folder_id = 4 [(required) = true, (length) = "<=50"];
+
+  // ID of the region that the trunkConnection belongs to.
+  string region_id = 5 [(length) = "<=50", deprecated = true];
+
+  reserved 6 to 9;
+
+  // Special trunkConnection config
+  oneof joint {
+    // Single port trunkConnection config
+    SinglePortDirectJoint single_port_direct_joint = 10;
+
+    // LAG trunkConnection config
+    LagDirectJoint lag_direct_joint = 11;
+
+    // PartnerJoint trunkConnection config
+    PartnerJoint partner_joint_info = 12;
+  }
+
+  // ID of pointOfPresence that the trunkConnection is deployed on.
+  google.protobuf.StringValue point_of_presence_id = 13 [(required) = true];
+
+  reserved 14 to 16;
+
+  // Capacity of the trunkConnection
+  TrunkConnection.Capacity capacity = 17 [(required) = true];
+
+  // Resource labels, `key:value` pairs.
+  // No more than 64 per resource.
+  // The maximum string length in characters for each value is 63.
+  // Each value must match the regular expression `[-_0-9a-z]*`.
+  // The string length in characters for each key must be 1-63.
+  // Each key must match the regular expression `[a-z][-_0-9a-z]*`.
+  map<string, string> labels = 18 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  reserved 19;
+
+  // Deletion protection flag.
+  // Optional.
+  // If set prohibits deletion of the trunkConnection.
+  bool deletion_protection = 20;
+
+  // Config of trunkConnection that is deployed on single port.
+  message SinglePortDirectJoint {
+    // Type of transceiver that the trunkConnection is deployed on.
+    common.TransceiverType transceiver_type = 1 [(required) = true];
+
+    reserved 2 to 4;
+  }
+
+  // Config of trunkConnection that is deployed on lag.
+  message LagDirectJoint {
+    // Type of transceiver that the trunkConnection is deployed on.
+    common.TransceiverType transceiver_type = 1 [(required) = true];
+
+    reserved 2;
+
+    // LAG allocation settings that the trunkConnection is deployed on.
+    common.LagAllocationSettingsRequest lag_allocation_settings = 3 [(required) = true];
+  }
+
+  // Config of trunkConnection that is deployed on partner joint.
+  message PartnerJoint {
+    reserved 1 to 3;
+    
+    // ID of partner that the trunkConnection is deployed on.
+    google.protobuf.StringValue partner_id = 4 [(required) = true];
+  }
+}
+
+message CreateTrunkConnectionMetadata {
+  // ID of the TrunkConnection resource.
+  string trunk_connection_id = 1;
+}
+
+message UpdateTrunkConnectionRequest {
+  // ID of the TrunkConnection resource to return.
+  string trunk_connection_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask that specifies which fields of the TrunkConnection resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the trunkConnection.
+  // The name must be unique within the folder.
+  // Value must match the regular expression ``\|[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?``.
+  string name = 3 [(pattern) = "|[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?"];
+   
+  // Optional description of the trunkConnection. 0-256 characters long.
+  string description = 4 [(length) = "<=256"];
+
+  reserved 5 to 6;
+  
+  // ID of the region that the trunkConnection belongs to.
+  string region_id = 7 [(length) = "<=50", deprecated = true];
+
+  reserved 8 to 12;
+
+  // ID of pointOfPresence that the trunkConnection is deployed on.
+  google.protobuf.StringValue point_of_presence_id = 13 [deprecated = true];
+
+  reserved 14 to 16;
+
+  // Capacity of the trunkConnection
+  TrunkConnection.Capacity capacity = 17 [(required) = true];
+
+  // Resource labels, `key:value` pairs.
+  // No more than 64 per resource.
+  // The maximum string length in characters for each value is 63.
+  // Each value must match the regular expression `[-_0-9a-z]*`.
+  // The string length in characters for each key must be 1-63.
+  // Each key must match the regular expression `[a-z][-_0-9a-z]*`.
+  map<string, string> labels = 18 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  reserved 19;
+
+  // Deletion protection flag.
+  // Optional.
+  // If set prohibits deletion of the trunkConnection.
+  bool deletion_protection = 20;
+}
+
+message UpdateTrunkConnectionMetadata {
+  // ID of the TrunkConnection resource.
+  string trunk_connection_id = 1;
+}
+
+message DeleteTrunkConnectionRequest {
+  // ID of the TrunkConnection resource.
+  string trunk_connection_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteTrunkConnectionMetadata {
+  // ID of the TrunkConnection resource.
+  string trunk_connection_id = 1;
+}
+
+message MoveTrunkConnectionRequest {
+  // ID of the TrunkConnection resource to move.
+  // To get the trunkConnection ID use a [TrunkConnectionService.List] request.
+  string trunk_connection_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the folder to which trunkConnection will be moved.
+  // To get the folder ID use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string destination_folder_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message MoveTrunkConnectionMetadata {
+  // ID of the trunkConnection that is being moved.
+  string trunk_connection_id = 1;
+}
+
+message ListTrunkConnectionOperationsRequest {
+  // ID of the TrunkConnection resource.
+  string trunk_connection_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListTrunkConnectionOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests. Default value: 100.  
+  int64 page_size = 2 [(value) = "<=1000"];
+  
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListTrunkConnectionOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListTrunkConnectionOperationsResponse {
+  // List of TrunkConnection operations.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListTrunkConnectionOperationsRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListTrunkConnectionOperationsRequest.page_token] query parameter
+  // in the next list request. Subsequent list requests will have their own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

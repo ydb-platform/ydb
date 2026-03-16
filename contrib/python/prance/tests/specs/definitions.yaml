@@ -1,0 +1,23 @@
+---
+Pet:
+  required:
+    - id
+    - name
+  properties:
+    id:
+      type: integer
+      format: int64
+    name:
+      type: string
+    tag:
+      type: string
+Pets:
+  type: array
+  items:
+    $ref: '#/Pet'
+id:
+  name: petId
+  description: The id of the pet to retrieve
+  in: path
+  required: true
+  type: string

@@ -1,0 +1,84 @@
+Metadata-Version: 2.4
+Name: django-ltree-2
+Version: 0.1.13
+Summary: Continual of django-ltree with additional goodies
+Project-URL: Bug Tracker, https://github.com/baseplate-admin/django-ltree-2/issues
+Project-URL: homepage, https://github.com/baseplate-admin/django-ltree-2
+Project-URL: repository, https://github.com/baseplate-admin/django-ltree-2
+Author: Kimsia Sim
+Author-email: baseplate-admin <61817579+baseplate-admin@users.noreply.github.com>, Mario César Señoranis Ayala <mariocesar@humanzilla.com>
+Maintainer-email: baseplate-admin <61817579+baseplate-admin@users.noreply.github.com>
+License-Expression: MIT
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 4.2
+Classifier: Framework :: Django :: 5.0
+Classifier: Framework :: Django :: 5.1
+Classifier: Framework :: Django :: 5.2
+Classifier: Framework :: Django :: 6.0
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Requires-Python: >=3.9
+Requires-Dist: django>=3.2
+Requires-Dist: psycopg>=3
+Description-Content-Type: text/markdown
+
+# django-ltree-2
+
+[![Downloads](https://static.pepy.tech/badge/django-ltree-2)](https://pepy.tech/project/django-ltree-2) [![Documentation Status](https://readthedocs.org/projects/django-ltree-2/badge/?version=latest)](https://django-ltree-2.readthedocs.io/en/latest/?badge=latest) [![CI](https://github.com/baseplate-admin/django-ltree-2/actions/workflows/CI.yml/badge.svg)](https://github.com/baseplate-admin/django-ltree-2/actions/workflows/test.yml) [![Pypi Badge](https://img.shields.io/pypi/v/django-ltree-2.svg)](https://pypi.org/project/django-ltree-2/) [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/baseplate-admin/django-ltree-2/master.svg)](https://results.pre-commit.ci/latest/github/baseplate-admin/django-ltree-2/master)
+
+A tree extension implementation to support hierarchical tree-like data in Django models,
+using the native Postgres extension `ltree`.
+
+Postgresql has already a optimized and very useful tree implementation for data.
+The extension is [ltree](https://www.postgresql.org/docs/9.6/static/ltree.html)
+
+This fork contains is a continuation of the work done by [`mariocesar`](https://github.com/mariocesar/) on [`django-ltree`](https://github.com/mariocesar/django-ltree) and merges the work done by [`simkimsia`](https://github.com/simkimsia) on [`greendeploy-django-ltree`](https://github.com/GreenDeploy-io/greendeploy-django-ltree)
+
+## Install
+
+Please remember to uninstall `django-ltree` before installing `django-ltree-2`, since both uses `django_ltree` namespace.
+
+---
+
+```
+pip install django-ltree-2
+```
+
+Then add `django_ltree` to `INSTALLED_APPS` in your Django project settings.
+
+```python
+INSTALLED_APPS = [
+    ...,
+    'django_ltree',
+    ...
+]
+```
+
+Then use it like this:
+
+```python
+
+from django_ltree.models import TreeModel
+
+
+class CustomTree(TreeModel):
+    ...
+
+```
+
+## Requires
+
+-   Django 3.2 or superior
+-   Python 3.9 or higher

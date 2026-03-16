@@ -1,0 +1,264 @@
+syntax = "proto3";
+
+package yandex.cloud.airflow.v1;
+
+import "yandex/cloud/airflow/v1/common.proto";
+import "yandex/cloud/airflow/v1/maintenance.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/logging/v1/log_entry.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/airflow/v1;airflow";
+option java_package = "yandex.cloud.api.airflow.v1";
+
+// Apache Airflow cluster.
+message Cluster {
+  enum Status {
+
+    // Cluster state is unknown.
+    STATUS_UNKNOWN = 0;
+
+    // Cluster is being created.
+    CREATING = 1;
+
+    // Cluster is running normally.
+    RUNNING = 2;
+
+    // Cluster encountered a problem and cannot operate.
+    ERROR = 3;
+
+    // Cluster is stopping.
+    STOPPING = 4;
+
+    // Cluster is stopped.
+    STOPPED = 5;
+
+    // Cluster is starting.
+    STARTING = 6;
+
+    // Cluster is being updated.
+    UPDATING = 7;
+  }
+
+  // Unique ID of the Apache Airflow cluster.
+  // This ID is assigned by Cloud during cluster creation.
+  string id = 1;
+
+  // ID of the folder that the Apache Airflow cluster belongs to.
+  string folder_id = 2;
+
+  // The time when the Apache Airflow cluster was created.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the Apache Airflow cluster.
+  // The name is unique within the folder. 1-64 characters long.
+  string name = 4;
+
+  // Description of the Apache Airflow cluster. 0-256 characters long.
+  string description = 5;
+
+  // Resource labels as `key:value` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 6;
+
+  reserved 7;
+
+  // Monitoring systems relevant to the Apache Airflow cluster.
+  repeated Monitoring monitoring = 8;
+
+  // Configuration of Apache Airflow components.
+  ClusterConfig config = 9;
+
+  // Aggregated cluster health.
+  Health health = 10;
+
+  // Cluster status.
+  Status status = 11;
+
+  // Network related configuration options.
+  NetworkConfig network = 12;
+
+  // Parameters of the location and access to the code that will be executed in the cluster.
+  CodeSyncConfig code_sync = 13;
+
+  // Deletion Protection inhibits deletion of the cluster.
+  bool deletion_protection = 14;
+
+  // Address of Apache Airflow web UI.
+  string webserver_url = 15;
+
+  // Service account used to access Cloud resources.
+  // For more information, see [documentation](/docs/managed-airflow/concepts/impersonation).
+  string service_account_id = 16 [(length) = "<=50"];
+
+  // Cloud Logging configuration.
+  LoggingConfig logging = 17;
+
+  // Window of maintenance operations.
+  MaintenanceWindow maintenance_window = 18;
+
+  // Maintenance operation planned at nearest maintenance_window.
+  MaintenanceOperation planned_operation = 19;
+}
+
+// Monitoring system.
+message Monitoring {
+  // Name of the monitoring system.
+  string name = 1;
+
+  // Description of the monitoring system.
+  string description = 2;
+
+  // Link to the monitoring system.
+  string link = 3;
+}
+
+message ClusterConfig {
+  // Version of Apache Airflow that runs on the cluster.
+  // Use `airflow_version` instead.
+  string version_id = 1 [deprecated = true];
+
+  // Configuration of the Apache Airflow application itself.
+  AirflowConfig airflow = 2;
+
+  // Configuration of webserver instances.
+  WebserverConfig webserver = 3 [(required) = true];
+
+  // Configuration of scheduler instances.
+  SchedulerConfig scheduler = 4 [(required) = true];
+
+  // Configuration of triggerer instances.
+  TriggererConfig triggerer = 5;
+
+  // Configuration of worker instances.
+  WorkerConfig worker = 6 [(required) = true];
+
+  // The list of additional packages installed in the cluster.
+  Dependencies dependencies = 7;
+
+  // Configuration of Lockbox Secret Backend.
+  LockboxConfig lockbox = 8;
+
+  // Apache Airflow version. Format: "Major.Minor"
+  string airflow_version = 9;
+
+  // Python version. Format: "Major.Minor"
+  string python_version = 10;
+
+  // Configuration of dag-processor instances.
+  DagProcessorConfig dag_processor = 11;
+}
+
+message AirflowConfig {
+  // Properties to be passed to Apache Airflow configuration file.
+  map<string, string> config = 1;
+}
+
+message WebserverConfig {
+  // The number of webserver instances in the cluster.
+  int64 count = 1 [(value) = "1-512"];
+
+  // Resources allocated to webserver instances.
+  Resources resources = 2;
+}
+
+message SchedulerConfig {
+  // The number of scheduler instances in the cluster.
+  int64 count = 1 [(value) = "1-512"];
+
+  // Resources allocated to scheduler instances.
+  Resources resources = 2;
+}
+
+message DagProcessorConfig {
+    // The number of dag-processor instances in the cluster.
+    int64 count = 1 [(value) = "1-512"];
+
+    // Resources allocated to dag-processor instances.
+    Resources resources = 2;
+}
+
+message TriggererConfig {
+  // The number of triggerer instances in the cluster.
+  int64 count = 1 [(value) = "0-512"];
+
+  // Resources allocated to triggerer instances.
+  Resources resources = 2;
+}
+
+message WorkerConfig {
+  // The minimum number of worker instances in the cluster.
+  int64 min_count = 1 [(value) = "0-512"];
+
+  // The maximum number of worker instances in the cluster.
+  int64 max_count = 2 [(value) = "1-512"];
+
+  // Resources allocated to worker instances.
+  Resources resources = 3;
+}
+
+message Dependencies {
+  // Python packages that are installed in the cluster.
+  repeated string pip_packages = 1;
+
+  // System packages that are installed in the cluster.
+  repeated string deb_packages = 2;
+}
+
+message NetworkConfig {
+  // IDs of VPC network subnets where instances of the cluster are attached.
+  repeated string subnet_ids = 1;
+
+  // User security groups.
+  repeated string security_group_ids = 2;
+}
+
+message S3Config {
+  // The name of the Object Storage bucket that stores DAG files used in the cluster.
+  string bucket = 3;
+}
+
+message GitSyncConfig {
+  // Git repository URL.
+  string repo = 1 [(required) = true];
+
+  // Git branch name to sync from.
+  string branch = 2 [(required) = true];
+
+  // Subdirectory path within the repository containing DAG files.
+  string sub_path = 3;
+
+  // SSH private key for repository authentication.
+  string ssh_key = 4;
+}
+
+message CodeSyncConfig {
+  oneof source {
+    option (exactly_one) = true;
+    S3Config s3 = 1;
+    GitSyncConfig git_sync = 2;
+  }
+}
+
+message LoggingConfig {
+  // Logs generated by the Airflow components are delivered to Cloud Logging.
+  bool enabled = 1;
+
+  // Destination of log records.
+  oneof destination {
+    // Logs should be written to default log group for specified folder.
+    string folder_id = 2 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+
+    // Logs should be written to log group resolved by ID.
+    string log_group_id = 3 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+  }
+
+  // Minimum log entry level.
+  //
+  // See [LogLevel.Level] for details.
+  yandex.cloud.logging.v1.LogLevel.Level min_level = 4;
+}
+
+message LockboxConfig {
+  // The setting allows to enable Lockbox Secret Backend.
+  bool enabled = 1;
+}

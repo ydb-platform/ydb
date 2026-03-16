@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package yandex.cloud.datatransfer.v1.endpoint;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datatransfer/v1/endpoint;endpoint";
+option java_package = "yandex.cloud.api.datatransfer.v1.endpoint";
+option csharp_namespace = "Yandex.Cloud.Datatransfer.V1.EndPoint"; // there is a clash with class Endpoint in namespace Yandex.Cloud.Datatransfer.V1
+
+import "google/protobuf/empty.proto";
+
+enum ObjectTransferStage {
+    OBJECT_TRANSFER_STAGE_UNSPECIFIED = 0;
+    // Before data transfer
+    BEFORE_DATA = 1;
+    // After data transfer
+    AFTER_DATA = 2;
+    // Don't copy
+    NEVER = 3;
+}
+enum CleanupPolicy {
+    CLEANUP_POLICY_UNSPECIFIED = 0;
+    // Don't cleanup
+    DISABLED = 1;
+    // Drop
+    DROP = 2;
+    // Truncate
+    TRUNCATE = 3;
+}
+enum ColumnType {
+    COLUMN_TYPE_UNSPECIFIED = 0;
+    INT32 = 1;
+    INT16 = 2;
+    INT8 = 3;
+    UINT64 = 4;
+    UINT32 = 5;
+    UINT16 = 6;
+    UINT8 = 7;
+    DOUBLE = 8;
+    BOOLEAN = 9;
+    STRING = 10;
+    UTF8 = 11;
+    ANY = 12;
+    DATETIME = 13;
+    INT64 = 14;
+}
+message AltName {
+    // Source table name
+    string from_name = 1;
+    // Target table name
+    string to_name = 2;
+}
+message Secret {
+    oneof value {
+        // Raw secret value
+        string raw = 1;
+    }
+}
+message ColSchema {
+    // Field name
+    string name = 1;
+    // Field type, one of: `INT64`, `INT32`, `INT16`, `INT8`, `UINT64`, `UINT32`,
+    // `UINT16`, `UINT8`, `DOUBLE`, `BOOLEAN`, `STRING`, `UTF8`, `ANY`, `DATETIME`.    
+    ColumnType type = 2;
+    // Mark field as Primary Key
+    bool key = 3;
+    // Mark field as required
+    bool required = 4;
+    // Path to the field
+    string path = 5;
+}
+// TLS configuration
+message TLSMode {
+    oneof tls_mode {
+        // Empty block designating that the connection is not secured, i.e. plaintext
+        // connection
+        google.protobuf.Empty disabled = 1;
+        // TLS is used for the server connection
+        TLSConfig enabled = 2;
+    }
+}
+message TLSConfig {
+    // CA certificate
+    // X.509 certificate of the certificate authority which issued the server's
+    // certificate, in PEM format. When CA certificate is specified, TLS is used to
+    // connect to the server. If CA certificate is empty, the server's certificate must
+    // be signed by a well-known CA
+    string ca_certificate = 1;
+}
+message ColumnValue {
+    oneof value {
+        string string_value = 1;
+    }
+}
+message DataTransformationOptions {
+    reserved 6 to 7;
+    // Cloud function
+    string cloud_function = 1;
+    // Number of retries
+    int64 number_of_retries = 2;
+    // Buffer size for function. Maximum 4 GB.  Use value with units, i.e. 10 B, 20 kB,
+    // 2.0 MB, 30 MB, 1.0 GB
+    string buffer_size = 3;
+    // Flush interval
+    string buffer_flush_interval = 4;
+    // Invocation timeout
+    string invocation_timeout = 5;
+    // Service account
+    string service_account_id = 8;
+}
+message FieldList {
+    reserved 1;
+    // Description of the column schema in the array of `fields` structure
+    repeated ColSchema fields = 2;
+}
+message DataSchema {
+    oneof schema {
+        // Description of the data schema as JSON specification
+        // Deprecated: please use fields instead
+        string json_fields = 1 [deprecated = true];
+        // Description of the data schema in the array of `fields` structure
+        FieldList fields = 2;
+    }
+}
+// No authentication
+message NoAuth {
+}
+// Use Connection Manager connection
+message ConnectionManagerConnection {
+    // ID of connection in Connection Manager with installation params and credetials
+    string connection_id = 1;
+    // Identifier of the Yandex Cloud VPC subnetwork to user for accessing the
+    // database. 
+    // If omitted, the server has to be accessible via Internet
+    string subnet_id = 2;
+}

@@ -1,0 +1,3 @@
+codetable[1] localDefinitionNumber  'grib1/localDefinitionNumber.[centre:l].table' = 1 : dump;
+template  localDefinition  "grib1/local.[centre:l].[localDefinitionNumber:l].def";
+

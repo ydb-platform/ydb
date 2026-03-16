@@ -1,0 +1,47 @@
+# (C) Copyright 2005- ECMWF.
+
+codetable[2] marsClass  "mars/class.table" = "od" : dump,string_type,lowercase;
+codetable[2] marsType   "mars/type.table" = "an"  : dump,string_type,no_fail,lowercase;
+codetable[2] marsStream "mars/stream.table" = "oper" : dump,string_type,lowercase;
+ksec1expver[4] experimentVersionNumber = "0001" : dump;
+
+meta class g2_mars_labeling(
+    0,marsClass,
+    marsType,
+    marsStream,
+    experimentVersionNumber,
+    typeOfProcessedData,
+    productDefinitionTemplateNumber,
+    stepType,
+    derivedForecast,
+    typeOfGeneratingProcess);
+
+meta type g2_mars_labeling(
+    1,marsClass,
+    marsType,
+    marsStream,
+    experimentVersionNumber,
+    typeOfProcessedData,
+    productDefinitionTemplateNumber,
+    stepType,
+    derivedForecast,
+    typeOfGeneratingProcess);
+
+meta stream g2_mars_labeling(
+    2,marsClass,
+    marsType,
+    marsStream,
+    experimentVersionNumber,
+    typeOfProcessedData,
+    productDefinitionTemplateNumber,
+    stepType,
+    derivedForecast,
+    typeOfGeneratingProcess);
+
+alias ls.dataType = marsType;
+
+alias mars.class  = class;
+alias mars.type   = type;
+alias mars.stream = stream;
+alias mars.expver = experimentVersionNumber;
+alias mars.domain = globalDomain; # For now...

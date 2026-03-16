@@ -1,0 +1,29 @@
+--- contrib/python/httpretty/py3/httpretty/core.py	(2193aaec5721a582ce1df67a9a4f348bc33dbe37)
++++ contrib/python/httpretty/py3/httpretty/core.py	(index)
+@@ -796,7 +796,7 @@ class fakesock(object):
+                     else:
+                         self._entry.request.body += body
+ 
+-                    httpretty.historify_request(headers, body, sock=self)
++                    httpretty.historify_request(headers, body, sock=self, append=False)
+                     return
+ 
+             if path[:2] == '//':
+@@ -1602,7 +1602,7 @@ class httpretty(HttpBaseClass):
+         __internals__.cleanup_sockets()
+ 
+     @classmethod
+-    def historify_request(cls, headers, body='', sock=None):
++    def historify_request(cls, headers, body='', sock=None, append=True):
+         """appends request to a list for later retrieval
+ 
+         .. testcode::
+@@ -1618,7 +1618,7 @@ class httpretty(HttpBaseClass):
+         request = HTTPrettyRequest(headers, body, sock=sock)
+         cls.last_request = request
+ 
+-        if request not in cls.latest_requests:
++        if append or not cls.latest_requests:
+             cls.latest_requests.append(request)
+         else:
+             cls.latest_requests[-1] = request

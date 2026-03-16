@@ -1,0 +1,18 @@
+--- contrib/python/nbconvert/nbconvert/preprocessors/sanitize.py	(index)
++++ contrib/python/nbconvert/nbconvert/preprocessors/sanitize.py	(working tree)
+@@ -7,1 +7,0 @@ NBConvert Preprocessor for sanitizing HTML rendering of notebooks.
+-    ALLOWED_STYLES,
+@@ -10,2 +9,4 @@
+ )
++from bleach.css_sanitizer import ALLOWED_CSS_PROPERTIES as ALLOWED_STYLES
++from bleach.css_sanitizer import CSSSanitizer
+ from traitlets import (
+@@ -132,7 +133,7 @@ class SanitizeHTML(Preprocessor):
+             html_str,
+             tags=self.tags,
+             attributes=self.attributes,
+-            styles=self.styles,
+             strip=self.strip,
+             strip_comments=self.strip_comments,
++            css_sanitizer=CSSSanitizer(allowed_css_properties=self.styles),
+         )

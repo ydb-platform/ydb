@@ -1,0 +1,13 @@
+requirements:
+  - pydantic: contrib/python/pydantic/pydantic-2
+mark_as_cython_c:
+  - spacy/matcher/levenshtein.pyx
+cython_directive:
+  - language_level=-3
+  - embedsignature=true
+  - annotation_typing=false
+exclude_from_macros:
+  - licenses/*
+  - spacy/matcher/polyleven.c
+copy:
+  - licenses/*

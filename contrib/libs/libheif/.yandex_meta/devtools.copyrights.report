@@ -1,0 +1,423 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1228153db424394c80f07846caba6536
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017-2023 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/api/libheif/heif_brands.h [3:3]
+        libheif/api/libheif/heif_color.h [3:3]
+        libheif/api/libheif/heif_error.h [3:3]
+        libheif/api/libheif/heif_library.h [3:3]
+        libheif/api/libheif/heif_metadata.h [3:3]
+        libheif/api/libheif/heif_properties.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1253500f1a1585e35e9a97ab2898c622
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024-2025 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/api/libheif/heif_uncompressed.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a17fd3837441850a7c35445cc8080c2
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/plugins/decoder_aom.cc [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2149a87c50d2c22e12eb5e386d0c6337
+BELONGS ya.make
+    License text:
+           * Cyan component (C).
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/codecs/uncompressed/unc_types.h [102:102]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 32b7af1bb9226b8ec08d56c83bed432d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/api/libheif/heif_experimental.h [3:3]
+        libheif/api/libheif/heif_sequences.cc [3:3]
+        libheif/api/libheif/heif_uncompressed.cc [3:3]
+        libheif/codecs/avc_dec.cc [3:3]
+        libheif/codecs/avc_dec.h [3:3]
+        libheif/codecs/avif_dec.cc [3:3]
+        libheif/codecs/avif_dec.h [3:3]
+        libheif/codecs/avif_enc.cc [3:3]
+        libheif/codecs/avif_enc.h [3:3]
+        libheif/codecs/decoder.cc [3:3]
+        libheif/codecs/decoder.h [3:3]
+        libheif/codecs/encoder.cc [3:3]
+        libheif/codecs/encoder.h [3:3]
+        libheif/codecs/hevc_dec.cc [3:3]
+        libheif/codecs/hevc_dec.h [3:3]
+        libheif/codecs/hevc_enc.cc [3:3]
+        libheif/codecs/hevc_enc.h [3:3]
+        libheif/codecs/jpeg2000_dec.cc [3:3]
+        libheif/codecs/jpeg2000_dec.h [3:3]
+        libheif/codecs/jpeg2000_enc.cc [3:3]
+        libheif/codecs/jpeg2000_enc.h [3:3]
+        libheif/codecs/jpeg_dec.cc [3:3]
+        libheif/codecs/jpeg_dec.h [3:3]
+        libheif/codecs/jpeg_enc.cc [3:3]
+        libheif/codecs/jpeg_enc.h [3:3]
+        libheif/codecs/vvc_dec.cc [3:3]
+        libheif/codecs/vvc_dec.h [3:3]
+        libheif/codecs/vvc_enc.cc [3:3]
+        libheif/codecs/vvc_enc.h [3:3]
+        libheif/file_layout.cc [3:3]
+        libheif/file_layout.h [3:3]
+        libheif/image-items/grid.cc [3:3]
+        libheif/image-items/grid.h [3:3]
+        libheif/image-items/iden.cc [3:3]
+        libheif/image-items/iden.h [3:3]
+        libheif/image-items/image_item.cc [3:3]
+        libheif/image-items/image_item.h [3:3]
+        libheif/image-items/overlay.cc [3:3]
+        libheif/image-items/overlay.h [3:3]
+        libheif/image-items/tiled.cc [3:3]
+        libheif/image-items/tiled.h [3:3]
+        libheif/logging.cc [3:3]
+        libheif/mdat_data.h [3:3]
+        libheif/security_limits.cc [3:3]
+        libheif/sequences/chunk.cc [3:3]
+        libheif/sequences/chunk.h [3:3]
+        libheif/sequences/seq_boxes.cc [3:3]
+        libheif/sequences/seq_boxes.h [3:3]
+        libheif/sequences/track.cc [3:3]
+        libheif/sequences/track.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e6d8a3f6733d30e1ddfb0333ae45921
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2025 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/api/libheif/heif_sequences.h [3:3]
+        libheif/api/libheif/heif_tai_timestamps.cc [3:3]
+        libheif/api/libheif/heif_tai_timestamps.h [3:3]
+        libheif/brands.cc [3:3]
+        libheif/brands.h [3:3]
+        libheif/codecs/avc_enc.cc [3:3]
+        libheif/codecs/avc_enc.h [3:3]
+        libheif/image-items/avc.cc [3:4]
+        libheif/image-items/avc.h [3:4]
+        libheif/sequences/track_metadata.cc [3:3]
+        libheif/sequences/track_metadata.h [3:3]
+        libheif/sequences/track_visual.cc [3:3]
+        libheif/sequences/track_visual.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 70927df948548389c3358b775874422c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2023 Dirk Farin <dirk.farin@gmail.com>
+         * Copyright (c) 2025 Brad Hards <bradh@frogmouth.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/api/libheif/heif_text.cc [3:4]
+        libheif/api/libheif/heif_text.h [3:4]
+        libheif/text.cc [3:4]
+        libheif/text.h [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7df43df5e2d66139f584b6f9078a20c8
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/api/libheif/heif_cxx.h [6:6]
+        libheif/security_limits.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 823f986e46e51b965bf9f99ca4a4b346
+BELONGS ya.make
+    License text:
+        Copyright (c) 2017-2020 Struktur AG
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [420:422]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8698fbbb478794157447951452dba8dd
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/api/libheif/heif_brands.cc [3:3]
+        libheif/api/libheif/heif_color.cc [3:3]
+        libheif/api/libheif/heif_image.cc [3:3]
+        libheif/api/libheif/heif_library.cc [3:3]
+        libheif/api/libheif/heif_plugin.cc [3:3]
+        libheif/api/libheif/heif_plugin.h [3:3]
+        libheif/api/libheif/heif_properties.cc [3:3]
+        libheif/api_structs.h [3:3]
+        libheif/bitstream.cc [3:3]
+        libheif/bitstream.h [3:3]
+        libheif/box.cc [3:3]
+        libheif/box.h [3:3]
+        libheif/codecs/avif_boxes.cc [3:3]
+        libheif/codecs/avif_boxes.h [3:3]
+        libheif/codecs/hevc_boxes.cc [3:3]
+        libheif/codecs/hevc_boxes.h [3:3]
+        libheif/color-conversion/colorconversion.cc [3:3]
+        libheif/color-conversion/colorconversion.h [3:3]
+        libheif/context.cc [3:3]
+        libheif/context.h [3:3]
+        libheif/error.cc [3:3]
+        libheif/error.h [3:3]
+        libheif/file.cc [3:3]
+        libheif/file.h [3:3]
+        libheif/heif_version.h [3:3]
+        libheif/image-items/avif.cc [3:3]
+        libheif/image-items/avif.h [3:3]
+        libheif/image-items/hevc.cc [3:3]
+        libheif/image-items/hevc.h [3:3]
+        libheif/logging.h [3:3]
+        libheif/pixelimage.cc [3:3]
+        libheif/pixelimage.h [3:3]
+        libheif/plugin_registry.cc [3:3]
+        libheif/plugin_registry.h [3:3]
+        libheif/plugins/decoder_aom.h [3:3]
+        libheif/plugins/decoder_libde265.cc [3:3]
+        libheif/plugins/decoder_libde265.h [3:3]
+        libheif/plugins/encoder_aom.cc [3:3]
+        libheif/plugins/encoder_aom.h [3:3]
+        libheif/plugins/encoder_mask.cc [3:3]
+        libheif/plugins/encoder_mask.h [3:3]
+        libheif/plugins/encoder_x265.cc [3:3]
+        libheif/plugins/encoder_x265.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8b1749cae99f831f56bf86a294da33b9
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2023 Dirk Farin <dirk.farin@gmail.com>
+         * Copyright (c) 2023 Brad Hards <bradh@frogmouth.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/api/libheif/heif_regions.cc [3:4]
+        libheif/api/libheif/heif_regions.h [3:4]
+        libheif/codecs/avc_boxes.cc [3:3]
+        libheif/codecs/avc_boxes.h [3:3]
+        libheif/codecs/jpeg2000_boxes.cc [2:3]
+        libheif/codecs/jpeg2000_boxes.h [2:3]
+        libheif/image-items/avc.cc [3:4]
+        libheif/image-items/avc.h [3:4]
+        libheif/image-items/jpeg2000.cc [2:3]
+        libheif/image-items/jpeg2000.h [2:3]
+        libheif/image-items/mask_image.cc [4:5]
+        libheif/image-items/mask_image.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9aa593ab30395aa15527306848dd6d01
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2023 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/api/libheif/heif_items.cc [3:3]
+        libheif/api/libheif/heif_items.h [3:3]
+        libheif/api/libheif/heif_regions.cc [3:4]
+        libheif/api/libheif/heif_regions.h [3:4]
+        libheif/api/libheif/heif_text.cc [3:4]
+        libheif/api/libheif/heif_text.h [3:4]
+        libheif/codecs/jpeg_boxes.cc [3:3]
+        libheif/codecs/jpeg_boxes.h [3:3]
+        libheif/codecs/uncompressed/unc_boxes.h [3:3]
+        libheif/codecs/uncompressed/unc_types.h [3:3]
+        libheif/codecs/vvc_boxes.cc [3:3]
+        libheif/codecs/vvc_boxes.h [3:3]
+        libheif/color-conversion/alpha.cc [3:3]
+        libheif/color-conversion/alpha.h [3:3]
+        libheif/color-conversion/chroma_sampling.cc [3:3]
+        libheif/color-conversion/chroma_sampling.h [3:3]
+        libheif/color-conversion/hdr_sdr.cc [3:3]
+        libheif/color-conversion/hdr_sdr.h [3:3]
+        libheif/color-conversion/monochrome.cc [3:3]
+        libheif/color-conversion/monochrome.h [3:3]
+        libheif/color-conversion/rgb2rgb.cc [3:3]
+        libheif/color-conversion/rgb2rgb.h [3:3]
+        libheif/color-conversion/rgb2yuv.cc [3:3]
+        libheif/color-conversion/rgb2yuv.h [3:3]
+        libheif/color-conversion/rgb2yuv_sharp.cc [3:3]
+        libheif/color-conversion/rgb2yuv_sharp.h [3:3]
+        libheif/color-conversion/yuv2rgb.cc [3:3]
+        libheif/color-conversion/yuv2rgb.h [3:3]
+        libheif/common_utils.cc [3:3]
+        libheif/common_utils.h [3:3]
+        libheif/image-items/jpeg.cc [3:3]
+        libheif/image-items/jpeg.h [3:3]
+        libheif/image-items/mask_image.cc [4:5]
+        libheif/image-items/mask_image.h [4:5]
+        libheif/image-items/unc_image.h [3:3]
+        libheif/image-items/vvc.cc [3:3]
+        libheif/image-items/vvc.h [3:3]
+        libheif/plugins/nalu_utils.cc [3:3]
+        libheif/plugins/nalu_utils.h [3:3]
+        libheif/plugins_unix.h [3:3]
+        libheif/plugins_windows.h [3:3]
+        libheif/region.cc [3:3]
+        libheif/region.h [3:3]
+        libheif/text.cc [3:4]
+        libheif/text.h [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa51634dd17d3dd0df27c924c5980b91
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017-2025 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/api/libheif/heif.cc [3:3]
+        libheif/api/libheif/heif.h [3:3]
+        libheif/api/libheif/heif_aux_images.cc [3:3]
+        libheif/api/libheif/heif_aux_images.h [3:3]
+        libheif/api/libheif/heif_context.cc [3:3]
+        libheif/api/libheif/heif_context.h [3:3]
+        libheif/api/libheif/heif_decoding.cc [3:3]
+        libheif/api/libheif/heif_decoding.h [3:3]
+        libheif/api/libheif/heif_encoding.cc [3:3]
+        libheif/api/libheif/heif_encoding.h [3:3]
+        libheif/api/libheif/heif_entity_groups.cc [3:3]
+        libheif/api/libheif/heif_entity_groups.h [3:3]
+        libheif/api/libheif/heif_image.h [3:3]
+        libheif/api/libheif/heif_image_handle.cc [3:3]
+        libheif/api/libheif/heif_image_handle.h [3:3]
+        libheif/api/libheif/heif_metadata.cc [3:3]
+        libheif/api/libheif/heif_security.cc [3:3]
+        libheif/api/libheif/heif_security.h [3:3]
+        libheif/api/libheif/heif_tiling.cc [3:3]
+        libheif/api/libheif/heif_tiling.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL de666112fc3c94aaa682d7d29d7f7798
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/compression.h [3:3]
+        libheif/compression_zlib.cc [3:3]
+        libheif/init.cc [3:3]
+        libheif/init.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f096ea1ff6fa877b89e8b7eb2758e38a
+BELONGS ya.make
+    License text:
+        Copyright (c) 2017-2026 Dirk Farin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [420:422]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f1e98094d13cbcb7fbb417ff5937b6aa
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2020 Dirk Farin <dirk.farin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/nclx.cc [3:3]
+        libheif/nclx.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f929b98eecbba830d66cdc83a6607bc7
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024 Brad Hards <bradh@frogmouth.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libheif/compression_brotli.cc [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe6f4a2cadd39168e946fc1f97e42e56
+BELONGS ya.make
+    License text:
+         Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
+         Everyone is permitted to copy and distribute verbatim copies
+         of this license document, but changing it is not allowed.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [11:13]
+        COPYING [179:181]

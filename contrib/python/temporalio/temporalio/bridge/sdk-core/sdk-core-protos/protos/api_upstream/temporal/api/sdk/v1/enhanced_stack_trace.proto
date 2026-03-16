@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package temporal.api.sdk.v1;
+
+option go_package = "go.temporal.io/api/sdk/v1;sdk";
+option java_package = "io.temporal.api.sdk.v1";
+option java_multiple_files = true;
+option java_outer_classname = "EnhancedStackTraceProto";
+option ruby_package = "Temporalio::Api::Sdk::V1";
+option csharp_namespace = "Temporalio.Api.Sdk.V1";
+
+// Internal structure used to create worker stack traces with references to code.
+message EnhancedStackTrace {
+    // Information pertaining to the SDK that the trace has been captured from.
+    StackTraceSDKInfo sdk = 1;
+
+    // Mapping of file path to file contents.
+    map<string, StackTraceFileSlice> sources = 2;
+
+    // Collection of stacks captured.
+    repeated StackTrace stacks = 3;
+}
+
+// Information pertaining to the SDK that the trace has been captured from.
+// (-- api-linter: core::0123::resource-annotation=disabled
+//     aip.dev/not-precedent: Naming SDK version is optional. --)
+message StackTraceSDKInfo {
+    // Name of the SDK
+    string name = 1;
+
+    // Version string of the SDK
+    string version = 2;
+}
+
+// "Slice" of a file starting at line_offset -- a line offset and code fragment corresponding to the worker's stack.
+message StackTraceFileSlice {
+    // Only used (possibly) to trim the file without breaking syntax highlighting. This is not optional, unlike
+    // the `line` property of a `StackTraceFileLocation`.
+    // (-- api-linter: core::0141::forbidden-types=disabled
+    //     aip.dev/not-precedent: These really shouldn't have negative values. --)
+    uint32 line_offset = 1;
+
+    // Slice of a file with the respective OS-specific line terminator.
+    string content = 2;
+}
+
+// More specific location details of a file: its path, precise line and column numbers if applicable, and function name if available.
+// In essence, a pointer to a location in a file
+message StackTraceFileLocation {
+    // Path to source file (absolute or relative).
+    // If the paths are relative, ensure that they are all relative to the same root.
+    string file_path = 1;
+
+    // Optional; If possible, SDK should send this -- this is required for displaying the code location.
+    // If not provided, set to -1.
+    int32 line = 2;
+
+    // Optional; if possible, SDK should send this.
+    // If not provided, set to -1.
+    int32 column = 3;
+
+    // Function name this line belongs to, if applicable.
+    // Used for falling back to stack trace view.
+    string function_name = 4;
+    
+    // Flag to communicate whether a location should be hidden by default in the stack view.
+    bool internal_code = 5;
+}
+
+// Collection of FileLocation messages from a single stack.
+message StackTrace {
+    // Collection of `FileLocation`s, each for a stack frame that comprise a stack trace.
+    repeated StackTraceFileLocation locations = 1;
+}

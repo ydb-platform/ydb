@@ -1,0 +1,179 @@
+// SPDX-Copyright: Copyright (c) Capital One Services, LLC
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2020 Capital One Services, LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and limitations under the License.
+
+
+// From https://github.com/google/cel-spec
+// Modified in several ways:
+// - EBNF to Lark: Rules are all lower case, No terminating ; on rules, Regexes wrapped in //, Replace ::= with :.
+// - Strings expanded to include escapes and rewritten to be pure regex.
+// - FLOAT_LIT expanded
+// - Terminals reordered to reflect priorities better.
+
+// A number of rules used ! annotation to capture tokens.
+// These were rewritten to expand into specific, named rules and avoid a need for the Lark "!" construct.
+
+expr           : conditionalor ["?" conditionalor ":" expr]
+
+conditionalor  : [conditionalor "||"] conditionaland
+
+conditionaland : [conditionaland "&&"] relation
+
+// Original...
+// !relation       : [relation relop] addition
+// !relop          : "<" | "<=" | ">=" | ">" | "==" | "!=" | "in"
+
+// Expose operators in the AST.
+relation       : [relation_lt | relation_le | relation_ge | relation_gt | relation_eq | relation_ne | relation_in] addition
+relation_lt    : relation "<"
+relation_le    : relation "<="
+relation_gt    : relation ">"
+relation_ge    : relation ">="
+relation_eq    : relation "=="
+relation_ne    : relation "!="
+relation_in    : relation "in"
+
+// Original...
+// !addition      : [addition ("+" | "-")] multiplication
+
+// Expose operators in the AST.
+addition       : [addition_add | addition_sub] multiplication
+addition_add   : addition "+"
+addition_sub   : addition "-"
+
+// Original...
+// !multiplication: [multiplication ("*" | "/" | "%")] unary
+
+// Expose operators in the AST.
+multiplication : [multiplication_mul | multiplication_div | multiplication_mod] unary
+multiplication_mul : multiplication "*"
+multiplication_div : multiplication "/"
+multiplication_mod : multiplication "%"
+
+// Original...
+// !unary         : member
+//                | "!" "!"* member
+//                | "-" "-"* member
+
+// Expose operators in the AST
+// Option 1: zero or more token nodes; requires some care to handle sequence of operations.
+//unary          : [unary_not | unary_neg]* member
+
+// Option 2: separate expressions; doesn't maintain type safetly, allows ~!~!~!~!~x syntax which isn't really ideal.
+unary          : member
+               | unary_not unary
+               | unary_neg unary
+
+unary_not      : "!"
+unary_neg      : "-"
+
+
+// Original...
+// !member        : primary
+//                | member "." IDENT ["(" [exprlist] ")"]
+//                | member "[" expr "]"
+//                | member "{" [fieldinits] "}"
+
+// Expose constructs in the AST.
+member         : member_dot | member_dot_arg | member_index | member_object | primary
+member_dot     : member "." IDENT
+member_dot_arg : member "." IDENT "(" [exprlist] ")"
+member_index   : member "[" expr "]"
+member_object  : member "{" [fieldinits] "}"
+
+
+// Original...
+// !primary       : ["."] IDENT ["(" [exprlist] ")"]
+//                | "(" expr ")"
+//                | "[" [exprlist] "]"
+//                | "{" [mapinits] "}"
+//                | literal
+
+// Expose constructs in the AST.
+primary        : literal | dot_ident_arg | dot_ident | ident_arg
+               | paren_expr | list_lit | map_lit | ident
+dot_ident_arg  : "." IDENT "(" [exprlist] ")"
+dot_ident      : "." IDENT
+ident_arg      : IDENT "(" [exprlist] ")"
+ident          : IDENT
+paren_expr     : "(" expr ")"
+list_lit       : "[" [exprlist] "]"
+map_lit        : "{" [mapinits] "}"
+
+exprlist       : expr ("," expr)*
+
+fieldinits     : IDENT ":" expr ("," IDENT ":" expr)*
+
+mapinits       : expr ":" expr ("," expr ":" expr)*
+
+// Elevated from Terminals to expose the type name in the AST.
+literal        : UINT_LIT | FLOAT_LIT | INT_LIT | MLSTRING_LIT | STRING_LIT | BYTES_LIT
+               | BOOL_LIT | NULL_LIT
+
+// Terminals. Order of some definitions altered to help lark.
+
+// Signs added (see https://github.com/google/cel-spec/issues/126)
+INT_LIT        : /-?/ /0x/ HEXDIGIT+ | /-?/ DIGIT+
+
+UINT_LIT       : INT_LIT /[uU]/
+
+// Original...
+// FLOAT_LIT      : DIGIT* . DIGIT+ EXPONENT? | DIGIT+ EXPONENT
+
+// Expanded and signs added (see  https://github.com/google/cel-spec/issues/126)
+FLOAT_LIT      : /-?/ DIGIT+ "." DIGIT* EXPONENT? | /-?/ DIGIT* "." DIGIT+ EXPONENT? | /-?/ DIGIT+ EXPONENT
+
+DIGIT          : /[0-9]/
+
+HEXDIGIT       : /[0-9abcdefABCDEF]/
+
+EXPONENT       : /[eE]/ /[+-]?/ DIGIT+
+
+// Rewritten into REGEX; explicitly list the escapes
+
+STRING_LIT     : /[rR]?"(?:\\[abfnrtv"'\\]|\\\d{3}|\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4-8}|.)*?"/
+               | /[rR]?'(?:\\[abfnrtv"'\\]|\\\d{3}|\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}|.)*?'/
+
+MLSTRING_LIT   : /[rR]?"""(?:\\[abfnrtv"'\\]|\\\d{3}|\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4-8}|\r\n|\r|\n|.)*?"""/
+               | /[rR]?'''(?:\\[abfnrtv"'\\]|\\\d{3}|\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}|\r\n|\r|\n|.)*?'''/
+
+BYTES_LIT      : /[bB]/ MLSTRING_LIT | /[bB]/ STRING_LIT
+
+// Moved into STRING_LIT and MLSTRING_LIT, no longer needed.
+
+// ESCAPE         : /\\[bfnrt"'\\]/
+//                 | /\\x/ HEXDIGIT HEXDIGIT
+//                 | /\\u/ HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT
+//                 | /\\[0-3][0-7][0-7]/
+
+// NEWLINE        : /\\r\\n/ | /\\r/ | /\\n/
+
+BOOL_LIT       : "true" | "false"
+
+NULL_LIT       : "null"
+
+IDENT          : /[_a-zA-Z][_a-zA-Z0-9]*/
+
+RESERVED.0       : "as" | "break" | "const" | "continue" | "else"
+               | "for" | "function" | "if" | "import" | "let"
+               | "loop" | "package" | "namespace" | "return"
+               | "var" | "void" | "while"
+
+
+WHITESPACE     : /[\t\n\f\r ]+/
+
+COMMENT        : /\/\/.*/
+
+%ignore WHITESPACE
+%ignore COMMENT

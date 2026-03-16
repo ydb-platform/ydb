@@ -1,0 +1,11 @@
+--- contrib/restricted/boost/geometry/include/boost/geometry/algorithms/detail/buffer/get_piece_turns.hpp       (index)
++++ contrib/restricted/boost/geometry/include/boost/geometry/algorithms/detail/buffer/get_piece_turns.hpp       (working tree)
+@@ -50,6 +50,7 @@ struct unique_sub_range_from_piece
+         : m_ring(ring)
+         , m_iterator_at_i(iterator_at_i)
+         , m_iterator_at_j(iterator_at_j)
++        , m_iterator_at_k()
+         , m_point_retrieved(false)
+     {}
+ 
+

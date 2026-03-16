@@ -1,0 +1,9 @@
+--- contrib/python/nbconvert/nbconvert/filters/ansi.py	(index)
++++ contrib/python/nbconvert/nbconvert/filters/ansi.py	(working tree)
+@@ -7,2 +7,3 @@
+ import jinja2
++import markupsafe
+ 
+@@ -60,1 +61,1 @@ def ansi2html(text):
+-    text = jinja2.utils.escape(text)
++    text = markupsafe.escape(text)

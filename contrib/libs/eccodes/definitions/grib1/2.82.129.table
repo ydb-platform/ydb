@@ -1,0 +1,120 @@
+1 msl MSL Pressure reduced to MSL Pa
+11 t T Temperature K
+12 tiw TIW Wet bulb temperature K
+13 mean2t24 MEAN2T24 24 hour mean of 2 meter temperature K
+15 tmax TMAX Maximum temperature K
+16 tmin TMIN Minimum temperature K
+20 vis VIS Visibility m
+32 fg FG Wind gusts m/s
+33 u U u-component of wind m/s
+34 v V v-component of wind m/s
+52 r R Relative humidity %
+71 tcc TCC Total cloud cover fraction
+73 lcc LCC Low cloud cover fraction
+74 mcc MCC Medium cloud cove fraction
+75 hcc HCC High cloud cover fraction
+77 frsigc FRSIGC Fraction of significant clouds fraction
+78 cbsigc CBSIGC Cloud base of significant clouds m
+79 ctsigc CTSIGC Cloud top of significant clouds m
+128 vptmp VPTMP Virtual potential temperature K
+129 heatx HEATX Heat index K
+130 wcf WCF Wind chill factor K
+131 snohf SNOHF Snow phase change heat flux W/m2
+132 skt SKT Skin temperature K
+133 snoag SNOAG Snow age day
+134 absh ABSH Absolute humidity kg/m3
+135 ptype PTYPE Precipitation type code
+136 iliqw ILIQW Integrated liquid water kg/m2
+137 tcond TCOND Condensate kg/kg
+138 clwmr CLWMR Cloud mixing ratio kg/kg
+139 icmr ICMR Ice water mixing ratio kg/kg
+140 rwmr RWMR Rain mixing ratio kg/kg
+141 snmr SNMR Snow mixing ratio kg/kg
+142 mconv MCONV Horizontal moisture convergence kg/kg/s
+143 pwcat PWCAT Precipitable water category code
+144 hail HAIL Hail m
+145 prtype PRTYPE Type of precipitation code
+146 prsort PRSORT Sort of precipitation code
+150 grle GRLE Graupel kg/kg
+151 crain CRAIN Categorical rain code
+152 cfrzr CFRZR Categorical freezing rain code
+153 cicep CICEP Categorical ice pellets code
+154 csnow CSNOW Categorical snow code
+155 cprat CPRAT Convective precipitation rate kg/m2/s
+156 mconv MCONV Horizontal moisture divergence kg/kg/s
+157 cpofp CPOFP Percent frozen precipitation %
+158 pev PEV Potential evaporation kg/m2
+159 pevpr PEVPR Potential evaporation rate W/m2
+160 snowc SNOWC Snow cover %
+161 prec6h PREC6H 6 hour precipitation mm
+162 prec12h PREC12H 12 hour precipitation mm
+163 prec18h PREC18H 18 hour precipitation mm
+164 prec24h PREC24H 24 hour precipitation mm
+165 prec1h PREC1H 1 hour precipitation mm
+166 prec2h PREC2H 2 hour precipitation mm
+167 prec3h PREC3H 3 hour precipitation mm
+168 prec9h PREC9H 9 hour precipitation mm
+169 prec15h PREC15H 15 hour precipitation mm
+171 frsn6h FRSN6H 6 hour fresh snow cover cm
+172 frsn12h FRSN12H 12 hour fresh snow cover cm
+173 frsn18h FRSN18H 18 hour fresh snow cover cm
+174 frsn24h FRSN24H 24 hour fresh snow cover cm
+175 frsn1h FRSN1H 1 hour fresh snow cover cm
+176 frsn2h FRSN2H 2 hour fresh snow cover cm
+177 frsn3h FRSN3H 3 hour fresh snow cover cm
+178 frsn9h FRSN9H 9 hour fresh snow cover cm
+179 frsn15h FRSN15H 15 hour fresh snow cover cm
+181 prec6h_cor PREC6H_COR 6 hour precipitation, corrected mm
+182 prec12h_cor PREC12H_COR 12 hour precipitation, corrected mm
+183 prec18h_cor PREC18H_COR 18 hour precipitation, corrected mm
+184 prec24h_cor PREC24H_COR 24 hour precipitation, corrected mm
+185 prec1h_cor PREC1H_COR 1 hour precipitation, corrected mm
+186 prec2h_cor PREC2H_COR 2 hour precipitation, corrected mm
+187 prec3h_cor PREC3H_COR 3 hour precipitation, corrected mm
+188 prec9h_cor PREC9H_COR 9 hour precipitation, corrected mm
+189 prec15h_cor PREC15H_COR 15 hour precipitation, corrected mm
+191 frsn6h_cor FRSN6H_COR 6 hour fresh snow cover, corrected cm
+192 frsn12h_cor FRSN12H_COR 12 hour fresh snow cover, corrected cm
+193 frsn18h_cor FRSN18H_COR 18 hour fresh snow cover, corrected cm
+194 frsn24h_cor FRSN24H_COR 24 hour fresh snow cover, corrected cm
+195 frsn1h_cor FRSN1H_COR 1 hour fresh snow cover, corrected cm
+196 frsn2h_cor FRSN2H_COR 2 hour fresh snow cover, corrected cm
+197 frsn3h_cor FRSN3H_COR 3 hour fresh snow cover, corrected cm
+198 frsn9h_cor FRSN9H_COR 9 hour fresh snow cover, corrected cm
+199 frsn15h_cor FRSN15H_COR 15 hour fresh snow cover, corrected cm
+201 prec6h_sta PREC6H_STA 6 hour precipitation, standardized mm
+202 prec12h_sta PREC12H_STA 12 hour precipitation, standardized mm
+203 prec18h_sta PREC18H_STA 18 hour precipitation, standardized mm
+204 prec24h_sta PREC24H_STA 24 hour precipitation, standardized mm
+205 prec1h_sta PREC1H_STA 1 hour precipitation, standardized mm
+206 prec2h_sta PREC2H_STA 2 hour precipitation, standardized mm
+207 prec3h_sta PREC3H_STA 3 hour precipitation, standardized mm
+208 prec9h_sta PREC9H_STA 9 hour precipitation, standardized mm
+209 prec15h_sta PREC15H_STA 15 hour precipitation, standardized mm
+211 frsn6h_sta FRSN6H_STA 6 hour fresh snow cover, standardized cm
+212 frsn12h_sta FRSN12H_STA 12 hour fresh snow cover, standardized cm
+213 frsn18h_sta FRSN18H_STA 18 hour fresh snow cover, standardized cm
+214 frsn24h_sta FRSN24H_STA 24 hour fresh snow cover, standardized cm
+215 frsn1h_sta FRSN1H_STA 1 hour fresh snow cover, standardized cm
+216 frsn2h_sta FRSN2H_STA 2 hour fresh snow cover, standardized cm
+217 frsn3h_sta FRSN3H_STA 3 hour fresh snow cover, standardized cm
+218 frsn9h_sta FRSN9H_STA 9 hour fresh snow cover, standardized cm
+219 frsn15h_sta FRSN15H_STA 15 hour fresh snow cover, standardized cm
+221 prec6h_corsta PREC6H_CORSTA 6 hour precipitation, corrected and standardized mm
+222 prec12h_corsta PREC12H_CORSTA 12 hour precipitation, corrected and standardized mm
+223 prec18h_corsta PREC18H_CORSTA 18 hour precipitation, corrected and standardized mm
+224 prec24h_corsta PREC24H_CORSTA 24 hour precipitation, corrected and standardized mm
+225 prec1h_corsta PREC1H_CORSTA 1 hour precipitation, corrected and standardized mm
+226 prec2h_corsta PREC2H_CORSTA 2 hour precipitation, corrected and standardized mm
+227 prec3h_corsta PREC3H_CORSTA 3 hour precipitation, corrected and standardized mm
+228 prec9h_corsta PREC9H_CORSTA 9 hour precipitation, corrected and standardized mm
+229 prec15h_corsta PREC15H_CORSTA 15 hour precipitation, corrected and standardized mm
+231 frsn6h_corsta FRSN6H_CORSTA 6 hour fresh snow cover, corrected and standardized cm
+232 frsn12h_corsta FRSN12H_CORSTA 12 hour fresh snow cover, corrected and standardized cm
+233 frsn18h_corsta FRSN18H_CORSTA 18 hour fresh snow cover, corrected and standardized cm
+234 frsn24h_corsta FRSN24H_CORSTA 24 hour fresh snow cover, corrected and standardized cm
+235 frsn1h_corsta FRSN1H_CORSTA 1 hour fresh snow cover, corrected and standardized cm
+236 frsn2h_corsta FRSN2H_CORSTA 2 hour fresh snow cover, corrected and standardized cm
+237 frsn3h_corsta FRSN3H_CORSTA 3 hour fresh snow cover, corrected and standardized cm
+238 frsn9h_corsta FRSN9H_CORSTA 9 hour fresh snow cover, corrected and standardized cm
+239 frsn15h_corsta FRSN15H_CORSTA 15 hour fresh snow cover, corrected and standardized cm

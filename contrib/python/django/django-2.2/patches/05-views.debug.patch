@@ -1,0 +1,55 @@
+--- contrib/python/django/django-2.2/django/views/debug.py	(index)
++++ contrib/python/django/django-2.2/django/views/debug.py	(working tree)
+@@ -2,7 +2,7 @@ import functools
+ import re
+ import sys
+ import types
+-from pathlib import Path
++import io, pkgutil
+ 
+ from django.conf import settings
+ from django.http import HttpResponse, HttpResponseNotFound
+@@ -28,8 +28,6 @@ HIDDEN_SETTINGS = re.compile('API|TOKEN|KEY|SECRET|PASS|SIGNATURE', flags=re.IGN
+ 
+ CLEANSED_SUBSTITUTE = '********************'
+ 
+-CURRENT_DIR = Path(__file__).parent
+-
+ 
+ class CallableSettingWrapper:
+     """
+@@ -328,14 +326,14 @@ class ExceptionReporter:
+ 
+     def get_traceback_html(self):
+         """Return HTML version of debug 500 HTTP error page."""
+-        with Path(CURRENT_DIR, 'templates', 'technical_500.html').open(encoding='utf-8') as fh:
++        with io.StringIO(pkgutil.get_data(__package__, 'templates/technical_500.html').decode('utf-8')) as fh:
+             t = DEBUG_ENGINE.from_string(fh.read())
+         c = Context(self.get_traceback_data(), use_l10n=False)
+         return t.render(c)
+ 
+     def get_traceback_text(self):
+         """Return plain text version of debug 500 HTTP error page."""
+-        with Path(CURRENT_DIR, 'templates', 'technical_500.txt').open(encoding='utf-8') as fh:
++        with io.StringIO(pkgutil.get_data(__package__, 'templates/technical_500.txt').decode('utf-8')) as fh:
+             t = DEBUG_ENGINE.from_string(fh.read())
+         c = Context(self.get_traceback_data(), autoescape=False, use_l10n=False)
+         return t.render(c)
+@@ -494,7 +492,7 @@ def technical_404_response(request, exception):
+             module = obj.__module__
+             caller = '%s.%s' % (module, caller)
+ 
+-    with Path(CURRENT_DIR, 'templates', 'technical_404.html').open() as fh:
++    with io.StringIO(pkgutil.get_data(__package__, 'templates/technical_404.html').decode('utf-8')) as fh:
+         t = DEBUG_ENGINE.from_string(fh.read())
+     c = Context({
+         'urlconf': urlconf,
+@@ -511,7 +509,7 @@ def technical_404_response(request, exception):
+ 
+ def default_urlconf(request):
+     """Create an empty URLconf 404 error response."""
+-    with Path(CURRENT_DIR, 'templates', 'default_urlconf.html').open() as fh:
++    with io.StringIO(pkgutil.get_data(__package__, 'templates/default_urlconf.html').decode('utf-8')) as fh:
+         t = DEBUG_ENGINE.from_string(fh.read())
+     c = Context({
+         'version': get_docs_version(),

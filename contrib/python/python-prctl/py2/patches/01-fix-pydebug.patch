@@ -1,0 +1,54 @@
+--- contrib/python/python-prctl/py2/_prctlmodule.c	(index)
++++ contrib/python/python-prctl/py2/_prctlmodule.c	(working tree)
+@@ -426,9 +426,8 @@ prctl_prctl(PyObject *self, PyObject *args)
+  * encoded copy of it. We try to find the real one by going back from the start
+  * of environ.
+  */
+-static char * encode(wchar_t *wstr) {
++static PyObject * encode(wchar_t *wstr) {
+     PyObject *unicodestr = NULL, *bytesstr = NULL;
+-    char *str = NULL;
+ 
+     unicodestr = PyUnicode_FromWideChar(wstr, -1);
+     if(!unicodestr) {
+@@ -443,16 +442,15 @@ static char * encode(wchar_t *wstr) {
+         return NULL;
+     }
+ 
+-    str = PyBytes_AsString(bytesstr);
+     Py_XDECREF(unicodestr);
+-    Py_XDECREF(bytesstr);
+-    return str;
++    return bytesstr;
+ }
+ 
+ static int _Py_GetArgcArgv(int* argc, char ***argv) {
+     int i = 0;
+     wchar_t **argv_w;
+     char **buf = NULL , *arg0 = NULL, *ptr = 0, *limit = NULL;
++    PyObject *bytesstr = NULL;
+ 
+     Py_GetArgcArgv(argc, &argv_w);
+     if (*argc < 1 || argv_w == NULL) {
+@@ -476,17 +474,20 @@ static int _Py_GetArgcArgv(int* argc, char ***argv) {
+     }
+ 
+     /* Now try to find argv[0] */
+-    arg0 = encode(argv_w[0]);
++    bytesstr = encode(argv_w[0]);
++    arg0 = PyBytes_AsString(bytesstr);
+     if(!arg0) {
+         free(buf);
+         return 0;
+     }
+     ptr -= strlen(arg0);
+     if(strcmp(ptr, arg0)) {
++        Py_XDECREF(bytesstr);
+         free(buf);
+         return 0;
+     }
+ 
++    Py_XDECREF(bytesstr);
+     buf[0] = ptr;
+     *argv = buf;
+     return 1;

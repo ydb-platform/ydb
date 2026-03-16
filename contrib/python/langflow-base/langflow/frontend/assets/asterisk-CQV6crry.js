@@ -1,0 +1,1 @@
+import{a8 as a}from"./index-Cp3b7MWQ.js";const e=[["path",{d:"M12 6v12",key:"1vza4d"}],["path",{d:"M17.196 9 6.804 15",key:"1ah31z"}],["path",{d:"m6.804 9 10.392 6",key:"1b6pxd"}]],d=a("asterisk",e);export{e as __iconNode,d as default};

@@ -1,0 +1,162 @@
+# Code table 4.252 - Tile classes and groupings
+0 0 Reserved
+1 SEOC Seas and oceans
+2 INWB Inland water bodies
+3 BARE Bare areas
+4 HIV High vegetation
+5 LOV Low vegetation
+6 URBAN Urban
+# 7-1000 Reserved for intercomparison tile classes/groupings
+1001 SEAO Sea and oceans
+1002 LAKE Lakes
+1003 RIVE Rivers
+1004 NO Bare land
+1005 ROCK Bare rock
+1006 SNOW Permanent snow
+1007 BOBD Boreal broadleaf deciduous
+1008 TEBD Temperate broadleaf deciduous
+1009 TRBD Tropical broadleaf deciduous
+1010 TEBE Temperate broadleaf evergreen
+1011 TRBE Tropical broadleaf evergreen
+1012 BONE Boreal needleleaf evergreen
+1013 TENE Temperate needleleaf evergreen
+1014 BOND Boreal needleleaf deciduous
+1015 SHRB Shrubs
+1016 BOGR Boreal grassland
+1017 GRAS Temperate grassland
+1018 TROG Tropical grassland
+1019 C3W Winter C3 crops
+1020 C3S Summer C3 crops
+1021 C4 C4 crops
+1022 FLTR Flooded trees
+1023 FLGR Flooded grassland
+1024 LCZ1 Local climate zone 1: compact high-rise (buildings)
+1025 LCZ2 Local climate zone 2: compact midrise (buildings)
+1026 LCZ3 Local climate zone 3: compact low-rise (buildings)
+1027 LCZ4 Local climate zone 4: open high-rise (buildings)
+1028 LCZ5 Local climate zone 5: open midrise (buildings)
+1029 LCZ6 Local climate zone 6: open low-rise (buildings)
+1030 LCZ7 Local climate zone 7: lightweight low-rise (buildings)
+1031 LCZ8 Local climate zone 8: large low-rise (buildings)
+1032 LCZ9 Local climate zone 9: sparsely built (buildings)
+1033 LCZ10 Local climate zone 10: heavy industry (buildings)
+1034 TEBDU Urban temperate broadleaf deciduous
+1035 TRBDU Urban tropical broadleaf deciduous
+1036 TEBEU Urban temperate broadleaf evergreen
+1037 TRBEU Urban tropical broadleaf evergreen
+1038 BONEU Urban boreal needleleaf evergreen
+1039 TENEU Urban temperate needleleaf evergreen
+1040 BONDU Urban boreal needleleaf deciduous
+# 1041-1500 Reserved for tile class entries for tile models using the ECOCLIMAP-SG land cover survey
+1501 GNATU Nature grouping (NO + ROCK + SNOW + BOBD + TEBD + TRBD + TEBE + TRBE + BONE + TENE + BOND + SHRB + BOGR + GRAS + TROG + C3W + C3S + C4 + FLTR + FLGR)
+1502 GNOFO Non-forest grouping (NO + ROCK + SNOW + BOGR + GRAS + TROG + C3W + C3S + C4 + FLTR + FLGR)
+1503 GFORE Forest grouping (BOBD + TEBD + TRBD + TEBE + TRBE + BONE + TENE + BOND + SHRB)
+1504 GNOVE Non-vegetated grouping (NO + ROCK + SNOW)
+1505 GTREE Trees grouping (BOBD + TEBD + TRBD + TEBE + TRBE + BONE + TENE + BOND + SHRB + FLTR)
+1506 GLVEG Low vegetation grouping (BOGR + GRAS + TROG + C3W + C3S + C4 + FLGR)
+1507 GNFLV Non-flooded low vegetation grouping (BOGR + GRAS + TROG + C3W + C3S + C4)
+1508 GCROP Crops grouping (C3W + C3S + C4)
+1509 GGRAS Grassland grouping (BOGR + GRAS + TROG)
+1510 GBARO Bare and rock grouping (NO + ROCK)
+1511 GC3CR C3 crops grouping (C3W + C3S)
+1512 GBFOR Broadleaf forest grouping (BOBD + TEBD + TRBD + TEBE + TRBE + SHRB)
+1513 GNFOR Needleleaf forest grouping (BONE + TENE + BOND)
+1514 GDBFO Deciduous broadleaf forest grouping (BOBD + TEBD + TRBD + TEBE + SHRB)
+1515 GTGRA Temperate grassland grouping (BOGR + GRAS)
+1516 GNFNF Non-forest (no FLTR) grouping (NO + ROCK + SNOW + BOGR + GRAS + TROG + C3W + C3S + C4 + FLGR)
+1517 GBFFT Broadleaf forest (with FLTR) grouping (BOBD + TEBD + TRBD + TEBE + TRBE + SHRB + FLTR)
+1518 GBTRE Broadleaf trees grouping (BOBD + TEBD + TRBD + TEBE + TRBE + FLTR)
+1519 GCGRA C3/C4 grasslands grouping (BOGR + GRAS + FLGR)
+1520 GBDTR Broadleaf deciduous trees grouping (BOBD + TEBD + TRBD + FLTR)
+1521 GBETR Broadleaf evergreen trees grouping (TEBE + TRBE)
+1522 GNETR Needleleaf evergreen trees grouping (BONE + TENE)
+1523 GLCZU LCZ or urban grouping (LCZ1 + LCZ2 + LCZ3 + LCZ4 + LCZ5 + LCZ6 + LCZ7 + LCZ8 + LCZ9 + LCZ10)
+1524 GIWAT Inland water grouping (LAKE + RIVE)
+1525 GPTEBD Urban parks and gardens TEBD grouping (NO + GRAS + TEBDU)
+1526 GPTRBD Urban parks and gardens TRBD grouping (NO + GRAS + TRBDU)
+1527 GPTEBE Urban parks and gardens TEBE grouping (NO + GRAS + TEBEU)
+1528 GPTRBE Urban parks and gardens TRBE grouping (NO + GRAS + TRBEU)
+1529 GPBONE Urban parks and gardens BONE grouping (NO + GRAS + BONEU)
+1530 GPTENE Urban parks and gardens TENE grouping (NO + GRAS + TENEU)
+1531 GPBOND Urban parks and gardens BOND grouping (NO + GRAS + BONDU)
+# 1532-2000 Reserved for tile grouping entries for tile models using the ECOCLIMAP-SG land cover survey
+2001 CRMF Crops, mixed farming
+2002 SHGR Short grass
+2003 EVNE Evergreen needleleaf trees
+2004 DENE Deciduous needleleaf trees
+2005 DEBR Deciduous broadleaf trees
+2006 EVBR Evergreen broadleaf trees
+2007 TAGR Tall grass
+2008 DESE Desert
+2009 TUND Tundra
+2010 IRCR Irrigated crops
+2011 SEDE Semidesert
+2012 ICGL Ice caps and glaciers
+2013 BOMA Bogs and marshes
+2014 INWA Inland water
+2015 OCEA Ocean
+2016 EVSH Evergreen shrubs
+2017 DESH Deciduous shrubs
+2018 MFWO Mixed forest/woodland
+2019 INFO Interrupted forest
+2020 WLMI Water and land mixtures
+2021 BASO Bare soil
+2022 URBA Urban
+2023 LORI Low-rise building
+2024 HIRI High-rise building
+# 2025-2500 Reserved for tile class entries for tile models using the GLCC v2.0 BATS Classification survey
+2501 GLVE Low vegetation grouping (CRMF + SHGR + TAGR + TUND + IRCR + SEDE + BOMA + EVSH + DESH + WLMI)
+2502 GHVE High vegetation grouping (EVNE + DENE + DEBR + EVBR + MFWO + INFO)
+# 2503-3000 Reserved for tile grouping entries for tile models using the GLCC v2.0 BATS Classification survey
+3001 PFIC Post-flooding or irrigated croplands
+3002 RACR Rainfed croplands
+3003 MCVE Mosaic cropland (50-70%) / vegetation (grassland, shrubland, forest) (20-50%)
+3004 MVCR Mosaic vegetation (grassland, shrubland, forest) (50-70%) / cropland (20-50%)
+3005 COBS Closed to open (>15%) broadleaved evergreen and/or semi-deciduous forest (>5m)
+3006 CLBD Closed (>40%) broadleaved deciduous forest (>5m)
+3007 OPBD Open (15-40%) broadleaved deciduous forest (>5m)
+3008 CLNE Closed (>40%) needleleaved evergreen forest (>5m)
+3009 ONDE Open (15-40%) needleleaved deciduous or evergreen forest (>5m)
+3010 COBN Closed to open (>15%) mixed broadleaved and needleleaved forest (>5m)
+3011 MFSG Mosaic forest/shrubland (50-70%) / grassland (20-50%)
+3012 MGFS Mosaic grassland (50-70%) / forest / shrubland (20-50%)
+3013 COSH Closed to open (>15%) shrubland (<5m)
+3014 COHV Closed to open (>15%) herbaceous vegetation
+3015 SPVE Sparse (<15%) vegetation (woody vegetation, shrubs, grassland)
+3016 COBFF Closed to open (>15%) broadleaved forest regularly flooded (semi-permanently or temporarily) - fresh or brackish water
+3017 CLBFF Closed (>40%) broadleaved forest or shrubland permanently flooded - saline or brackish water
+3018 COVEF Closed to open (>15%) vegetation (grassland, shrubland, woody vegetation) on regularly flooded or waterlogged soil - fresh, brackish or saline water
+3019 ASAA Artificial surfaces and associated areas (urban areas >50%)
+3020 BAAR Bare areas
+3021 WABO Water bodies
+3022 PESI Permanent snow and ice
+# 3023-3500 Reserved for tile class entries for tile models using the ESA-GlobCover GCV2009 survey
+3501 GRDT Grouping using the dominant tiles approach (dominant tile varies per gridbox)
+# 3502-4000 Reserved for tile grouping entries for tile models using the ESA-GlobCover GCV2009 survey
+4001 TBECO Tree cover, broadleaved evergreen, closed to open (>15%)
+4002 TBDC Tree cover, broadleaved deciduous, closed (>40%)
+4003 TBDO Tree cover, broadleaved deciduous, open (15-40%)
+4004 TNECO Tree cover, needleleaved evergreen, closed to open (>15%)
+4005 TNDCO Tree cover, needleleaved decidous, closed to open (>15%)
+4006 TMLCO Tree cover, mixed leaftype, closed to open (>15%)
+4007 TCOFF Tree cover, closed to open (>15%), regularly flooded, fresh or brackish water: swamp forests
+4008 TCOFS Tree cover, closed to open (>15%), regularly flooded, saline water: mangrove forests
+4009 MTVG Mosaic of tree cover and other natural vegetation (crop component possible)
+4010 TBURN Tree Cover, burnt (mainly boreal forests)
+4011 SCOE Shrubcover, closed to open (>15%), evergreen (broadleaved or needleleaved)
+4012 SCOD Shrubcover, closed to open (>15%), deciduous (broadleaved)
+4013 HCCO Herbaceous cover, closed to open (>15%)
+4014 SHSC Sparse herbaceous or sparse shrub cover
+4015 FSHCO Regularly flooded (>2 month) shrub or herbaceous cover, closed to open
+4016 CROP Cropland (upland crops or inundated/ flooded crops)
+4017 MCTNV Mosaic of cropland / tree cover/ other natural vegetation
+4018 MCSH Mosaic of cropland / shrub or herbaceous cover
+4019 BAARE Bare areas
+4020 WBNA Water bodies (natural or artificial)
+4021 SINA Snow or ice (natural or artificial)
+4022 URAR Urban areas
+# 4023-4500 Reserved for tile class entries for tile models using the European Commission-Global Land Cover Project GLC2000 survey
+# 4501-5000 Reserved for tile grouping entries for tile models using the European Commission-Global Land Cover Project GLC2000 survey
+# 5001-32767 Reserved for additional land cover surveys
+# 32768-65534 Reserved for local use
+65535 65535 Missing

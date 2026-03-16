@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.idp;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/idp;idp";
+option java_package = "yandex.cloud.api.organizationmanager.v1.idp";
+
+// A user in the Identity Provider system.
+//
+// Users are created within a userpool and can authenticate to access cloud resources.
+// Each user has a unique identifier, credentials, and profile information.
+message User {
+  // Represents the current status of a user in the Identity Provider system.
+  enum Status {
+    // The status is not specified.
+    STATUS_UNSPECIFIED = 0;
+    // The user is in the process of being created.
+    CREATING = 4;
+    // The user is active and can authenticate.
+    // Active users have full access to the system according to their permissions.
+    ACTIVE = 1;
+    // The user is suspended and cannot authenticate.
+    // Suspended users retain their data but cannot access the system.
+    SUSPENDED = 2;
+    // The user is in the process of being deleted.
+    // This is a transitional state before the user is completely removed from the system.
+    DELETING = 3;
+  }
+
+  // Unique identifier of the user.
+  // This ID is generated automatically when the user is created.
+  string id = 1;
+  
+  // ID of the userpool this user belongs to.
+  // To get the userpool ID, make a [UserpoolService.List] request.
+  string userpool_id = 2;
+  
+  // Current status of the user.
+  // Determines whether the user can authenticate and access the system.
+  Status status = 3;
+  
+  // Username used for authentication.
+  // Usually in the format of an email address.
+  string username = 4;
+  
+  // User's full name (display name).
+  // This is typically shown in the UI and used for identification purposes.
+  string full_name = 6;
+  
+  // User's first name.
+  // Part of the user's profile information.
+  string given_name = 7;
+  
+  // User's last name.
+  // Part of the user's profile information.
+  string family_name = 8;
+  
+  // User's email address.
+  string email = 9;
+  
+  // User's phone number.
+  string phone_number = 10;
+  
+  // Timestamp when the user was created.
+  google.protobuf.Timestamp created_at = 11;
+  
+  // Timestamp when the user was last updated.
+  google.protobuf.Timestamp updated_at = 12;
+  
+  // External identifier for federation with external identity systems.
+  // This ID can be used to link this user with an account in an external system.
+  string external_id = 13;
+
+  // User's company name.
+  string company_name = 14;
+
+  // User's department.
+  string department = 15;
+
+  // User's job title.
+  string job_title = 16;
+
+  // User's employee ID
+  string employee_id = 17;
+  
+  reserved 5;
+}

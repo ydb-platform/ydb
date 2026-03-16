@@ -1,0 +1,60 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.20, Radar product
+codetable[1] parameterCategory('4.1.[discipline:l].table',masterDir,localDir) : dump;
+
+# Parameter number
+codetable[1] parameterNumber('4.2.[discipline:l].[parameterCategory:l].table',masterDir,localDir) : dump;
+meta parameterUnits codetable_units(parameterNumber) : dump;
+meta parameterName  codetable_title(parameterNumber) : dump;
+
+codetable[1] typeOfGeneratingProcess('4.3.table',masterDir,localDir) : dump;
+
+# Number of radar sites used
+unsigned[1] numberOfRadarSitesUsed : dump;
+
+codetable[1] indicatorOfUnitForForecastTime('4.4.table',masterDir,localDir) : dump;
+alias indicatorOfUnitOfTimeRange = indicatorOfUnitForForecastTime;
+include "grib2/stepUnits.def"
+
+# Site latitude (in microdegrees)
+unsigned[4] siteLatitude : dump;
+
+# Site longitude (in microdegrees)
+unsigned[4] siteLongitude : dump;
+
+# Site elevation (meters)
+unsigned[2] siteElevation : dump;
+
+# Site ID (alphanumeric)
+unsigned[4] siteId : dump;
+
+# Site ID (numeric)
+unsigned[2] siteId : dump;
+
+# Operating mode
+codetable[1] operatingMode('4.12.table',masterDir,localDir) : dump;
+
+# Reflectivity calibration constant (tenths of dB)
+unsigned[1] reflectivityCalibrationConstant : dump;
+
+# Quality control indicator
+codetable[1] qualityControlIndicator('4.13.table',masterDir,localDir) : dump;
+
+# Clutter filter indicator
+codetable[1] clutterFilterIndicator('4.14.table',masterDir,localDir) : dump;
+
+# Constant antenna elevation angle (tenths of degree true)
+unsigned[1] constantAntennaElevationAngle : dump;
+
+# Accumulation interval (minutes)
+unsigned[2] accumulationInterval : dump;
+
+# Reference reflectivity for echo top (dB)
+unsigned[1] referenceReflectivityForEchoTop : dump;
+
+# Range bin spacing (meters)
+unsigned[3] rangeBinSpacing : dump;
+
+# Radial angular spacing (tenths of degree true)
+unsigned[2] radialAngularSpacing : dump;

@@ -1,0 +1,26 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls %}
+
+
+{% block breadcrumbs %}
+    <div class="breadcrumbs">
+        <a href="{% url 'admin:index' %}">{% trans "Home" %}</a> &rsaquo;
+        <a href="{% url 'admin:app_list' opts.app_label %}">{{opts.app_config.verbose_name}}</a> &rsaquo;
+        <a href="{% url opts|admin_urlname:'changelist' %}">{{opts.verbose_name_plural|capfirst}}</a> &rsaquo;
+        <a href="{% url opts|admin_urlname:'change' object_id %}">{{original|truncatewords:"18"}}</a> &rsaquo;
+        <a href="{% url opts|admin_urlname:'history' object_id %}">{% trans "History" %}</a> &rsaquo;
+        {% blocktrans with opts.verbose_name as verbose_name %}Revert {{verbose_name}}{% endblocktrans %}
+    </div>
+{% endblock %}
+
+
+{% block object-tools %}{% endblock %}
+
+
+{% block form_top %}
+    <p>{% blocktrans %}Press the save button below to revert to this version of the object.{% endblocktrans %}</p>
+{% endblock %}
+
+
+{% block submit_buttons_top %}{% with is_popup=1 %}{{block.super}}{% endwith %}{% endblock %}
+{% block submit_buttons_bottom %}{% with is_popup=1 %}{{block.super}}{% endwith %}{% endblock %}

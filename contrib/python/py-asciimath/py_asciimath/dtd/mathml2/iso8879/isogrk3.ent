@@ -1,0 +1,64 @@
+
+<!--
+     File isogrk3.ent produced by the XSL script characters.xsl
+     from input data in unicode.xml.
+
+     Please report any errors to David Carlisle
+     via the public W3C list www-math@w3.org.
+
+     The numeric character values assigned to each entity
+     (should) match the Unicode assignments in Unicode 4.0.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1986
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+
+-->
+
+<!ENTITY alpha            "&#x003B1;" ><!--=small alpha, Greek -->
+<!ENTITY beta             "&#x003B2;" ><!--=small beta, Greek -->
+<!ENTITY chi              "&#x003C7;" ><!--=small chi, Greek -->
+<!ENTITY Delta            "&#x00394;" ><!--=capital Delta, Greek -->
+<!ENTITY delta            "&#x003B4;" ><!--=small delta, Greek -->
+<!ENTITY epsi             "&#x003F5;" ><!--=small epsilon, Greek -->
+<!ENTITY epsis            "&#x003F5;" ><!--/straightepsilon -->
+<!ENTITY epsiv            "&#x003B5;" ><!--/varepsilon -->
+<!ENTITY eta              "&#x003B7;" ><!--=small eta, Greek -->
+<!ENTITY Gamma            "&#x00393;" ><!--=capital Gamma, Greek -->
+<!ENTITY gamma            "&#x003B3;" ><!--=small gamma, Greek -->
+<!ENTITY gammad           "&#x003DD;" ><!--/digamma -->
+<!ENTITY iota             "&#x003B9;" ><!--=small iota, Greek -->
+<!ENTITY kappa            "&#x003BA;" ><!--=small kappa, Greek -->
+<!ENTITY kappav           "&#x003F0;" ><!--/varkappa -->
+<!ENTITY Lambda           "&#x0039B;" ><!--=capital Lambda, Greek -->
+<!ENTITY lambda           "&#x003BB;" ><!--=small lambda, Greek -->
+<!ENTITY mu               "&#x003BC;" ><!--=small mu, Greek -->
+<!ENTITY nu               "&#x003BD;" ><!--=small nu, Greek -->
+<!ENTITY Omega            "&#x003A9;" ><!--=capital Omega, Greek -->
+<!ENTITY omega            "&#x003C9;" ><!--=small omega, Greek -->
+<!ENTITY Phi              "&#x003A6;" ><!--=capital Phi, Greek -->
+<!ENTITY phis             "&#x003D5;" ><!--/straightphi - straight phi -->
+<!ENTITY phiv             "&#x003C6;" ><!--/varphi - curly or open phi -->
+<!ENTITY Pi               "&#x003A0;" ><!--=capital Pi, Greek -->
+<!ENTITY pi               "&#x003C0;" ><!--=small pi, Greek -->
+<!ENTITY piv              "&#x003D6;" ><!--/varpi -->
+<!ENTITY Psi              "&#x003A8;" ><!--=capital Psi, Greek -->
+<!ENTITY psi              "&#x003C8;" ><!--=small psi, Greek -->
+<!ENTITY rho              "&#x003C1;" ><!--=small rho, Greek -->
+<!ENTITY rhov             "&#x003F1;" ><!--/varrho -->
+<!ENTITY Sigma            "&#x003A3;" ><!--=capital Sigma, Greek -->
+<!ENTITY sigma            "&#x003C3;" ><!--=small sigma, Greek -->
+<!ENTITY sigmav           "&#x003C2;" ><!--/varsigma -->
+<!ENTITY tau              "&#x003C4;" ><!--=small tau, Greek -->
+<!ENTITY Theta            "&#x00398;" ><!--=capital Theta, Greek -->
+<!ENTITY thetas           "&#x003B8;" ><!--straight theta -->
+<!ENTITY thetav           "&#x003D1;" ><!--/vartheta - curly or open theta -->
+<!ENTITY Upsi             "&#x003D2;" ><!--=capital Upsilon, Greek -->
+<!ENTITY upsi             "&#x003C5;" ><!--=small upsilon, Greek -->
+<!ENTITY Xi               "&#x0039E;" ><!--=capital Xi, Greek -->
+<!ENTITY xi               "&#x003BE;" ><!--=small xi, Greek -->
+<!ENTITY zeta             "&#x003B6;" ><!--=small zeta, Greek -->

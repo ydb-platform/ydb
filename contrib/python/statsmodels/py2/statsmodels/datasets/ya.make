@@ -1,0 +1,112 @@
+PY2_LIBRARY()
+
+VERSION(0.10.2)
+
+LICENSE(BSD-3-Clause)
+
+NO_LINT()
+
+PY_SRCS(
+    NAMESPACE statsmodels.datasets
+
+    __init__.py
+    anes96/__init__.py
+    anes96/data.py
+    cancer/__init__.py
+    cancer/data.py
+    ccard/__init__.py
+    ccard/data.py
+    china_smoking/__init__.py
+    china_smoking/data.py
+    co2/__init__.py
+    co2/data.py
+    committee/__init__.py
+    committee/data.py
+    copper/__init__.py
+    copper/data.py
+    cpunish/__init__.py
+    cpunish/data.py
+    elnino/__init__.py
+    elnino/data.py
+    engel/__init__.py
+    engel/data.py
+    fair/__init__.py
+    fair/data.py
+    fertility/__init__.py
+    fertility/data.py
+    grunfeld/__init__.py
+    grunfeld/data.py
+    heart/__init__.py
+    heart/data.py
+    interest_inflation/__init__.py
+    interest_inflation/data.py
+    longley/__init__.py
+    longley/data.py
+    macrodata/__init__.py
+    macrodata/data.py
+    modechoice/__init__.py
+    modechoice/data.py
+    nile/__init__.py
+    nile/data.py
+    randhie/__init__.py
+    randhie/data.py
+    scotland/__init__.py
+    scotland/data.py
+    spector/__init__.py
+    spector/data.py
+    stackloss/__init__.py
+    stackloss/data.py
+    star98/__init__.py
+    star98/data.py
+    statecrime/__init__.py
+    statecrime/data.py
+    strikes/__init__.py
+    strikes/data.py
+    sunspots/__init__.py
+    sunspots/data.py
+    template_data.py
+    utils.py
+)
+
+RESOURCE_FILES(
+    PREFIX contrib/python/statsmodels/py2/statsmodels/datasets/
+    anes96/anes96.csv
+    anes96/src/anes96.csv
+    cancer/cancer.csv
+    ccard/ccard.csv
+    ccard/src/ccard.csv
+    china_smoking/china_smoking.csv
+    co2/co2.csv
+    committee/committee.csv
+    copper/copper.csv
+    cpunish/cpunish.csv
+    elnino/elnino.csv
+    engel/engel.csv
+    fair/fair.csv
+    fair/fair_pt.csv
+    fertility/fertility.csv
+    grunfeld/grunfeld.csv
+    grunfeld/src/grunfeld.csv
+    heart/heart.csv
+    interest_inflation/E6.csv
+    interest_inflation/E6_jmulti.csv
+    longley/longley.csv
+    macrodata/macrodata.csv
+    macrodata/src/unemp.csv
+    modechoice/modechoice.csv
+    modechoice/src/TableF18-2.csv
+    nile/nile.csv
+    randhie/randhie.csv
+    randhie/src/randhie.csv
+    scotland/scotvote.csv
+    scotland/src/scotland_population.csv
+    scotland/src/scotvote.csv
+    spector/spector.csv
+    stackloss/stackloss.csv
+    star98/star98.csv
+    statecrime/statecrime.csv
+    strikes/strikes.csv
+    sunspots/sunspots.csv
+)
+
+END()

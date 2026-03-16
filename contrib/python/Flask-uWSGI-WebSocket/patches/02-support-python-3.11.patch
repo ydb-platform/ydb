@@ -1,0 +1,39 @@
+--- contrib/python/Flask-uWSGI-WebSocket/flask_uwsgi_websocket/_asyncio.py	(index)
++++ contrib/python/Flask-uWSGI-WebSocket/flask_uwsgi_websocket/_asyncio.py	(working tree)
+@@ -34,3 +34,2 @@ class AsyncioWebSocketClient(WebSocketClient):
+-    @asyncio.coroutine
+-    def _send_ready(self, f):
+-        msg = yield from self.send_queue.get()
++    async def _send_ready(self, f):
++        msg = await self.send_queue.get()
+@@ -40,3 +39,2 @@ class AsyncioWebSocketClient(WebSocketClient):
+-    @asyncio.coroutine
+-    def receive(self):
+-        msg = yield from self.a_recv()
++    async def receive(self):
++        msg = await self.a_recv()
+@@ -45,3 +43,2 @@ class AsyncioWebSocketClient(WebSocketClient):
+-    @asyncio.coroutine
+-    def recv(self):
+-        msg = yield from self.a_recv()
++    async def recv(self):
++        msg = await self.a_recv()
+@@ -60,3 +57,2 @@ class AsyncioWebSocketClient(WebSocketClient):
+-    @asyncio.coroutine
+-    def send(self, msg):
+-        yield from self.a_send(msg)
++    async def send(self, msg):
++        await self.a_send(msg)
+@@ -70,2 +66 @@ class AsyncioWebSocketClient(WebSocketClient):
+-    @asyncio.coroutine
+-    def a_recv(self):
++    async def a_recv(self):
+@@ -73 +68 @@ class AsyncioWebSocketClient(WebSocketClient):
+-            msg = yield from self.recv_queue.get()
++            msg = await self.recv_queue.get()
+@@ -78,3 +73,2 @@ class AsyncioWebSocketClient(WebSocketClient):
+-    @asyncio.coroutine
+-    def a_send(self, msg):
+-        yield from self.send_queue.put(msg)
++    async def a_send(self, msg):
++        await self.send_queue.put(msg)

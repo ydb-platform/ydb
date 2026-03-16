@@ -1,0 +1,4 @@
+keep:
+  - iter2/*.pyi
+  - iter2/py.typed
+  - iter2/iterators/py.typed

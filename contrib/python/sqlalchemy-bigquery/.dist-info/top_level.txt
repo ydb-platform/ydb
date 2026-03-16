@@ -1,0 +1,2 @@
+sqlalchemy_bigquery
+sqlalchemy_bigquery_vendored

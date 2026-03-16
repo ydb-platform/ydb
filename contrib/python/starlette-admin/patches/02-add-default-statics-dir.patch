@@ -1,0 +1,33 @@
+--- contrib/python/starlette-admin/starlette_admin/base.py	(index)
++++ contrib/python/starlette-admin/starlette_admin/base.py	(working tree)
+@@ -54,7 +54,7 @@ class BaseAdmin:
+         logo_url: Optional[str] = None,
+         login_logo_url: Optional[str] = None,
+         templates_dir: str = "templates",
+-        statics_dir: Optional[str] = None,
++        statics_dir: str = "statics",
+         index_view: Optional[CustomView] = None,
+         auth_provider: Optional[BaseAuthProvider] = None,
+         middlewares: Optional[Sequence[Middleware]] = None,
+--- contrib/python/starlette-admin/starlette_admin/contrib/odmantic/admin.py	(index)
++++ contrib/python/starlette-admin/starlette_admin/contrib/odmantic/admin.py	(working tree)
+@@ -20,7 +20,7 @@ class Admin(BaseAdmin):
+         logo_url: Optional[str] = None,
+         login_logo_url: Optional[str] = None,
+         templates_dir: str = "templates",
+-        statics_dir: Optional[str] = None,
++        statics_dir: str = "statics",
+         index_view: Optional[CustomView] = None,
+         auth_provider: Optional[BaseAuthProvider] = None,
+         middlewares: Optional[Sequence[Middleware]] = None,
+--- contrib/python/starlette-admin/starlette_admin/contrib/sqla/admin.py	(index)
++++ contrib/python/starlette-admin/starlette_admin/contrib/sqla/admin.py	(working tree)
+@@ -31,7 +31,7 @@ class Admin(BaseAdmin):
+         logo_url: Optional[str] = None,
+         login_logo_url: Optional[str] = None,
+         templates_dir: str = "templates",
+-        statics_dir: Optional[str] = None,
++        statics_dir: str = "statics",
+         index_view: Optional[CustomView] = None,
+         auth_provider: Optional[BaseAuthProvider] = None,
+         middlewares: Optional[Sequence[Middleware]] = None,

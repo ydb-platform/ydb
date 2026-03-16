@@ -1,0 +1,286 @@
+ul.jqtree-tree {
+  list-style: none outside;
+  margin-left: 0;
+  margin-bottom: 0;
+  padding: 0;
+}
+
+ul.jqtree-tree.jqtree-dnd {
+  touch-action: none;
+}
+
+ul.jqtree-tree ul.jqtree_common {
+  list-style: none outside;
+  margin-left: 12px;
+  margin-right: 0;
+  margin-bottom: 0;
+  padding: 0;
+  display: block;
+}
+
+ul.jqtree-tree li.jqtree-closed > ul.jqtree_common {
+  display: none;
+}
+
+ul.jqtree-tree li.jqtree_common {
+  clear: both;
+  list-style-type: none;
+}
+
+ul.jqtree-tree .jqtree-toggler {
+  border-bottom: none;
+  color: #333;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+ul.jqtree-tree .jqtree-toggler:hover {
+  color: #000;
+  text-decoration: none;
+}
+
+ul.jqtree-tree .jqtree-toggler.jqtree-closed {
+  background-position: 0 0;
+}
+
+ul.jqtree-tree .jqtree-toggler.jqtree-toggler-left {
+  margin-right: 0.5em;
+}
+
+ul.jqtree-tree .jqtree-toggler.jqtree-toggler-right {
+  margin-left: 0.5em;
+}
+
+ul.jqtree-tree .jqtree-element {
+  cursor: pointer;
+  position: relative;
+  display: flex;
+}
+
+ul.jqtree-tree .jqtree-element:has(.jqtree-title-button-right) {
+  display: block;
+}
+
+ul.jqtree-tree .jqtree-title {
+  color: #1c4257;
+  vertical-align: middle;
+}
+
+ul.jqtree-tree .jqtree-title-button-left {
+  margin-left: 1.5em;
+}
+
+ul.jqtree-tree .jqtree-title-button-left.jqtree-title-folder {
+  margin-left: 0;
+}
+
+ul.jqtree-tree li.jqtree-folder {
+  margin-bottom: 4px;
+}
+
+ul.jqtree-tree li.jqtree-folder.jqtree-closed {
+  margin-bottom: 1px;
+}
+
+ul.jqtree-tree li.jqtree-ghost {
+  position: relative;
+  z-index: 10;
+  margin-right: 10px;
+}
+
+ul.jqtree-tree li.jqtree-ghost span {
+  display: block;
+}
+
+ul.jqtree-tree li.jqtree-ghost span.jqtree-circle {
+  border: solid 2px #0000ff;
+  border-radius: 100px;
+  height: 8px;
+  width: 8px;
+  position: absolute;
+  top: -4px;
+  left: -6px;
+  box-sizing: border-box;
+}
+
+ul.jqtree-tree li.jqtree-ghost span.jqtree-line {
+  background-color: #0000ff;
+  height: 2px;
+  padding: 0;
+  position: absolute;
+  top: -1px;
+  left: 2px;
+  width: 100%;
+}
+
+ul.jqtree-tree li.jqtree-ghost.jqtree-inside {
+  margin-left: 48px;
+}
+
+ul.jqtree-tree span.jqtree-border {
+  position: absolute;
+  display: block;
+  left: -2px;
+  top: 0;
+  border: solid 2px #0000ff;
+  border-radius: 6px;
+  margin: 0;
+  box-sizing: content-box;
+}
+
+ul.jqtree-tree li.jqtree-selected > .jqtree-element,
+ul.jqtree-tree li.jqtree-selected > .jqtree-element:hover {
+  background-color: #97bdd6;
+  background: linear-gradient(#bee0f5, #89afca);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+ul.jqtree-tree .jqtree-moving > .jqtree-element .jqtree-title {
+  outline: dashed 1px #0000ff;
+}
+
+ul.jqtree-tree.jqtree-rtl {
+  direction: rtl;
+}
+
+ul.jqtree-tree.jqtree-rtl ul.jqtree_common {
+  margin-left: 0;
+  margin-right: 12px;
+}
+
+ul.jqtree-tree.jqtree-rtl .jqtree-toggler {
+  margin-left: 0.5em;
+  margin-right: 0;
+}
+
+ul.jqtree-tree.jqtree-rtl .jqtree-title {
+  margin-left: 0;
+  margin-right: 1.5em;
+}
+
+ul.jqtree-tree.jqtree-rtl .jqtree-title.jqtree-title-folder {
+  margin-right: 0;
+}
+
+ul.jqtree-tree.jqtree-rtl li.jqtree-ghost {
+  margin-right: 0;
+  margin-left: 10px;
+}
+
+ul.jqtree-tree.jqtree-rtl li.jqtree-ghost span.jqtree-circle {
+  right: -6px;
+}
+
+ul.jqtree-tree.jqtree-rtl li.jqtree-ghost span.jqtree-line {
+  right: 2px;
+}
+
+ul.jqtree-tree.jqtree-rtl li.jqtree-ghost.jqtree-inside {
+  margin-left: 0;
+  margin-right: 48px;
+}
+
+ul.jqtree-tree.jqtree-rtl span.jqtree-border {
+  right: -2px;
+}
+
+span.jqtree-dragging {
+  color: #fff;
+  background: #000;
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+
+@keyframes jqtree-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+#changelist {
+  border: none;
+}
+
+#tree {
+  padding: 1em 0 1em 0;
+}
+#tree .mptt-admin-error {
+  color: var(--error-fg);
+  margin-left: 8px;
+}
+#tree ul.jqtree-tree .jqtree-toggler {
+  top: 10%;
+  color: var(--link-fg);
+  text-decoration: none;
+}
+#tree ul.jqtree-tree .edit {
+  margin-left: 0.5em;
+  vertical-align: middle;
+  color: var(--link-fg);
+}
+#tree ul.jqtree-tree ul.jqtree_common {
+  margin-top: 0;
+}
+#tree ul.jqtree-tree li.jqtree_common {
+  padding: 0;
+}
+#tree ul.jqtree-tree.jqtree-rtl .edit {
+  margin-left: 0;
+  margin-right: 0.5em;
+}
+#tree .jqtree-spin {
+  margin-left: 1em;
+  width: 1em;
+  height: 1em;
+  border: 2px solid var(--body-fg);
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  box-sizing: border-box;
+  animation: jqtree-spin 1s linear infinite;
+  vertical-align: middle;
+}
+#tree.block-style ul.jqtree-tree {
+  margin-left: 0;
+  margin-right: 0;
+}
+#tree.block-style ul.jqtree-tree ul.jqtree_common {
+  margin-left: 2em;
+}
+#tree.block-style ul.jqtree-tree .jqtree-element {
+  margin-bottom: 8px;
+  background-color: var(--darkened-bg);
+  padding: 8px;
+}
+#tree.block-style ul.jqtree-tree .jqtree-element .jqtree-title {
+  color: var(--body-fg);
+  margin-left: 0;
+  margin-right: 0;
+}
+#tree.block-style ul.jqtree-tree .jqtree-element .jqtree-toggler.jqtree-toggler-right {
+  margin-left: 1em;
+}
+#tree.block-style ul.jqtree-tree li.jqtree-selected > .jqtree-element {
+  background: var(--breadcrumbs-bg);
+  color: var(--header-color);
+  text-shadow: none;
+}
+#tree.block-style ul.jqtree-tree li.jqtree-selected > .jqtree-element .jqtree-title {
+  color: var(--breadcrumbs-link-fg);
+}
+#tree.block-style ul.jqtree-tree li.jqtree-selected > .jqtree-element .edit {
+  color: var(--breadcrumbs-fg);
+}
+#tree.block-style ul.jqtree-tree.jqtree-rtl ul.jqtree_common {
+  margin-left: 0;
+  margin-right: 2em;
+}
+#tree.block-style ul.jqtree-tree.jqtree-rtl .jqtree-toggler.jqtree-toggler-right {
+  margin-left: 0;
+  margin-right: 1em;
+}
+
+/*# sourceMappingURL=django_mptt_admin.css.map */

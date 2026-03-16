@@ -1,0 +1,103 @@
+{# -*- engine: jinja -*- #}
+<div id="summary" class="summary">
+  <div>
+    <table class="legend">
+      <tr>
+        <th scope="row">Directory:</th>
+        <td>{{info.get_directory()}}{{relative_path}}</td>
+      </tr>
+      <tr>
+        <th scope="row">Coverage:</th>
+        <td class="legend">
+          <span class="coverage-low">low: &ge; 0%</span>
+          {% if COVERAGE_MED != COVERAGE_HIGH %}
+          <span class="coverage-medium">medium: &ge; {{COVERAGE_MED}}%</span>
+          {% endif %}
+          {% if COVERAGE_HIGH < 100 %}
+          <span class="coverage-high">high: &ge; {{COVERAGE_HIGH}}%</span>
+          {% else %}
+          <span class="coverage-high">high: = 100%</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% if (COVERAGE_MED != LINE_COVERAGE_MED) or (COVERAGE_HIGH != LINE_COVERAGE_HIGH) %}
+      <tr>
+        <th scope="row">Lines:</th>
+        <td class="legend">
+          <span class="coverage-low">low: &ge; 0%</span>
+          {% if LINE_COVERAGE_MED != LINE_COVERAGE_HIGH %}
+          <span class="coverage-medium">medium: &ge; {{LINE_COVERAGE_MED}}%</span>
+          {% endif %}
+          {% if LINE_COVERAGE_HIGH < 100 %}
+          <span class="coverage-high">high: &ge; {{LINE_COVERAGE_HIGH}}%</span>
+          {% else %}
+          <span class="coverage-high">high: = 100%</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endif %}
+      {% if (COVERAGE_MED != BRANCH_COVERAGE_MED) or (COVERAGE_HIGH != BRANCH_COVERAGE_HIGH) %}
+      <tr>
+        <th scope="row">Branches:</th>
+        <td class="legend">
+          <span class="coverage-low">low: &ge; 0%</span>
+          {% if BRANCH_COVERAGE_MED != BRANCH_COVERAGE_HIGH %}
+          <span class="coverage-medium">medium: &ge; {{BRANCH_COVERAGE_MED}}%</span>
+          {% endif %}
+          {% if BRANCH_COVERAGE_HIGH < 100 %}
+          <span class="coverage-high">high: &ge; {{BRANCH_COVERAGE_HIGH}}%</span>
+          {% else %}
+          <span class="coverage-high">high: = 100%</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endif %}
+    </table>
+  </div>
+
+  <div>
+    <table class="coverage">
+      <tr>
+        <th></th>
+        <th scope="col">Coverage</th>
+        <th scope="col">Exec / Excl / Total</th>
+      </tr>
+      <tr>
+        <th scope="row">Lines:</th>
+        <td class="{{info.lines.class}}">{{info.lines.coverage}}%</td>
+        <td class="{{info.lines.class}}">{{info.lines.exec}} / {{info.lines.excluded}} / {{info.lines.total}}</td>
+      </tr>
+      <tr>
+        <th scope="row">Functions:</th>
+        <td class="{{info.functions.class}}">{{info.functions.coverage}}%</td>
+        <td class="{{info.functions.class}}">{{info.functions.exec}} / {{info.functions.excluded}} / {{info.functions.total}}</td>
+      </tr>
+      <tr>
+        <th scope="row">Branches:</th>
+        <td class="{{info.branches.class}}">{{info.branches.coverage}}%</td>
+        <td class="{{info.branches.class}}">{{info.branches.exec}} / {{info.branches.excluded}} / {{info.branches.total}}</td>
+      </tr>
+      {% if SHOW_CONDITION_COVERAGE %}
+      <tr>
+        <th scope="row">Conditions:</th>
+        <td class="{{info.conditions.class}}">{{info.conditions.coverage}}%</td>
+        <td class="{{info.conditions.class}}">{{info.conditions.exec}} / {{info.conditions.excluded}} / {{info.conditions.total}}</td>
+      </tr>
+      {% endif %}
+      {% if SHOW_DECISION %}
+      <tr>
+        <th scope="row">Decisions:</th>
+        <td class="{{info.decisions.class}}">{{info.decisions.coverage}}%</td>
+        <td class="{{info.decisions.class}}">{{info.decisions.exec}} / - / {{info.decisions.total}}</td>
+      </tr>
+      {% endif %}
+      {% if SHOW_CALLS %}
+      <tr>
+        <th scope="row">Calls:</th>
+        <td class="{{info.calls.class}}">{{info.calls.coverage}}%</td>
+        <td class="{{info.calls.class}}">{{info.calls.exec}} / {{info.calls.excluded}} / {{info.calls.total}}</td>
+      </tr>
+      {% endif %}
+    </table>
+  </div>
+</div>

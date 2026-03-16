@@ -1,0 +1,3 @@
+[console_scripts]
+timezonefinder=timezonefinder.command_line:main
+

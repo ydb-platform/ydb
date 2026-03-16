@@ -1,0 +1,123 @@
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2011-2018 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2013      Los Alamos National Security, LLC.
+#                         All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for rankle utilities.
+#
+# Voltaire
+[no-hwloc]
+A slot_list containing detailed location info was given, but
+hwloc support is not available:
+
+  Rank:      %d
+  Slot list:  %s
+
+Unfortunately, hwloc support is required for this action.
+Please reconfigure OMPI for hwloc if binding to specified
+cpus is desired.
+[no-rankfile]
+Open RTE was unable to open the rankfile:
+    %s
+Check to make sure the path and filename are correct.
+
+usage:  mpirun -mca rmaps_rankfile_path rankfile ./app
+
+Examples of proper syntax include:
+  cat hostfile
+    host1
+    host2
+    host3
+    host4
+  cat rankfile
+    rank 1=host1 slot=1:0,1
+    rank 0=host2 slot=0:*
+    rank 2=host4 slot=1-2
+    rank 3=host3 slot=0:1;1:0-2
+#
+[parse_error_string]
+Open RTE detected a parse error in the rankfile (%s)
+It occured on line number %d on token %d:
+    %s
+Examples of proper syntax include:
+    rank 1=host1 slot=1:0,1
+    rank 0=host2 slot=0:*
+    rank 2=host4 slot=1-2
+    rank 3=host3 slot=0:1;1:0-2
+#
+[parse_error_int]
+Open RTE detected a parse error in the rankfile (%s)
+It occured on line number %d on token %d:
+    %d
+Examples of proper syntax include:
+    rank 1=host1 slot=1:0,1
+    rank 0=host2 slot=0:*
+    rank 2=host4 slot=1-2
+    rank 3=host3 slot=0:1;1:0-2
+#
+[parse_error]
+Open RTE detected a parse error in the rankfile (%s)
+It occured on line number %d on token %d. Examples of
+proper syntax include:
+    rank 1=host1 slot=1:0,1
+    rank 0=host2 slot=0:*
+    rank 2=host4 slot=1-2
+    rank 3=host3 slot=0:1;1:0-2
+
+#
+[not-all-mapped-alloc]
+Some of the requested ranks are not included in the current allocation.
+    %s
+
+Please verify that you have specified the allocated resources properly in
+the provided rankfile.
+#
+[bad-host]
+The rankfile that was used claimed that a host was either not
+allocated or oversubscribed its slots.  Please review your rank-slot
+assignments and your host allocation to ensure a proper match.  Also,
+some systems may require using full hostnames, such as
+"host1.example.com" (instead of just plain "host1").
+
+  Host: %s
+#
+[bad-index]
+Rankfile claimed host %s by index that is bigger than number of allocated hosts.
+#
+[bad-rankfile]
+Error, invalid rank (%d) in the rankfile (%s)
+#
+[bad-assign]
+Error, rank %d is already assigned to %s, check %s
+#
+[bad-syntax]
+Error, invalid syntax in the rankfile (%s)
+syntax must be the fallowing
+rank i=host_i slot=string
+Examples of proper syntax include:
+    rank 1=host1 slot=1:0,1
+    rank 0=host2 slot=0:*
+    rank 2=host4 slot=1-2
+    rank 3=host3 slot=0:1;1:0-2
+#
+[orte-rmaps-rf:multi-apps-and-zero-np]
+RMAPS found multiple applications to be launched, with
+at least one that failed to specify the number of processes to execute.
+When specifying multiple applications, you must specify how many processes
+of each to launch via the -np argument.
+#
+[missing-rank]
+A rank is missing its location specification:
+
+  Rank:        %d
+  Rank file:   %s
+
+All processes must have their location specified in the rank file. Either
+add an entry to the file, or provide a default slot_list to use for
+any unspecified ranks.

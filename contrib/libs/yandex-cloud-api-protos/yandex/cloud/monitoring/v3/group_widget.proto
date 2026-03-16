@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package yandex.cloud.monitoring.v3;
+
+import "yandex/cloud/monitoring/v3/chart_widget.proto";
+import "yandex/cloud/monitoring/v3/text_widget.proto";
+import "yandex/cloud/monitoring/v3/title_widget.proto";
+import "yandex/cloud/monitoring/v3/multi_source_chart_widget.proto";
+import "yandex/cloud/monitoring/v3/link_item.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/monitoring/v3;monitoring";
+option java_package = "yandex.cloud.api.monitoring.v3";
+
+message GroupWidget {
+    message RepeatSettings {
+        repeated string repeat_by = 1;
+    }
+
+    // Layout item for widget item positioning.
+    message LayoutPosition {
+        // Required. X-axis top-left corner coordinate.
+        int64 x = 1;
+
+        // Required. Y-axis top-left corner coordinate.
+        int64 y = 2;
+
+        // Required. Weight.
+        int64 w = 3;
+
+        // Required. Height.
+        int64 h = 4;
+    }
+
+    message ChildWidget {
+        reserved 5 to 8;
+        reserved 10 to 18;
+        string id = 1;
+
+        repeated LinkItem links = 19;
+
+        // Widget layout position.
+        LayoutPosition position = 20;
+
+        oneof widget {
+            TextWidget text = 2;
+            TitleWidget title = 3;
+            ChartWidget chart = 4;
+            MultiSourceChartWidget multi_source_chart = 9;
+        }
+    }
+
+    string id = 1;
+    string title = 2;
+    bool collapsed = 3;
+    repeated ChildWidget widgets = 4;
+    RepeatSettings repeat_settings = 5;
+}

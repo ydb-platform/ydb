@@ -1,0 +1,25 @@
+--- contrib/python/lfx/lfx/interface/initialize/loading.py	(index)
++++ contrib/python/lfx/lfx/interface/initialize/loading.py	(working tree)
+@@ -15,6 +15,8 @@ from lfx.schema.data import Data
+ from lfx.services.deps import get_settings_service, session_scope
+ from lfx.services.session import NoopSession
+
++import library.python.langflow_patches_lib.code_execution_guard as langflow_patches_lib_code_execution_guard
++
+ if TYPE_CHECKING:
+     from lfx.custom.custom_component.component import Component
+     from lfx.custom.custom_component.custom_component import CustomComponent
+@@ -43,7 +46,12 @@ def instantiate_class(
+         raise ValueError(msg)
+
+     custom_params = get_params(vertex.params)
+-    code = custom_params.pop("code")
++
++    if langflow_patches_lib_code_execution_guard.is_custom_code_exec_enabled():
++        code = custom_params.pop("code")
++    else:
++        code = langflow_patches_lib_code_execution_guard.restore_templated_code(vertex.data["type"])
++
+     class_object: type[CustomComponent | Component] = eval_custom_component_code(code)
+     custom_component: CustomComponent | Component = class_object(
+         _user_id=user_id,

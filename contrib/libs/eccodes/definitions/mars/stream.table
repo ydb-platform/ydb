@@ -1,0 +1,122 @@
+0 0 Unknown
+1022 fsob Forecast sensitivity to observations
+1023 fsow Forecast sensitivity to observations wave
+1024 dahc Daily archive hindcast
+1025 oper Atmospheric model
+1026 scda Atmospheric model (short cutoff)
+1027 scwv Wave model (short cutoff)
+1028 dcda Atmospheric model (delayed cutoff)
+1029 dcwv Wave model (delayed cutoff)
+1030 enda Ensemble data assimilation
+1032 efho Ensemble forecast hindcast overlap
+1033 enfh Ensemble forecast hindcasts
+1034 efov Ensemble forecast overlap
+1035 enfo Ensemble prediction system
+1036 sens Sensitivity forecast
+1037 maed Multianalysis ensemble data
+1038 amap Analysis for multianalysis project
+1039 efhc Ensemble forecast hindcasts (obsolete)
+1040 efhs Ensemble forecast hindcast statistics
+1041 toga TOGA
+1042 cher Chernobyl
+1043 mnth Monthly means
+1044 supd Deterministic supplementary data
+1045 wave Wave model
+1046 ocea Ocean
+1047 fgge FGGE
+1050 egrr Bracknell
+1051 kwbc Washington
+1052 edzw Offenbach
+1053 lfpw Toulouse
+1054 rjtd Tokyo
+1055 cwao Montreal
+1056 ammc Melbourne
+1057 efas European flood awareness system (EFAS)
+1058 efse European flood awareness system (EFAS) seasonal forecasts
+1059 efcl European flood awareness system (EFAS) climatology
+1060 wfas Global flood awareness system (GLOFAS)
+1061 wfcl Global flood awareness system (GLOFAS) climatology
+1062 wfse Global flood awareness system (GLOFAS) seasonal forecasts
+1063 efrf European flood awareness system (EFAS) reforecasts
+1064 efsr European flood awareness system (EFAS) seasonal reforecasts
+1065 wfrf Global flood awareness system (GLOFAS) reforecasts
+1066 wfsr Global flood awareness system (GLOFAS) seasonal reforecasts
+1070 msdc Monthly standard deviation and covariance
+1071 moda Monthly means of daily means
+1072 monr Monthly means using G. Boer's step function
+1073 mnvr Monthly variance and covariance data using G. Boer's step function
+1074 msda Monthly standard deviation and covariance of daily means
+1075 mdfa Monthly means of daily forecast accumulations
+1076 dacl Daily climatology
+1077 wehs Wave ensemble forecast hindcast statistics
+1078 ewho Ensemble forecast wave hindcast overlap
+1079 enwh Ensemble forecast wave hindcasts
+1080 wamo Wave monthly means
+1081 waef Wave ensemble forecast
+1082 wasf Wave seasonal forecast
+1083 mawv Multianalysis wave data
+1084 ewhc Wave ensemble forecast hindcast (obsolete)
+1085 wvhc Wave hindcast
+1086 weov Wave ensemble forecast overlap
+1087 wavm Wave model (standalone)
+1088 ewda Ensemble wave data assimilation
+1089 dacw Daily climatology wave
+1090 seas Seasonal forecast
+1091 sfmm Seasonal forecast atmospheric monthly means
+1092 swmm Seasonal forecast wave monthly means
+1093 mofc Monthly forecast
+1094 mofm Monthly forecast means
+1095 wamf Wave monthly forecast
+1096 wmfm Wave monthly forecast means
+1097 smma Seasonal monthly means anomalies
+1098 clte Climate run output
+1099 clmn Climate run monthly means output
+1100 dame Daily means
+1110 seap Sensitive area prediction
+1120 eefh Extended ensemble forecast hindcast
+1121 eehs Extended ensemble forecast hindcast statistics
+1122 eefo Extended ensemble prediction system
+1123 weef Wave extended ensemble forecast
+1124 weeh Wave extended ensemble forecast hindcast
+1125 wees Wave extended ensemble forecast hindcast statistics
+1200 mnfc Real-time
+1201 mnfh Hindcasts
+1202 mnfa Anomalies
+1203 mnfw Wave real-time
+1204 mfhw Monthly forecast hindcasts wave
+1205 mfaw Wave anomalies
+1206 mnfm Real-time means
+1207 mfhm Hindcast means
+1208 mfam Anomaly means
+1209 mfwm Wave real-time means
+1210 mhwm Wave hindcast means
+1211 mawm Wave anomaly means
+1220 mmsf Multi-model seasonal forecast
+1221 msmm Multi-model seasonal forecast atmospheric monthly means
+1222 wams Multi-model seasonal forecast wave
+1223 mswm Multi-model seasonal forecast wave monthly means
+1224 mmsa Multi-model seasonal forecast monthly anomalies
+1230 mmaf Multi-model multi-annual forecast
+1231 mmam Multi-model multi-annual forecast means
+1232 mmaw Multi-model multi-annual forecast wave
+1233 mmwm Multi-model multi-annual forecast wave means
+1240 esmm Combined multi-model monthly means
+1241 ehmm Combined multi-model hindcast monthly means
+1242 edmm Ensemble data assimilation monthly means
+1243 edmo Ensemble data assimilation monthly means of daily means
+1244 ewmo Ensemble wave data assimilation monthly means of daily means
+1245 ewmm Ensemble wave data assimilation monthly means
+1246 espd Ensemble supplementary data
+1247 lwda Long window daily archive
+1248 lwwv Long window wave
+1249 elda Ensemble Long window data assimilation
+1250 ewla Ensemble Wave Long window data assimilation
+1251 wamd Wave monthly means of daily means
+1252 gfas Global fire assimilation system
+1253 ocda Ocean data assimilation
+1254 olda Ocean Long window data assimilation
+1255 gfra Global fire assimilation system reanalysis
+1256 rfsd Retrospective forcing and simulation data
+2231 cnrm Meteo France climate centre
+2232 mpic Max Plank Institute
+2233 ukmo UKMO climate centre

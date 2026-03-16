@@ -1,0 +1,93 @@
+# (C) Copyright 2005- ECMWF.
+
+# Type of first fixed surface
+codetable[1] typeOfFirstFixedSurface ('4.5.table',masterDir,localDir) : dump,edition_specific,string_type;
+meta unitsOfFirstFixedSurface codetable_units(typeOfFirstFixedSurface) : dump;
+meta nameOfFirstFixedSurface codetable_title(typeOfFirstFixedSurface) : dump;
+
+# Scale factor of first fixed surface
+signed[1] scaleFactorOfFirstFixedSurface = missing()  : can_be_missing,dump,edition_specific;
+
+# Scaled value of first fixed surface
+unsigned[4] scaledValueOfFirstFixedSurface = missing()  : can_be_missing,dump,edition_specific;
+
+# Type of second fixed surface
+codetable[1] typeOfSecondFixedSurface ('4.5.table',masterDir,localDir) = 255 : dump,edition_specific;
+meta unitsOfSecondFixedSurface codetable_units(typeOfSecondFixedSurface) : dump;
+meta nameOfSecondFixedSurface codetable_title(typeOfSecondFixedSurface) : dump;
+
+# Scale factor of second fixed surface
+signed[1] scaleFactorOfSecondFixedSurface = missing() : can_be_missing,dump,edition_specific;
+
+# Scaled value of second fixed surface
+unsigned[4] scaledValueOfSecondFixedSurface = missing() : can_be_missing,dump,edition_specific;
+
+transient pressureUnits="hPa";
+
+concept vertical.typeOfLevel (unknown,"typeOfLevelConcept.def",conceptsDir2,conceptsDir1);
+
+alias levelType=typeOfFirstFixedSurface;
+
+if (typeOfSecondFixedSurface == 255) {
+  # Only one surface
+  meta level g2level(typeOfFirstFixedSurface,
+    scaleFactorOfFirstFixedSurface,
+    scaledValueOfFirstFixedSurface,
+    pressureUnits)  :dump;
+  transient bottomLevel=level; # Do not use alias (see GRIB-725)
+  transient topLevel=level;
+} else {
+  # Two surfaces
+  meta topLevel g2level(typeOfFirstFixedSurface,
+    scaleFactorOfFirstFixedSurface,
+    scaledValueOfFirstFixedSurface,
+    pressureUnits)  :dump;
+  meta bottomLevel g2level(typeOfSecondFixedSurface,
+    scaleFactorOfSecondFixedSurface,
+    scaledValueOfSecondFixedSurface,
+    pressureUnits)  :dump;
+    alias level=topLevel;  # (see GRIB-725)
+
+}
+alias ls.level=level;
+alias vertical.level=level;
+alias vertical.bottomLevel=bottomLevel;
+alias vertical.topLevel=topLevel;
+
+alias extraDim=false;
+if (defined(extraDimensionPresent)) {
+    if (extraDimensionPresent) {
+        alias extraDim=true;
+    }
+}
+if (extraDim) {
+    alias mars.levelist = dimension;
+    alias mars.levtype = dimensionType;
+} else {
+    # ECC-1333: levtype should be read-only in GRIB2
+    concept mars.levtype(unknown,"marsLevtypeConcept.def",conceptsDir2,conceptsDir1):no_copy, read_only;
+    # GRIB-372: levelist alias does not pertain to surface parameters
+    # See GRIB-74 why we store the pressureUnits in a transient
+    transient tempPressureUnits=pressureUnits;
+    # Also see ECC-2019
+    if ( ! (typeOfLevel is "surface" || levtype is "sfc" || levtype is "o2d") ) {
+        if (tempPressureUnits is "Pa") {
+            meta marsLevel scale(level,one,hundred) : read_only;
+            alias mars.levelist=marsLevel;
+        } else {
+            alias mars.levelist = level;
+        }
+    }
+}
+
+# See ECC-854, ECC-1435, ECC-1451, ECC-1462
+if( (typeOfFirstFixedSurface == 151 && typeOfSecondFixedSurface == 151) ||
+    (typeOfFirstFixedSurface == 152 && typeOfSecondFixedSurface == 152) ||
+    (typeOfFirstFixedSurface == 168 && typeOfSecondFixedSurface == 168) ||
+    (typeOfFirstFixedSurface == 114 && typeOfSecondFixedSurface == 114) ) {
+    alias mars.levelist = bottomLevel;
+    alias ls.level = bottomLevel;
+    alias vertical.level = bottomLevel;
+}
+
+alias ls.typeOfLevel=typeOfLevel;

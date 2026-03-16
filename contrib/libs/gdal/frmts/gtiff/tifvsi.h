@@ -1,0 +1,39 @@
+/******************************************************************************
+ *
+ * Project:  GeoTIFF Driver
+ * Purpose:  Implement system hook functions for libtiff on top of CPL/VSI,
+ *           including > 2GB support.  Based on tif_unix.c from libtiff
+ *           distribution.
+ * Author:   Frank Warmerdam, warmerdam@pobox.com
+ *
+ ******************************************************************************
+ * Copyright (c) 2005, Frank Warmerdam, warmerdam@pobox.com
+ * Copyright (c) 2010, Even Rouault <even dot rouault at spatialys.com>
+ *
+ * SPDX-License-Identifier: MIT
+ ****************************************************************************/
+
+#ifndef TIFVSI_H_INCLUDED
+#define TIFVSI_H_INCLUDED
+
+#include "cpl_port.h"
+#include "cpl_vsi.h"
+#include "tiffio.h"
+
+TIFF CPL_DLL *VSI_TIFFOpen(const char *name, const char *mode, VSILFILE *fp);
+TIFF *VSI_TIFFOpenChild(
+    TIFF *parent);  // the returned handle must be closed before the parent.
+                    // They share the same underlying VSILFILE
+TIFF *VSI_TIFFReOpen(TIFF *tif);
+VSILFILE *VSI_TIFFGetVSILFile(thandle_t th);
+int VSI_TIFFFlushBufferedWrite(thandle_t th);
+toff_t VSI_TIFFSeek(TIFF *tif, toff_t off, int whence);
+int VSI_TIFFWrite(TIFF *tif, const void *buffer, size_t buffersize);
+int VSI_TIFFHasCachedRanges(thandle_t th);
+void VSI_TIFFSetCachedRanges(
+    thandle_t th, int nRanges,
+    void **ppData,  // memory pointed by ppData[i] must be kept alive by caller
+    const vsi_l_offset *panOffsets, const size_t *panSizes);
+void *VSI_TIFFGetCachedRange(thandle_t th, vsi_l_offset nOffset, size_t nSize);
+
+#endif  // TIFVSI_H_INCLUDED

@@ -1,0 +1,18 @@
+# Code table 4.212 - Land use
+0 0 Reserved
+1 1 Urban land
+2 2 Agriculture
+3 3 Range land
+4 4 Deciduous forest
+5 5 Coniferous forest
+6 6 Forest/wetland
+7 7 Water
+8 8 Wetlands
+9 9 Desert
+10 10 Tundra
+11 11 Ice
+12 12 Tropical forest
+13 13 Savannah
+# 14-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package yandex.cloud.cloudregistry.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cloudregistry/v1;cloudregistry";
+option java_package = "yandex.cloud.api.cloudregistry.v1";
+
+// A LifecyclePolicy resource. 
+message LifecyclePolicy {
+  // ID of the lifecycle policy.
+  string id = 1;
+  
+  // Name of the lifecycle policy.
+  string name = 2;
+  
+  // Description of the lifecycle policy. 0-1024 characters long.
+  string description = 3;
+  
+  // List of lifecycle rules.
+  repeated LifecycleRule rules = 4;
+  
+  // Current state of the lifecycle policy.
+  LifecyclePolicyState state = 5;
+  
+  // ID of the registry that the lifecycle policy belongs to.
+  string registry_id = 6;
+  
+  // Output only. Creation timestamp.
+  google.protobuf.Timestamp created_at = 7;
+  
+  // Output only. Modification timestamp.
+  google.protobuf.Timestamp modified_at = 8;
+  
+  // Output only. ID of the user who created the lifecycle policy.
+  string created_by = 9;
+  
+  // Output only. ID of the user who last modified the lifecycle policy.
+  string modified_by = 10;
+}
+
+// A rule that defines lifecycle policy behavior.
+message LifecycleRule {
+  // Path prefix to which the rule applies.
+  string path_prefix = 1;
+  
+  // Type of lifecycle rule.
+  oneof kind {
+    // Rule that keeps artifacts by age.
+    KeepByAgeLifecycleRule keep_by_age = 2;
+    // Rule that keeps artifacts by version count.
+    KeepByVersionLifecycleRule keep_by_version = 3;
+    // Rule that deletes artifacts.
+    DeleteLifecycleRule delete = 4;
+  }
+
+  // Filters to determine which artifacts the rule applies to.
+  oneof filter {
+    // Docker-specific filters.
+    DockerFilters docker_filters = 5;
+    // Maven-specific filters.
+    MavenFilters maven_filters = 6;
+  }
+
+  // Regular expression pattern to match package version or docker tag.
+  string version_regexp = 7;
+}
+
+// Docker-specific filters for lifecycle rules.
+message DockerFilters {
+  enum TagStatus {
+    TAG_STATUS_UNSPECIFIED = 0;
+    // Any tag status.
+    TAG_STATUS_ANY = 1;
+    // Only tagged images.
+    TAGGED = 2;
+    // Only untagged images.
+    UNTAGGED = 3;
+  }
+  // Filter by tag status.
+  TagStatus tag_status = 1;
+}
+
+// Maven-specific filters for lifecycle rules.
+message MavenFilters {
+  enum VersionType {
+    VERSION_TYPE_UNSPECIFIED = 0;
+    // Any version type.
+    VERSION_TYPE_ANY = 1;
+    // Only release versions.
+    RELEASE = 2;
+    // Only snapshot versions.
+    SNAPSHOT = 3;
+  }
+  // Filter by version type.
+  VersionType version_type = 1;
+}
+
+// Rule that keeps a specified number of recent versions.
+message KeepByVersionLifecycleRule {
+  // Number of versions to keep.
+  int64 keep_versions_count = 1;
+}
+
+// Rule that keeps artifacts younger than specified age.
+message KeepByAgeLifecycleRule {
+  // Keep artifacts younger than this number of days.
+  int64 younger_than_days = 1;
+}
+
+// Rule that deletes artifacts based on specified conditions.
+message DeleteLifecycleRule {
+  // Type of deletion.
+  DeleteLifecycleRuleKind type = 1;
+  // Cooldown period in days before deletion.
+  int64 cooldown_period_days = 2;
+
+  // Condition that triggers deletion.
+  oneof condition {
+    // Delete artifacts older than specified days.
+    int64 older_than_days = 3;
+    // Delete artifacts by version count condition.
+    DeleteByVersionCondition version_condition = 4;
+    // Always delete (use with caution).
+    bool always = 5;
+  }
+}
+
+// Condition for deletion based on version count.
+message DeleteByVersionCondition {
+  // Delete when version count exceeds this number.
+  int64 versions_count_greater_than = 1;
+}
+
+// Type of deletion for lifecycle rules.
+enum DeleteLifecycleRuleKind {
+  DELETE_LIFECYCLE_RULE_KIND_UNSPECIFIED = 0;
+  // Hard delete - artifacts are permanently removed.
+  HARD_DELETE = 1;
+  // Soft delete - artifacts are marked for deletion but can be recovered.
+  SOFT_DELETE = 2;
+}
+
+// State of the lifecycle policy.
+enum LifecyclePolicyState {
+  LIFECYCLE_POLICY_STATE_UNSPECIFIED = 0;
+  // Policy is disabled and won't be executed.
+  DISABLED = 1;
+  // Policy is enabled and will be executed according to schedule.
+  ENABLED = 2;
+}

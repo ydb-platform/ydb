@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1;
+
+option java_package = "yandex.cloud.api.speechsense.v1";
+option java_outer_classname = "ClassifiersServiceProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1;speechsense";
+
+import "google/api/annotations.proto";
+import "yandex/cloud/speechsense/v1/classifier.proto";
+
+service ClassifiersService {
+  // Rpc for listing classifiers in a project
+  rpc List(ListClassifiersRequest) returns (ListClassifiersResponse) {
+    option (google.api.http) = { post: "/speechsense/v1/classifiers/list" body: "*" };
+  }
+}
+
+message ListClassifiersRequest {
+  // Project id
+  string project_id = 1;
+}
+
+message ListClassifiersResponse {
+  // Classifiers belonging to the given project
+  repeated Classifier classifiers = 1;
+}

@@ -1,0 +1,105 @@
+{#
+This template renders (commented out) Managed Objects Instances
+for scalar and columnar Managed Objects.
+
+The user is expected to provide:
+
+ * values for all Managed Objects
+ * proper indices and values for zero or more tables rows
+
+#}
+{% include "pysnmp/base.j2" %}
+
+{% block smi_imports scoped %}
+
+MibScalarInstance, = mibBuilder.importSymbols(
+    'SNMPv2-SMI',
+    'MibScalarInstance'
+)
+
+# Import Managed Objects to base Managed Objects Instances on
+
+{% for symbol, definition in mib.items()|sort
+   if definition['class'] == 'objecttype' and
+      definition['nodetype'] in ('scalar', 'column') %}
+    {% if loop.first and loop.last %}
+({{ symbol|pythonsym }},) = mibBuilder.importSymbols(
+    "{{ mib['meta']['module'] }}",
+    {% elif loop.first %}
+({{ symbol|pythonsym }},
+    {% elif loop.last %}
+ {{ symbol|pythonsym }}) = mibBuilder.importSymbols(
+    "{{ mib['meta']['module'] }}",
+    {%  else %}
+ {{ symbol|pythonsym }},
+    {%  endif %}
+{% endfor %}
+{% for symbol, definition in mib.items()|sort
+       if definition['class'] == 'objecttype' and
+           definition['nodetype'] in ('scalar', 'column') %}
+    {% if loop.last %}
+    "{{ symbol }}")
+    {% else %}
+    "{{ symbol }}",
+    {% endif %}
+{% endfor %}
+
+{% endblock %}
+{% block managed_objects_instances scoped %}
+
+# MIB Managed Objects in the order of their OIDs
+{% for symbol, definition in mib.items() %}
+    {% if definition['nodetype'] == 'scalar' %}
+        {% block mib_scalar_object_instance_definition scoped %}
+{{ symbol|capfirst }}_ObjectInstance = MibScalarInstance
+        {% endblock %}
+        {% block mib_scalar_object_instantiation scoped %}
+# TODO: uncomment Managed Object Instance instantiation optionally
+#       setting a default value (via `.syntax.clone()`)
+# _{{ symbol }} = {{ symbol|capfirst }}_ObjectInstance(
+#      {{ symbol }}.name,
+#      (0,),
+#      {{ symbol }}.syntax
+# )
+        {% endblock %}
+    {% elif definition['nodetype'] == 'column' %}
+        {% block mib_table_column_object_instance_definition scoped %}
+{{ symbol|capfirst }}_ObjectInstance = MibScalarInstance
+        {% endblock %}
+        {% block mib_column_instantiation scoped %}
+# TODO: Set proper OID for Managed Object Instance (see INDEX clause in MIB)
+# TODO: Initialize Managed Object Instance value (via `.syntax.clone()`)
+# _{{ symbol }} = {{ symbol|capfirst }}_ObjectInstance(
+#     {{ symbol }}.name,
+#     (<add columnar indices here>,),
+#     {{ symbol }}.syntax
+# )
+        {% endblock %}
+    {% endif %}
+{% endfor %}
+{% endblock %}
+
+{% block exports scoped %}
+
+# Export Managed Objects Instances to the MIB builder
+
+# TODO: complete Managed Objects Instances initialization above
+# and uncomment the exports below
+
+mibBuilder.exportSymbols(
+    "__{{ mib['meta']['module'] }}",
+    {% for symbol, definition in mib.items()
+       if definition['class'] == 'objecttype' and
+           definition['nodetype'] in ('scalar', 'column') %}
+        {% if loop.first and loop.last %}
+    # **{"{{ definition['name'] }}": _{{ symbol }}}
+        {% elif loop.first %}
+    # **{"{{ definition['name'] }}": _{{ symbol }},
+        {% elif loop.last %}
+    # "{{ definition['name'] }}": _{{ symbol }}}
+        {% else %}
+    # "{{ definition['name'] }}": _{{ symbol }},
+        {% endif %}
+    {%  endfor %}
+)
+{% endblock %}

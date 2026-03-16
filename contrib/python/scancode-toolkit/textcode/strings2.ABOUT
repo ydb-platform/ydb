@@ -1,0 +1,11 @@
+about_resource: strings2.py
+name: floss-strings
+download_url: https://raw.githubusercontent.com/fireeye/flare-floss/0db13aff88d0487f818f19a36de879dc27c94e13/floss/strings.py
+authors: |
+ Willi Ballenthin <william.ballenthin@mandiant.com>
+ Moritz Raabe <moritz.raabe@mandiant.com>
+owner: Fireeye
+homepage_url: https://www.github.com/fireeye/flare-floss
+license_expression: apache-2.0
+copyright: Copyright (c) FireEye, Inc.
+license_file: apache-2.0.LICENSE

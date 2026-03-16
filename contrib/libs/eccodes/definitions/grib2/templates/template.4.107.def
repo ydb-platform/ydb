@@ -1,0 +1,11 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.107, Derived forecasts based on all ensemble members in relation to a reference period at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.horizontal.def"
+include "grib2/templates/template.4.statistical.def"
+include "grib2/templates/template.4.derived.def"
+include "grib2/templates/template.4.referenceperiod.def"

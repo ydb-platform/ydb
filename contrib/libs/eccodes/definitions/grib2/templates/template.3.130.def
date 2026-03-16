@@ -1,0 +1,14 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.130, Irregular Latitude/longitude grid
+
+constant isGridded = true;
+
+# Note: This template is deprecated.
+
+include "grib2/templates/template.3.shape_of_the_earth.def"
+
+points list(numberOfDataPoints) {
+    signed[4] latitude;
+    signed[4] longitude;
+}

@@ -1,0 +1,186 @@
+Metadata-Version: 2.4
+Name: certipy
+Version: 0.2.2
+Summary: Utility to create and sign CAs and certificates
+Author-email: Thomas Mendoza <mendoza33@llnl.gov>
+License: BSD 3-Clause License
+        
+        Copyright (c) 2018, Lawrence Livermore National Security, LLC
+        All rights reserved.
+        
+        Redistribution and use in source and binary forms, with or without
+        modification, are permitted provided that the following conditions are met:
+        
+        * Redistributions of source code must retain the above copyright notice, this
+          list of conditions and the following disclaimer.
+        
+        * Redistributions in binary form must reproduce the above copyright notice,
+          this list of conditions and the following disclaimer in the documentation
+          and/or other materials provided with the distribution.
+        
+        * Neither the name of the copyright holder nor the names of its
+          contributors may be used to endorse or promote products derived from
+          this software without specific prior written permission.
+        
+        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+        AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+        IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+        DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+        FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+        DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+        SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+        CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+        OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+        OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+        
+Project-URL: Homepage, https://github.com/LLNL/certipy
+Keywords: pki,ssl,tls,certificates
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Utilities
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: NOTICE
+Requires-Dist: cryptography
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: flask; extra == "dev"
+Requires-Dist: build; extra == "dev"
+Requires-Dist: pre-commit; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: bump-my-version; extra == "dev"
+Dynamic: license-file
+
+# Certipy
+
+A simple python tool for creating certificate authorities and certificates on
+the fly.
+
+## Introduction
+
+Certipy was made to simplify the certificate creation process. To that end,
+Certipy exposes methods for creating and managing certificate authorities,
+certificates, signing and building trust bundles. Behind the scenes Certipy:
+
+* Manages records of all certificates it creates
+  * External certs can be imported and managed by Certipy
+  * Maintains signing hierarchy
+* Persists certificates to files with appropriate permissions
+
+## Usage
+
+### Command line
+
+Creating a certificate authority:
+
+Certipy defaults to writing certs and certipy.json into a folder called `out`
+in your current directory.
+
+```
+$ certipy foo
+FILES {'ca': '', 'cert': 'out/foo/foo.crt', 'key': 'out/foo/foo.key'}
+IS_CA True
+SERIAL 0
+SIGNEES None
+PARENT_CA
+```
+
+Creating and signing a key-cert pair:
+
+```
+$ certipy bar --ca-name foo
+FILES {'ca': 'out/foo/foo.crt', 'key': 'out/bar/bar.key', 'cert': 'out/bar/bar.crt'}
+IS_CA False
+SERIAL 0
+SIGNEES None
+PARENT_CA foo
+```
+
+Removal:
+
+```
+certipy --rm bar
+Deleted:
+FILES {'ca': 'out/foo/foo.crt', 'key': 'out/bar/bar.key', 'cert': 'out/bar/bar.crt'}
+IS_CA False
+SERIAL 0
+SIGNEES None
+PARENT_CA foo
+```
+
+### Code
+
+Creating a certificate authority:
+
+```
+from certipy import Certipy
+
+certipy = Certipy(store_dir='/tmp')
+certipy.create_ca('foo')
+record = certipy.store.get_record('foo')
+```
+
+Creating and signing a key-cert pair:
+
+```
+certipy.create_signed_pair('bar', 'foo')
+record = certipy.store.get_record('bar')
+```
+
+Creating trust:
+
+```
+certipy.create_ca_bundle('ca-bundle.crt')
+
+# or to trust specific certs only:
+certipy.create_ca_bundle_for_names('ca-bundle.crt', ['bar'])
+```
+
+Removal:
+
+```
+record = certipy.remove_files('bar')
+```
+
+Records are dicts with the following structure:
+
+```
+{
+  'serial': 0,
+  'is_ca': true,
+  'parent_ca': 'ca_name',
+  'signees': {
+    'signee_name': 1
+  },
+  'files': {
+    'key': 'path/to/key.key',
+    'cert': 'path/to/cert.crt',
+    'ca': 'path/to/ca.crt',
+  }
+}
+```
+
+The `signees` will be empty for non-CA certificates. The `signees` field
+is stored as a python `Counter`. These relationships are used to build trust
+bundles.
+
+Information in Certipy is generally passed around as records which point to
+actual files. For most `_record` methods, there are generally equivalent
+`_file` methods that operate on files themselves. The former will only affect
+records in Certipy's store and the latter will affect both (something happens
+to the file, the record for it should change, too).
+
+### Release
+
+Certipy is released under BSD license. For more details see the LICENSE file.
+
+LLNL-CODE-754897

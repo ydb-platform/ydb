@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1;organizationmanager";
+option java_package = "yandex.cloud.api.organizationmanager.v1";
+
+message UserSshKey {
+  string id = 1;
+  string subject_id = 2;
+  string data = 3;
+  string name = 4;
+  string fingerprint = 5;
+  string organization_id = 6;
+  google.protobuf.Timestamp created_at = 7;
+  // Used for temporary keys, if empty the key doesn't expire
+  google.protobuf.Timestamp expires_at = 8;
+}

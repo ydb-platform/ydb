@@ -1,0 +1,11 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.136, Probability forecasts of anomalies, significance and other derived products in relation to a reference period with spatiotemporal processing based on focal (moving window) statistics in relation to a reference period at a horizontal level or in at a point in time
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.horizontal.def"
+include "grib2/templates/template.4.probability_large_ensemble.def"
+include "grib2/templates/template.4.referenceperiod.def"
+include "grib2/templates/template.4.focal_statistics.def"

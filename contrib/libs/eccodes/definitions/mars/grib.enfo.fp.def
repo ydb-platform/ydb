@@ -1,0 +1,31 @@
+#TODO assert(localDefinitionNumber == 5);
+# This is obsolete. Here for backward compatibility
+
+
+if(startStep == endStep)
+{
+	alias mars.step   = endStep;
+}
+else
+{
+	if((paramId == 131228) && (class == 1))
+	{
+		if(startStep == endStep - 24)
+		{
+			alias mars.step   = endStep;
+		}
+		else
+		{
+			transient patch_precip_fp = 24;
+			meta stepRange g1step_range(P1,P2,timeRangeIndicator,unitOfTimeRange,stepUnits,stepType,patch_precip_fp) : dump,read_only;
+			alias mars.step   = stepRange;
+		}
+	}
+	else
+	{
+		alias mars.step   = stepRange;
+	}
+}
+
+
+alias mars.number = forecastProbabilityNumber;

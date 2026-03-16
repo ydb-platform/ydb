@@ -1,0 +1,545 @@
+Metadata-Version: 2.1
+Name: requests-aws4auth
+Version: 1.3.1
+Summary: AWS4 authentication for Requests
+Home-page: https://github.com/tedder/requests-aws4auth
+Download-URL: https://github.com/tedder/requests-aws4auth/tarball/1.3.1
+Author: Ted Timmons
+Author-email: ted@tedder.dev
+License: MIT License
+Keywords: requests authentication amazon web services aws s3 REST
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Internet :: WWW/HTTP
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests
+Provides-Extra: httpx
+Requires-Dist: httpx ; extra == 'httpx'
+
+[![image](https://img.shields.io/pypi/v/requests-aws4auth.svg)](https://pypi.python.org/pypi/requests-aws4auth)
+[![image](https://img.shields.io/pypi/l/requests-aws4auth.svg)](https://pypi.python.org/pypi/requests-aws4auth)
+
+Amazon Web Services version 4 authentication for the Python [Requests](https://github.com/kennethreitz/requests) library.
+
+Features
+========
+
+-   Requests authentication for all AWS services that support AWS auth v4
+-   Independent signing key objects
+-   Automatic regeneration of keys when scope date boundary is passed
+-   Support for STS temporary credentials
+
+Implements header-based authentication, GET URL parameter and POST
+parameter authentication are not supported.
+
+Supported Services
+==================
+
+This package has been tested as working against:
+
+AppStream, AppSync, Auto-Scaling, CloudFormation, CloudFront, CloudHSM,
+CloudSearch, CloudTrail, CloudWatch Monitoring, CloudWatch Logs,
+CodeDeploy, Cognito Identity, Cognito Sync, Config, DataPipeline, Direct
+Connect, DynamoDB, Elastic Beanstalk, ElastiCache, EC2, EC2 Container
+Service, Elastic Load Balancing, Elastic MapReduce, ElasticSearch,
+Elastic Transcoder, Glacier, Identity and Access Management (IAM), Key
+Management Service (KMS), Kinesis, Lambda, Opsworks, Redshift,
+Relational Database Service (RDS), Route 53, Simple Storage Service
+(S3), Simple Notification Service (SNS), Simple Queue Service (SQS),
+Storage Gateway, Security Token Service (STS)
+
+The following services do not support AWS auth version 4 and are not
+usable with this package:
+
+Simple Email Service (SES), Simple Workflow Service (SWF),
+Import/Export, SimpleDB, DevPay, Mechanical Turk
+
+The AWS Support API has not been tested as it requires a premium
+subscription.
+
+Python versions
+========
+In the 1.x semantic versions, the minimum python support will be gradually raised:
+
+* 1.0.x: Support python2.7 and python3.3+.
+* 1.1.x: python2.7 is not supported, is best-effort. Support python3.3+.
+* 1.2.x: [Requires-Python](https://packaging.python.org/guides/dropping-older-python-versions/#specify-the-version-ranges-for-supported-python-distributions) will be set to python3.3+, explicitly removing earlier versions. python<3.7 is not supported, is best-effort.
+* 1.3.x: [Requires-Python](https://packaging.python.org/guides/dropping-older-python-versions/#specify-the-version-ranges-for-supported-python-distributions) will be set to python3.7+, explicitly removing earlier versions. (best-effort is TBD)
+
+Installation
+============
+
+Install via pip:
+
+``` {.sourceCode .bash}
+$ pip install requests-aws4auth
+```
+
+requests-aws4auth requires the
+[Requests](https://github.com/kennethreitz/requests) library by Kenneth
+Reitz.
+
+requests-aws4auth is tested on Python 2.7 and 3.5 and up.
+
+Behaviour changes in 0.8
+========================
+
+Version 0.8 introduces request date checking and automatic key
+regeneration behaviour as default. This has implications for sharing
+authentication objects between threads, and for storage of secret keys.
+See the relevant sections below for details. See also the discussion in
+[GitHub issue
+\#10](https://github.com/sam-washington/requests-aws4auth/issues/10).
+
+Basic usage
+===========
+
+``` {.sourceCode .python}
+>>> import requests
+>>> from requests_aws4auth import AWS4Auth
+>>> endpoint = 'http://s3-eu-west-1.amazonaws.com'
+>>> auth = AWS4Auth('<ACCESS ID>', '<ACCESS KEY>', 'eu-west-1', 's3')
+>>> response = requests.get(endpoint, auth=auth)
+>>> response.text
+<?xml version="1.0" encoding="UTF-8"?>
+    <ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01">
+        <Owner>
+        <ID>bcaf1ffd86f461ca5fb16fd081034f</ID>
+        <DisplayName>webfile</DisplayName>
+        ...
+```
+
+This example would list your buckets in the `eu-west-1` region of the
+Amazon S3 service.
+
+STS Temporary Credentials
+=========================
+
+``` {.sourceCode .python}
+>>> from requests_aws4auth import AWS4Auth
+>>> auth = AWS4Auth('<ACCESS ID>', '<ACCESS KEY>', 'eu-west-1', 's3',
+                    session_token='<SESSION TOKEN>')
+...
+```
+
+This example shows how to construct an AWS4Auth object for use with STS
+temporary credentials. The `x-amz-security-token` header is added with
+the session token. Temporary credential timeouts are not managed \-- in
+case the temporary credentials expire, they need to be re-generated and
+the AWS4Auth object re-constructed with the new credentials.
+
+Dynamic STS Credentials using botocore RefreshableCredentials
+=============================================================
+
+``` {.sourceCode .python}
+>>> from requests_aws4auth import AWS4Auth
+>>> from botocore.session import Session
+>>> credentials = Session().get_credentials()
+>>> auth = AWS4Auth(region='eu-west-1', service='es',
+                    refreshable_credentials=credentials)
+...
+```
+
+This example shows how to construct an AWS4Auth instance with
+automatically refreshing credentials, suitable for long-running
+applications using AWS IAM assume-role.
+The RefreshableCredentials instance is used to generate valid static
+credentials per-request, eliminating the need to recreate the AWS4Auth
+instance when temporary credentials expire.
+
+Date handling
+=============
+
+If an HTTP request to be authenticated contains a `Date` or `X-Amz-Date`
+header, AWS will only accept the authorised request if the date in the
+header matches the scope date of the signing key (see the [AWS REST API date
+docs](http://docs.aws.amazon.com/general/latest/gr/sigv4-date-handling.html).)).
+
+From version 0.8 of requests-aws4auth, if the header date does not match
+the scope date, an `AWS4Auth` instance will automatically regenerate its
+signing key, using the same scope parameters as the previous key except
+for the date, which will be changed to match the request date. If a
+request does not include a date, the current date is added to the
+request in an `X-Amz-Date` header, and the signing key is regenerated if
+this differs from the scope date.
+
+This means that `AWS4Auth` now extracts and parses dates from the values
+of `X-Amz-Date` and `Date` headers. Supported date formats are:
+
+-   RFC 7231 (e.g. Mon, 09 Sep 2011 23:36:00 GMT)
+-   RFC 850 (e.g. Sunday, 06-Nov-94 08:49:37 GMT)
+-   C time (e.g. Wed Dec 4 00:00:00 2002)
+-   Amz-Date format (e.g. 20090325T010101Z)
+-   ISO 8601 / RFC 3339 (e.g. 2009-03-25T10:11:12.13-01:00)
+
+If either header is present but `AWS4Auth` cannot extract a date because
+all present date headers are in an unrecognisable format, `AWS4Auth`
+will delete any `X-Amz-Date` and `Date` headers present and replace with
+a single `X-Amz-Date` header containing the current date. This behaviour
+can be modified using the `raise_invalid_date` keyword argument of the
+`AWS4Auth` constructor.
+
+Automatic key regeneration
+==========================
+
+If you do not want the signing key to be automatically regenerated when
+a mismatch between the request date and the scope date is encountered,
+use the alternative `StrictAWS4Auth` class, which is identical to
+`AWS4Auth` except that upon encountering a date mismatch it just raises
+a `DateMismatchError`. You can also use the `PassiveAWS4Auth` class,
+which mimics the `AWS4Auth` behaviour prior to version 0.8 and just
+signs and sends the request, whether the date matches or not. In this
+case it is up to the calling code to handle an authentication failure
+response from AWS caused by the date mismatch.
+
+Secret key storage
+==================
+
+To allow automatic key regeneration, the secret key is stored in the
+`AWS4Auth` instance, in the signing key object. If you do not want this
+to occur, instantiate the instance using an `AWS4Signing` key which was
+created with the `store_secret_key` parameter set to False:
+
+``` {.sourceCode .python}
+>>> sig_key = AWS4SigningKey(secret_key, region, service, date, False)
+>>> auth = StrictAWS4Auth(access_id, sig_key)
+```
+
+The `AWS4Auth` class will then raise a `NoSecretKeyError` when it
+attempts to regenerate its key. A slightly more conceptually elegant way
+to handle this is to use the alternative `StrictAWS4Auth` class, again
+instantiating it with an `AWS4SigningKey` instance created with
+`store_secret_key = False`.
+
+Multithreading
+==============
+
+If you share `AWS4Auth` (or even `StrictAWS4Auth`) instances between
+threads you are likely to encounter problems. Because `AWS4Auth`
+instances may unpredictably regenerate their signing key as part of
+signing a request, threads using the same instance may find the key
+changed by another thread halfway through the signing process, which may
+result in undefined behaviour.
+
+It may be possible to rig up a workable instance sharing mechanism using
+locking primitives and the `StrictAWS4Auth` class, however this poor
+author can\'t think of a scenario which works safely yet doesn\'t suffer
+from at some point blocking all threads for at least the duration of an
+HTTP request, which could be several seconds. If several requests come
+in in close succession which all require key regenerations then the
+system could be forced into serial operation for quite a length of time.
+
+In short, it\'s probably best to create a thread-local instance of
+`AWS4Auth` for each thread that needs to do authentication.
+
+API reference
+=============
+
+See the doctrings in `aws4auth.py` and `aws4signingkey.py`.
+
+Testing
+=======
+
+A test suite is included in the test folder.
+
+The package passes all tests in the AWS auth v4
+[test_suite](http://docs.aws.amazon.com/general/latest/gr/signature-v4-test-suite.html),
+and contains tests against the supported live services. See docstrings
+in `test/requests_aws4auth_test.py` for details about running the tests.
+
+Connection parameters are included in the tests for the AWS Support API,
+should you have access and want to try it. The documentation says it
+supports auth v4 so it should work if you have a subscription. Do pass
+on your results!
+
+Unsupported AWS features / todo
+===============================
+
+-   Currently does not support Amazon S3 chunked uploads
+-   Tests for new AWS services
+-   Requires Requests library to be present even if only using
+    AWS4SigningKey
+-   Coherent documentation
+
+Version release notes
+=====================
+
+- update `HISTORY.md`
+- update `requests_aws4auth/__init__.py`
+- create a [release](https://github.com/tedder/requests-aws4auth/releases) on github
+
+docker env:
+```
+docker run -v `pwd`:/opt/app/ -v ~/.pypirc:/root/.pypirc  -it python:3.12 /bin/bash
+```
+
+prep:
+```
+python3 -m pip install --user --upgrade setuptools wheel testresources twine
+```
+
+build and release, creds in `~/.pypirc`:
+```
+rm -f dist/*; \
+python3 setup.py sdist bdist_wheel && \
+python3 -m twine upload --repository testpypi dist/* && \
+python3 -m twine upload --repository pypi dist/*
+```
+
+
+
+1.3.1 (2024-07-21)
+=========
+
+**Changes**
+
+- explicitly set python requirement to 3.7.
+
+1.3.0 (2024-07-21)
+=========
+
+**Changes**
+
+- test against 3.12. Currently supporting 3.8-3.12.
+- add nonstandard port test, #68. Thanks @phillipberndt.
+- remove `six` and support for any python before 3.7, #73. Thanks @hugovk.
+
+1.2.3 (2023-05-03)
+=========
+
+**Changes**
+
+- Add manifest file so tarball installs succeed, #66. Thanks @jantman.
+
+1.2.2 (2023-02-02)
+=========
+
+**Bugfixes**
+
+- The 1.2.0/1.2.1 releases had a regression error. The fix of #63 has been reverted.
+
+1.2.1 (2023-01-25)
+=========
+
+**Bugfixes**
+
+- Actually fix #34. Build 1.2.0 was not fully released.
+
+
+1.2.0 (2023-01-20)
+=========
+
+**Bugfixes**
+
+- Fix #34, port numbers on header, with #63. Thanks @phillipberndt.
+
+**Changes**
+
+- test against 3.10. Currently supporting 3.8-3.10.
+- small fixup to flake8 config
+
+1.1.2 (2022-03-24)
+=========
+
+**Changes**
+
+- don't install markdown files, and especially not outside of our lib dir, see #51. Thanks @benjaminp.
+- prevent unquoting of query string reserved characters, see #60. Thanks @mliarakos.
+- Add support for files as request body, see see #58. Thanks @USSRLivesOn.
+- remove deprecated python 2.7 and python 3.5. Currently testing against 3.8 and 3.9.
+- renamed main branch to 'main'
+
+
+1.1.1 (2021-06-04)
+=========
+
+**Bugfixes**
+
+- secondary fix to query string ordering, documented in #49. It would fail with multiple values for the same key. Thanks @martinamps.
+- fix minor deprecation warning in a regex.
+
+**Package changes**
+
+- none
+
+**Tests**
+
+- Added tests for #49 secondary fix for string ordering.
+
+
+
+1.1.0 (2021-05-21)
+=========
+
+**New features**
+
+- query string ordering has been fixed. Documented in #21, fixed in #23. Thanks @zen4ever.
+- test for spaces before calling shlex on them in `amz_norm_whitespace`. shlex doesn't like to split whitespace on a string without whitespace, taking several orders of magnitude longer to parse through it. #35, thanks @noamkush.
+- added `refreshable_credentials`, see #37, thanks @teemuy.
+
+**Package changes**
+
+- Removed python2.7 support. Usage of py2.7 is not supported. `Requires-Python` will be set to py3.3+ in the next minor release.
+
+**Tests**
+
+- none
+
+
+1.0.1 (2020-09-28)
+=========
+
+**New features**
+
+- none
+
+**Package changes**
+
+- bump to proper X.Y.Z semver syntax
+- bump project to stable (#33)
+
+**Tests**
+
+- none
+
+1.0 (2020-06-06)
+=========
+
+**New features**
+
+- none!
+
+**Package changes**
+
+- add flake8 config
+- convert docs to markdown
+- Removed bundled six.py.
+- Taken over ownership via [PEP451](https://www.python.org/dev/peps/pep-0541/#continue-maintenance); [pypi issue here](https://github.com/pypa/pypi-support/issues/393), [successfully contacted Sam](https://github.com/sam-washington/requests-aws4auth/issues/40).
+
+**Tests**
+
+- remove sys path hacking from tests.
+- Ensure they work now.
+- Github Actions are in place for continuous integration.
+- Allow longer flake8 line length in tests.
+
+0.9 (2016-02-07)
+================
+
+**New features**
+
+-   Support for STS temporary credentials. Thanks to
+    <https://github.com/magdalene>
+
+**Tests**
+
+-   Tests for the STS temporary credentials functionality
+-   Fixed `AWS4SigningKey.amz_date` deprecation warning test
+-   Elastic MapReduce live service test no longer using deprecated DescribeJobFlows action
+
+0.8 (2015-12-31)
+================
+
+This version introduces some behaviour changes designed to reduce the legwork needed when a signing key goes out of date. This has implications for multithreading and secret key storage. See the README for further details.
+
+**New features**
+
+-   AWS4Auth class now checks request header date against signing key
+    scope date, and automatically regenerates the signing key with the
+    request date if they don't match
+-   Added exceptions module with new exceptions:
+    RequestsAWS4AuthException, DateMismatchError, NoSecretKeyError, DateFormatError
+-   Added StrictAWS4Auth and PassiveAWS4Auth classes
+
+**AWS4Auth changes**
+
+-   Added `regenerate_signing_key()` method, to allow regeneration of
+    current signing key with parameter overrides
+-   Added methods for checking and extracting dates from requests:
+    `get_request_date()`, `parse_date()`, `handle_date_mismatch()`
+-   `__call__()` now checks for a date header in the request and
+    attempts to automatically regenerate the signing key with the
+    request date if request date differs from the signing key date
+-   Can now supply a date to the constructor
+-   Changed default included sig headers to include `Date` header if
+    present
+
+**AWS4SigningKey changes**
+
+-   Added new `store_secret_key` instantiation parameter which allows
+    control of whether the secret key is stored in the instance
+-   Deprecated the `amz_date` property in favour of just `date`
+-   Spelling typo fix in AWS4AuthSigningKey module docstring. Thanks to jhgorrell
+
+**Package changes**
+
+-   Dropped support for Python 3.2. Now only supported on Python 2.7 and
+    3.3 and up, to match versions supported by Requests.
+
+**Tests**
+
+-   Many new tests for the new functionality
+-   Added tests for generating canonical path, including test for fix
+    added in 0.7 for percent encoding of paths
+-   Added tests for generating canonical querystrings
+
+0.7 (2015-11-02)
+================
+
+**Bugfixes**
+
+-   Fixed percent encoded characters in URL paths not being encoded
+    again for signature generation, as is expected for all services
+    except S3. This was causing authentication failures whenever these
+    characters appeared in a URL. Thanks to ipartola and cristi23 for
+    the report.
+-   Two bugfixes for ElasticSearch, thanks to Matthew Thompson for both:
+    -   No longer setting body to `b''` during signing if it's None
+    -   Now stripping port from URL netloc for signature generation
+
+**Modules**
+
+-   Upgraded the included version of six.py to 1.10
+
+**Tests**
+
+-   Fixed a couple of broken Unicode tests on Python 2
+-   Added a couple more tests for encoding Unicode request bodies
+
+0.6 (2015-09-07)
+================
+
+**Bugfixes**
+
+-   Included HISTORY.rst in built package to fix pip source install
+    failure. Thanks to Beirdo for the bug report.
+
+0.5 (2015-04-29)
+================
+
+**Bugfixes**
+
+-   Fixed bug when uploading to S3 with x-amz-acl header which caused
+    authentication failure - headers used in signature are now: host,
+    content-type and all `x-amz-*` headers (except for
+    x-amz-client-context which breaks Mobile Analytics auth if included)
+
+**Docs**
+
+-   Minor docstring and comment updates
+
+**License**
+
+-   Changed content of LICENSE to vanilla MIT license

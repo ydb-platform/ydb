@@ -1,0 +1,7 @@
+[console_scripts]
+luigi = luigi.cmdline:luigi_run
+luigi-deps = luigi.tools.deps:main
+luigi-deps-tree = luigi.tools.deps_tree:main
+luigi-grep = luigi.tools.luigi_grep:main
+luigid = luigi.cmdline:luigid
+

@@ -1,0 +1,114 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18
+BELONGS ya.make
+    # CLA
+    License text:
+        \## Contributor License Agreement
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [6:6]
+
+KEEP     BSD-3-Clause         71bd4cf523dc0d96d92eb06ea452cf58
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: include/crc32c/crc32c_config-linux.h at line 3, src/crc32c.cc at line 3, src/crc32c_arm64.cc at line 3, src/crc32c_arm64.h at line 3, src/crc32c_arm64_check.h at line 3, src/crc32c_internal.h at line 3, src/crc32c_portable.cc at line 3, src/crc32c_prefetch.h at line 3, src/crc32c_read_le.h at line 3, src/crc32c_round_up.h at line 3, src/crc32c_sse42.cc at line 3, src/crc32c_sse42.h at line 3, src/crc32c_sse42_check.h at line 3
+FILE_INCLUDE LICENSE found in files: include/crc32c/crc32c_config-linux.h at line 3, src/crc32c.cc at line 3, src/crc32c_arm64.cc at line 3, src/crc32c_arm64.h at line 3, src/crc32c_arm64_check.h at line 3, src/crc32c_internal.h at line 3, src/crc32c_portable.cc at line 3, src/crc32c_prefetch.h at line 3, src/crc32c_read_le.h at line 3, src/crc32c_round_up.h at line 3, src/crc32c_sse42.cc at line 3, src/crc32c_sse42.h at line 3, src/crc32c_sse42_check.h at line 3
+    License text:
+        // Use of this source code is governed by a BSD-style license that can be
+        // found in the LICENSE file. See the AUTHORS file for names of contributors.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/crc32c/crc32c_config-linux.h [2:3]
+        src/crc32c.cc [2:3]
+        src/crc32c_arm64.cc [2:3]
+        src/crc32c_arm64.h [2:3]
+        src/crc32c_arm64_check.h [2:3]
+        src/crc32c_internal.h [2:3]
+        src/crc32c_portable.cc [2:3]
+        src/crc32c_prefetch.h [2:3]
+        src/crc32c_read_le.h [2:3]
+        src/crc32c_round_up.h [2:3]
+        src/crc32c_sse42.cc [2:3]
+        src/crc32c_sse42.h [2:3]
+        src/crc32c_sse42_check.h [2:3]
+
+KEEP     BSD-3-Clause         a34ca18b6d1af06b5917ea0088ac9c87
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [3:28]
+
+KEEP     BSD-3-Clause         a402634d4233d35dc900b0600897b0a2
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: include/crc32c/crc32c.h at line 3
+FILE_INCLUDE LICENSE found in files: include/crc32c/crc32c.h at line 3
+    License text:
+           Use of this source code is governed by a BSD-style license that can be
+           found in the LICENSE file. See the AUTHORS file for names of contributors. */
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/crc32c/crc32c.h [2:3]
+
+SKIP     LicenseRef-scancode-generic-cla d72fcd21b18e44b666a94e6225ed43eb
+BELONGS ya.make
+    # CLA
+    License text:
+        Contributions to this project must be accompanied by a Contributor License
+        Agreement. You (or your employer) retain the copyright to your contribution,
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [8:9]

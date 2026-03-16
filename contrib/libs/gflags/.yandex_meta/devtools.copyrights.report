@@ -1,0 +1,118 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 409286d0fcf20c4e6a7aaa2fe3fbfc6f
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2011, Google Inc.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/util.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58b7390a1692c4372f7220b3953fc3b1
+BELONGS ya.make
+    License text:
+        Copyright (c) 2006, Google Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.txt [1:2]
+        include/gflags/gflags.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6311a72ce758031e9216e6c32d64ca94
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2008, Google Inc.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/gflags/gflags_completions.h [1:2]
+        src/gflags_completions.cc [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7096296241c007dc75bade8f6d805c41
+BELONGS ya.make
+    License text:
+        // Copyright (c) 1999, Google Inc.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/gflags/gflags_declare.h [1:2]
+        src/gflags.cc [1:2]
+        src/gflags_reporting.cc [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9a3e854b6e4f95f04ddbff2ae8042a23
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2007, Google Inc.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/mutex.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d431b8ec993eed4b55a747aa6ef7bead
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2014, Andreas Schuh
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/gflags/gflags_gflags.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e69e7ec3a76b47464c1ca40548f1482a
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2009, Google Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/windows_port.h [1:2]

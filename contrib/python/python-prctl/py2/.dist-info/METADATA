@@ -1,0 +1,21 @@
+Metadata-Version: 2.1
+Name: python-prctl
+Version: 1.8.1
+Summary: Python(ic) interface to the linux prctl syscall
+Home-page: http://github.com/seveas/python-prctl
+Author: Dennis Kaarsemaker
+Author-email: dennis@kaarsemaker.net
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU General Public License (GPL)
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: C
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Security
+
+UNKNOWN
+
+

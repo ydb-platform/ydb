@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package yandex.cloud.cdn.v1;
+
+import "google/api/annotations.proto";
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cdn/v1;cdn";
+option java_package = "yandex.cloud.api.cdn.v1";
+
+// A set of methods for managing Cache Service resources.
+service CacheService {
+    // Removes specified files from the cache of the specified resource. For details about purging, see [documentation](/docs/cdn/concepts/caching#purge).
+    //
+    // Purging may take up to 15 minutes.
+    rpc Purge(PurgeCacheRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/cdn/v1/cache/{resource_id}:purge" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "PurgeCacheMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+
+    // Uploads specified files from origins to cache of the specified resource. For defails about prefetching, see [documentation](/docs/cdn/concepts/caching#prefetch).
+    rpc Prefetch(PrefetchCacheRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/cdn/v1/cache/{resource_id}:prefetch" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "PrefetchCacheMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+}
+
+message PurgeCacheRequest {
+    // ID of the resource to perform purge operation on.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Set of paths:
+    // Paths of the files to remove from the cache.
+    //
+    // You may use asterisk (`*`) as a wildcard character that substitutes any number of characters.
+    //
+    // If an empty array of paths is specified (`"paths": []`), the cache is purged entirely.  
+    repeated string paths = 2;
+}
+
+message PurgeCacheMetadata {
+    // ID of the resource.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message PrefetchCacheRequest {
+    // ID of the resource to perform prefetch operation on.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Set of paths to prefetch.
+    repeated string paths = 2;
+}
+
+message PrefetchCacheMetadata {
+    // ID of the resource.
+    string resource_id = 1 [(required) = true, (length) = "<=50"];
+}

@@ -1,0 +1,7 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.53, Stretched and rotated spherical harmonic coefficients
+
+include "grib2/templates/template.3.spherical_harmonics.def"
+include "grib2/templates/template.3.rotation.def"
+include "grib2/templates/template.3.stretching.def"

@@ -1,0 +1,84 @@
+Metadata-Version: 2.4
+Name: pysmi
+Version: 1.6.3
+Summary: A pure-Python implementation of SNMP/SMI MIB parsing and conversion library.
+Author-email: Ilya Etingof <etingof@gmail.com>, "LeXtudio Inc." <support@lextudio.com>
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-Expression: BSD-2-Clause
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: System Administrators
+Classifier: Intended Audience :: Telecommunications Industry
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Communications
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+License-File: LICENSE.rst
+Requires-Dist: ply>=3.11
+Requires-Dist: Jinja2>=3.1.3
+Requires-Dist: requests>=2.26.0
+Requires-Dist: pysnmp>=7.1.16 ; extra == "dev"
+Requires-Dist: pytest>=6.2.5 ; extra == "dev"
+Requires-Dist: pytest-cov>=3.0.0 ; extra == "dev"
+Requires-Dist: black==22.3.0 ; extra == "dev"
+Requires-Dist: pre-commit==2.21.0 ; extra == "dev"
+Requires-Dist: isort>=5.10.1 ; extra == "dev"
+Requires-Dist: sphinx-sitemap-lextudio>=2.5.2 ; extra == "dev"
+Requires-Dist: sphinx>=7.0.0,<8.0.0 ; extra == "dev"
+Requires-Dist: furo>=2023.1.1 ; extra == "dev"
+Requires-Dist: sphinx-copybutton>=0.5.2 ; extra == "dev"
+Requires-Dist: doc8>=1.1.1 ; extra == "dev"
+Requires-Dist: sphinx-notfound-page>=1.0.0 ; extra == "dev"
+Requires-Dist: flake8>=5.0.4 ; extra == "dev"
+Requires-Dist: flake8-import-order>=0.18.2 ; extra == "dev"
+Requires-Dist: flake8-docstrings>=1.7.0 ; extra == "dev"
+Requires-Dist: flake8-rst-docstrings>=0.3.0 ; extra == "dev"
+Requires-Dist: pep8-naming>=0.14.1 ; extra == "dev"
+Requires-Dist: bump2version>=1.0.1 ; extra == "dev"
+Project-URL: Homepage, https://pysnmp.com
+Project-URL: Repository, https://github.com/lextudio/pysmi
+Provides-Extra: dev
+
+# SNMP MIB Compiler
+
+[![Become a Sponsor](https://img.shields.io/badge/Become%20a%20Sponsor-lextudio-orange.svg?style=for-readme)](https://github.com/sponsors/lextudio)
+[![PyPI](https://img.shields.io/pypi/v/pysmi.svg)](https://pypi.org/project/pysmi)
+[![PyPI Downloads](https://img.shields.io/pypi/dd/pysmi)](https://pypi.python.org/pypi/pysmi/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/pysmi.svg)](https://pypi.org/project/pysmi/)
+[![GitHub license](https://img.shields.io/badge/license-BSD-blue.svg)](https://raw.githubusercontent.com/lextudio/pysmi/master/LICENSE.rst)
+
+PySMI is a pure-Python implementation of
+[SNMP SMI](https://en.wikipedia.org/wiki/Management_information_base) MIB parser.
+This tool is designed to turn ASN.1 MIBs into various formats. As of this moment,
+JSON and [PySNMP](https://github.com/lextudio/pysnmp) modules can be generated
+from ASN.1 MIBs.
+
+## Features
+
+* Understands SMIv1, SMIv2 and de-facto SMI dialects
+* Turns MIBs into PySNMP classes and JSON documents
+* Maintains an index of MIB objects over many MIB modules
+* Automatically pulls ASN.1 MIBs from local directories, ZIP archives,
+  and HTTP servers
+* 100% Python, works with Python 3.9+
+
+PySMI documentation can be found at [PySMI site](https://www.pysnmp.com/pysmi).
+
+## How to get PySMI
+
+The pysmi package is distributed under terms and conditions of 2-clause
+BSD [license](https://www.pysnmp.com/pysmi/license.html). Source code is freely
+available as a GitHub [repo](https://github.com/lextudio/pysmi).
+
+You could `pip install pysmi` or download it from [PyPI](https://pypi.org/project/pysmi/).
+
+If something does not work as expected,
+[open an issue](https://github.com/lextudio/pysnmp/issues) at GitHub.
+
+Copyright (c) 2015-2020, [Ilya Etingof](mailto:etingof@gmail.com).
+Copyright (c) 2022-2026, [LeXtudio Inc.](mailto:support@lextudio.com).
+All rights reserved.
+

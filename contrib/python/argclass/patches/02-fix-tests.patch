@@ -1,0 +1,5 @@
+--- contrib/python/argclass/tests/test_secret_string.py	(index)
++++ contrib/python/argclass/tests/test_secret_string.py	(working tree)
+@@ -24 +24 @@ def test_secret_log(caplog):
+-    assert caplog.records[0].message == SecretString.PLACEHOLDER
++    assert caplog.records[1].message == SecretString.PLACEHOLDER

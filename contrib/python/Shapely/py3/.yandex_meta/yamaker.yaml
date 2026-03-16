@@ -1,0 +1,10 @@
+copy:
+  - src/*
+requirements:
+  - contrib/libs/geos/capi
+  - numpy
+mark_as_cython_c:
+  - shapely/_geometry_helpers.pyx
+  - shapely/_geos.pyx
+cython_directive:
+  - language_level=3

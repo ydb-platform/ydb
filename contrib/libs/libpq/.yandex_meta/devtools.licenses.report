@@ -1,0 +1,298 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     PostgreSQL           0a1ed7b9701876f1bb38819e27108844
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: PostgreSQL
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/postgresql, http://www.postgresql.org/about/licence, https://spdx.org/licenses/PostgreSQL
+    Files with this license:
+        src/port/win32gettimeofday.c [10:26]
+
+KEEP     PostgreSQL           0dba19eaada1256dbd2d31dd87210b07
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: PostgreSQL
+        Score           : 90.70
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/postgresql, http://www.postgresql.org/about/licence, https://spdx.org/licenses/PostgreSQL
+    Files with this license:
+        COPYRIGHT [4:23]
+
+KEEP     BSD-3-Clause         1bfa8f0e885fdff82cd781696e09fa40
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/port/bsearch_arg.c [8:31]
+
+KEEP     BSD-3-Clause         32125293cd51b70fe22c69714db15a03
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/include/lib/sort_template.h [87:109]
+        src/port/snprintf.c [7:29]
+
+KEEP     Apache-2.0           352cc870bed287c56ff6d0ed49989576
+BELONGS ya.make
+    License text:
+         *     (See accompanying file LICENSE-Apache or copy at
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 90.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        src/common/d2s.c [19:19]
+        src/common/d2s_full_table.h [19:19]
+        src/common/d2s_intrinsics.h [19:19]
+        src/common/f2s.c [19:19]
+        src/common/ryu_common.h [19:19]
+        src/include/common/shortest_dec.h [19:19]
+
+KEEP     BSD-3-Clause         3af7741f9ea652c032b759d9e3d3a190
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/port/inet_aton.c [17:39]
+
+KEEP     Apache-2.0           41a922de9306b0a257f5751fe442eaed
+BELONGS ya.make
+    License text:
+         * The contents of this file may be used under the terms of the Apache
+         * License, Version 2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        src/common/d2s.c [16:17]
+        src/common/d2s_full_table.h [16:17]
+        src/common/d2s_intrinsics.h [16:17]
+        src/common/f2s.c [16:17]
+        src/common/ryu_common.h [16:17]
+        src/include/common/shortest_dec.h [16:17]
+
+KEEP     Apache-2.0           4810a1d011df1766e55de40cecbb109b
+BELONGS ya.make
+    License text:
+         *      http://www.apache.org/licenses/LICENSE-2.0)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        src/common/f2s.c [20:20]
+        src/common/ryu_common.h [20:20]
+
+KEEP     ISC                  496ba8557c8105b63a14ddbb272cca56
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        src/port/inet_net_ntop.c [5:15]
+
+KEEP     BSL-1.0 AND Apache-2.0 58f28b232cdc20fe17ee98c8d1426303
+BELONGS ya.make
+    License text:
+         * terms of the Boost license (not the Apache license). The original copyright
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        src/common/d2s.c [11:11]
+        src/common/d2s_full_table.h [11:11]
+        src/common/d2s_intrinsics.h [11:11]
+        src/common/f2s.c [11:11]
+        src/common/ryu_common.h [11:11]
+        src/include/common/shortest_dec.h [11:11]
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        src/common/d2s.c [11:11]
+        src/common/d2s_full_table.h [11:11]
+        src/common/d2s_intrinsics.h [11:11]
+        src/common/f2s.c [11:11]
+        src/common/ryu_common.h [11:11]
+        src/include/common/shortest_dec.h [11:11]
+
+KEEP     Public-Domain        7c92e8089385b22ed5fd567295c81033
+BELONGS ya.make
+    License text:
+         * Markus Kuhn -- 2001-09-08 -- public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/common/wchar.c [584:584]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 8c50bddae7664b09fbc4ea14bdb18b7a
+BELONGS ya.make
+    # warrantly disclaimer
+    License text:
+         * Unless required by applicable law or agreed to in writing, this software is
+         * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+         * KIND, either express or implied.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 57.45
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        src/common/d2s.c [28:30]
+        src/common/d2s_full_table.h [28:30]
+        src/common/d2s_intrinsics.h [28:30]
+        src/common/f2s.c [28:30]
+        src/common/ryu_common.h [28:30]
+        src/include/common/shortest_dec.h [28:30]
+
+KEEP     MIT                  903a88db016e1047089dbd0f52332032
+BELONGS ya.make
+    License text:
+        /* MIT licensed */
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/port/pg_crc32c_sse42.c [88:88]
+
+KEEP     BSD-3-Clause         9ab535721548e623be4b2c7b18d27556
+BELONGS ya.make
+    License text:
+         *	  reliable BSD-style signal(2) routine stolen from RWW who stole it
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/port/pqsignal.c [4:4]
+
+KEEP     BSD-3-Clause         a056e68d4c9945273dc37d685db60e82
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/port/pgmkdirp.c [8:30]
+
+KEEP     BSL-1.0              daa8af89f716798301b720508a659d6c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 72.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        src/common/d2s.c [22:26]
+        src/common/d2s_full_table.h [22:26]
+        src/common/d2s_intrinsics.h [22:26]
+        src/common/f2s.c [22:26]
+        src/common/ryu_common.h [22:26]
+        src/include/common/shortest_dec.h [22:26]
+
+KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        src/port/timingsafe_bcmp.c [10:20]
+
+KEEP     Apache-2.0           f0e4847ae046ec3bc163a26442a0cc53
+BELONGS ya.make
+    License text:
+         * License, Version 2.0.
+         *
+         *     (See accompanying file LICENSE-Apache or copy at
+         *      http://www.apache.org/licenses/LICENSE-2.0)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 23.81
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        src/common/d2s.c [17:20]
+        src/common/d2s_full_table.h [17:20]
+        src/common/d2s_intrinsics.h [17:20]
+        src/include/common/shortest_dec.h [17:20]
+
+KEEP     BSD-3-Clause         ff944e260801f8f617ff03884446378e
+BELONGS ya.make
+    License text:
+         * BSD-style getpeereid() for platforms that lack it.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/port/getpeereid.c [30:30]

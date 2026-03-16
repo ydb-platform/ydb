@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.redis.v1;
+
+import "google/protobuf/timestamp.proto";
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/redis/v1;redis";
+option java_package = "yandex.cloud.api.mdb.redis.v1";
+
+// A maintenance window settings.
+message MaintenanceWindow {
+  // The maintenance policy in effect.
+  oneof policy {
+    option (exactly_one) = true;
+
+    // Maintenance operation can be scheduled anytime.
+    AnytimeMaintenanceWindow anytime = 1;
+
+    // Maintenance operation can be scheduled on a weekly basis.
+    WeeklyMaintenanceWindow weekly_maintenance_window = 2;
+  }
+}
+
+message AnytimeMaintenanceWindow {}
+
+// Weelky maintenance window settings.
+message WeeklyMaintenanceWindow {
+  enum WeekDay {
+    WEEK_DAY_UNSPECIFIED = 0;
+    MON = 1;
+    TUE = 2;
+    WED = 3;
+    THU = 4;
+    FRI = 5;
+    SAT = 6;
+    SUN = 7;
+  }
+
+  // Day of the week (in `DDD` format).
+  WeekDay day = 1;
+
+  // Hour of the day in UTC (in `HH` format).
+  int64 hour = 2 [(value) = "1-24"];
+}
+
+// A planned maintenance operation.
+message MaintenanceOperation {
+  // Information about this maintenance operation.
+  string info = 1 [(length) = "<=256"];
+
+  // Time until which this maintenance operation is delayed.
+  google.protobuf.Timestamp delayed_until = 2;
+}

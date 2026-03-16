@@ -1,0 +1,11 @@
+# (C) Copyright 2005- ECMWF.
+
+# Type of generating process
+codetable[1] typeOfGeneratingProcess ('4.3.table',masterDir,localDir) : dump;
+
+# Background generating process identifier (defined by originating centre)
+unsigned[1] backgroundProcess = 255 : edition_specific;
+alias backgroundGeneratingProcessIdentifier=backgroundProcess;
+
+# Analysis or forecast generating processes identifier (defined by originating centre)
+unsigned[1] generatingProcessIdentifier  : dump;

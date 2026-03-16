@@ -1,0 +1,87 @@
+--- contrib/python/acme/acme/_internal/tests/challenges_test.py	(index)
++++ contrib/python/acme/acme/_internal/tests/challenges_test.py	(working tree)
+@@ -11,7 +11,7 @@ import pytest
+ import requests
+ 
+ from acme import errors
+-from acme._internal.tests import test_util
++from __tests__ import test_util
+ 
+ CERT = test_util.load_comparable_cert('cert.pem')
+ KEY = jose.JWKRSA(key=test_util.load_rsa_private_key('rsa512_key.pem'))
+--- contrib/python/acme/acme/_internal/tests/client_test.py	(index)
++++ contrib/python/acme/acme/_internal/tests/client_test.py	(working tree)
+@@ -17,8 +17,8 @@ from acme import challenges
+ from acme import errors
+ from acme import jws as acme_jws
+ from acme import messages
+-from acme._internal.tests import messages_test
+-from acme._internal.tests import test_util
++from __tests__ import messages_test
++from __tests__ import test_util
+ from acme.client import ClientNetwork
+ from acme.client import ClientV2
+ 
+--- contrib/python/acme/acme/_internal/tests/crypto_util_test.py	(index)
++++ contrib/python/acme/acme/_internal/tests/crypto_util_test.py	(working tree)
+@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives import serialization
+ from cryptography.hazmat.primitives.asymmetric import rsa, x25519
+ 
+ from acme import errors
+-from acme._internal.tests import test_util
++from __tests__ import test_util
+ 
+ 
+ class FormatTest(unittest.TestCase):
+--- contrib/python/acme/acme/_internal/tests/jws_test.py	(index)
++++ contrib/python/acme/acme/_internal/tests/jws_test.py	(working tree)
+@@ -5,7 +5,7 @@ import unittest
+ import josepy as jose
+ import pytest
+ 
+-from acme._internal.tests import test_util
++from __tests__ import test_util
+ 
+ KEY = jose.JWKRSA.load(test_util.load_vector('rsa512_key.pem'))
+ 
+--- contrib/python/acme/acme/_internal/tests/messages_test.py	(index)
++++ contrib/python/acme/acme/_internal/tests/messages_test.py	(working tree)
+@@ -10,7 +10,7 @@ import josepy as jose
+ import pytest
+ 
+ from acme import challenges
+-from acme._internal.tests import test_util
++from __tests__ import test_util
+ 
+ CERT = test_util.load_comparable_cert('cert.der')
+ CSR = test_util.load_comparable_csr('csr.der')
+--- contrib/python/acme/acme/_internal/tests/standalone_test.py	(index)
++++ contrib/python/acme/acme/_internal/tests/standalone_test.py	(working tree)
+@@ -15,7 +15,7 @@ import requests
+ from acme import challenges
+ from acme import crypto_util
+ from acme import errors
+-from acme._internal.tests import test_util
++from __tests__ import test_util
+ 
+ 
+ class TLSServerTest(unittest.TestCase):
+--- contrib/python/acme/acme/_internal/tests/test_util.py	(index)
++++ contrib/python/acme/acme/_internal/tests/test_util.py	(working tree)
+@@ -12,13 +12,14 @@ from cryptography.hazmat.primitives import serialization
+ import josepy as jose
+ from josepy.util import ComparableECKey
+ from OpenSSL import crypto
++from library.python.resource import resfs_read
+ 
+ 
+ def load_vector(*names):
+     """Load contents of a test vector."""
+     # luckily, resource_string opens file in binary mode
+-    vector_ref = importlib.resources.files(__package__).joinpath('testdata', *names)
+-    return vector_ref.read_bytes()
++    vector_ref = resfs_read(os.path.join('testdata', *names))
++    return vector_ref
+ 
+ 
+ def _guess_loader(filename, loader_pem, loader_der):

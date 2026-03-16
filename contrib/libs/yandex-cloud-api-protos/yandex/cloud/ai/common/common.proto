@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.common;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/common;common";
+option java_package = "yandex.cloud.api.ai.common";
+
+message ExpirationConfig {
+  enum ExpirationPolicy {
+    EXPIRATION_POLICY_UNSPECIFIED = 0;
+
+    STATIC = 1;
+
+    SINCE_LAST_ACTIVE = 2;
+  }
+
+  ExpirationPolicy expiration_policy = 1;
+
+  int64 ttl_days = 2;
+}
+
+message Error {
+  int64 code = 1;
+
+  string message = 2;
+}

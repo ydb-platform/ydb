@@ -1,0 +1,128 @@
+PY23_LIBRARY()
+
+LICENSE(BSD-3-Clause)
+
+VERSION(0.13.0)
+
+PEERDIR(
+    contrib/python/Flask-RESTful
+    contrib/python/jsonschema
+)
+
+IF(PYTHON2)
+    PEERDIR(
+        contrib/deprecated/python/enum34
+    )
+ENDIF()
+
+PY_SRCS(
+    TOP_LEVEL
+    flask_restplus/__about__.py
+    flask_restplus/__init__.py
+    flask_restplus/_http.py
+    flask_restplus/api.py
+    flask_restplus/apidoc.py
+    flask_restplus/cors.py
+    flask_restplus/errors.py
+    flask_restplus/fields.py
+    flask_restplus/inputs.py
+    flask_restplus/marshalling.py
+    flask_restplus/mask.py
+    flask_restplus/model.py
+    flask_restplus/namespace.py
+    flask_restplus/postman.py
+    flask_restplus/representations.py
+    flask_restplus/reqparse.py
+    flask_restplus/resource.py
+    flask_restplus/schemas/__init__.py
+    flask_restplus/specs.py
+    flask_restplus/swagger.py
+    flask_restplus/utils.py
+)
+
+RESOURCE_FILES(
+    PREFIX contrib/python/flask-restplus/
+    .dist-info/METADATA
+    .dist-info/top_level.txt
+)
+
+RESOURCE_FILES(
+    flask_restplus/swagger-ui/version
+    flask_restplus/swagger-ui/dist/swagger-ui.js
+    flask_restplus/swagger-ui/dist/index.html
+    flask_restplus/swagger-ui/dist/fonts/DroidSans.ttf
+    flask_restplus/swagger-ui/dist/fonts/DroidSans-Bold.ttf
+    flask_restplus/swagger-ui/dist/lib/handlebars-4.0.5.js
+    flask_restplus/swagger-ui/dist/lib/object-assign-pollyfill.js
+    flask_restplus/swagger-ui/dist/lib/highlight.9.1.0.pack.js
+    flask_restplus/swagger-ui/dist/lib/backbone-min.js
+    flask_restplus/swagger-ui/dist/lib/es5-shim.js
+    flask_restplus/swagger-ui/dist/lib/marked.js
+    flask_restplus/swagger-ui/dist/lib/js-yaml.min.js
+    flask_restplus/swagger-ui/dist/lib/lodash.min.js
+    flask_restplus/swagger-ui/dist/lib/jquery.slideto.min.js
+    flask_restplus/swagger-ui/dist/lib/highlight.9.1.0.pack_extended.js
+    flask_restplus/swagger-ui/dist/lib/sanitize-html.min.js
+    flask_restplus/swagger-ui/dist/lib/jquery.ba-bbq.min.js
+    flask_restplus/swagger-ui/dist/lib/jquery-1.8.0.min.js
+    flask_restplus/swagger-ui/dist/lib/swagger-oauth.js
+    flask_restplus/swagger-ui/dist/lib/jsoneditor.min.js
+    flask_restplus/swagger-ui/dist/lib/jquery.wiggle.min.js
+    flask_restplus/swagger-ui/dist/o2c.html
+    flask_restplus/swagger-ui/dist/css/print.css
+    flask_restplus/swagger-ui/dist/css/typography.css
+    flask_restplus/swagger-ui/dist/css/reset.css
+    flask_restplus/swagger-ui/dist/css/screen.css
+    flask_restplus/swagger-ui/dist/css/style.css
+    flask_restplus/swagger-ui/dist/images/collapse.gif
+    flask_restplus/swagger-ui/dist/images/expand.gif
+    flask_restplus/swagger-ui/dist/images/favicon-16x16.png
+    flask_restplus/swagger-ui/dist/images/pet_store_api.png
+    flask_restplus/swagger-ui/dist/images/wordnik_api.png
+    flask_restplus/swagger-ui/dist/images/favicon.ico
+    flask_restplus/swagger-ui/dist/images/favicon-32x32.png
+    flask_restplus/swagger-ui/dist/images/logo_small.png
+    flask_restplus/swagger-ui/dist/images/throbber.gif
+    flask_restplus/swagger-ui/dist/images/explorer_icons.png
+    flask_restplus/swagger-ui/dist/swagger-ui.min.js
+    flask_restplus/swagger-ui/dist/lang/ko-kr.js
+    flask_restplus/swagger-ui/dist/lang/it.js
+    flask_restplus/swagger-ui/dist/lang/en.js
+    flask_restplus/swagger-ui/dist/lang/ca.js
+    flask_restplus/swagger-ui/dist/lang/ru.js
+    flask_restplus/swagger-ui/dist/lang/zh-cn.js
+    flask_restplus/swagger-ui/dist/lang/translator.js
+    flask_restplus/swagger-ui/dist/lang/pt.js
+    flask_restplus/swagger-ui/dist/lang/ja.js
+    flask_restplus/swagger-ui/dist/lang/pl.js
+    flask_restplus/swagger-ui/dist/lang/es.js
+    flask_restplus/swagger-ui/dist/lang/geo.js
+    flask_restplus/swagger-ui/dist/lang/fr.js
+    flask_restplus/swagger-ui/dist/lang/tr.js
+    flask_restplus/swagger-ui/dist/lang/el.js
+    flask_restplus/schemas/oas-2.0.json
+    flask_restplus/static/droid-sans.css
+    flask_restplus/static/favicon-16x16.png
+    flask_restplus/static/favicon-32x32.png
+    flask_restplus/static/files/.npmignore
+    flask_restplus/static/files/droid-sans-latin-400.woff
+    flask_restplus/static/files/droid-sans-latin-400.woff2
+    flask_restplus/static/files/droid-sans-latin-700.woff
+    flask_restplus/static/files/droid-sans-latin-700.woff2
+    flask_restplus/static/oauth2-redirect.html
+    flask_restplus/static/swagger-ui-bundle.js
+    flask_restplus/static/swagger-ui-bundle.js.map
+    flask_restplus/static/swagger-ui-standalone-preset.js
+    flask_restplus/static/swagger-ui-standalone-preset.js.map
+    flask_restplus/static/swagger-ui.css
+    flask_restplus/static/swagger-ui.css.map
+    flask_restplus/static/swagger-ui.js
+    flask_restplus/static/swagger-ui.js.map
+    flask_restplus/templates/swagger-ui-css.html
+    flask_restplus/templates/swagger-ui-libs.html
+    flask_restplus/templates/swagger-ui.html
+)
+
+NO_LINT()
+
+END()

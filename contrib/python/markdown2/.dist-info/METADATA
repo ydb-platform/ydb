@@ -1,0 +1,51 @@
+Metadata-Version: 2.1
+Name: markdown2
+Version: 2.5.4
+Summary: A fast and complete Python implementation of Markdown
+Home-page: https://github.com/trentm/python-markdown2
+Author: Trent Mick
+Author-email: trentm@gmail.com
+Maintainer: Trent Mick
+Maintainer-email: trentm@gmail.com
+License: MIT
+Platform: any
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Software Development :: Documentation
+Classifier: Topic :: Text Processing :: Filters
+Classifier: Topic :: Text Processing :: Markup :: HTML
+Requires-Python: >=3.9, <4
+License-File: LICENSE.txt
+Provides-Extra: all
+Requires-Dist: pygments>=2.7.3; extra == "all"
+Requires-Dist: wavedrom; extra == "all"
+Requires-Dist: latex2mathml; python_version >= "3.8.1" and extra == "all"
+Provides-Extra: code_syntax_highlighting
+Requires-Dist: pygments>=2.7.3; extra == "code-syntax-highlighting"
+Provides-Extra: latex
+Requires-Dist: latex2mathml; python_version >= "3.8.1" and extra == "latex"
+Provides-Extra: wavedrom
+Requires-Dist: wavedrom; extra == "wavedrom"
+
+markdown2: A fast and complete Python implementation of Markdown.
+
+Markdown is a text-to-HTML filter; it translates an easy-to-read /
+easy-to-write structured text format into HTML.  Markdown's text
+format is most similar to that of plain text email, and supports
+features such as headers, *emphasis*, code blocks, blockquotes, and
+links.  -- http://daringfireball.net/projects/markdown/
+
+This is a fast and complete Python implementation of the Markdown
+spec. See http://github.com/trentm/python-markdown2 for more info.
+
+

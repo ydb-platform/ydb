@@ -1,0 +1,31 @@
+#
+# Copyright (c), 2016-2021, SISSA (International School for Advanced Studies).
+# All rights reserved.
+# This file is distributed under the terms of the MIT License.
+# See the file 'LICENSE' in the root directory of the present
+# distribution, or http://opensource.org/licenses/MIT.
+#
+# Auto-generated code: don't edit this file
+#
+"""
+Sample of XML data bindings for schema {{ schema.name }}
+"""
+import xmlschema
+from xmlschema.dataobjects import DataElement, DataBindingMeta
+
+{% if schema.target_namespace -%}
+__NAMESPACE__ = "{{ schema.target_namespace }}"
+{%- endif %}
+
+{% if schema.XSD_VERSION == '1.0' -%}
+schema = xmlschema.XMLSchema10("{{ schema.name }}")
+{%- else -%}
+schema = xmlschema.XMLSchema11("{{ schema.name }}")
+{%- endif -%}
+
+{# Bindings for global elements #}
+{% for xsd_element in schema.elements.values() %}
+
+class {{ xsd_element|name|capitalize }}Binding(DataElement, metaclass=DataBindingMeta):
+    xsd_element = schema.elements['{{ xsd_element.local_name }}']
+{% endfor %}

@@ -1,0 +1,53 @@
+Metadata-Version: 2.1
+Name: Flask-Bootstrap
+Version: 3.3.7.1
+Summary: An extension that includes Bootstrap in your project, without any boilerplate code.
+Home-page: http://github.com/mbr/flask-bootstrap
+Author: Marc Brinkmann
+Author-email: git@marcbrinkmann.de
+License: BSD
+Platform: any
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Dist: Flask>=0.8
+Requires-Dist: dominate
+Requires-Dist: visitor
+
+===============
+Flask-Bootstrap
+===============
+
+.. image:: https://travis-ci.org/mbr/flask-bootstrap.png?branch=master
+   :target: https://travis-ci.org/mbr/flask-bootstrap
+
+Flask-Bootstrap packages `Bootstrap
+<http://getbootstrap.com>`_ into an extension that mostly consists
+of a blueprint named 'bootstrap'. It can also create links to serve Bootstrap
+from a CDN and works with no boilerplate code in your application.
+
+Usage
+-----
+
+Here is an example::
+
+  from flask_bootstrap import Bootstrap
+
+  [...]
+
+  Bootstrap(app)
+
+This makes some new templates available, containing blank pages that include all
+bootstrap resources, and have predefined blocks where you can put your content.
+
+As of version 3, Flask-Bootstrap has a `proper documentation
+<http://pythonhosted.org /Flask-Bootstrap>`_, which you can check for more
+details.
+
+

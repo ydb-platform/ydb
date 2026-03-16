@@ -1,0 +1,65 @@
+{#
+run `ya tool yamaker ym2 reimport -t ~/arcadia/contrib/python/orjson/.yandex_meta/build.ym` on me
+docs:
+https://docs.yandex-team.ru/contrib-automation/templates
+https://a.yandex-team.ru/arcadia/devtools/yamaker/libym2/templates/pycargo.ym
+#}
+
+{% extends '//builtin/pycargo.ym' %}
+
+{% block mod_name %}
+_whenever
+{% endblock %}
+
+{% block current_version %}0.8.8{% endblock %}
+{% block current_url %}https://github.com/ariebovenberg/whenever/archive/refs/tags/{{self.version().strip()}}.tar.gz{% endblock %}
+
+{% block platforms %}
+aarch64-apple-darwin
+x86_64-apple-darwin
+x86_64-unknown-linux-gnu
+{% endblock %}
+
+{% block patch_source %}
+sed -e 's|cdylib|staticlib|' -i Cargo.toml
+{% endblock %}
+
+{# rust from pycargo.ym is too old #}
+{% block rust_version %}1.87.0{% endblock %}
+{% block rustup_verison %}1.28.2{% endblock %}
+
+{% block build_source %}
+export PYO3_CROSS_PYTHON_VERSION=3.12
+{{super()}}
+
+find "${BUILD}/x86_64-pc-windows-msvc/" -name '*.lib' -type f  | while read l; do
+    llvm-ar d ${l} $(llvm-ar t ${l} | grep dll)
+done
+
+(find ${BUILD} -type f -name '*.a'; find ${BUILD} -type f -name '*.lib') | grep -v "/deps/" | while read l; do
+    llvm-objcopy --redefine-sym "_PyInit__whenever=_PyInit_8whenever8whenever" ${l}
+    llvm-objcopy --redefine-sym "PyInit__whenever=PyInit_8whenever8whenever" ${l}
+done
+
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+
+find "${OUTPUT}/a/x86_64-pc-windows-msvc" -name '*.lib' -type f  | while read l; do
+    new_l=$(echo ${l} | sed -e 's|whenever.lib$|lib_whenever.lib|')
+    mv ${l} ${new_l}
+done
+{% endblock %}
+
+{% block prepare_yamake %}
+:
+{% endblock %}
+
+{% block run_license_analyzer %}
+:
+{% endblock %}
+
+{% block step_install %}
+rsync --recursive --perms ${OUTPUT}/a ${DST_PATH}
+{% endblock %}

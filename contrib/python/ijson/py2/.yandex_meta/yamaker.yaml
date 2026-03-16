@@ -1,0 +1,4 @@
+mark_as_py3_sources:
+  - ijson/utils35.py
+exclude:
+  - ijson/backends/yajl*

@@ -1,0 +1,4 @@
+requirements:
+  - contrib/libs/xxhash
+copy:
+  - _xxhash.c

@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package yandex.cloud.containerregistry.v1;
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/containerregistry/v1/scan_policy.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "google/protobuf/field_mask.proto";
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/containerregistry/v1;containerregistry";
+option java_package = "yandex.cloud.api.containerregistry.v1";
+
+// A set of methods for managing scan policy resources.
+service ScanPolicyService {
+
+  // Returns the specified scan policy.
+  rpc Get (GetScanPolicyRequest) returns (ScanPolicy) {
+    option (google.api.http) = { get: "/container-registry/v1/scanPolicies/{scan_policy_id}" };
+  }
+
+  // Returns scan policy for the registry if any exists.
+  rpc GetByRegistry (GetScanPolicyByRegistryRequest) returns (ScanPolicy) {
+    option (google.api.http) = { get: "/container-registry/v1/scanPolicies/{registry_id}:byRegistry" };
+  }
+
+  // Creates a scan policy for the specified registry.
+  rpc Create (CreateScanPolicyRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/container-registry/v1/scanPolicies" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateScanPolicyMetadata"
+      response: "ScanPolicy"
+    };
+  }
+
+  // Updates the specified scan policy.
+  rpc Update (UpdateScanPolicyRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/container-registry/v1/scanPolicies/{scan_policy_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateScanPolicyMetadata"
+      response: "ScanPolicy"
+    };
+  }
+
+  // Deletes the specified scan policy.
+  rpc Delete (DeleteScanPolicyRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/container-registry/v1/scanPolicies/{scan_policy_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteScanPolicyMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetScanPolicyRequest {
+  // ID of the scan policy.
+  string scan_policy_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GetScanPolicyByRegistryRequest {
+  // ID of the registry with scan policy.
+  string registry_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message CreateScanPolicyRequest {
+  // ID of the scan policy registry.
+  string registry_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the scan policy.
+  string name = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Description of the scan policy.
+  string description = 3 [(length) = "<=256"];
+
+  // Rules of the scan policy.
+  ScanRules rules = 4;
+}
+
+message UpdateScanPolicyRequest {
+  // ID of the scan policy.
+  string scan_policy_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask that specifies which fields of the scan policy resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the scan policy.
+  string name = 3 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Description of the scan policy.
+  string description = 4 [(length) = "<=256"];
+
+  // Rules of the scan policy.
+  ScanRules rules = 5;
+}
+
+message DeleteScanPolicyRequest {
+  // ID of the scan policy.
+  string scan_policy_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message CreateScanPolicyMetadata {
+  // ID of created scan policy resource.
+  string scan_policy_id = 1;
+}
+
+message UpdateScanPolicyMetadata {
+  // ID of the scan policy resource that is updated.
+  string scan_policy_id = 1;
+}
+
+message DeleteScanPolicyMetadata {
+  // ID of the scan policy resource that is deleted.
+  string scan_policy_id = 1;
+}

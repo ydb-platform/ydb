@@ -1,0 +1,38 @@
+commit 43fd3f69cc316f028001241064fd4abf50118c08
+merge: c10d9baae1ed07d26e67891fdd72bce269e2a0c7 e2c2b8820e9ad5565dad18164e4e93ebf97f2073
+author: thegeorg
+date: 2020-12-11T17:31:23+03:00
+revision: 7664053
+
+    Make Eigen / tensorflow compile under C++20
+    
+    В С++20 сломали сравнение через CRTP-паттерн (подробности тут: DEVTOOLS-7793)
+    Заменил member-based сравнение на friend-based.
+    
+    Похоже, что это работает правильно везде.
+    
+    REVIEW: 1559619
+
+--- a/unsupported/Eigen/CXX11/src/Tensor/TensorBase.h
++++ b/unsupported/Eigen/CXX11/src/Tensor/TensorBase.h
+@@ -452,11 +452,20 @@ class TensorBase<Derived, ReadOnlyAccessors>
+       return binaryExpr(other.derived(), internal::scalar_cmp_op<Scalar, Scalar, internal::cmp_GE>());
+     }
+ 
++#ifdef __cpp_impl_three_way_comparison
++    template<typename OtherDerived> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
++    friend
++    const TensorCwiseBinaryOp<internal::scalar_cmp_op<Scalar, Scalar, internal::cmp_EQ>, const Derived, const OtherDerived>
++    operator==(const TensorBase& lhs, const OtherDerived& rhs) {
++      return lhs.binaryExpr(rhs.derived(), internal::scalar_cmp_op<Scalar, Scalar, internal::cmp_EQ>());
++    }
++#else
+     template<typename OtherDerived> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
+     const TensorCwiseBinaryOp<internal::scalar_cmp_op<Scalar, Scalar, internal::cmp_EQ>, const Derived, const OtherDerived>
+     operator==(const OtherDerived& other) const {
+       return binaryExpr(other.derived(), internal::scalar_cmp_op<Scalar, Scalar, internal::cmp_EQ>());
+     }
++#endif
+ 
+     template<typename OtherDerived> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
+     const TensorCwiseBinaryOp<internal::scalar_cmp_op<Scalar, Scalar, internal::cmp_NEQ>, const Derived, const OtherDerived>

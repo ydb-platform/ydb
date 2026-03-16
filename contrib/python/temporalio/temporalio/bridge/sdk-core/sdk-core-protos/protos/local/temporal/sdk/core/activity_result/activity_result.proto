@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package coresdk.activity_result;
+option ruby_package = "Temporalio::Internal::Bridge::Api::ActivityResult";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
+
+// Used to report activity completions to core
+message ActivityExecutionResult {
+    oneof status {
+        Success completed = 1;
+        Failure failed = 2;
+        Cancellation cancelled = 3;
+        WillCompleteAsync will_complete_async = 4;
+    }
+}
+
+// Used to report activity resolutions to lang. IE: This is what the activities are resolved with
+// in the workflow.
+message ActivityResolution {
+    oneof status {
+        Success completed = 1;
+        Failure failed = 2;
+        Cancellation cancelled = 3;
+        DoBackoff backoff = 4;
+    }
+}
+
+// Used to report successful completion either when executing or resolving
+message Success {
+    temporal.api.common.v1.Payload result = 1;
+}
+
+// Used to report activity failure either when executing or resolving
+message Failure {
+    temporal.api.failure.v1.Failure failure = 1;
+}
+
+/*
+ * Used to report cancellation from both Core and Lang.
+ * When Lang reports a cancelled activity, it must put a CancelledFailure in the failure field.
+ * When Core reports a cancelled activity, it must put an ActivityFailure with CancelledFailure
+ * as the cause in the failure field.
+ */
+message Cancellation {
+    temporal.api.failure.v1.Failure failure = 1;
+}
+
+/*
+ * Used in ActivityExecutionResult to notify Core that this Activity will complete asynchronously.
+ * Core will forget about this Activity and free up resources used to track this Activity.
+ */
+message WillCompleteAsync {
+}
+
+/*
+ * Issued when a local activity needs to retry but also wants to back off more than would be
+ * reasonable to WFT heartbeat for. Lang is expected to schedule a timer for the duration
+ * and then start a local activity of the same type & same inputs with the provided attempt number
+ * after the timer has elapsed.
+ *
+ * This exists because Core does not have a concept of starting commands by itself, they originate
+ * from lang. So expecting lang to start the timer / next pass of the activity fits more smoothly.
+ */
+message DoBackoff {
+    // The attempt number that lang should provide when scheduling the retry. If the LA failed
+    // on attempt 4 and we told lang to back off with a timer, this number will be 5.
+    uint32 attempt = 1;
+    google.protobuf.Duration backoff_duration = 2;
+    // The time the first attempt of this local activity was scheduled. Must be passed with attempt
+    // to the retry LA.
+    google.protobuf.Timestamp original_schedule_time = 3;
+}
+

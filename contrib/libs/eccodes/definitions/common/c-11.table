@@ -1,0 +1,300 @@
+# COMMON CODE TABLE C-11: Originating/generating centres (GRIB2, BUFR4)
+0 0 WMO Secretariat
+1 ammc Melbourne (WMC)
+2 2 Melbourne (WMC)
+3 3 Melbourne (WMC)
+4 rums Moscow (WMC)
+5 5 Moscow (WMC)
+6 6 Moscow (WMC)
+7 kwbc US National Weather Service - NCEP (WMC)
+8 8 US National Weather Service - NWSTG (WMC)
+9 9 US National Weather Service - Other (WMC)
+10 10 Cairo (RSMC/RAFC)
+11 11 Cairo (RSMC/RAFC)
+12 12 Dakar (RSMC/RAFC)
+13 13 Dakar (RSMC/RAFC)
+14 14 Nairobi (RSMC/RAFC)
+15 15 Nairobi (RSMC/RAFC)
+16 16 Casablanca (RSMC)
+17 17 Tunis (RSMC)
+18 18 Tunis-Casablanca (RSMC)
+20 20 Las Palmas (RAFC)
+21 21 Algiers (RSMC)
+22 22 ACMAD
+23 23 Mozambique (NMC)
+24 fapr Pretoria (RSMC)
+25 25 La Reunion (RSMC)
+26 26 Khabarovsk (RSMC)
+28 vabb New Delhi (IMD)
+29 dems New Delhi (NCMRWF)
+30 30 Novosibirsk (RSMC)
+32 32 Tashkent (RSMC)
+33 33 Jeddah (RSMC)
+34 rjtd Japanese Meteorological Agency - Tokyo (RSMC)
+36 36 Bangkok
+37 37 Ulaanbaatar
+38 babj Beijing (RSMC)
+40 rksl Seoul
+41 sabm Buenos Aires (RSMC/RAFC)
+43 43 Brasilia (RSMC/RAFC)
+45 45 Santiago
+46 sbsj Brasilian Space Agency - INPE
+47 47 Colombia (NMC)
+48 48 Ecuador (NMC)
+49 49 Peru (NMC)
+50 50 Venezuela (Bolivarian Republic of) (NMC)
+51 51 Miami (RSMC/RAFC)
+52 52 National Hurricane Center, Miami
+53 53 Canadian Meteorological Service - Montreal (RSMC)
+54 cwao Canadian Meteorological Service - Montreal (RSMC)
+55 55 San Francisco
+56 56 ARINC Centre
+57 57 U.S. Air Force - Global Weather Center
+58 fnmo US Navy - Fleet Numerical Oceanography Center
+59 59 NOAA Forecast Systems Lab, Boulder CO
+60 60 National Center for Atmospheric Research (NCAR), Boulder, CO
+61 61 Service ARGOS - Landover
+62 62 US Naval Oceanographic Office
+63 63 International Research Institute for Climate and Society (IRI)
+64 64 Honolulu
+65 65 Darwin (RSMC)
+67 67 Melbourne (RSMC)
+# 68 Reserved
+69 nzkl Wellington (RSMC/RAFC)
+71 71 Nadi (RSMC)
+72 72 Singapore
+73 73 Malaysia (NMC)
+74 egrr U.K. Met Office - Exeter
+76 76 Moscow (RSMC/RAFC)
+# 77 Reserved
+78 edzw Offenbach (RSMC)
+80 cnmc Rome (RSMC)
+82 eswi Norrkoping
+84 lfpw French Weather Service - Toulouse
+85 lfpw French Weather Service - Toulouse
+86 efkl Helsinki
+87 87 Belgrade
+88 enmi Oslo
+89 89 Prague
+90 90 Episkopi
+91 91 Ankara
+92 92 Frankfurt/Main (RAFC)
+93 93 London (WAFC)
+94 ekmi Copenhagen
+95 95 Rota
+96 96 Athens
+97 97 European Space Agency (ESA)
+98 ecmf European Centre for Medium-Range Weather Forecasts
+99 knmi DeBilt, Netherlands
+100 100 Brazzaville
+101 101 Abidjan
+102 102 Libya (NMC)
+103 103 Madagascar (NMC)
+104 104 Mauritius (NMC)
+105 105 Niger (NMC)
+106 106 Seychelles (NMC)
+107 107 Uganda (NMC)
+108 108 United Republic of Tanzania (NMC)
+109 109 Zimbabwe (NMC)
+110 110 Hong Kong
+111 111 Afghanistan (NMC)
+112 112 Bahrain (NMC)
+113 113 Bangladesh (NMC)
+114 114 Bhutan (NMC)
+115 115 Cambodia (NMC)
+116 116 Democratic People's Republic of Korea (NMC)
+117 117 Islamic Republic of Iran (NMC)
+118 118 Iraq (NMC)
+119 119 Kazakhstan (NMC)
+120 120 Kuwait (NMC)
+121 121 Kyrgyzstan (NMC)
+122 122 Lao People's Democratic Republic (NMC)
+123 123 "Macao  China"
+124 124 Maldives (NMC)
+125 125 Myanmar (NMC)
+126 126 Nepal (NMC)
+127 127 Oman (NMC)
+128 128 Pakistan (NMC)
+129 129 Qatar (NMC)
+130 130 Yemen (NMC)
+131 131 Sri Lanka (NMC)
+132 132 Tajikistan (NMC)
+133 133 Turkmenistan (NMC)
+134 134 United Arab Emirates (NMC)
+135 135 Uzbekistan (NMC)
+136 136 Viet Nam (NMC)
+# 137-139 Reserved for other centres
+140 140 Bolivia (Plurinational State of) (NMC)
+141 141 Guyana (NMC)
+142 142 Paraguay (NMC)
+143 143 Suriname (NMC)
+144 144 Uruguay (NMC)
+145 145 French Guiana
+146 146 Brazilian Navy Hydrographic Centre
+147 147 National Commission on Space Activities (CONAE) - Argentina
+148 148 Brazilian Department of Airspace Control - DECEA
+# 149 Reserved for other centres
+150 150 Antigua and Barbuda (NMC)
+151 151 Bahamas (NMC)
+152 152 Barbados (NMC)
+153 153 Belize (NMC)
+154 154 British Caribbean Territories Centre
+155 155 San Jose
+156 156 Cuba (NMC)
+157 157 Dominica (NMC)
+158 158 Dominican Republic (NMC)
+159 159 El Salvador (NMC)
+160 160 US NOAA/NESDIS
+161 161 US NOAA Office of Oceanic and Atmospheric Research
+162 162 Guatemala (NMC)
+163 163 Haiti (NMC)
+164 164 Honduras (NMC)
+165 165 Jamaica (NMC)
+166 166 Mexico
+167 167 Curacao and Sint Maarten (NMC)
+168 168 Nicaragua (NMC)
+169 169 Panama (NMC)
+170 170 Saint Lucia (NMC)
+171 171 Trinidad and Tobago (NMC)
+172 172 French Departments in RA IV
+173 nasa US National Aeronautics and Space Administration (NASA)
+174 174 Integrated Science Data Management/Marine Environmental Data Service (ISDM/MEDS - Canada)
+175 175 University Corporation for Atmospheric Research (UCAR) - United States
+176 176 Cooperative Institute for Meteorological Satellite Studies (CIMSS) - United States
+177 177 NOAA National Ocean Service - United States
+178 178 Spire Global, Inc.
+179 179 GeoOptics, Inc.
+180 180 PlanetiQ
+181 181 Atmospheric and Environmental Research (AER)
+# 182-189 Reserved for other centres
+190 190 Cook Islands (NMC)
+191 191 French Polynesia (NMC)
+192 192 Tonga (NMC)
+193 193 Vanuatu (NMC)
+194 194 Brunei Darussalam (NMC)
+195 wiix Indonesia (NMC)
+196 196 Kiribati (NMC)
+197 197 Federated States of Micronesia (NMC)
+198 198 New Caledonia (NMC)
+199 199 Niue
+200 200 Papua New Guinea (NMC)
+201 201 Philippines (NMC)
+202 202 Samoa (NMC)
+203 203 Solomon Islands (NMC)
+204 niwa  National Institute of Water and Atmospheric Research (NIWA - New Zealand)
+# 205-209 Reserved for other centres
+210 210  Frascati (ESA/ESRIN)
+211 211  Lannion
+212 212  Lisboa
+213 birk Reykjavik
+214 lemm INM Madrid
+215 lssw Zurich
+216 216  Service ARGOS Toulouse
+217 217 Bratislava
+218 habp Budapest
+219 219 Ljubljana
+220 220 Warsaw
+221 221 Zagreb
+222 222 Albania (NMC)
+223 223 Armenia (NMC)
+224 lowm Austria
+225 225 Azerbaijan (NMC)
+226 226 Belarus (NMC)
+227 ebum Belgium (NMC)
+228 228 Bosnia and Herzegovina (NMC)
+229 229 Bulgaria (NMC)
+230 230 Cyprus (NMC)
+231 231 Estonia (NMC)
+232 232 Georgia (NMC)
+233 eidb Dublin
+234 234 Israel (NMC)
+235 ingv INGV
+236 236 Latvia (NMC)
+237 237 Lebanon (NMC)
+238 238 Lithuania (NMC)
+239 crfc CERFAX
+240 240 Malta (NMC)
+241 241 Monaco
+242 242 Romania (NMC)
+243 243 Syrian Arab Republic (NMC)
+244 244 The former Yugoslav Republic of Macedonia (NMC)
+245 245 Ukraine (NMC)
+246 246 Republic of Moldova (NMC)
+247 247 Operational Programme for the Exchange of weather RAdar information (OPERA) - EUMETNET
+248 248 Montenegro (NMC)
+249 249 Barcelona Dust Forecast Center
+250 cosmo COnsortium for Small scale MOdelling (COSMO)
+251 251 Meteorological Cooperation on Operational NWP (MetCoOp)
+252 mpim Max Planck Institute for Meteorology (MPI-M)
+253 253 Alfred Wegener Institute (AWI)
+254 eums EUMETSAT Operation Centre
+255 consensus Consensus
+256 256 Angola (NMC)
+257 257 Benin (NMC)
+258 258 Botswana (NMC)
+259 259 Burkina Faso (NMC)
+260 260 Burundi (NMC)
+261 261 Cameroon (NMC)
+262 262 Cabo Verde (NMC)
+263 263 Central African Republic (NMC)
+264 264 Chad (NMC)
+265 265 Comoros (NMC)
+266 266 Democratic Republic of the Congo (NMC)
+267 267 Djibouti (NMC)
+268 268 Eritrea (NMC)
+269 269 Ethiopia (NMC)
+270 270 Gabon (NMC)
+271 271 Gambia (NMC)
+272 272 Ghana (NMC)
+273 273 Guinea (NMC)
+274 274 Guinea-Bissau (NMC)
+275 275 Lesotho (NMC)
+276 276 Liberia (NMC)
+277 277 Malawi (NMC)
+278 278 Mali (NMC)
+279 279 Mauritania (NMC)
+280 280 Namibia (NMC)
+281 281 Nigeria (NMC)
+282 282 Rwanda (NMC)
+283 283 Sao Tome and Principe (NMC)
+284 284 Sierra Leone (NMC)
+285 285 Somalia (NMC)
+286 286 Sudan (NMC)
+287 287 Eswatini (NMC)
+288 288 Togo (NMC)
+289 289 Zambia (NMC)
+290 290 EUMETNET E-Profile
+291 anso Alliance of International Science Organizations (Beijing, China)
+292 ufz Helmholtz Centre for Environmental Research
+293 293 University of Bremen
+294 294 Netherlands Institute for Space Research (SRON)
+295 295 The Royal Belgian Institute for Space Aeronomy (BIRA-IASB)
+296 296 The French National Centre for Scientific Research (CNRS)
+297 297 The Nanjing Institute of Environmental Sciences (NIES)
+298 298 Dynamic Meteorology Laboratory (LMD)
+299 299 The Rutherford Appleton Laboratory (RAL)
+300 300 Greek Atomic Energy Commission (Greece)
+301 301 United Stated Environmental Protection Agency (USA)
+302 302 Autralian Radiation Protection and Nuclear Safety (Australia)
+303 303 Authority for Nuclear Safety and Radiation Protection (The Netherlands)
+304 304 Autorite de Surete Nucleaire (France)
+305 305 Bundesamt für Strahlenschutz (Germany)
+306 306 National Commission for Nuclear Activities Control (Romania)
+307 307 Consejo de Seguridad Nuclear (Spain)
+308 308 Danish Emergency Management Agency (Denmark)
+309 309 Norwegian Radiation Protection Agency (Norway)
+310 310 Federal Agency for Nuclear Control (Belgium)
+311 311 Institute of Radiation Protection and Dosimetry (Brazil)
+312 312 National Inspectorate for Nuclear Safety and Radiation Protection (Italy)
+313 313 Nuclear Regulatory Authority (Turkiye)
+314 314 Nuclear Regulation Authority (Japan)
+315 315 Nuclear Regulatory Agency (Bulgaria)
+316 316 Ukrainian Radiation Protection Institute (Ukriane)
+317 317 Health Canada Radio Protection Bureau (Canada)
+318 318 Portuguese Society for Radiation Protection (Portugal)
+319 319 Swedish Radiation Safety Authority (Sweden)
+320 320 Radiation and Nuclear Safety Authority (Finland)
+321 321 State Office for Nuclear Safety (Czechia)
+322 322 Nuclear Regulation Authority (Slovakia)
+# 323-65534 Reserved for other centres
+65535 65535 Missing value

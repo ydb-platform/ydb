@@ -1,0 +1,4 @@
+requirements:
+  - library/python/symbols/registry
+keep:
+  - syms.cpp

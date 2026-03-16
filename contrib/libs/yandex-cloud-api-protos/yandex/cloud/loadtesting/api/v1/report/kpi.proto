@@ -1,0 +1,141 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.report;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/report;report";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.report";
+
+import "yandex/cloud/loadtesting/api/v1/common/quantiles.proto";
+
+// Aggregation function.
+enum Aggregation {
+    // Unspecified.
+    AGGREGATION_UNSPECIFIED = 0;
+
+    // Minimum.
+    AGGREGATION_MIN = 1;
+
+    // Maximum.
+    AGGREGATION_MAX = 2;
+
+    // Average.
+    AGGREGATION_AVG = 4;
+
+    // Median.
+    AGGREGATION_MEDIAN = 5;
+
+    // Standard deviation.
+    AGGREGATION_STD_DEV = 6;
+}
+
+// Comparison operator.
+enum Comparison {
+    // Unspecified.
+    COMPARISON_UNSPECIFIED = 0;
+
+    // Less than the specified value.
+    COMPARISON_LT = 1;
+
+    // Less than or equal to the specified value.
+    COMPARISON_LTE = 2;
+
+    // Greater than the specified value.
+    COMPARISON_GT = 3;
+
+    // Greater than or equal to the specified value.
+    COMPARISON_GTE = 4;
+}
+
+// KPI (Key Performance Indicator) represents some integral indicator measured during test.
+message Kpi {
+    // Kind of KPI.
+    KpiSelector selector = 1;
+
+    // A condition that should be specified.
+    KpiThreshold threshold = 2;
+}
+
+// KPI threshold represents a condition that an actual value of test's KPI should satisfy.
+message KpiThreshold {
+    // Value for comparison with an actual KPI value.
+    double value = 1;
+
+    // Comparison operator for comparing actual with the threshold value.
+    //
+    // Rule: actual (</<=/>/>=) reference
+    Comparison comparison = 2;
+}
+
+// KPI selector.
+message KpiSelector {
+    // Response time.
+    message ResponseTime {
+        // Cummulative quantile (percentile).
+        common.QuantileType quantile = 1;
+    }
+
+    // Aggregated number of instances.
+    message Instances {
+        // Aggregation function.
+        Aggregation agg = 1;
+    }
+
+    // Imbalance RPS.
+    message ImbalanceRps {
+    }
+
+    message ProtocolCodesAbsolute {
+        // Protocol (HTTP, GRPC) code patterns to match.
+        //
+        // All successful HTTP responses: ['2xx', '3xx'].
+        // All failed HTTP responses: ['0', '4xx', '5xx'].
+        repeated string codes_patterns = 1;
+    }
+
+    message ProtocolCodesRelative {
+        // Protocol (HTTP, GRPC) code patterns to match.
+        //
+        // All successful HTTP responses: ['2xx', '3xx'].
+        // All failed HTTP responses: ['0', '4xx', '5xx'].
+        repeated string codes_patterns = 1;
+    }
+
+    message NetworkCodesAbsolute {
+        // Network code patterns to match.
+        //
+        // All successful network responses: ['0'].
+        // All failed network responses: ['xx', 'xxx'].
+        repeated string codes_patterns = 1;
+    }
+
+    message NetworkCodesRelative {
+        // Network code patterns to match.
+        //
+        // All successful network responses: ['0'].
+        // All failed network responses: ['xx', 'xxx'].
+        repeated string codes_patterns = 1;
+    }
+
+    oneof kind {
+        // Response time cummulative quantile (percentile).
+        ResponseTime response_time = 1;
+        
+        // A number of instances throughout the test.
+        Instances instances = 2;
+
+        // An RPS at the moment the test has been auto-stopped.
+        ImbalanceRps imbalance_rps = 3;
+
+        // A total number of requests completed with certain protocol (HTTP, GRPC, etc.) codes.
+        ProtocolCodesAbsolute protocol_codes_absolute = 4;
+
+        // A percentage of requests completed with certain protocol (HTTP, GRPC, etc.) codes.
+        ProtocolCodesRelative protocol_codes_relative = 5;
+
+        // A total number of requests completed with certain network codes.
+        NetworkCodesAbsolute network_codes_absolute = 6;
+
+        // A percentage of requests completed with certain network codes.
+        NetworkCodesRelative network_codes_relative = 7;
+    }
+}

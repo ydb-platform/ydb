@@ -1,0 +1,14 @@
+# ECMWF Unstructured Grid Mapping
+
+concept unstructuredGridType(unknown,"unstructuredGridType.def",conceptsLocalDirAll,conceptsMasterDir);
+
+concept unstructuredGridSubtype(unknown,"unstructuredGridSubtype.def",conceptsLocalDirAll,conceptsMasterDir);
+
+concept unstructuredGridUUID(unknown,"unstructuredGridUUID.def",conceptsLocalDirAll,conceptsMasterDir);
+
+if (unstructuredGridType is "undefined" || unstructuredGridType is "unknown") {
+  meta gridName sprintf("%s",unstructuredGridType) : no_copy;
+} else {
+  meta gridName sprintf("%s_%s",unstructuredGridType,unstructuredGridSubtype) : no_copy;
+}
+alias ls.gridName=gridName;

@@ -1,0 +1,40 @@
+# Page 1
+text
+    Bounding Box: (58.692, 759.975, 127.024, 779.335)
+    Quad Points: [(58.692, 759.975), (127.024, 759.975), (127.024, 779.335), (58.692, 779.335)]
+image
+    Bounding Box: (132.7, 459.189, 349.5, 549.689)
+    Quad Points: [(132.7, 459.189), (349.5, 459.189), (349.5, 549.689), (132.7, 549.689)]
+    Filters: ['CCITTFaxDecode']
+    width: 115
+    height: 48
+    horizontal_dpi: 38.1919
+    vertical_dpi: 38.1879
+    bits_per_pixel: 1
+    colorspace: DeviceGray
+    marked_content_id: 1
+image
+    Bounding Box: (47.65, 652.239, 162.6, 700.239)
+    Quad Points: [(47.65, 652.239), (162.6, 652.239), (162.6, 700.239), (47.65, 700.239)]
+    Filters: ['CCITTFaxDecode']
+    width: 115
+    height: 48
+    horizontal_dpi: 72.0313
+    vertical_dpi: 72.0
+    bits_per_pixel: 1
+    colorspace: DeviceGray
+    marked_content_id: 2
+image
+    Bounding Box: (203.55, 204.089, 577.2, 360.039)
+    Quad Points: [(203.55, 204.089), (577.2, 204.089), (577.2, 360.039), (203.55, 360.039)]
+    Filters: ['CCITTFaxDecode']
+    width: 115
+    height: 48
+    horizontal_dpi: 22.1598
+    vertical_dpi: 22.1609
+    bits_per_pixel: 1
+    colorspace: DeviceGray
+    marked_content_id: 3
+-> Count: 4
+
+-> Total count: 4

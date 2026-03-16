@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.foundation_models.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/foundation_models/v1/embedding;foundation_models";
+option java_package = "yandex.cloud.api.ai.foundation_models.v1";
+
+// Request for the service to obtain text embeddings.
+message TextEmbeddingRequest {
+  // The [model URI](/docs/foundation-models/concepts/embeddings) to be used for obtaining text embeddings.
+  string model_uri = 1;
+  // The input text for which the embedding is requested.
+  string text = 2;
+  // Optional parameter to specify embedding dimension for models that support multi-dimensional outputs
+  google.protobuf.Int64Value dim = 3;
+}
+
+// Response containing generated text embedding.
+message TextEmbeddingResponse {
+  // A repeated list of double values representing the embedding.
+  repeated double embedding = 1;
+  // The number of tokens in the input text.
+  int64 num_tokens = 2;
+  // The model version changes with each new releases.
+  string model_version = 3;
+}
+
+// Service for obtaining embeddings from input data.
+service EmbeddingsService {
+  // A method for obtaining embeddings from text data.
+  rpc TextEmbedding (TextEmbeddingRequest) returns (TextEmbeddingResponse) {
+    option (google.api.http) = {post: "/foundationModels/v1/textEmbedding" body: "*"};
+  }
+}

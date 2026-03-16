@@ -1,0 +1,16 @@
+<dl>
+    {% for field in field.get_fields_list(request, 'DETAIL' | ra) %}
+        <dt>{{ field.label }}:</dt>
+        <dd>
+            {% with data=(data[field.name] if data else None) %}
+                {% if data == None %}
+                    {% include "displays/_null.html" %}
+                {% elif (data | is_iter) and (data |length) ==0 %}
+                    {% include "displays/_empty.html" %}
+                {% else %}
+                    {% include field.display_template %}
+                {% endif %}
+            {% endwith %}
+        </dd>
+    {% endfor %}
+</dl>

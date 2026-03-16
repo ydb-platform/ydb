@@ -1,0 +1,83 @@
+Metadata-Version: 2.1
+Name: fabric
+Version: 2.7.1
+Summary: High level SSH command execution
+Home-page: https://fabfile.org
+Author: Jeff Forcier
+Author-email: jeff@bitprophet.org
+License: BSD
+Project-URL: Docs, https://docs.fabfile.org
+Project-URL: Source, https://github.com/fabric/fabric
+Project-URL: Issues, https://github.com/fabric/fabric/issues
+Project-URL: Changelog, https://www.fabfile.org/changelog.html
+Project-URL: CI, https://app.circleci.com/pipelines/github/fabric/fabric
+Project-URL: Twitter, https://twitter.com/pyfabric
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: POSIX
+Classifier: Operating System :: Unix
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Build Tools
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Clustering
+Classifier: Topic :: System :: Software Distribution
+Classifier: Topic :: System :: Systems Administration
+Requires-Dist: invoke (<2.0,>=1.3)
+Requires-Dist: paramiko (>=2.4)
+Requires-Dist: pathlib2
+Provides-Extra: pytest
+Requires-Dist: mock (<3.0,>=2.0.0) ; extra == 'pytest'
+Requires-Dist: pytest (<4.0,>=3.2.5) ; extra == 'pytest'
+Provides-Extra: testing
+Requires-Dist: mock (<3.0,>=2.0.0) ; extra == 'testing'
+
+|version| |python| |license| |ci| |coverage|
+
+.. |version| image:: https://img.shields.io/pypi/v/fabric
+    :target: https://pypi.org/project/fabric/
+    :alt: PyPI - Package Version
+.. |python| image:: https://img.shields.io/pypi/pyversions/fabric
+    :target: https://pypi.org/project/fabric/
+    :alt: PyPI - Python Version
+.. |license| image:: https://img.shields.io/pypi/l/fabric
+    :target: https://github.com/fabric/fabric/blob/main/LICENSE
+    :alt: PyPI - License
+.. |ci| image:: https://img.shields.io/circleci/build/github/fabric/fabric/main
+    :target: https://app.circleci.com/pipelines/github/fabric/fabric
+    :alt: CircleCI
+.. |coverage| image:: https://img.shields.io/codecov/c/gh/fabric/fabric
+    :target: https://app.codecov.io/gh/fabric/fabric
+    :alt: Codecov
+
+Welcome to Fabric!
+==================
+
+Fabric is a high level Python (2.7, 3.4+) library designed to execute shell
+commands remotely over SSH, yielding useful Python objects in return. It builds
+on top of `Invoke <https://pyinvoke.org>`_ (subprocess command execution and
+command-line features) and `Paramiko <https://paramiko.org>`_ (SSH protocol
+implementation), extending their APIs to complement one another and provide
+additional functionality.
+
+To find out what's new in this version of Fabric, please see `the changelog
+<https://fabfile.org/changelog.html#{}>`_.
+
+The project maintainer keeps a `roadmap
+<https://bitprophet.org/projects#roadmap>`_ on his website.
+
+

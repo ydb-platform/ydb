@@ -1,0 +1,6634 @@
+[
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01000",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XFNB",
+    "bank_code": "01050",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01100",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01201",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01202",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01203",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01205",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01206",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01207",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01208",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01209",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01210",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01211",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01212",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01213",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01214",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01215",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01217",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01218",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01219",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01220",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01221",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01222",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01223",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01224",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01225",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01227",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01228",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01229",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01230",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01231",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01232",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01233",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01234",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01235",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01236",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01237",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01238",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01239",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01240",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01241",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01242",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01243",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01244",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01245",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01246",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01247",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01248",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01249",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01250",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01251",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01252",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01253",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01255",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01256",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01257",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01258",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01259",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01260",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01261",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01262",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01263",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01264",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01265",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01266",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01267",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01268",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01269",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01270",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01271",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01273",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01274",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01275",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01276",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01277",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01278",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01279",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01280",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01281",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01282",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01283",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01284",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01285",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01286",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01287",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01288",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01289",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01290",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01292",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01293",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01294",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01295",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01296",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01297",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01298",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01299",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01300",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01301",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01302",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01303",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01304",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01305",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01306",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01307",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01308",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01309",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01310",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01311",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01312",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01313",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01314",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01315",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01317",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01318",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01319",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01320",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01321",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01322",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01323",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01324",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01325",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01326",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01328",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01329",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01330",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01331",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01332",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01333",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01334",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01335",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01336",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01337",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01338",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01339",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01340",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01341",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01342",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01343",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01344",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01346",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01349",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01350",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01351",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01352",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01354",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01355",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01358",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01359",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01360",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01361",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01362",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01363",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01365",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01366",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01367",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01369",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01370",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01371",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01372",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01373",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01374",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01375",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01376",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01377",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01378",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01379",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01383",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01384",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01385",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01386",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01387",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01388",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01389",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01390",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01391",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01392",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01393",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01394",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01395",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01396",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01397",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01398",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01400",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01401",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01403",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01404",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01406",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01407",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01408",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01409",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01411",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01413",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01504",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01505",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01506",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01700",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BSLJSI2XXXX",
+    "bank_code": "01760",
+    "name": "BANKA SLOVENIJE",
+    "short_name": "BANKA SLOVENIJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02001",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02010",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02011",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02012",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02013",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02014",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02015",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02016",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02017",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02018",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02019",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02021",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02022",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02023",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02024",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02025",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02026",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02027",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02028",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02029",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02031",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02032",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02033",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02034",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02035",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02036",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02037",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02038",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02041",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02042",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02043",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02044",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02045",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02046",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02047",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02049",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02050",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02051",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02052",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02053",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02054",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02056",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02057",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02058",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02059",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02060",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02061",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02062",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02064",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02065",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02066",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02067",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02068",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02070",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02071",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02072",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02073",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02074",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02075",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02076",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02077",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02078",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02079",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02080",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02081",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02082",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02083",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02084",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02085",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02086",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02087",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02090",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02091",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02092",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02093",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02094",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02095",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02096",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02097",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02098",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02140",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02141",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02145",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02146",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02150",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02151",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02184",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02185",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02186",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02187",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02219",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02222",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02228",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02229",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02230",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02232",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02233",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02234",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02235",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02236",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02237",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02238",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02239",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02240",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02241",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02242",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02243",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02244",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02275",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02280",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02281",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02282",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02283",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02284",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02285",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02286",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02287",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02291",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02292",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02293",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02294",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02295",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02296",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02297",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02300",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02301",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02302",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02303",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02304",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02305",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02306",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02308",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02309",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02310",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02311",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02312",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02314",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02320",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02321",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02322",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02323",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02324",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02325",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02326",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02327",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02330",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02331",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02332",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02333",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02334",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02338",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02340",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02341",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02342",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02343",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02344",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02345",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02346",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02347",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02348",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02349",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02354",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02355",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02356",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02358",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02373",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02374",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02379",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02400",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02401",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02402",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02403",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02404",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02405",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02406",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02407",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02408",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02409",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02421",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02422",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02423",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02424",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02425",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02426",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02427",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02428",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02430",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02431",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02432",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02433",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02434",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02435",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02436",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02438",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02450",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02451",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02452",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02453",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02454",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02455",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02456",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02465",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02466",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02467",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02469",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02470",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02492",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02493",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02494",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02495",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02496",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02498",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02499",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02528",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02529",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02543",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02544",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02545",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02546",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02547",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02548",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02663",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02664",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02666",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02670",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02673",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02674",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02675",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02676",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02677",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02756",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02796",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02797",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02841",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02843",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02844",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02845",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02849",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02854",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02855",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02856",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02857",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02872",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02873",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02878",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02879",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02887",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02888",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02889",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02892",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02893",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02894",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02895",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02898",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02899",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02900",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02901",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02902",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02903",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02905",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02906",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02907",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02909",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02910",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02911",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02912",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02913",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02914",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02915",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02916",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02917",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02919",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02920",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02921",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02922",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02923",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02924",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02925",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02926",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02927",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02928",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02929",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02931",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02932",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02933",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02934",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02935",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02937",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02938",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02939",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02940",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02941",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02942",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02943",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02944",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02945",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02946",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02947",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02949",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02950",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02951",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02952",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02953",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02954",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02955",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02958",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02959",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02961",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02962",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02963",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02966",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02967",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02968",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02969",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02970",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02971",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02972",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02973",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02974",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02975",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02976",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02977",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02978",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02979",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02980",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02981",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02982",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02983",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02984",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02985",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02986",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02988",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02989",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02991",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02992",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02993",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02994",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02996",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02997",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "02998",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03100",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA CENTER",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA CENTER"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03102",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA WTC",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA WTC"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03103",
+    "name": "SKB BANKA D.D. POSLOVALNICA KAMNIK",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA KAMNIK"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03104",
+    "name": "SKB BANKA D.D. POSLOVALNICA DOM\u008eALE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA DOM\u008eALE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03105",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA CENTER",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA CENTER"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03106",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA \u008aI\u008aKA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA \u008aI\u008aKA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03107",
+    "name": "SKB BANKA D.D. POSLOVALNICA TRZIN PIRAMIDA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA TRZIN PIRAMIDA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03108",
+    "name": "SKB BANKA D.D. POSLOVALNICA GROSUPLJE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA GROSUPLJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03109",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA ZALOG",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA ZALOG"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03110",
+    "name": "SKB BANKA D.D. POSLOVALNICA LITIJA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LITIJA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03111",
+    "name": "SKB BANKA D.D. POSLOVALNICA ZAGORJE OB SAVI",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA ZAGORJE OB SAVI"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03112",
+    "name": "SKB BANKA D.D. POSLOVALNICA VRHNIKA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA VRHNIKA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03113",
+    "name": "SKB BANKA D.D. POSLOVALNICA KO\u00c8EVJE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA KO\u00c8EVJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03114",
+    "name": "SKB BANKA D.D. POSLOVALNICA KO\u00c8EVJE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA KO\u00c8EVJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03115",
+    "name": "SKB BANKA D.D. POSLOVALNICA CERKNICA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA CERKNICA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03116",
+    "name": "SKB BANKA D.D. POSLOVALNICA \u008eALEC",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA \u008eALEC"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03117",
+    "name": "SKB BANKA D.D. POSLOVALNICA MOZIRJE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA MOZIRJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03118",
+    "name": "SKB BANKA D.D. POSLOVALNICA CELJE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA CELJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03119",
+    "name": "SKB BANKA D.D. POSLOVALNICA IDRIJA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA IDRIJA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03120",
+    "name": "SKB BANKA D.D. POSLOVALNICA MARIBOR I",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA MARIBOR I"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03121",
+    "name": "SKB BANKA D.D. POSLOVALNICA MARIBOR II",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA MARIBOR II"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03122",
+    "name": "SKB BANKA D.D. POSLOVALNICA GORNJA RADGONA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA GORNJA RADGONA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03123",
+    "name": "SKB BANKA D.D. POSLOVALNICA ORMO\u008e",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA ORMO\u008e"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03124",
+    "name": "SKB BANKA D.D. POSLOVALNICA MURSKA SOBOTA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA MURSKA SOBOTA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03125",
+    "name": "SKB BANKA D.D. POSLOVALNICA MURSKA SOBOTA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA MURSKA SOBOTA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03126",
+    "name": "SKB BANKA D.D. POSLOVALNICA KRANJ PRIMSKOVO",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA KRANJ PRIMSKOVO"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03127",
+    "name": "SKB BANKA D.D. POSLOVALNICA RADOVLJICA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA RADOVLJICA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03128",
+    "name": "SKB BANKA D.D. POSLOVALNICA \u008aKOFJA LOKA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA \u008aKOFJA LOKA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03130",
+    "name": "SKB BANKA D.D. POSLOVALNICA NOVA GORICA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA NOVA GORICA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03131",
+    "name": "SKB BANKA D.D. POSLOVALNICA TRZIN PIRAMIDA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA TRZIN PIRAMIDA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03132",
+    "name": "SKB BANKA D.D. POSLOVALNICA MARIBOR TABOR",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA MARIBOR TABOR"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03133",
+    "name": "SKB BANKA D.D. POSLOVALNICA POSTOJNA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA POSTOJNA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03134",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA ZUPAN\u00c8I\u00c8EVA JAMA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA ZUPAN\u00c8I\u00c8EVA JAMA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03135",
+    "name": "SKB BANKA D.D. POSLOVALNICA KOPER",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA KOPER"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03136",
+    "name": "SKB BANKA D.D. POSLOVALNICA KOPER",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA KOPER"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03137",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA CITY PARK (BTC)",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA CITY PARK (BTC)"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03138",
+    "name": "SKB BANKA D.D. POSLOVALNICA KRANJ CENTER",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA KRANJ CENTER"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03139",
+    "name": "SKB BANKA D.D. POSLOVALNICA BLED",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA BLED"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03150",
+    "name": "SKB BANKA D.D. POSLOVALNICA NOVO MESTO",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA NOVO MESTO"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03151",
+    "name": "SKB BANKA D.D. POSLOVALNICA NOVO MESTO",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA NOVO MESTO"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03152",
+    "name": "SKB BANKA D.D. POSLOVALNICA METLIKA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA METLIKA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03153",
+    "name": "SKB BANKA D.D. POSLOVALNICA TREBNJE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA TREBNJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03154",
+    "name": "SKB BANKA D.D. POSLOVALNICA \u00c8RNOMELJ",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA \u00c8RNOMELJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03155",
+    "name": "SKB BANKA D.D. POSLOVALNICA KR\u008aKO",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA KR\u008aKO"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03156",
+    "name": "SKB BANKA D.D. POSLOVALNICA NOVO MESTO",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA NOVO MESTO"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03157",
+    "name": "SKB BANKA D.D. POSLOVALNICA BRE\u008eICE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA BRE\u008eICE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03158",
+    "name": "SKB BANKA D.D. POSLOVALNICA SEVNICA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA SEVNICA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03160",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA VI\u00c8",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA VI\u00c8"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03161",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA CITY PARK (BTC)",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA CITY PARK (BTC)"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03162",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA VI\u00c8",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA VI\u00c8"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03163",
+    "name": "SKB BANKA D.D. POSLOVALNICA ROGA\u008aKA SLATINA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA ROGA\u008aKA SLATINA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03165",
+    "name": "SKB BANKA D.D. POSLOVALNICA CELJE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA CELJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03168",
+    "name": "SKB BANKA D.D.",
+    "short_name": "SKB BANKA D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03169",
+    "name": "SKB BANKA D.D. PRIVATNO BAN\u00c8NI\u008aTVO",
+    "short_name": "SKB BANKA D.D. PRIVATNO BAN\u00c8NI\u008aTVO"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03170",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA ZUPAN\u00c8I\u00c8EVA JAMA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA ZUPAN\u00c8I\u00c8EVA JAMA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03171",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA CITY PARK (BTC)",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUBLJANA CITY PARK (BTC)"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03173",
+    "name": "SKB BANKA D.D. POSLOVALNICA LJUTOMER",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA LJUTOMER"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03175",
+    "name": "SKB BANKA D.D. POSLOVALNICA SLOVENJ GRADEC",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA SLOVENJ GRADEC"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03176",
+    "name": "SKB BANKA D.D. POSLOVALNICA VELENJE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA VELENJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03178",
+    "name": "SKB BANKA D.D. POSLOVALNICA JESENICE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA JESENICE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03179",
+    "name": "SKB BANKA D.D. POSLOVALNICA POSTOJNA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA POSTOJNA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03180",
+    "name": "SKB BANKA D.D. POSLOVALNICA NOVA GORICA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA NOVA GORICA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03181",
+    "name": "SKB BANKA D.D. POSLOVALNICA ILIRSKA BISTRICA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA ILIRSKA BISTRICA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03182",
+    "name": "SKB BANKA D.D. POSLOVALNICA PTUJ",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA PTUJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03185",
+    "name": "SKB BANKA D.D. POSLOVALNICA NOVA GORICA",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA NOVA GORICA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03186",
+    "name": "SKB BANKA D.D. POSLOVALNICA JESENICE",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA JESENICE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03188",
+    "name": "SKB BANKA D.D. POSLOVALNICA MARIBOR II",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA MARIBOR II"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03189",
+    "name": "SKB BANKA D.D. POSLOVALNICA MARIBOR II",
+    "short_name": "SKB BANKA D.D. POSLOVALNICA MARIBOR II"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03215",
+    "name": "SKB BANKA D.D. POSLOVANJE S PODJETJI",
+    "short_name": "SKB BANKA D.D. POSLOVANJE S PODJETJI"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03500",
+    "name": "SKB BANKA D.D. POSLOVANJE S PODJETJI",
+    "short_name": "SKB BANKA D.D. POSLOVANJE S PODJETJI"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03721",
+    "name": "SKB BANKA D.D.",
+    "short_name": "SKB BANKA D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SKBASI2XXXX",
+    "bank_code": "03770",
+    "name": "SKB BANKA D.D.",
+    "short_name": "SKB BANKA D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04000",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04001",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04101",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04102",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04103",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04104",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04105",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04106",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04107",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04108",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04109",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04112",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04113",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04114",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04115",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04117",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04118",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04119",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04120",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04122",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04123",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04124",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04126",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04127",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04172",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04173",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04175",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04202",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04217",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04221",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04222",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04223",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04224",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04225",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04226",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04227",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04228",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04229",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04236",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04237",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04239",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04302",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04310",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04311",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04321",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04322",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04331",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04332",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04340",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04341",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04342",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04343",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04344",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04345",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04346",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04347",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04348",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04349",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04351",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04353",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04355",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04356",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04358",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04360",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04361",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04370",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04385",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04390",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04403",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04405",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04411",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04412",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04413",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04415",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04416",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04417",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04418",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04421",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04422",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04423",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04424",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04430",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04440",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04441",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04442",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04443",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04444",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04445",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04446",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04447",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04448",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04449",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04471",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04472",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04473",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04474",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04475",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04476",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04477",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04478",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04479",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04480",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04481",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04482",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04486",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04487",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04488",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04489",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04515",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04518",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04613",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04614",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04625",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04634",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04635",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04682",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04683",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04684",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04728",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04750",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04751",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04752",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04753",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04802",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04810",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04821",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04835",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04851",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04860",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04870",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04881",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04883",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04884",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04885",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "04888",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KBMASI2XXXX",
+    "bank_code": "05100",
+    "name": "NOVA KBM D.D.",
+    "short_name": "NOVA KBM D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07000",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07601",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07602",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07603",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07604",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07605",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07606",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07607",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07611",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07613",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07614",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07621",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07622",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07623",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07624",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07625",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07627",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07631",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07632",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07633",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07634",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07635",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07636",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07637",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07638",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07641",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07642",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07645",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07647",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07648",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07650",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07651",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07653",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07656",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07658",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07665",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07679",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "GORESI2XXXX",
+    "bank_code": "07686",
+    "name": "GORENJSKA BANKA D.D., KRANJ",
+    "short_name": "GORENJSKA BANKA D.D., KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BAKOSI2XXXX",
+    "bank_code": "10100",
+    "name": "BANKA INTESA SANPAOLO D.D.",
+    "short_name": "BANKA INTESA SANPAOLO D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BAKOSI2XXXX",
+    "bank_code": "10111",
+    "name": "BANKA INTESA SANPAOLO D.D.",
+    "short_name": "BANKA INTESA SANPAOLO D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19000",
+    "name": "DBS D.D.",
+    "short_name": "DBS D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19002",
+    "name": "DBS D.D.",
+    "short_name": "DBS D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19005",
+    "name": "DBS D.D.",
+    "short_name": "DBS D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19008",
+    "name": "DBS D.D.",
+    "short_name": "DBS D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19100",
+    "name": "DBS .D.D., CENTRALA LJUBLJANA",
+    "short_name": "DBS .D.D., CENTRALA LJUBLJANA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19130",
+    "name": "DBS .D.D., POSLOVALNICA II LITIJA",
+    "short_name": "DBS .D.D., POSLOVALNICA II LITIJA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19140",
+    "name": "DBS .D.D., POSLOVALNICA I LJUBLJANA",
+    "short_name": "DBS .D.D., POSLOVALNICA I LJUBLJANA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19146",
+    "name": "DBS .D.D., POSLOVALNICA I VRHNIKA",
+    "short_name": "DBS .D.D., POSLOVALNICA I VRHNIKA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19150",
+    "name": "DBS .D.D., POSLOVALNICA I POSTOJNA",
+    "short_name": "DBS .D.D., POSLOVALNICA I POSTOJNA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19155",
+    "name": "DBS .D.D., POSLOVALNICA I TOLMIN",
+    "short_name": "DBS .D.D., POSLOVALNICA I TOLMIN"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19157",
+    "name": "DBS .D.D., POSLOVALNICA I IDRIJA",
+    "short_name": "DBS .D.D., POSLOVALNICA I IDRIJA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19160",
+    "name": "DBS .D.D., POSLOVALNICA I NOVA GORICA",
+    "short_name": "DBS .D.D., POSLOVALNICA I NOVA GORICA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19170",
+    "name": "DBS .D.D., POSLOVALNICA I KRANJ",
+    "short_name": "DBS .D.D., POSLOVALNICA I KRANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19180",
+    "name": "DBS .D.D., POSLOVALNICA II DOM\u008eALE",
+    "short_name": "DBS .D.D., POSLOVALNICA II DOM\u008eALE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19190",
+    "name": "DBS .D.D., POSLOVALNICA II \u008aKOFJA LOKA",
+    "short_name": "DBS .D.D., POSLOVALNICA II \u008aKOFJA LOKA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19200",
+    "name": "DBS .D.D., POSLOVALNICA I KO\u00c8EVJE",
+    "short_name": "DBS .D.D., POSLOVALNICA I KO\u00c8EVJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19340",
+    "name": "DBS .D.D., POSLOVALNICA I MARIBOR",
+    "short_name": "DBS .D.D., POSLOVALNICA I MARIBOR"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19346",
+    "name": "DBS .D.D., POSLOVALNICA I LENART",
+    "short_name": "DBS .D.D., POSLOVALNICA I LENART"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19350",
+    "name": "DBS .D.D., POSLOVALNICA I PTUJ",
+    "short_name": "DBS .D.D., POSLOVALNICA I PTUJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19490",
+    "name": "DBS .D.D., POSLOVALNICA I MURSKA SOBOTA",
+    "short_name": "DBS .D.D., POSLOVALNICA I MURSKA SOBOTA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19491",
+    "name": "DBS .D.D., POSLOVALNICA I LJUTOMER",
+    "short_name": "DBS .D.D., POSLOVALNICA I LJUTOMER"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19496",
+    "name": "DBS .D.D., POSLOVALNICA I GORNJA RADGONA",
+    "short_name": "DBS .D.D., POSLOVALNICA I GORNJA RADGONA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19540",
+    "name": "DBS .D.D., POSLOVALNICA I SL.GRADEC",
+    "short_name": "DBS .D.D., POSLOVALNICA I SL.GRADEC"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19640",
+    "name": "DBS .D.D., POSLOVALNICA I CELJE",
+    "short_name": "DBS .D.D., POSLOVALNICA I CELJE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19650",
+    "name": "DBS .D.D., POSLOVALNICA II \u008eALEC",
+    "short_name": "DBS .D.D., POSLOVALNICA II \u008eALEC"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19660",
+    "name": "DBS .D.D., POSLOVALNICA I \u008aO\u008aTANJ",
+    "short_name": "DBS .D.D., POSLOVALNICA I \u008aO\u008aTANJ"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19670",
+    "name": "DBS .D.D., POSLOVALNICA I \u008aENTJUR",
+    "short_name": "DBS .D.D., POSLOVALNICA I \u008aENTJUR"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19700",
+    "name": "DBS .D.D., POSLOVALNICA I KOPER",
+    "short_name": "DBS .D.D., POSLOVALNICA I KOPER"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19710",
+    "name": "DBS .D.D., POSLOVALNICA I SE\u008eANA",
+    "short_name": "DBS .D.D., POSLOVALNICA I SE\u008eANA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19900",
+    "name": "DBS .D.D., POSLOVALNICA I NOVO MESTO",
+    "short_name": "DBS .D.D., POSLOVALNICA I NOVO MESTO"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19906",
+    "name": "DBS .D.D., POSLOVALNICA I NOVO MESTO",
+    "short_name": "DBS .D.D., POSLOVALNICA I NOVO MESTO"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SZKBSI2XXXX",
+    "bank_code": "19920",
+    "name": "DBS .D.D., POSLOVALNICA I BRE\u008eICE",
+    "short_name": "DBS .D.D., POSLOVALNICA I BRE\u008eICE"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BACXSI22XXX",
+    "bank_code": "29000",
+    "name": "UNICREDIT BANKA SLOVENIJA D.D.",
+    "short_name": "UNICREDIT BANKA SLOVENIJA D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "30000",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "LJBASI2XXXX",
+    "bank_code": "30909",
+    "name": "NLB D.D.",
+    "short_name": "NLB D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "HAABSI22XXX",
+    "bank_code": "33000",
+    "name": "ADDIKO BANK D.D.",
+    "short_name": "ADDIKO BANK D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KSPKSI22XXX",
+    "bank_code": "34000",
+    "name": "BANKA SPARKASSE D.D.",
+    "short_name": "BANKA SPARKASSE D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "BFKKSI22XXX",
+    "bank_code": "35001",
+    "name": "BKS BANK AG, BAN\u00c8NA PODRU\u008eNICA",
+    "short_name": "BKS BANK AG, BAN\u00c8NA PODRU\u008eNICA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "SIDRSI22XXX",
+    "bank_code": "38000",
+    "name": "SID BANKA D.D.",
+    "short_name": "SID BANKA D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "HLONSI22XXX",
+    "bank_code": "60000",
+    "name": "HRANILNICA LON D.D.",
+    "short_name": "HRANILNICA LON D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "HDELSI22XXX",
+    "bank_code": "61000",
+    "name": "DELAVSKA HRANILNICA D.D. LJUBLJANA",
+    "short_name": "DELAVSKA HRANILNICA D.D. LJUBLJANA"
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "HKVISI22XXX",
+    "bank_code": "64000",
+    "name": "PRIMORSKA HRANILNICA VIPAVA D.D.",
+    "short_name": "PRIMORSKA HRANILNICA VIPAVA D.D."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "KDDSSI22XXX",
+    "bank_code": "79095",
+    "name": "KDD-CENTRALNA KLIRIN\u008aKO DEPOTNA DRU\u008eBA, D.O.O.",
+    "short_name": "KDD-CENTRALNA KLIRIN\u008aKO DEPOTNA DRU\u008eBA, D.O.O."
+  },
+  {
+    "country_code": "SI",
+    "primary": true,
+    "bic": "PWSRSI22XXX",
+    "bank_code": "91002",
+    "name": "PAYWISER DRU\u008eBA ZA IZDAJO ELEKTRONSKEGA DENARJA IN PLA\u00c8ILNE STORITVE, D.O.O.",
+    "short_name": "PAYWISER DRU\u008eBA ZA IZDAJO ELEKTRONSKEGA DENARJA IN PLA\u00c8ILNE STORITVE, D.O.O."
+  }
+]

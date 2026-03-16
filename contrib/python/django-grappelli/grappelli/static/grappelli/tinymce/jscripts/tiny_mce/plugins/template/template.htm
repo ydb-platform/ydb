@@ -1,0 +1,45 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>{#template_dlg.title}</title>
+    <script type="text/javascript" src="../../tiny_mce_popup.js"></script>
+    <script type="text/javascript" src="js/template.js"></script>
+    <base target="_self" />
+</head>
+<body onresize="TemplateDialog.resize();" class="tinyMCE"> 
+    <form onsubmit="TemplateDialog.insert();return false;">
+        <div id="frmbody">
+            <div class="title">{#template_dlg.desc}</div>
+            <fieldset class="grp-module">
+                <div class="grp-row combine">
+                    <div class="l-2c-fluid l-d-4">
+                        <div class="c-1"><label for="tpath" title="{#template_dlg.select}">{#template_dlg.label}:</label></div>
+                        <div class="c-2">
+                            <select id="tpath" name="tpath" onchange="TemplateDialog.selectTemplate(this.options[this.selectedIndex].value, this.options[this.selectedIndex].text);" class="mceFocus">
+                                <option value="">{#template_dlg.select}...</option>
+                            </select>
+                            <span id="warning"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="grp-row grp-description grp-last">
+                    <div class="l-2c-fluid l-d-4">
+                        <div class="c-1"><label for="tdesc">{#template_dlg.desc_label}:</label></div>
+                        <div class="c-2">
+                            <span id="tmpldesc"></span>
+                        </div>
+                    </div>
+                </div>
+                <fieldset style="display: none;">
+                    <iframe id="templatesrc" name="templatesrc" src="blank.htm" width="260" height="400" frameborder="0"></iframe>
+                </fieldset>
+            </fieldset>
+        </div>
+        <div class="mceActionPanel grp-module grp-submit-row">
+            <ul>
+                <li class="grp-float-left"><input type="button" id="cancel" class="grp-button grp-cancel-link" name="cancel" value="{#cancel}" onclick="tinyMCEPopup.close();" /></li>
+                <li><input type="submit" id="insert" class="grp-button grp-default" name="insert" value="{#insert}" /></li>
+            </ul>
+        </div>
+    </form>
+</body> 
+</html> 

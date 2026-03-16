@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "orderReference": {
+      "type": "string",
+      "examples": [
+        "27378669"
+      ],
+      "description": "Reference number of the order"
+    },
+    "brand": {
+       "$ref": "./schema.json#/$defs/brand",
+      "$id": "#root/brand"
+    }
+  }
+}

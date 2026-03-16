@@ -1,0 +1,239 @@
+syntax = "proto3";
+
+package yandex.cloud.audittrails.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/audittrails/v1/trail.proto";
+import "yandex/cloud/access/access.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/audittrails/v1;audittrails";
+option java_package = "yandex.cloud.api.audittrails.v1";
+option java_outer_classname = "ATS";
+
+// A set of methods for managing trails.
+service TrailService {
+  // Returns the specified trail.
+  //
+  // To get the list of all available trails, make a [List] request.
+  rpc Get (GetTrailRequest) returns (Trail) {
+    option (google.api.http) = { get: "/audit-trails/v1/trails/{trail_id}" };
+  }
+
+  // Retrieves the list of trails in the specified folder.
+  rpc List (ListTrailsRequest) returns (ListTrailsResponse) {
+    option (google.api.http) = { get: "/audit-trails/v1/trails" };
+  }
+
+  // Creates a trail in the specified folder.
+  rpc Create (CreateTrailRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/audit-trails/v1/trails" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateTrailMetadata"
+      response: "Trail"
+    };
+  }
+
+  // Updates the specified trail.
+  rpc Update (UpdateTrailRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/audit-trails/v1/trails/{trail_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateTrailMetadata"
+      response: "Trail"
+    };
+  }
+
+  // Deletes the specified trail.
+  rpc Delete (DeleteTrailRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/audit-trails/v1/trails/{trail_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteTrailMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified trail.
+  rpc ListOperations (ListTrailOperationsRequest) returns (ListTrailOperationsResponse) {
+    option (google.api.http) = { get: "/audit-trails/v1/trails/{trail_id}/operations" };
+  }
+
+  // Lists existing access bindings for the specified trail.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/audit-trails/v1/trails/{resource_id}:listAccessBindings" };
+  }
+
+  // Sets access bindings for the trail.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/audit-trails/v1/trails/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Updates access bindings for the trail.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/audit-trails/v1/trails/{resource_id}:updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetTrailRequest {
+  // ID of the trail to return.
+  //
+  // To get a trail ID make a [List] request.
+  string trail_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Placeholder for private_call
+  reserved 2;
+}
+
+message ListTrailsRequest {
+  // ID of the folder to list trails in.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListTrailsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListTrailsRequest.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters subscription locks listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering on [Trail.name, Trail.created_at] fields.
+  // 2. An operator. Can be either `=` or `!=` for single values, `IN` or `NOT IN` for lists of values.
+  // 3. The value. Must be in double quotes `""`. Must be 3-63 characters long and match the regular expression `^[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name="my-name"`.
+  string filter = 4;
+
+  // By which column the listing should be ordered and in which direction.
+  // format is "<field> desc|acs"
+  string order_by = 5;
+}
+
+message ListTrailsResponse {
+  // List of trails in the specified folder.
+  repeated Trail trails = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number
+  // of results is greater than the specified [ListTrailsRequest.page_size], use
+  // the `next_page_token` as the value for the [ListTrailsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateTrailRequest {
+  // ID of the folder to create a trail in.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the trail.
+  string name = 2 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the trail.
+  string description = 3 [(length) = "<=1024"];
+
+  // Custom labels for the secret as `key:value` pairs. Maximum 64 per key.
+  // For example, `"type": "critical"` or `"source": "dictionary"`.
+  map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "<=63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // Destination configuration for the trail
+  Trail.Destination destination = 5 [(required) = true];
+
+  // Service account ID of the trail
+  string service_account_id = 6 [(required) = true, (length) = "<=50"];
+
+  // Event filtering configuration of the trail
+  // deprecated: use filtering_policy instead
+  Trail.Filter filter = 7 [deprecated = true];
+
+  // Event filtering policy of the trail
+  Trail.FilteringPolicy filtering_policy = 8;
+}
+
+message UpdateTrailRequest {
+  // ID of the trail to update.
+  string trail_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask that specifies which attributes of the trail are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New name of the trail.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // New description of the trail.
+  string description = 4 [(length) = "<=1024"];
+
+  // New custom labels for the secret as `key:value` pairs. Maximum 64 per key.
+  map<string, string> labels = 5 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "<=63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // New destination configuration for the trail
+  Trail.Destination destination = 6;
+
+  // New service account ID of the trail
+  string service_account_id = 7 [(length) = "<=50"];
+
+  // Updated filtering configuration of the trail
+  // deprecated: use filtering_policy instead
+  Trail.Filter filter = 8 [deprecated = true];
+
+  // Updated event filtering policy
+  Trail.FilteringPolicy filtering_policy = 9;
+}
+
+message DeleteTrailRequest {
+  // ID of the trail to be deleted.
+  string trail_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message CreateTrailMetadata {
+  // ID of the trail that is being created
+  string trail_id = 1;
+}
+
+message UpdateTrailMetadata {
+  // ID of the trail that is being updated
+  string trail_id = 1;
+}
+
+message DeleteTrailMetadata {
+  // ID of the trail that is being deleted
+  string trail_id = 1;
+}
+
+message ListTrailOperationsRequest {
+  // ID of the trail to get operations for.
+  string trail_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a [ListTrailOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListTrailOperationsRequest.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListTrailOperationsResponse {
+  // List of operations for the specified trail.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListTrailOperationsResponse.page_size], use the `next_page_token` as the value
+  // for the [ListTrailOperationsResponse.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

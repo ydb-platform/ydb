@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.sqlserver.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/sqlserver/v1;sqlserver";
+option java_outer_classname = "PSB";
+option java_package = "yandex.cloud.api.mdb.sqlserver.v1";
+
+// An SQL Server backup resource.
+//
+// For more information, see the [Backup](/docs/managed-sqlserver/concepts/backup) section in the documentation.
+message Backup {
+  // ID of the backup.
+  string id = 1;
+
+  // ID of the folder that the backup belongs to.
+  string folder_id = 2;
+
+  // Time when the backup operation was completed.
+  google.protobuf.Timestamp created_at = 3;
+
+  // ID of the SQL Server cluster that the backup was created for.
+  string source_cluster_id = 4;
+
+  // Time when the backup operation was started.
+  google.protobuf.Timestamp started_at = 5;
+
+  // List of databases included in the backup.
+  repeated string databases = 6;
+}

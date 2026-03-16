@@ -1,0 +1,3578 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     LicenseRef-scancode-warranty-disclaimer AND Public-Domain 02c10a5445ad09487c0a1188dcd06b8f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 26.92
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        frmts/grib/degrib/LICENSE.TXT [28:30]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 20.63
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        frmts/grib/degrib/LICENSE.TXT [28:30]
+
+KEEP     Public-Domain        0600481230707b3024c106e97f9acf59
+BELONGS ya.make
+    License text:
+         * CPLYMDHMSToUnixTime() has been implemented by Even Rouault and is in the
+         * public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        port/cpl_time.cpp [13:14]
+
+KEEP     Apache-2.0           06209abe95b90904e809b2e6f3ba4ea7
+BELONGS ya.make
+FILE_INCLUDE frmts/mrf/LERCV1/NOTICE found in files: frmts/mrf/LERCV1/LICENSE.TXT at line 65, frmts/mrf/LERCV1/LICENSE.TXT at line 66, frmts/mrf/LERCV1/LICENSE.TXT at line 67, frmts/mrf/LERCV1/LICENSE.TXT at line 69, frmts/mrf/LERCV1/LICENSE.TXT at line 70, frmts/mrf/LERCV1/LICENSE.TXT at line 81, third_party/LercLib/LICENSE at line 65, third_party/LercLib/LICENSE at line 66, third_party/LercLib/LICENSE at line 67, third_party/LercLib/LICENSE at line 69, third_party/LercLib/LICENSE at line 70, third_party/LercLib/LICENSE at line 81
+FILE_INCLUDE third_party/LercLib/NOTICE found in files: frmts/mrf/LERCV1/LICENSE.TXT at line 65, frmts/mrf/LERCV1/LICENSE.TXT at line 66, frmts/mrf/LERCV1/LICENSE.TXT at line 67, frmts/mrf/LERCV1/LICENSE.TXT at line 69, frmts/mrf/LERCV1/LICENSE.TXT at line 70, frmts/mrf/LERCV1/LICENSE.TXT at line 81, third_party/LercLib/LICENSE at line 65, third_party/LercLib/LICENSE at line 66, third_party/LercLib/LICENSE at line 67, third_party/LercLib/LICENSE at line 69, third_party/LercLib/LICENSE at line 70, third_party/LercLib/LICENSE at line 81
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 99.64
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        frmts/mrf/LERCV1/LICENSE.TXT [1:101]
+        third_party/LercLib/LICENSE [1:101]
+
+KEEP     MIT                  07588dfbdde0b6fa05ebefee241b73ec
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: port/cpl_sha256.cpp at line 24, port/cpl_sha256.h at line 21
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        port/cpl_sha256.cpp [10:28]
+        port/cpl_sha256.h [7:25]
+
+KEEP     GPL-2.0-only AND BSD-3-Clause 0c23dfb251e26127a5164f5e35d2fb0e
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/COPYING found in files: ogr/ogrsf_frmts/geojson/libjson/json_object_iterator.h at line 8
+    License text:
+        * This library is free software; you can redistribute it and/or modify
+        * it under the terms of the MIT license. See COPYING for details.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 58.33
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/json_object_iterator.c [7:8]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 72.35
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/json_object_iterator.h [7:8]
+
+KEEP     Qhull                0c5e66527436ef43f8ba213ee15defb7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Qhull
+        Score           : 97.66
+        Match type      : TEXT
+        Links           : https://fedoraproject.org/wiki/Licensing:Qhull?rd=Licensing/Qhull, https://spdx.org/licenses/Qhull
+    Files with this license:
+        LICENSE.TXT [279:309]
+
+KEEP     BSD-3-Clause         0cda4fc4c8a0e69833d01d1b70147de3
+BELONGS ya.make
+    License text:
+        		<p>This program is free software; you can redistribute it and/or modify it under the terms of the MIT License..</p>
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/README.html [31:31]
+
+KEEP     MIT                  0de64830926d7b28059b0628b12a0676
+BELONGS ya.make
+    License text:
+        SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        apps/argparse/argparse.hpp [9:9]
+
+KEEP     ISC                  164f58d08d8a08459197d7b93bf8a702
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE.TXT [440:450]
+        ogr/ogrsf_frmts/flatgeobuf/LICENSE [25:35]
+
+KEEP     Public-Domain        16585e8c2b21b7056d4b3ead400e0207
+BELONGS ya.make
+    License text:
+        /// Below code is adapted from Public Domain VICAR project
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        port/cpl_vax.cpp [226:226]
+
+KEEP     BSD-3-Clause         169919003e7f98b714d80795001bcaaa
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/COPYING found in files: ogr/ogrsf_frmts/geojson/libjson/config.h at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 54.55
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/config.h [7:14]
+
+KEEP     MIT                  1a9d7f02f1fd925c5f74b7600bd69744
+BELONGS ya.make
+    License text:
+        In general GDAL/OGR is licensed under an MIT style license with the
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.TXT [15:15]
+
+KEEP     MIT                  1ba822caa73c202f6689e358ff59978e
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: apps/argparse/argparse.hpp at line 26
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        apps/argparse/argparse.hpp [13:29]
+
+KEEP     LGPL-2.0-or-later AND GPL-1.0-or-later 1d15d63b4ef75cfb00d9c88b11aafc73
+BELONGS ya.make
+    License text:
+         * Now require libepsilon 0.9.1 to build (now dual LGPL/GPL) (#4084)
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        NEWS-1.x.md [1762:1762]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        NEWS-1.x.md [1762:1762]
+
+KEEP     Public-Domain        1f07efe884a95d874fbece616c7cb3ec
+BELONGS ya.make
+    License text:
+        by NOAA NWS and are in the public domain subject to the following
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE.TXT [120:120]
+        frmts/grib/degrib/LICENSE.TXT [5:5]
+
+KEEP     Public-Domain        201e0a545ec6d2400557d57f059c76d8
+BELONGS ya.make
+    License text:
+         * NOTE: Original code authored by Trent and Robert and placed in the public
+         * domain as per US government policy.  I have (within my rights) appropriated
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        frmts/pds/isis2dataset.cpp [10:11]
+        frmts/pds/pdsdataset.cpp [8:9]
+
+KEEP     HPND-sell-variant    2274b121cd1e6251a177be3023c7ff0a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        frmts/zarr/ucs4_utf8.hpp [4:20]
+
+KEEP     Libpbm               23851eb4a6b2cdfbac203509fe7f9ce3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-libpbm
+        Score           : 76.79
+        Match type      : TEXT
+        Links           : http://web.mit.edu/tex/fontutil/fontutils-0.6/pbm/libpbm1.c, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/libpbm.LICENSE
+    Files with this license:
+        PROVENANCE.TXT [370:373]
+
+KEEP     NTP                  24516a7801161cca5498dcc60645f706
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NTP
+        Score           : 91.49
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_.28no_advertising_without_permission.29, https://spdx.org/licenses/NTP
+    Files with this license:
+        ogr/ogr_swq.h [10:18]
+        ogr/swq.cpp [11:19]
+
+KEEP     PostgreSQL           2735c91e0415d018d24a9a8783acd500
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: PostgreSQL
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/postgresql, http://www.postgresql.org/about/licence, https://spdx.org/licenses/PostgreSQL
+    Files with this license:
+        ogr/ogrsf_frmts/pg/ogrpglayer.cpp [26:41]
+
+KEEP     MIT                  2995454deea186f128a76b7a5322870b
+BELONGS ya.make
+    License text:
+        license: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        CITATION.cff [16:16]
+
+KEEP     Zlib                 2b78bf6379ac2b3c1562403ffb9266cd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        port/cpl_minizip_unzip.h [27:43]
+        port/cpl_minizip_zip.h [33:49]
+
+KEEP     MIT                  2e32acf7dc6164f9bb231b719563b0ea
+BELONGS ya.make
+    License text:
+        * gdal_crs.c: derived from old GRASS/UMichigan code also under MIT license, properly noted in headers.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        PROVENANCE.TXT [112:112]
+
+KEEP     MIT                  3158a75221c70090b7e127aa7c980dd8
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        alg/contour.cpp [13:13]
+        alg/delaunay.c [10:10]
+        alg/gdal_alg.h [12:12]
+        alg/gdal_alg_priv.h [13:13]
+        alg/gdal_homography.cpp [9:9]
+        alg/gdal_interpolateatpoint.cpp [13:13]
+        alg/gdal_interpolateatpoint.h [13:13]
+        alg/gdal_octave.cpp [9:9]
+        alg/gdal_rpc.cpp [11:11]
+        alg/gdal_simplesurf.cpp [9:9]
+        alg/gdal_simplesurf.h [10:10]
+        alg/gdal_tps.cpp [11:11]
+        alg/gdalapplyverticalshiftgrid.cpp [10:10]
+        alg/gdalchecksum.cpp [11:11]
+        alg/gdalcutline.cpp [11:11]
+        alg/gdaldither.cpp [12:12]
+        alg/gdalgenericinverse.cpp [11:11]
+        alg/gdalgenericinverse.h [11:11]
+        alg/gdalgeoloc.cpp [13:13]
+        alg/gdalgeoloc.h [10:10]
+        alg/gdalgeoloc_carray_accessor.h [10:10]
+        alg/gdalgeoloc_dataset_accessor.h [10:10]
+        alg/gdalgeolocquadtree.cpp [11:11]
+        alg/gdalgeolocquadtree.h [11:11]
+        alg/gdalgrid.cpp [11:11]
+        alg/gdalgrid.h [12:12]
+        alg/gdalgrid_priv.h [11:11]
+        alg/gdalgridavx.cpp [10:10]
+        alg/gdalgridsse.cpp [10:10]
+        alg/gdallinearsystem.cpp [15:15]
+        alg/gdallinearsystem.h [10:10]
+        alg/gdalmatching.cpp [11:11]
+        alg/gdalmediancut.cpp [12:12]
+        alg/gdalpansharpen.cpp [11:11]
+        alg/gdalpansharpen.h [11:11]
+        alg/gdalproximity.cpp [11:11]
+        alg/gdalrasterize.cpp [11:11]
+        alg/gdalrasterpolygonenumerator.cpp [11:11]
+        alg/gdalresamplingkernels.h [13:13]
+        alg/gdalsievefilter.cpp [11:11]
+        alg/gdalsimplewarp.cpp [10:10]
+        alg/gdaltransformer.cpp [14:14]
+        alg/gdaltransformgeolocs.cpp [10:10]
+        alg/gdalwarper.cpp [11:11]
+        alg/gdalwarper.h [12:12]
+        alg/gdalwarpkernel.cpp [13:13]
+        alg/gdalwarpoperation.cpp [11:11]
+        alg/llrasterize.cpp [11:11]
+        alg/los.cpp [9:9]
+        alg/marching_squares/contour_generator.h [10:10]
+        alg/marching_squares/level_generator.h [10:10]
+        alg/marching_squares/point.h [10:10]
+        alg/marching_squares/polygon_ring_appender.h [10:10]
+        alg/marching_squares/segment_merger.h [10:10]
+        alg/marching_squares/square.h [10:10]
+        alg/marching_squares/utility.h [10:10]
+        alg/polygonize.cpp [10:10]
+        alg/polygonize_polygonizer.cpp [9:9]
+        alg/polygonize_polygonizer.h [9:9]
+        alg/rasterfill.cpp [12:12]
+        alg/thinplatespline.cpp [14:14]
+        alg/thinplatespline.h [14:14]
+        alg/viewshed/combiner.cpp [4:4]
+        alg/viewshed/combiner.h [4:4]
+        alg/viewshed/cumulative.cpp [4:4]
+        alg/viewshed/cumulative.h [4:4]
+        alg/viewshed/notifyqueue.h [4:4]
+        alg/viewshed/progress.cpp [4:4]
+        alg/viewshed/progress.h [4:4]
+        alg/viewshed/util.cpp [4:4]
+        alg/viewshed/util.h [4:4]
+        alg/viewshed/viewshed.cpp [11:11]
+        alg/viewshed/viewshed.h [11:11]
+        alg/viewshed/viewshed_executor.cpp [11:11]
+        alg/viewshed/viewshed_executor.h [11:11]
+        alg/viewshed/viewshed_types.h [4:4]
+        apps/commonutils.cpp [10:10]
+        apps/commonutils.h [10:10]
+        apps/gdal.cpp [10:10]
+        apps/gdal_contour_bin.cpp [12:12]
+        apps/gdal_contour_lib.cpp [12:12]
+        apps/gdal_create.cpp [10:10]
+        apps/gdal_footprint_bin.cpp [10:10]
+        apps/gdal_footprint_lib.cpp [10:10]
+        apps/gdal_grid_bin.cpp [10:10]
+        apps/gdal_grid_lib.cpp [11:11]
+        apps/gdal_rasterize_bin.cpp [10:10]
+        apps/gdal_rasterize_lib.cpp [11:11]
+        apps/gdal_translate_bin.cpp [11:11]
+        apps/gdal_translate_lib.cpp [12:12]
+        apps/gdal_utils.h [12:12]
+        apps/gdal_utils_priv.h [10:10]
+        apps/gdal_viewshed.cpp [9:9]
+        apps/gdaladdo.cpp [11:11]
+        apps/gdalalg_abstract_pipeline.h [10:10]
+        apps/gdalalg_clip_common.cpp [10:10]
+        apps/gdalalg_clip_common.h [10:10]
+        apps/gdalalg_convert.cpp [10:10]
+        apps/gdalalg_dispatcher.h [10:10]
+        apps/gdalalg_info.cpp [10:10]
+        apps/gdalalg_main.h [10:10]
+        apps/gdalalg_mdim.cpp [10:10]
+        apps/gdalalg_mdim_convert.cpp [10:10]
+        apps/gdalalg_mdim_convert.h [10:10]
+        apps/gdalalg_mdim_info.cpp [10:10]
+        apps/gdalalg_mdim_info.h [10:10]
+        apps/gdalalg_pipeline.cpp [10:10]
+        apps/gdalalg_raster.cpp [10:10]
+        apps/gdalalg_raster_aspect.cpp [10:10]
+        apps/gdalalg_raster_aspect.h [10:10]
+        apps/gdalalg_raster_calc.cpp [10:10]
+        apps/gdalalg_raster_calc.h [10:10]
+        apps/gdalalg_raster_clean_collar.cpp [10:10]
+        apps/gdalalg_raster_clean_collar.h [10:10]
+        apps/gdalalg_raster_clip.cpp [10:10]
+        apps/gdalalg_raster_clip.h [10:10]
+        apps/gdalalg_raster_color_map.cpp [10:10]
+        apps/gdalalg_raster_color_map.h [10:10]
+        apps/gdalalg_raster_contour.cpp [10:10]
+        apps/gdalalg_raster_contour.h [10:10]
+        apps/gdalalg_raster_convert.cpp [10:10]
+        apps/gdalalg_raster_convert.h [10:10]
+        apps/gdalalg_raster_create.cpp [10:10]
+        apps/gdalalg_raster_create.h [10:10]
+        apps/gdalalg_raster_edit.cpp [10:10]
+        apps/gdalalg_raster_edit.h [10:10]
+        apps/gdalalg_raster_fill_nodata.cpp [10:10]
+        apps/gdalalg_raster_fill_nodata.h [10:10]
+        apps/gdalalg_raster_footprint.cpp [10:10]
+        apps/gdalalg_raster_footprint.h [10:10]
+        apps/gdalalg_raster_hillshade.cpp [10:10]
+        apps/gdalalg_raster_hillshade.h [10:10]
+        apps/gdalalg_raster_index.cpp [10:10]
+        apps/gdalalg_raster_index.h [10:10]
+        apps/gdalalg_raster_info.cpp [10:10]
+        apps/gdalalg_raster_info.h [10:10]
+        apps/gdalalg_raster_mosaic.cpp [10:10]
+        apps/gdalalg_raster_mosaic.h [10:10]
+        apps/gdalalg_raster_overview.h [10:10]
+        apps/gdalalg_raster_overview_add.cpp [10:10]
+        apps/gdalalg_raster_overview_add.h [10:10]
+        apps/gdalalg_raster_overview_delete.cpp [10:10]
+        apps/gdalalg_raster_overview_delete.h [10:10]
+        apps/gdalalg_raster_pipeline.cpp [10:10]
+        apps/gdalalg_raster_pipeline.h [10:10]
+        apps/gdalalg_raster_pixel_info.cpp [10:10]
+        apps/gdalalg_raster_pixel_info.h [10:10]
+        apps/gdalalg_raster_polygonize.cpp [10:10]
+        apps/gdalalg_raster_polygonize.h [10:10]
+        apps/gdalalg_raster_read.cpp [10:10]
+        apps/gdalalg_raster_read.h [10:10]
+        apps/gdalalg_raster_reclassify.cpp [10:10]
+        apps/gdalalg_raster_reclassify.h [10:10]
+        apps/gdalalg_raster_reproject.cpp [10:10]
+        apps/gdalalg_raster_reproject.h [10:10]
+        apps/gdalalg_raster_resize.cpp [10:10]
+        apps/gdalalg_raster_resize.h [10:10]
+        apps/gdalalg_raster_roughness.cpp [10:10]
+        apps/gdalalg_raster_roughness.h [10:10]
+        apps/gdalalg_raster_scale.cpp [10:10]
+        apps/gdalalg_raster_scale.h [10:10]
+        apps/gdalalg_raster_select.cpp [10:10]
+        apps/gdalalg_raster_select.h [10:10]
+        apps/gdalalg_raster_set_type.cpp [10:10]
+        apps/gdalalg_raster_set_type.h [10:10]
+        apps/gdalalg_raster_sieve.cpp [10:10]
+        apps/gdalalg_raster_sieve.h [10:10]
+        apps/gdalalg_raster_slope.cpp [10:10]
+        apps/gdalalg_raster_slope.h [10:10]
+        apps/gdalalg_raster_stack.cpp [10:10]
+        apps/gdalalg_raster_stack.h [10:10]
+        apps/gdalalg_raster_tile.cpp [10:10]
+        apps/gdalalg_raster_tile.h [10:10]
+        apps/gdalalg_raster_tpi.cpp [10:10]
+        apps/gdalalg_raster_tpi.h [10:10]
+        apps/gdalalg_raster_tri.cpp [10:10]
+        apps/gdalalg_raster_tri.h [10:10]
+        apps/gdalalg_raster_unscale.cpp [10:10]
+        apps/gdalalg_raster_unscale.h [10:10]
+        apps/gdalalg_raster_viewshed.cpp [10:10]
+        apps/gdalalg_raster_viewshed.h [10:10]
+        apps/gdalalg_raster_write.cpp [10:10]
+        apps/gdalalg_raster_write.h [10:10]
+        apps/gdalalg_vector.cpp [10:10]
+        apps/gdalalg_vector_clip.cpp [10:10]
+        apps/gdalalg_vector_clip.h [10:10]
+        apps/gdalalg_vector_concat.cpp [10:10]
+        apps/gdalalg_vector_concat.h [10:10]
+        apps/gdalalg_vector_convert.cpp [10:10]
+        apps/gdalalg_vector_convert.h [10:10]
+        apps/gdalalg_vector_edit.cpp [10:10]
+        apps/gdalalg_vector_edit.h [10:10]
+        apps/gdalalg_vector_filter.cpp [10:10]
+        apps/gdalalg_vector_filter.h [10:10]
+        apps/gdalalg_vector_geom.cpp [10:10]
+        apps/gdalalg_vector_geom.h [10:10]
+        apps/gdalalg_vector_geom_buffer.cpp [10:10]
+        apps/gdalalg_vector_geom_buffer.h [10:10]
+        apps/gdalalg_vector_geom_explode_collections.cpp [10:10]
+        apps/gdalalg_vector_geom_explode_collections.h [10:10]
+        apps/gdalalg_vector_geom_make_valid.cpp [10:10]
+        apps/gdalalg_vector_geom_make_valid.h [10:10]
+        apps/gdalalg_vector_geom_segmentize.cpp [10:10]
+        apps/gdalalg_vector_geom_segmentize.h [10:10]
+        apps/gdalalg_vector_geom_set_type.cpp [10:10]
+        apps/gdalalg_vector_geom_set_type.h [10:10]
+        apps/gdalalg_vector_geom_simplify.cpp [10:10]
+        apps/gdalalg_vector_geom_simplify.h [10:10]
+        apps/gdalalg_vector_geom_swap_xy.cpp [10:10]
+        apps/gdalalg_vector_geom_swap_xy.h [10:10]
+        apps/gdalalg_vector_grid.cpp [10:10]
+        apps/gdalalg_vector_grid.h [10:10]
+        apps/gdalalg_vector_grid_average.cpp [10:10]
+        apps/gdalalg_vector_grid_average.h [10:10]
+        apps/gdalalg_vector_grid_data_metrics.cpp [10:10]
+        apps/gdalalg_vector_grid_data_metrics.h [10:10]
+        apps/gdalalg_vector_grid_invdist.cpp [10:10]
+        apps/gdalalg_vector_grid_invdist.h [10:10]
+        apps/gdalalg_vector_grid_invdistnn.cpp [10:10]
+        apps/gdalalg_vector_grid_invdistnn.h [10:10]
+        apps/gdalalg_vector_grid_linear.cpp [10:10]
+        apps/gdalalg_vector_grid_linear.h [10:10]
+        apps/gdalalg_vector_grid_nearest.cpp [10:10]
+        apps/gdalalg_vector_grid_nearest.h [10:10]
+        apps/gdalalg_vector_info.cpp [10:10]
+        apps/gdalalg_vector_info.h [10:10]
+        apps/gdalalg_vector_output_abstract.cpp [10:10]
+        apps/gdalalg_vector_output_abstract.h [10:10]
+        apps/gdalalg_vector_pipeline.cpp [10:10]
+        apps/gdalalg_vector_pipeline.h [10:10]
+        apps/gdalalg_vector_rasterize.cpp [10:10]
+        apps/gdalalg_vector_rasterize.h [10:10]
+        apps/gdalalg_vector_read.cpp [10:10]
+        apps/gdalalg_vector_read.h [10:10]
+        apps/gdalalg_vector_reproject.cpp [10:10]
+        apps/gdalalg_vector_reproject.h [10:10]
+        apps/gdalalg_vector_select.cpp [10:10]
+        apps/gdalalg_vector_select.h [10:10]
+        apps/gdalalg_vector_sql.cpp [10:10]
+        apps/gdalalg_vector_sql.h [10:10]
+        apps/gdalalg_vector_write.cpp [10:10]
+        apps/gdalalg_vector_write.h [10:10]
+        apps/gdalalg_vsi.cpp [10:10]
+        apps/gdalalg_vsi_copy.cpp [10:10]
+        apps/gdalalg_vsi_copy.h [10:10]
+        apps/gdalalg_vsi_delete.cpp [10:10]
+        apps/gdalalg_vsi_delete.h [10:10]
+        apps/gdalalg_vsi_list.cpp [10:10]
+        apps/gdalalg_vsi_list.h [10:10]
+        apps/gdalalg_vsi_move.cpp [10:10]
+        apps/gdalalg_vsi_move.h [10:10]
+        apps/gdalalg_vsi_sozip.cpp [10:10]
+        apps/gdalalg_vsi_sozip.h [10:10]
+        apps/gdalalg_vsi_sync.cpp [10:10]
+        apps/gdalalg_vsi_sync.h [10:10]
+        apps/gdalargumentparser.cpp [9:9]
+        apps/gdalargumentparser.h [9:9]
+        apps/gdalbuildvrt_bin.cpp [11:11]
+        apps/gdalbuildvrt_lib.cpp [11:11]
+        apps/gdaldem_bin.cpp [10:10]
+        apps/gdaldem_lib.cpp [17:17]
+        apps/gdalenhance.cpp [11:11]
+        apps/gdalinfo_bin.cpp [11:11]
+        apps/gdalinfo_lib.cpp [12:12]
+        apps/gdallocationinfo.cpp [11:11]
+        apps/gdalmanage.cpp [12:12]
+        apps/gdalmdiminfo_bin.cpp [10:10]
+        apps/gdalmdiminfo_lib.cpp [10:10]
+        apps/gdalmdimtranslate_bin.cpp [10:10]
+        apps/gdalmdimtranslate_lib.cpp [10:10]
+        apps/gdalsrsinfo.cpp [13:13]
+        apps/gdaltindex_bin.cpp [11:11]
+        apps/gdaltindex_lib.cpp [11:11]
+        apps/gdaltransform.cpp [11:11]
+        apps/gdalwarp_bin.cpp [12:12]
+        apps/gdalwarp_lib.cpp [13:13]
+        apps/gnmanalyse.cpp [11:11]
+        apps/gnmmanage.cpp [11:11]
+        apps/nearblack_bin.cpp [10:10]
+        apps/nearblack_lib.cpp [11:11]
+        apps/nearblack_lib.h [11:11]
+        apps/nearblack_lib_floodfill.cpp [11:11]
+        apps/ogr2ogr_bin.cpp [11:11]
+        apps/ogr2ogr_lib.cpp [12:12]
+        apps/ogrinfo_bin.cpp [11:11]
+        apps/ogrinfo_lib.cpp [11:11]
+        apps/ogrlineref.cpp [9:9]
+        apps/ogrtindex.cpp [12:12]
+        apps/sozip.cpp [10:10]
+        apps/test_ogrsf.cpp [11:11]
+        frmts/aaigrid/aaigriddataset.cpp [12:12]
+        frmts/aaigrid/aaigriddataset.h [12:12]
+        frmts/adrg/adrgdataset.cpp [9:9]
+        frmts/adrg/srpdataset.cpp [11:11]
+        frmts/aigrid/aigdataset.cpp [11:11]
+        frmts/aigrid/aigopen.c [11:11]
+        frmts/aigrid/aigrid.h [10:10]
+        frmts/aigrid/gridlib.c [11:11]
+        frmts/airsar/airsardataset.cpp [11:11]
+        frmts/bmp/bmpdataset.cpp [12:12]
+        frmts/bsb/bsb_read.c [16:16]
+        frmts/bsb/bsb_read.h [10:10]
+        frmts/bsb/bsbdataset.cpp [11:11]
+        frmts/cals/calsdataset.cpp [10:10]
+        frmts/ceos/ceosdataset.cpp [11:11]
+        frmts/ceos/ceosopen.c [11:11]
+        frmts/ceos/ceosopen.h [11:11]
+        frmts/ceos2/ceos.c [10:10]
+        frmts/ceos2/ceos.h [10:10]
+        frmts/ceos2/ceosrecipe.c [10:10]
+        frmts/ceos2/ceossar.c [10:10]
+        frmts/ceos2/link.c [10:10]
+        frmts/ceos2/sar_ceosdataset.cpp [11:11]
+        frmts/coasp/coasp_dataset.cpp [16:16]
+        frmts/cosar/cosar_dataset.cpp [4:4]
+        frmts/ctg/ctgdataset.cpp [10:10]
+        frmts/daas/daasdataset.cpp [10:10]
+        frmts/derived/deriveddataset.cpp [10:10]
+        frmts/derived/derivedlist.c [10:10]
+        frmts/derived/derivedlist.h [10:10]
+        frmts/dimap/dimapdataset.cpp [13:13]
+        frmts/dted/dted_api.c [11:11]
+        frmts/dted/dted_api.h [11:11]
+        frmts/dted/dted_create.c [10:10]
+        frmts/dted/dted_ptstream.c [10:10]
+        frmts/dted/dteddataset.cpp [11:11]
+        frmts/eeda/eeda.h [10:10]
+        frmts/eeda/eedacommon.cpp [10:10]
+        frmts/eeda/eedadataset.cpp [10:10]
+        frmts/eeda/eedaidataset.cpp [10:10]
+        frmts/envisat/EnvisatFile.c [11:11]
+        frmts/envisat/EnvisatFile.h [10:10]
+        frmts/envisat/adsrange.cpp [10:10]
+        frmts/envisat/adsrange.hpp [9:9]
+        frmts/envisat/envisatdataset.cpp [11:11]
+        frmts/envisat/records.c [10:10]
+        frmts/envisat/records.h [10:10]
+        frmts/envisat/timedelta.hpp [9:9]
+        frmts/envisat/unwrapgcps.cpp [10:10]
+        frmts/ers/ersdataset.cpp [11:11]
+        frmts/ers/ershdrnode.cpp [10:10]
+        frmts/esric/esric_dataset.cpp [13:13]
+        frmts/gdalallregister.cpp [11:11]
+        frmts/gdalg/gdalgdriver.cpp [10:10]
+        frmts/gff/gff_dataset.cpp [12:12]
+        frmts/gif/biggifdataset.cpp [13:13]
+        frmts/gif/gifabstractdataset.cpp [10:10]
+        frmts/gif/gifabstractdataset.h [10:10]
+        frmts/gif/gifdataset.cpp [11:11]
+        frmts/gif/gifdrivercore.cpp [11:11]
+        frmts/gif/gifdrivercore.h [11:11]
+        frmts/grib/gribcreatecopy.cpp [10:10]
+        frmts/grib/gribdataset.cpp [11:11]
+        frmts/grib/gribdataset.h [11:11]
+        frmts/grib/gribdrivercore.cpp [11:11]
+        frmts/grib/gribdrivercore.h [11:11]
+        frmts/gsg/gs7bgdataset.cpp [13:13]
+        frmts/gsg/gsagdataset.cpp [12:12]
+        frmts/gsg/gsbgdataset.cpp [12:12]
+        frmts/gti/gdaltileindexdataset.cpp [10:10]
+        frmts/gtiff/cogdriver.cpp [10:10]
+        frmts/gtiff/cogdriver.h [10:10]
+        frmts/gtiff/fetchbufferdirectio.h [11:11]
+        frmts/gtiff/geotiff.cpp [11:11]
+        frmts/gtiff/gt_citation.cpp [12:12]
+        frmts/gtiff/gt_citation.h [12:12]
+        frmts/gtiff/gt_jpeg_copy.cpp [10:10]
+        frmts/gtiff/gt_jpeg_copy.h [10:10]
+        frmts/gtiff/gt_overview.cpp [12:12]
+        frmts/gtiff/gt_overview.h [12:12]
+        frmts/gtiff/gt_wkt_srs.cpp [12:12]
+        frmts/gtiff/gt_wkt_srs.h [11:11]
+        frmts/gtiff/gt_wkt_srs_for_gdal.h [10:10]
+        frmts/gtiff/gt_wkt_srs_priv.h [10:10]
+        frmts/gtiff/gtiff.h [11:11]
+        frmts/gtiff/gtiffbitmapband.cpp [11:11]
+        frmts/gtiff/gtiffbitmapband.h [11:11]
+        frmts/gtiff/gtiffdataset.cpp [11:11]
+        frmts/gtiff/gtiffdataset.h [11:11]
+        frmts/gtiff/gtiffdataset_read.cpp [11:11]
+        frmts/gtiff/gtiffdataset_write.cpp [11:11]
+        frmts/gtiff/gtiffjpegoverviewds.cpp [11:11]
+        frmts/gtiff/gtiffjpegoverviewds.h [11:11]
+        frmts/gtiff/gtiffoddbitsband.cpp [11:11]
+        frmts/gtiff/gtiffoddbitsband.h [11:11]
+        frmts/gtiff/gtiffrasterband.cpp [11:11]
+        frmts/gtiff/gtiffrasterband.h [11:11]
+        frmts/gtiff/gtiffrasterband_read.cpp [11:11]
+        frmts/gtiff/gtiffrasterband_write.cpp [11:11]
+        frmts/gtiff/gtiffrgbaband.cpp [11:11]
+        frmts/gtiff/gtiffrgbaband.h [11:11]
+        frmts/gtiff/gtiffsplitband.cpp [11:11]
+        frmts/gtiff/gtiffsplitband.h [11:11]
+        frmts/gtiff/gtiffsplitbitmapband.cpp [11:11]
+        frmts/gtiff/gtiffsplitbitmapband.h [11:11]
+        frmts/gtiff/tifvsi.cpp [13:13]
+        frmts/gtiff/tifvsi.h [13:13]
+        frmts/gxf/gxf_ogcwkt.c [11:11]
+        frmts/gxf/gxf_proj4.c [11:11]
+        frmts/gxf/gxfdataset.cpp [11:11]
+        frmts/gxf/gxfopen.c [12:12]
+        frmts/gxf/gxfopen.h [11:11]
+        frmts/hdf5/bagdataset.cpp [11:11]
+        frmts/hdf5/gh5_convenience.cpp [10:10]
+        frmts/hdf5/gh5_convenience.h [10:10]
+        frmts/hdf5/hdf5_api.h [10:10]
+        frmts/hdf5/hdf5dataset.cpp [13:13]
+        frmts/hdf5/hdf5dataset.h [11:11]
+        frmts/hdf5/hdf5drivercore.cpp [10:10]
+        frmts/hdf5/hdf5drivercore.h [10:10]
+        frmts/hdf5/hdf5eosparser.cpp [10:10]
+        frmts/hdf5/hdf5eosparser.h [10:10]
+        frmts/hdf5/hdf5imagedataset.cpp [11:11]
+        frmts/hdf5/hdf5multidim.cpp [9:9]
+        frmts/hdf5/hdf5vfl.h [10:10]
+        frmts/hdf5/iso19115_srs.cpp [13:13]
+        frmts/hdf5/iso19115_srs.h [14:14]
+        frmts/hdf5/rat.cpp [10:10]
+        frmts/hdf5/rat.h [10:10]
+        frmts/hdf5/s100.cpp [10:10]
+        frmts/hdf5/s100.h [10:10]
+        frmts/hdf5/s102dataset.cpp [10:10]
+        frmts/hdf5/s104dataset.cpp [10:10]
+        frmts/hdf5/s111dataset.cpp [10:10]
+        frmts/hf2/hf2dataset.cpp [10:10]
+        frmts/hfa/hfa.h [12:12]
+        frmts/hfa/hfa_overviews.cpp [10:10]
+        frmts/hfa/hfa_p.h [12:12]
+        frmts/hfa/hfaband.cpp [11:11]
+        frmts/hfa/hfacompress.cpp [11:11]
+        frmts/hfa/hfadataset.cpp [12:12]
+        frmts/hfa/hfadataset.h [12:12]
+        frmts/hfa/hfadictionary.cpp [12:12]
+        frmts/hfa/hfaentry.cpp [12:12]
+        frmts/hfa/hfafield.cpp [12:12]
+        frmts/hfa/hfaopen.cpp [12:12]
+        frmts/hfa/hfatype.cpp [12:12]
+        frmts/http/httpdriver.cpp [11:11]
+        frmts/idrisi/IdrisiDataset.cpp [15:15]
+        frmts/idrisi/idrisi.h [11:11]
+        frmts/ilwis/ilwiscoordinatesystem.cpp [10:10]
+        frmts/ilwis/ilwisdataset.cpp [11:11]
+        frmts/ilwis/ilwisdataset.h [10:10]
+        frmts/iris/irisdataset.cpp [13:13]
+        frmts/iso8211/ddffield.cpp [10:10]
+        frmts/iso8211/ddffielddefn.cpp [10:10]
+        frmts/iso8211/ddfmodule.cpp [11:11]
+        frmts/iso8211/ddfrecord.cpp [11:11]
+        frmts/iso8211/ddfsubfielddefn.cpp [11:11]
+        frmts/iso8211/ddfutils.cpp [10:10]
+        frmts/iso8211/iso8211.h [10:10]
+        frmts/jaxapalsar/jaxapalsardataset.cpp [13:13]
+        frmts/jdem/jdemdataset.cpp [11:11]
+        frmts/jpeg/jpegdrivercore.cpp [14:14]
+        frmts/jpeg/jpegdrivercore.h [14:14]
+        frmts/jpeg/jpgdataset.cpp [14:14]
+        frmts/jpeg/jpgdataset.h [15:15]
+        frmts/jpeg/jpgdataset_12.cpp [10:10]
+        frmts/jpeg/vsidataio.cpp [11:11]
+        frmts/jpeg/vsidataio.h [11:11]
+        frmts/jpeg/vsidataio_12.cpp [11:11]
+        frmts/kmlsuperoverlay/kmlsuperoverlaydataset.cpp [11:11]
+        frmts/kmlsuperoverlay/kmlsuperoverlaydataset.h [11:11]
+        frmts/l1b/l1bdataset.cpp [17:17]
+        frmts/leveller/levellerdataset.cpp [15:15]
+        frmts/map/mapdataset.cpp [11:11]
+        frmts/mbtiles/mbtilesdataset.cpp [10:10]
+        frmts/mem/memdataset.cpp [11:11]
+        frmts/mem/memdataset.h [10:10]
+        frmts/mem/memmultidim.h [10:10]
+        frmts/mem/ogrmemlayer.cpp [11:11]
+        frmts/msgn/msg_basic_types.cpp [10:10]
+        frmts/msgn/msg_basic_types.h [10:10]
+        frmts/msgn/msg_reader_core.cpp [10:10]
+        frmts/msgn/msg_reader_core.h [10:10]
+        frmts/msgn/msgndataset.cpp [11:11]
+        frmts/netcdf/data/netcdf_config.xsd [11:11]
+        frmts/netcdf/netcdf_cf_constants.h [10:10]
+        frmts/netcdf/netcdf_sentinel3_sral_mwr.cpp [10:10]
+        frmts/netcdf/netcdfdataset.cpp [14:14]
+        frmts/netcdf/netcdfdataset.h [10:10]
+        frmts/netcdf/netcdfdrivercore.cpp [10:10]
+        frmts/netcdf/netcdfdrivercore.h [10:10]
+        frmts/netcdf/netcdfformatenum.h [10:10]
+        frmts/netcdf/netcdflayer.cpp [10:10]
+        frmts/netcdf/netcdflayersg.cpp [10:10]
+        frmts/netcdf/netcdflayersg.h [10:10]
+        frmts/netcdf/netcdfmultidim.cpp [9:9]
+        frmts/netcdf/netcdfsg.cpp [10:10]
+        frmts/netcdf/netcdfsg.h [10:10]
+        frmts/netcdf/netcdfsgwriterutil.cpp [10:10]
+        frmts/netcdf/netcdfsgwriterutil.h [10:10]
+        frmts/netcdf/netcdfuffd.h [10:10]
+        frmts/netcdf/netcdfvirtual.cpp [10:10]
+        frmts/netcdf/netcdfvirtual.h [10:10]
+        frmts/netcdf/netcdfwriterconfig.cpp [10:10]
+        frmts/ngsgeoid/ngsgeoiddataset.cpp [10:10]
+        frmts/nitf/data/nitf_spec.xml [11:11]
+        frmts/nitf/data/nitf_spec.xsd [11:11]
+        frmts/nitf/ecrgtocdataset.cpp [10:10]
+        frmts/nitf/nitf_gcprpc.cpp [10:10]
+        frmts/nitf/nitfaridpcm.cpp [11:11]
+        frmts/nitf/nitfbilevel.cpp [11:11]
+        frmts/nitf/nitfdataset.cpp [14:14]
+        frmts/nitf/nitfdataset.h [14:14]
+        frmts/nitf/nitfdes.c [10:10]
+        frmts/nitf/nitfdrivercore.cpp [14:14]
+        frmts/nitf/nitfdrivercore.h [14:14]
+        frmts/nitf/nitffile.c [12:12]
+        frmts/nitf/nitfimage.c [12:12]
+        frmts/nitf/nitflib.h [11:11]
+        frmts/nitf/nitfrasterband.cpp [14:14]
+        frmts/nitf/nitfwritejpeg.cpp [14:14]
+        frmts/nitf/rpftocdataset.cpp [10:10]
+        frmts/nitf/rpftocfile.cpp [11:11]
+        frmts/nitf/rpftoclib.h [10:10]
+        frmts/northwood/grcdataset.cpp [11:11]
+        frmts/northwood/grddataset.cpp [11:11]
+        frmts/northwood/northwood.cpp [11:11]
+        frmts/northwood/northwood.h [11:11]
+        frmts/ogcapi/gdalogcapidataset.cpp [10:10]
+        frmts/openjpeg/openjpegdataset.cpp [8:8]
+        frmts/openjpeg/openjpegdrivercore.cpp [10:10]
+        frmts/openjpeg/openjpegdrivercore.h [10:10]
+        frmts/openjpeg/opjdatasetbase.h [10:10]
+        frmts/opjlike/jp2opjlikedataset.cpp [13:13]
+        frmts/opjlike/jp2opjlikedataset.h [13:13]
+        frmts/pcidsk/gdal_edb.cpp [10:10]
+        frmts/pcidsk/ogrpcidsklayer.cpp [11:11]
+        frmts/pcidsk/pcidskdataset2.cpp [12:12]
+        frmts/pcidsk/pcidskdataset2.h [12:12]
+        frmts/pcidsk/pcidskdrivercore.cpp [12:12]
+        frmts/pcidsk/pcidskdrivercore.h [12:12]
+        frmts/pcidsk/sdk/blockdir/asciitiledir.cpp [9:9]
+        frmts/pcidsk/sdk/blockdir/asciitiledir.h [9:9]
+        frmts/pcidsk/sdk/blockdir/asciitilelayer.cpp [9:9]
+        frmts/pcidsk/sdk/blockdir/asciitilelayer.h [9:9]
+        frmts/pcidsk/sdk/blockdir/binarytiledir.cpp [9:9]
+        frmts/pcidsk/sdk/blockdir/binarytiledir.h [9:9]
+        frmts/pcidsk/sdk/blockdir/binarytilelayer.cpp [9:9]
+        frmts/pcidsk/sdk/blockdir/binarytilelayer.h [9:9]
+        frmts/pcidsk/sdk/blockdir/blockdir.cpp [9:9]
+        frmts/pcidsk/sdk/blockdir/blockdir.h [9:9]
+        frmts/pcidsk/sdk/blockdir/blockfile.cpp [9:9]
+        frmts/pcidsk/sdk/blockdir/blockfile.h [9:9]
+        frmts/pcidsk/sdk/blockdir/blocklayer.cpp [9:9]
+        frmts/pcidsk/sdk/blockdir/blocklayer.h [9:9]
+        frmts/pcidsk/sdk/blockdir/blocktiledir.cpp [9:9]
+        frmts/pcidsk/sdk/blockdir/blocktiledir.h [9:9]
+        frmts/pcidsk/sdk/blockdir/blocktilelayer.cpp [9:9]
+        frmts/pcidsk/sdk/blockdir/blocktilelayer.h [9:9]
+        frmts/pcidsk/sdk/channel/cbandinterleavedchannel.cpp [13:13]
+        frmts/pcidsk/sdk/channel/cbandinterleavedchannel.h [13:13]
+        frmts/pcidsk/sdk/channel/cexternalchannel.cpp [13:13]
+        frmts/pcidsk/sdk/channel/cexternalchannel.h [13:13]
+        frmts/pcidsk/sdk/channel/cpcidskchannel.cpp [9:9]
+        frmts/pcidsk/sdk/channel/cpcidskchannel.h [9:9]
+        frmts/pcidsk/sdk/channel/cpixelinterleavedchannel.cpp [9:9]
+        frmts/pcidsk/sdk/channel/cpixelinterleavedchannel.h [9:9]
+        frmts/pcidsk/sdk/channel/ctiledchannel.cpp [13:13]
+        frmts/pcidsk/sdk/channel/ctiledchannel.h [9:9]
+        frmts/pcidsk/sdk/core/clinksegment.cpp [9:9]
+        frmts/pcidsk/sdk/core/clinksegment.h [9:9]
+        frmts/pcidsk/sdk/core/cpcidskblockfile.cpp [9:9]
+        frmts/pcidsk/sdk/core/cpcidskblockfile.h [9:9]
+        frmts/pcidsk/sdk/core/cpcidskfile.cpp [9:9]
+        frmts/pcidsk/sdk/core/cpcidskfile.h [9:9]
+        frmts/pcidsk/sdk/core/edb_pcidsk.cpp [11:11]
+        frmts/pcidsk/sdk/core/libjpeg_io.cpp [11:11]
+        frmts/pcidsk/sdk/core/metadataset.h [9:9]
+        frmts/pcidsk/sdk/core/metadataset_p.cpp [12:12]
+        frmts/pcidsk/sdk/core/mutexholder.h [10:10]
+        frmts/pcidsk/sdk/core/pcidsk_pubutils.cpp [9:9]
+        frmts/pcidsk/sdk/core/pcidsk_raster.cpp [9:9]
+        frmts/pcidsk/sdk/core/pcidsk_raster.h [9:9]
+        frmts/pcidsk/sdk/core/pcidsk_scanint.cpp [9:9]
+        frmts/pcidsk/sdk/core/pcidsk_scanint.h [9:9]
+        frmts/pcidsk/sdk/core/pcidsk_utils.cpp [9:9]
+        frmts/pcidsk/sdk/core/pcidsk_utils.h [9:9]
+        frmts/pcidsk/sdk/core/pcidskbuffer.cpp [10:10]
+        frmts/pcidsk/sdk/core/pcidskcreate.cpp [9:9]
+        frmts/pcidsk/sdk/core/pcidskexception.cpp [9:9]
+        frmts/pcidsk/sdk/core/pcidskinterfaces.cpp [9:9]
+        frmts/pcidsk/sdk/core/pcidskopen.cpp [9:9]
+        frmts/pcidsk/sdk/core/protectedfile.h [9:9]
+        frmts/pcidsk/sdk/pcidsk.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_array.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_binary.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_blut.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_bpct.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_buffer.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_channel.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_config.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_edb.h [10:10]
+        frmts/pcidsk/sdk/pcidsk_ephemeris.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_exception.h [10:10]
+        frmts/pcidsk/sdk/pcidsk_file.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_gcp.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_gcpsegment.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_georef.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_interfaces.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_io.h [10:10]
+        frmts/pcidsk/sdk/pcidsk_lut.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_mutex.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_pct.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_poly.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_rpc.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_segment.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_shape.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_tex.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_toutin.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_types.h [9:9]
+        frmts/pcidsk/sdk/pcidsk_vectorsegment.h [9:9]
+        frmts/pcidsk/sdk/raster/rasterconfig.h [9:9]
+        frmts/pcidsk/sdk/raster/rastertypes.hh [9:9]
+        frmts/pcidsk/sdk/segment/cpcidsk_array.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidsk_array.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidsk_tex.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidsk_tex.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskbinarysegment.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskbinarysegment.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskbitmap.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskbitmap.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskblut.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskblut.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskbpct.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskbpct.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskephemerissegment.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskephemerissegment.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskgcp2segment.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskgcp2segment.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskgeoref.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskgeoref.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidsklut.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidsklut.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskpct.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskpct.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskpolymodel.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskpolymodel.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskrpcmodel.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskrpcmodel.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidsksegment.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidsksegment.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidsktoutinmodel.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidsktoutinmodel.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskvectorsegment.cpp [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskvectorsegment.h [9:9]
+        frmts/pcidsk/sdk/segment/cpcidskvectorsegment_consistencycheck.cpp [10:10]
+        frmts/pcidsk/sdk/segment/metadatasegment.h [14:14]
+        frmts/pcidsk/sdk/segment/metadatasegment_p.cpp [14:14]
+        frmts/pcidsk/sdk/segment/orbitstructures.h [9:9]
+        frmts/pcidsk/sdk/segment/systiledir.cpp [16:16]
+        frmts/pcidsk/sdk/segment/systiledir.h [16:16]
+        frmts/pcidsk/sdk/segment/toutinstructures.h [9:9]
+        frmts/pcidsk/sdk/segment/vecsegdataindex.cpp [14:14]
+        frmts/pcidsk/sdk/segment/vecsegdataindex.h [14:14]
+        frmts/pcidsk/sdk/segment/vecsegheader.cpp [13:13]
+        frmts/pcidsk/sdk/segment/vecsegheader.h [13:13]
+        frmts/pcidsk/vsi_pcidsk_io.cpp [11:11]
+        frmts/pdf/data/pdfcomposition.xsd [11:11]
+        frmts/pdf/gdal_pdf.h [17:17]
+        frmts/pdf/ogrpdflayer.cpp [10:10]
+        frmts/pdf/pdfcreatecopy.cpp [10:10]
+        frmts/pdf/pdfcreatecopy.h [10:10]
+        frmts/pdf/pdfcreatefromcomposition.cpp [10:10]
+        frmts/pdf/pdfcreatefromcomposition.h [10:10]
+        frmts/pdf/pdfdataset.cpp [17:17]
+        frmts/pdf/pdfdrivercore.cpp [10:10]
+        frmts/pdf/pdfdrivercore.h [10:10]
+        frmts/pdf/pdfio.cpp [10:10]
+        frmts/pdf/pdfobject.cpp [17:17]
+        frmts/pdf/pdfobject.h [17:17]
+        frmts/pdf/pdfreadvectors.cpp [10:10]
+        frmts/pdf/pdfsdk_headers_all.h [10:10]
+        frmts/pdf/pdfsdk_headers_pdfium.h [10:10]
+        frmts/pdf/pdfsdk_headers_podofo.h [10:10]
+        frmts/pdf/pdfsdk_headers_poppler.h [10:10]
+        frmts/pdf/pdfwritabledataset.cpp [10:10]
+        frmts/pds/isis2dataset.cpp [18:18]
+        frmts/pds/isis3dataset.cpp [20:20]
+        frmts/pds/pds4dataset.cpp [10:10]
+        frmts/pds/pds4dataset.h [10:10]
+        frmts/pds/pds4vector.cpp [10:10]
+        frmts/pds/pdsdataset.cpp [16:16]
+        frmts/pds/pdsdrivercore.cpp [10:10]
+        frmts/pds/pdsdrivercore.h [10:10]
+        frmts/pds/vicardataset.cpp [13:13]
+        frmts/pds/vicardataset.h [11:11]
+        frmts/pds/vicarkeywordhandler.cpp [14:14]
+        frmts/pds/vicarkeywordhandler.h [14:14]
+        frmts/plmosaic/plmosaicdataset.cpp [10:10]
+        frmts/png/pngdataset.cpp [11:11]
+        frmts/png/pngdataset.h [11:11]
+        frmts/png/pngdrivercore.cpp [11:11]
+        frmts/png/pngdrivercore.h [11:11]
+        frmts/postgisraster/postgisraster.h [15:15]
+        frmts/postgisraster/postgisrasterdataset.cpp [15:15]
+        frmts/postgisraster/postgisrasterdriver.cpp [12:12]
+        frmts/postgisraster/postgisrasterdrivercore.cpp [12:12]
+        frmts/postgisraster/postgisrasterdrivercore.h [12:12]
+        frmts/postgisraster/postgisrasterrasterband.cpp [15:15]
+        frmts/postgisraster/postgisrastertiledataset.cpp [13:13]
+        frmts/postgisraster/postgisrastertilerasterband.cpp [13:13]
+        frmts/postgisraster/postgisrastertools.cpp [14:14]
+        frmts/prf/phprfdataset.cpp [7:7]
+        frmts/raw/ace2dataset.cpp [11:11]
+        frmts/raw/atlsci_spheroid.cpp [10:10]
+        frmts/raw/atlsci_spheroid.h [10:10]
+        frmts/raw/btdataset.cpp [12:12]
+        frmts/raw/byndataset.cpp [11:11]
+        frmts/raw/byndataset.h [11:11]
+        frmts/raw/cpgdataset.cpp [11:11]
+        frmts/raw/doq1dataset.cpp [11:11]
+        frmts/raw/doq2dataset.cpp [11:11]
+        frmts/raw/ehdrdataset.cpp [11:11]
+        frmts/raw/ehdrdataset.h [11:11]
+        frmts/raw/eirdataset.cpp [11:11]
+        frmts/raw/envidataset.cpp [12:12]
+        frmts/raw/envidataset.h [12:12]
+        frmts/raw/fastdataset.cpp [11:11]
+        frmts/raw/genbindataset.cpp [11:11]
+        frmts/raw/gscdataset.cpp [11:11]
+        frmts/raw/gtxdataset.cpp [11:11]
+        frmts/raw/hkvdataset.cpp [11:11]
+        frmts/raw/iscedataset.cpp [10:10]
+        frmts/raw/krodataset.cpp [11:11]
+        frmts/raw/landataset.cpp [11:11]
+        frmts/raw/lcpdataset.cpp [12:12]
+        frmts/raw/loslasdataset.cpp [11:11]
+        frmts/raw/mffdataset.cpp [11:11]
+        frmts/raw/ndfdataset.cpp [11:11]
+        frmts/raw/noaabdataset.cpp [10:10]
+        frmts/raw/nsidcbindataset.cpp [10:10]
+        frmts/raw/ntv2dataset.cpp [13:13]
+        frmts/raw/pauxdataset.cpp [11:11]
+        frmts/raw/pnmdataset.cpp [11:11]
+        frmts/raw/roipacdataset.cpp [10:10]
+        frmts/raw/rrasterdataset.cpp [10:10]
+        frmts/raw/snodasdataset.cpp [10:10]
+        frmts/rcm/rcmdataset.cpp [13:13]
+        frmts/rcm/rcmdataset.h [13:13]
+        frmts/rcm/rcmdrivercore.cpp [13:13]
+        frmts/rcm/rcmdrivercore.h [13:13]
+        frmts/rik/rikdataset.cpp [11:11]
+        frmts/rmf/rmfdataset.cpp [13:13]
+        frmts/rmf/rmfdataset.h [12:12]
+        frmts/rmf/rmfdem.cpp [11:11]
+        frmts/rmf/rmfjpeg.cpp [11:11]
+        frmts/rmf/rmflzw.cpp [13:13]
+        frmts/rs2/rs2dataset.cpp [12:12]
+        frmts/safe/safedataset.cpp [10:10]
+        frmts/safe/safedataset.h [10:10]
+        frmts/saga/sagadataset.cpp [11:11]
+        frmts/sentinel2/sentinel2dataset.cpp [11:11]
+        frmts/sigdem/sigdemdataset.cpp [10:10]
+        frmts/sigdem/sigdemdataset.h [10:10]
+        frmts/srtmhgt/srtmhgtdataset.cpp [14:14]
+        frmts/stacit/stacitdataset.cpp [10:10]
+        frmts/stacta/stactadataset.cpp [10:10]
+        frmts/stacta/stactadataset.h [10:10]
+        frmts/terragen/terragendataset.cpp [23:23]
+        frmts/tga/tgadataset.cpp [9:9]
+        frmts/til/tildataset.cpp [11:11]
+        frmts/tsx/tsxdataset.cpp [13:13]
+        frmts/usgsdem/usgsdemdataset.cpp [14:14]
+        frmts/vrt/data/gdalvrt.xsd [11:11]
+        frmts/vrt/gdal_vrt.h [10:10]
+        frmts/vrt/pixelfunctions.cpp [11:11]
+        frmts/vrt/vrt_priv.h [9:9]
+        frmts/vrt/vrtdataset.cpp [11:11]
+        frmts/vrt/vrtdataset.h [11:11]
+        frmts/vrt/vrtderivedrasterband.cpp [12:12]
+        frmts/vrt/vrtdriver.cpp [11:11]
+        frmts/vrt/vrtexpression.h [10:10]
+        frmts/vrt/vrtfilters.cpp [11:11]
+        frmts/vrt/vrtmultidim.cpp [10:10]
+        frmts/vrt/vrtpansharpened.cpp [10:10]
+        frmts/vrt/vrtprocesseddataset.cpp [10:10]
+        frmts/vrt/vrtprocesseddatasetfunctions.cpp [10:10]
+        frmts/vrt/vrtrasterband.cpp [11:11]
+        frmts/vrt/vrtrawrasterband.cpp [11:11]
+        frmts/vrt/vrtreclassifier.cpp [10:10]
+        frmts/vrt/vrtreclassifier.h [10:10]
+        frmts/vrt/vrtsourcedrasterband.cpp [11:11]
+        frmts/vrt/vrtsources.cpp [12:12]
+        frmts/vrt/vrtwarped.cpp [11:11]
+        frmts/wcs/gmlcoverage.cpp [10:10]
+        frmts/wcs/gmlcoverage.h [11:11]
+        frmts/wcs/wcsdataset.cpp [11:11]
+        frmts/wcs/wcsdataset.h [13:13]
+        frmts/wcs/wcsdataset100.cpp [13:13]
+        frmts/wcs/wcsdataset110.cpp [13:13]
+        frmts/wcs/wcsdataset201.cpp [13:13]
+        frmts/wcs/wcsdrivercore.cpp [11:11]
+        frmts/wcs/wcsdrivercore.h [11:11]
+        frmts/wcs/wcsrasterband.cpp [11:11]
+        frmts/wcs/wcsrasterband.h [11:11]
+        frmts/wcs/wcsutils.cpp [13:13]
+        frmts/wcs/wcsutils.h [13:13]
+        frmts/webp/webp_headers.h [10:10]
+        frmts/webp/webpdataset.cpp [10:10]
+        frmts/webp/webpdrivercore.cpp [10:10]
+        frmts/webp/webpdrivercore.h [10:10]
+        frmts/wms/gdalhttp.cpp [13:13]
+        frmts/wms/gdalhttp.h [11:11]
+        frmts/wms/gdalwmscache.cpp [13:13]
+        frmts/wms/gdalwmsdataset.cpp [14:14]
+        frmts/wms/gdalwmsrasterband.cpp [13:13]
+        frmts/wms/minidriver.cpp [16:16]
+        frmts/wms/minidriver_arcgis_server.cpp [11:11]
+        frmts/wms/minidriver_arcgis_server.h [11:11]
+        frmts/wms/minidriver_iiifimage.cpp [11:11]
+        frmts/wms/minidriver_iiifimage.h [11:11]
+        frmts/wms/minidriver_iip.cpp [10:10]
+        frmts/wms/minidriver_iip.h [10:10]
+        frmts/wms/minidriver_mrf.h [11:11]
+        frmts/wms/minidriver_ogcapicoverage.cpp [9:9]
+        frmts/wms/minidriver_ogcapicoverage.h [9:9]
+        frmts/wms/minidriver_ogcapimaps.cpp [9:9]
+        frmts/wms/minidriver_ogcapimaps.h [9:9]
+        frmts/wms/minidriver_tiled_wms.cpp [13:13]
+        frmts/wms/minidriver_tiled_wms.h [12:12]
+        frmts/wms/minidriver_tileservice.cpp [11:11]
+        frmts/wms/minidriver_tileservice.h [11:11]
+        frmts/wms/minidriver_tms.cpp [11:11]
+        frmts/wms/minidriver_tms.h [11:11]
+        frmts/wms/minidriver_virtualearth.cpp [11:11]
+        frmts/wms/minidriver_virtualearth.h [11:11]
+        frmts/wms/minidriver_wms.cpp [12:12]
+        frmts/wms/minidriver_wms.h [11:11]
+        frmts/wms/minidriver_worldwind.cpp [11:11]
+        frmts/wms/minidriver_worldwind.h [11:11]
+        frmts/wms/wmsdriver.cpp [12:12]
+        frmts/wms/wmsdriver.h [14:14]
+        frmts/wms/wmsdrivercore.cpp [12:12]
+        frmts/wms/wmsdrivercore.h [12:12]
+        frmts/wms/wmsmetadataset.cpp [10:10]
+        frmts/wms/wmsmetadataset.h [10:10]
+        frmts/wms/wmsutils.cpp [10:10]
+        frmts/wmts/wmtsdataset.cpp [11:11]
+        frmts/wmts/wmtsdrivercore.cpp [11:11]
+        frmts/wmts/wmtsdrivercore.h [11:11]
+        frmts/xyz/xyzdataset.cpp [10:10]
+        frmts/zarr/vsikerchunk.cpp [10:10]
+        frmts/zarr/vsikerchunk.h [10:10]
+        frmts/zarr/vsikerchunk_inline.hpp [10:10]
+        frmts/zarr/vsikerchunk_json_ref.cpp [11:11]
+        frmts/zarr/vsikerchunk_parquet_ref.cpp [11:11]
+        frmts/zarr/zarr.h [10:10]
+        frmts/zarr/zarr_array.cpp [10:10]
+        frmts/zarr/zarr_attribute.cpp [10:10]
+        frmts/zarr/zarr_compressors.cpp [10:10]
+        frmts/zarr/zarr_dimension.cpp [10:10]
+        frmts/zarr/zarr_filters.cpp [10:10]
+        frmts/zarr/zarr_group.cpp [10:10]
+        frmts/zarr/zarr_sharedresource.cpp [10:10]
+        frmts/zarr/zarr_v2_array.cpp [10:10]
+        frmts/zarr/zarr_v2_group.cpp [10:10]
+        frmts/zarr/zarr_v3_array.cpp [10:10]
+        frmts/zarr/zarr_v3_codec.cpp [10:10]
+        frmts/zarr/zarr_v3_group.cpp [10:10]
+        frmts/zarr/zarrdriver.cpp [10:10]
+        frmts/zarr/zarrdrivercore.cpp [10:10]
+        frmts/zarr/zarrdrivercore.h [10:10]
+        frmts/zmap/zmapdataset.cpp [10:10]
+        gcore/gdal.h [11:11]
+        gcore/gdal_adbc.cpp [11:11]
+        gcore/gdal_adbc.h [11:11]
+        gcore/gdal_avx2_emulation.hpp [9:9]
+        gcore/gdal_frmts.h [11:11]
+        gcore/gdal_fwd.h [11:11]
+        gcore/gdal_mdreader.cpp [14:14]
+        gcore/gdal_mdreader.h [11:11]
+        gcore/gdal_minmax_element.hpp [9:9]
+        gcore/gdal_misc.cpp [11:11]
+        gcore/gdal_pam.h [10:10]
+        gcore/gdal_priv.h [12:12]
+        gcore/gdal_priv_templates.hpp [11:11]
+        gcore/gdal_proxy.h [10:10]
+        gcore/gdal_rat.cpp [11:11]
+        gcore/gdal_rat.h [10:10]
+        gcore/gdal_rat_vat_dbf.cpp [10:10]
+        gcore/gdal_thread_pool.cpp [10:10]
+        gcore/gdal_thread_pool.h [10:10]
+        gcore/gdal_vectorx.h [9:9]
+        gcore/gdalabstractbandblockcache.cpp [10:10]
+        gcore/gdalalgorithm.cpp [10:10]
+        gcore/gdalalgorithm.h [10:10]
+        gcore/gdalalgorithmregistry.cpp [10:10]
+        gcore/gdalallvalidmaskband.cpp [11:11]
+        gcore/gdalarraybandblockcache.cpp [11:11]
+        gcore/gdalcachedpixelaccessor.h [10:10]
+        gcore/gdalcolortable.cpp [11:11]
+        gcore/gdaldataset.cpp [11:11]
+        gcore/gdaldefaultasync.cpp [11:11]
+        gcore/gdaldefaultoverviews.cpp [12:12]
+        gcore/gdaldllmain.cpp [11:11]
+        gcore/gdaldriver.cpp [11:11]
+        gcore/gdaldrivermanager.cpp [11:11]
+        gcore/gdalexif.cpp [14:14]
+        gcore/gdalexif.h [11:11]
+        gcore/gdalgeorefpamdataset.cpp [11:11]
+        gcore/gdalgeorefpamdataset.h [11:11]
+        gcore/gdalhashsetbandblockcache.cpp [11:11]
+        gcore/gdaljp2abstractdataset.cpp [12:12]
+        gcore/gdaljp2abstractdataset.h [11:11]
+        gcore/gdaljp2box.cpp [11:11]
+        gcore/gdaljp2metadata.cpp [14:14]
+        gcore/gdaljp2metadata.h [11:11]
+        gcore/gdaljp2metadatagenerator.cpp [10:10]
+        gcore/gdaljp2metadatagenerator.h [10:10]
+        gcore/gdaljp2structure.cpp [10:10]
+        gcore/gdalmajorobject.cpp [11:11]
+        gcore/gdalmultidim.cpp [11:11]
+        gcore/gdalmultidim_gltorthorectification.cpp [10:10]
+        gcore/gdalmultidim_gridded.cpp [11:11]
+        gcore/gdalmultidim_meshgrid.cpp [10:10]
+        gcore/gdalmultidim_priv.h [10:10]
+        gcore/gdalmultidim_rat.cpp [10:10]
+        gcore/gdalmultidim_subsetdimension.cpp [10:10]
+        gcore/gdalmultidomainmetadata.cpp [12:12]
+        gcore/gdalnodatamaskband.cpp [12:12]
+        gcore/gdalnodatavaluesmaskband.cpp [13:13]
+        gcore/gdalopeninfo.cpp [11:11]
+        gcore/gdalorienteddataset.cpp [10:10]
+        gcore/gdalorienteddataset.h [10:10]
+        gcore/gdaloverviewdataset.cpp [10:10]
+        gcore/gdalpamdataset.cpp [12:12]
+        gcore/gdalpamproxydb.cpp [13:13]
+        gcore/gdalpamrasterband.cpp [13:13]
+        gcore/gdalproxydataset.cpp [11:11]
+        gcore/gdalproxypool.cpp [11:11]
+        gcore/gdalpython.cpp [11:11]
+        gcore/gdalpython.h [11:11]
+        gcore/gdalpythondriverloader.cpp [11:11]
+        gcore/gdalrasterband.cpp [12:12]
+        gcore/gdalrasterblock.cpp [12:12]
+        gcore/gdalrelationship.cpp [10:10]
+        gcore/gdalrescaledalphaband.cpp [11:11]
+        gcore/gdalsse_priv.h [10:10]
+        gcore/gdalsubdatasetinfo.cpp [10:10]
+        gcore/gdalsubdatasetinfo.h [10:10]
+        gcore/gdalthreadsafedataset.cpp [10:10]
+        gcore/gdalvirtualmem.cpp [11:11]
+        gcore/geoheif.cpp [11:11]
+        gcore/geoheif.h [3:3]
+        gcore/mdreader/reader_alos.cpp [11:11]
+        gcore/mdreader/reader_alos.h [11:11]
+        gcore/mdreader/reader_digital_globe.cpp [11:11]
+        gcore/mdreader/reader_digital_globe.h [11:11]
+        gcore/mdreader/reader_eros.cpp [11:11]
+        gcore/mdreader/reader_eros.h [11:11]
+        gcore/mdreader/reader_geo_eye.cpp [11:11]
+        gcore/mdreader/reader_geo_eye.h [11:11]
+        gcore/mdreader/reader_kompsat.cpp [11:11]
+        gcore/mdreader/reader_kompsat.h [11:11]
+        gcore/mdreader/reader_landsat.cpp [11:11]
+        gcore/mdreader/reader_landsat.h [11:11]
+        gcore/mdreader/reader_orb_view.cpp [11:11]
+        gcore/mdreader/reader_orb_view.h [11:11]
+        gcore/mdreader/reader_pleiades.cpp [11:11]
+        gcore/mdreader/reader_pleiades.h [11:11]
+        gcore/mdreader/reader_rapid_eye.cpp [11:11]
+        gcore/mdreader/reader_rapid_eye.h [11:11]
+        gcore/mdreader/reader_rdk1.cpp [11:11]
+        gcore/mdreader/reader_rdk1.h [11:11]
+        gcore/mdreader/reader_spot.cpp [11:11]
+        gcore/mdreader/reader_spot.h [11:11]
+        gcore/nasakeywordhandler.cpp [15:15]
+        gcore/nasakeywordhandler.h [15:15]
+        gcore/overview.cpp [12:12]
+        gcore/rasterio.cpp [12:12]
+        gcore/rasterio_ssse3.cpp [10:10]
+        gcore/rasterio_ssse3.h [10:10]
+        gcore/rawdataset.cpp [11:11]
+        gcore/rawdataset.h [12:12]
+        gcore/tiff_common.cpp [10:10]
+        gcore/tiff_common.h [10:10]
+        gcore/tilematrixset.cpp [10:10]
+        gcore/tilematrixset.hpp [10:10]
+        ogr/gml2ogrgeometry.cpp [11:11]
+        ogr/mitab_bounds.cpp [12:12]
+        ogr/ogr2gmlgeometry.cpp [11:11]
+        ogr/ogr2kmlgeometry.cpp [11:11]
+        ogr/ogr_api.cpp [12:12]
+        ogr/ogr_api.h [11:11]
+        ogr/ogr_core.h [11:11]
+        ogr/ogr_expat.cpp [10:10]
+        ogr/ogr_expat.h [10:10]
+        ogr/ogr_feature.h [11:11]
+        ogr/ogr_featurestyle.h [10:10]
+        ogr/ogr_fromepsg.cpp [12:12]
+        ogr/ogr_geo_utils.cpp [10:10]
+        ogr/ogr_geo_utils.h [10:10]
+        ogr/ogr_geocoding.cpp [10:10]
+        ogr/ogr_geocoding.h [10:10]
+        ogr/ogr_geomcoordinateprecision.h [10:10]
+        ogr/ogr_geometry.h [12:12]
+        ogr/ogr_geos.h [12:12]
+        ogr/ogr_libs.h [12:12]
+        ogr/ogr_p.h [11:11]
+        ogr/ogr_proj_p.cpp [10:10]
+        ogr/ogr_proj_p.h [10:10]
+        ogr/ogr_schema_override.cpp [9:9]
+        ogr/ogr_schema_override.h [9:9]
+        ogr/ogr_sfcgal.h [12:12]
+        ogr/ogr_spatialref.h [12:12]
+        ogr/ogr_srs_api.h [11:11]
+        ogr/ogr_srs_cf1.cpp [11:11]
+        ogr/ogr_srs_cf1.h [10:10]
+        ogr/ogr_srs_dict.cpp [11:11]
+        ogr/ogr_srs_erm.cpp [11:11]
+        ogr/ogr_srs_esri.cpp [12:12]
+        ogr/ogr_srs_ozi.cpp [12:12]
+        ogr/ogr_srs_panorama.cpp [13:13]
+        ogr/ogr_srs_pci.cpp [12:12]
+        ogr/ogr_srs_usgs.cpp [12:12]
+        ogr/ogr_srs_xml.cpp [11:11]
+        ogr/ogr_srsnode.cpp [11:11]
+        ogr/ogr_wkb.cpp [10:10]
+        ogr/ogr_wkb.h [10:10]
+        ogr/ogr_xerces.cpp [16:16]
+        ogr/ogr_xerces.h [9:9]
+        ogr/ograpispy.cpp [10:10]
+        ogr/ograpispy.h [10:10]
+        ogr/ograssemblepolygon.cpp [11:11]
+        ogr/ogrcircularstring.cpp [11:11]
+        ogr/ogrcompoundcurve.cpp [10:10]
+        ogr/ogrct.cpp [11:11]
+        ogr/ogrct_priv.h [11:11]
+        ogr/ogrcurve.cpp [10:10]
+        ogr/ogrcurvecollection.cpp [10:10]
+        ogr/ogrcurvepolygon.cpp [10:10]
+        ogr/ogrfeature.cpp [11:11]
+        ogr/ogrfeaturedefn.cpp [11:11]
+        ogr/ogrfeaturequery.cpp [12:12]
+        ogr/ogrfeaturestyle.cpp [11:11]
+        ogr/ogrfielddefn.cpp [11:11]
+        ogr/ogrgeojsonwriter.cpp [11:11]
+        ogr/ogrgeojsonwriter.h [11:11]
+        ogr/ogrgeomcoordinateprecision.cpp [10:10]
+        ogr/ogrgeometry.cpp [11:11]
+        ogr/ogrgeometrycollection.cpp [11:11]
+        ogr/ogrgeometryfactory.cpp [12:12]
+        ogr/ogrgeomfielddefn.cpp [10:10]
+        ogr/ogrlinearring.cpp [11:11]
+        ogr/ogrlinestring.cpp [11:11]
+        ogr/ogrmulticurve.cpp [10:10]
+        ogr/ogrmultilinestring.cpp [11:11]
+        ogr/ogrmultipoint.cpp [11:11]
+        ogr/ogrmultipolygon.cpp [11:11]
+        ogr/ogrmultisurface.cpp [10:10]
+        ogr/ogrpgeogeometry.cpp [13:13]
+        ogr/ogrpgeogeometry.h [11:11]
+        ogr/ogrpoint.cpp [11:11]
+        ogr/ogrpolygon.cpp [11:11]
+        ogr/ogrpolyhedralsurface.cpp [11:11]
+        ogr/ogrsf_frmts/adbc/ogr_adbc.h [10:10]
+        ogr/ogrsf_frmts/adbc/ogradbcdataset.cpp [11:11]
+        ogr/ogrsf_frmts/adbc/ogradbcdriver.cpp [10:10]
+        ogr/ogrsf_frmts/adbc/ogradbcdrivercore.cpp [10:10]
+        ogr/ogrsf_frmts/adbc/ogradbcdrivercore.h [10:10]
+        ogr/ogrsf_frmts/adbc/ogradbclayer.cpp [11:11]
+        ogr/ogrsf_frmts/aivector/ograivectordriver.cpp [10:10]
+        ogr/ogrsf_frmts/amigocloud/ogr_amigocloud.h [10:10]
+        ogr/ogrsf_frmts/amigocloud/ogramigoclouddatasource.cpp [10:10]
+        ogr/ogrsf_frmts/amigocloud/ogramigoclouddriver.cpp [10:10]
+        ogr/ogrsf_frmts/amigocloud/ogramigocloudlayer.cpp [10:10]
+        ogr/ogrsf_frmts/amigocloud/ogramigocloudresultlayer.cpp [10:10]
+        ogr/ogrsf_frmts/amigocloud/ogramigocloudtablelayer.cpp [10:10]
+        ogr/ogrsf_frmts/avc/avc.h [12:12]
+        ogr/ogrsf_frmts/avc/avc_bin.cpp [12:12]
+        ogr/ogrsf_frmts/avc/avc_e00gen.cpp [12:12]
+        ogr/ogrsf_frmts/avc/avc_e00parse.cpp [12:12]
+        ogr/ogrsf_frmts/avc/avc_e00read.cpp [14:14]
+        ogr/ogrsf_frmts/avc/avc_mbyte.cpp [11:11]
+        ogr/ogrsf_frmts/avc/avc_mbyte.h [12:12]
+        ogr/ogrsf_frmts/avc/avc_misc.cpp [12:12]
+        ogr/ogrsf_frmts/avc/avc_rawbin.cpp [12:12]
+        ogr/ogrsf_frmts/avc/ogr_avc.h [10:10]
+        ogr/ogrsf_frmts/avc/ogravcbindatasource.cpp [10:10]
+        ogr/ogrsf_frmts/avc/ogravcbindriver.cpp [10:10]
+        ogr/ogrsf_frmts/avc/ogravcbinlayer.cpp [10:10]
+        ogr/ogrsf_frmts/avc/ogravcdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/avc/ogravce00datasource.cpp [12:12]
+        ogr/ogrsf_frmts/avc/ogravce00driver.cpp [10:10]
+        ogr/ogrsf_frmts/avc/ogravce00layer.cpp [12:12]
+        ogr/ogrsf_frmts/avc/ogravclayer.cpp [13:13]
+        ogr/ogrsf_frmts/cad/gdalcaddataset.cpp [13:13]
+        ogr/ogrsf_frmts/cad/ogr_cad.h [13:13]
+        ogr/ogrsf_frmts/cad/ogrcaddriver.cpp [13:13]
+        ogr/ogrsf_frmts/cad/ogrcaddrivercore.cpp [13:13]
+        ogr/ogrsf_frmts/cad/ogrcaddrivercore.h [13:13]
+        ogr/ogrsf_frmts/cad/ogrcadlayer.cpp [13:13]
+        ogr/ogrsf_frmts/cad/vsilfileio.cpp [13:13]
+        ogr/ogrsf_frmts/cad/vsilfileio.h [13:13]
+        ogr/ogrsf_frmts/carto/ogr_carto.h [10:10]
+        ogr/ogrsf_frmts/carto/ogrcartodatasource.cpp [10:10]
+        ogr/ogrsf_frmts/carto/ogrcartodriver.cpp [10:10]
+        ogr/ogrsf_frmts/carto/ogrcartodrivercore.cpp [10:10]
+        ogr/ogrsf_frmts/carto/ogrcartodrivercore.h [10:10]
+        ogr/ogrsf_frmts/carto/ogrcartolayer.cpp [10:10]
+        ogr/ogrsf_frmts/carto/ogrcartoresultlayer.cpp [10:10]
+        ogr/ogrsf_frmts/carto/ogrcartotablelayer.cpp [10:10]
+        ogr/ogrsf_frmts/csv/ogr_csv.h [11:11]
+        ogr/ogrsf_frmts/csv/ogrcsvdatasource.cpp [11:11]
+        ogr/ogrsf_frmts/csv/ogrcsvdriver.cpp [11:11]
+        ogr/ogrsf_frmts/csv/ogrcsvlayer.cpp [11:11]
+        ogr/ogrsf_frmts/csw/ogrcswdataset.cpp [10:10]
+        ogr/ogrsf_frmts/dgn/dgnhelp.cpp [10:10]
+        ogr/ogrsf_frmts/dgn/dgnlib.h [10:10]
+        ogr/ogrsf_frmts/dgn/dgnlibp.h [11:11]
+        ogr/ogrsf_frmts/dgn/dgnopen.cpp [10:10]
+        ogr/ogrsf_frmts/dgn/dgnread.cpp [10:10]
+        ogr/ogrsf_frmts/dgn/dgnstroke.cpp [10:10]
+        ogr/ogrsf_frmts/dgn/dgnwrite.cpp [11:11]
+        ogr/ogrsf_frmts/dgn/ogr_dgn.h [10:10]
+        ogr/ogrsf_frmts/dgn/ogrdgndatasource.cpp [10:10]
+        ogr/ogrsf_frmts/dgn/ogrdgndriver.cpp [10:10]
+        ogr/ogrsf_frmts/dgn/ogrdgnlayer.cpp [10:10]
+        ogr/ogrsf_frmts/dxf/ogr_autocad_services.cpp [11:11]
+        ogr/ogrsf_frmts/dxf/ogr_autocad_services.h [10:10]
+        ogr/ogrsf_frmts/dxf/ogr_dxf.h [12:12]
+        ogr/ogrsf_frmts/dxf/ogrdxf_blockmap.cpp [11:11]
+        ogr/ogrsf_frmts/dxf/ogrdxf_dimension.cpp [13:13]
+        ogr/ogrsf_frmts/dxf/ogrdxf_feature.cpp [10:10]
+        ogr/ogrsf_frmts/dxf/ogrdxf_hatch.cpp [13:13]
+        ogr/ogrsf_frmts/dxf/ogrdxf_leader.cpp [11:11]
+        ogr/ogrsf_frmts/dxf/ogrdxf_ocstransformer.cpp [12:12]
+        ogr/ogrsf_frmts/dxf/ogrdxf_polyline_smooth.cpp [12:12]
+        ogr/ogrsf_frmts/dxf/ogrdxf_polyline_smooth.h [12:12]
+        ogr/ogrsf_frmts/dxf/ogrdxfblockslayer.cpp [10:10]
+        ogr/ogrsf_frmts/dxf/ogrdxfblockswriterlayer.cpp [11:11]
+        ogr/ogrsf_frmts/dxf/ogrdxfdatasource.cpp [11:11]
+        ogr/ogrsf_frmts/dxf/ogrdxfdriver.cpp [10:10]
+        ogr/ogrsf_frmts/dxf/ogrdxflayer.cpp [12:12]
+        ogr/ogrsf_frmts/dxf/ogrdxfreader.cpp [11:11]
+        ogr/ogrsf_frmts/dxf/ogrdxfwriterds.cpp [12:12]
+        ogr/ogrsf_frmts/dxf/ogrdxfwriterlayer.cpp [12:12]
+        ogr/ogrsf_frmts/edigeo/ogr_edigeo.h [10:10]
+        ogr/ogrsf_frmts/edigeo/ogredigeodatasource.cpp [10:10]
+        ogr/ogrsf_frmts/edigeo/ogredigeodriver.cpp [10:10]
+        ogr/ogrsf_frmts/edigeo/ogredigeolayer.cpp [10:10]
+        ogr/ogrsf_frmts/elastic/ogr_elastic.h [10:10]
+        ogr/ogrsf_frmts/elastic/ogrelasticaggregationlayer.cpp [10:10]
+        ogr/ogrsf_frmts/elastic/ogrelasticdatasource.cpp [11:11]
+        ogr/ogrsf_frmts/elastic/ogrelasticdriver.cpp [10:10]
+        ogr/ogrsf_frmts/elastic/ogrelasticdrivercore.cpp [10:10]
+        ogr/ogrsf_frmts/elastic/ogrelasticdrivercore.h [10:10]
+        ogr/ogrsf_frmts/elastic/ogrelasticlayer.cpp [11:11]
+        ogr/ogrsf_frmts/flatgeobuf/cplerrors.h [10:10]
+        ogr/ogrsf_frmts/flatgeobuf/geometryreader.cpp [10:10]
+        ogr/ogrsf_frmts/flatgeobuf/geometryreader.h [10:10]
+        ogr/ogrsf_frmts/flatgeobuf/geometrywriter.cpp [10:10]
+        ogr/ogrsf_frmts/flatgeobuf/geometrywriter.h [10:10]
+        ogr/ogrsf_frmts/flatgeobuf/ogr_flatgeobuf.h [10:10]
+        ogr/ogrsf_frmts/flatgeobuf/ogrflatgeobufdataset.cpp [10:10]
+        ogr/ogrsf_frmts/flatgeobuf/ogrflatgeobufeditablelayer.cpp [10:10]
+        ogr/ogrsf_frmts/flatgeobuf/ogrflatgeobuflayer.cpp [10:10]
+        ogr/ogrsf_frmts/flatgeobuf/packedrtree.cpp [10:10]
+        ogr/ogrsf_frmts/flatgeobuf/packedrtree.h [10:10]
+        ogr/ogrsf_frmts/generic/ogr_attrind.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ogr_gensql.cpp [11:11]
+        ogr/ogrsf_frmts/generic/ogr_gensql.h [11:11]
+        ogr/ogrsf_frmts/generic/ogr_miattrind.cpp [12:12]
+        ogr/ogrsf_frmts/generic/ograrrowarrayhelper.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ograrrowarrayhelper.h [10:10]
+        ogr/ogrsf_frmts/generic/ogrdatasource.cpp [11:11]
+        ogr/ogrsf_frmts/generic/ogreditablelayer.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ogreditablelayer.h [10:10]
+        ogr/ogrsf_frmts/generic/ogrlayer.cpp [11:11]
+        ogr/ogrsf_frmts/generic/ogrlayer_private.h [10:10]
+        ogr/ogrsf_frmts/generic/ogrlayerarrow.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ogrlayerarrow.h [10:10]
+        ogr/ogrsf_frmts/generic/ogrlayerdecorator.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ogrlayerdecorator.h [10:10]
+        ogr/ogrsf_frmts/generic/ogrlayerpool.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ogrlayerpool.h [10:10]
+        ogr/ogrsf_frmts/generic/ogrlayerwithtranslatefeature.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ogrlayerwithtranslatefeature.h [10:10]
+        ogr/ogrsf_frmts/generic/ogrmutexeddatasource.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ogrmutexeddatasource.h [10:10]
+        ogr/ogrsf_frmts/generic/ogrmutexedlayer.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ogrmutexedlayer.h [10:10]
+        ogr/ogrsf_frmts/generic/ogrregisterall.cpp [11:11]
+        ogr/ogrsf_frmts/generic/ogrsfdriver.cpp [11:11]
+        ogr/ogrsf_frmts/generic/ogrsfdriverregistrar.cpp [11:11]
+        ogr/ogrsf_frmts/generic/ogrunionlayer.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ogrunionlayer.h [10:10]
+        ogr/ogrsf_frmts/generic/ogrwarpedlayer.cpp [10:10]
+        ogr/ogrsf_frmts/generic/ogrwarpedlayer.h [10:10]
+        ogr/ogrsf_frmts/geojson/directedacyclicgraph.hpp [10:10]
+        ogr/ogrsf_frmts/geojson/ogr_geojson.h [11:11]
+        ogr/ogrsf_frmts/geojson/ogresrijsondriver.cpp [10:10]
+        ogr/ogrsf_frmts/geojson/ogresrijsonreader.cpp [13:13]
+        ogr/ogrsf_frmts/geojson/ogrgeojsondatasource.cpp [11:11]
+        ogr/ogrsf_frmts/geojson/ogrgeojsondriver.cpp [10:10]
+        ogr/ogrsf_frmts/geojson/ogrgeojsonlayer.cpp [11:11]
+        ogr/ogrsf_frmts/geojson/ogrgeojsonreader.cpp [11:11]
+        ogr/ogrsf_frmts/geojson/ogrgeojsonreader.h [11:11]
+        ogr/ogrsf_frmts/geojson/ogrgeojsonseqdriver.cpp [10:10]
+        ogr/ogrsf_frmts/geojson/ogrgeojsonutils.cpp [11:11]
+        ogr/ogrsf_frmts/geojson/ogrgeojsonutils.h [10:10]
+        ogr/ogrsf_frmts/geojson/ogrgeojsonwritelayer.cpp [11:11]
+        ogr/ogrsf_frmts/geojson/ogrjsoncollectionstreamingparser.cpp [10:10]
+        ogr/ogrsf_frmts/geojson/ogrjsoncollectionstreamingparser.h [10:10]
+        ogr/ogrsf_frmts/geojson/ogrtopojsondriver.cpp [10:10]
+        ogr/ogrsf_frmts/geojson/ogrtopojsonreader.cpp [10:10]
+        ogr/ogrsf_frmts/georss/ogr_georss.h [11:11]
+        ogr/ogrsf_frmts/georss/ogrgeorssdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/georss/ogrgeorssdriver.cpp [10:10]
+        ogr/ogrsf_frmts/georss/ogrgeorsslayer.cpp [10:10]
+        ogr/ogrsf_frmts/gml/gfstemplate.cpp [10:10]
+        ogr/ogrsf_frmts/gml/gmlhandler.cpp [11:11]
+        ogr/ogrsf_frmts/gml/gmlreader.cpp [11:11]
+        ogr/ogrsf_frmts/gml/gmlreader.h [11:11]
+        ogr/ogrsf_frmts/gml/gmlreaderp.h [11:11]
+        ogr/ogrsf_frmts/gml/gmlreadstate.cpp [11:11]
+        ogr/ogrsf_frmts/gml/gmlregistry.cpp [10:10]
+        ogr/ogrsf_frmts/gml/gmlregistry.h [10:10]
+        ogr/ogrsf_frmts/gml/hugefileresolver.cpp [11:11]
+        ogr/ogrsf_frmts/gml/ogr_gml.h [12:12]
+        ogr/ogrsf_frmts/gml/ogrgmldatasource.cpp [11:11]
+        ogr/ogrsf_frmts/gml/ogrgmldriver.cpp [10:10]
+        ogr/ogrsf_frmts/gml/ogrgmllayer.cpp [11:11]
+        ogr/ogrsf_frmts/gml/resolvexlinks.cpp [11:11]
+        ogr/ogrsf_frmts/gmlas/data/gmlasconf.xsd [11:11]
+        ogr/ogrsf_frmts/gmlutils/gmlfeature.cpp [11:11]
+        ogr/ogrsf_frmts/gmlutils/gmlfeature.h [11:11]
+        ogr/ogrsf_frmts/gmlutils/gmlfeatureclass.cpp [11:11]
+        ogr/ogrsf_frmts/gmlutils/gmlpropertydefn.cpp [11:11]
+        ogr/ogrsf_frmts/gmlutils/gmlutils.cpp [10:10]
+        ogr/ogrsf_frmts/gmlutils/gmlutils.h [10:10]
+        ogr/ogrsf_frmts/gmlutils/ogrwfsfilter.cpp [10:10]
+        ogr/ogrsf_frmts/gmlutils/ogrwfsfilter.h [10:10]
+        ogr/ogrsf_frmts/gmlutils/parsexsd.cpp [11:11]
+        ogr/ogrsf_frmts/gmlutils/parsexsd.h [11:11]
+        ogr/ogrsf_frmts/gmt/ogr_gmt.h [10:10]
+        ogr/ogrsf_frmts/gmt/ogrgmtdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/gmt/ogrgmtdriver.cpp [10:10]
+        ogr/ogrsf_frmts/gmt/ogrgmtlayer.cpp [10:10]
+        ogr/ogrsf_frmts/gpkg/gdalgeopackagerasterband.cpp [10:10]
+        ogr/ogrsf_frmts/gpkg/gpkgmbtilescommon.h [10:10]
+        ogr/ogrsf_frmts/gpkg/ogr_geopackage.h [10:10]
+        ogr/ogrsf_frmts/gpkg/ogrgeopackagedatasource.cpp [11:11]
+        ogr/ogrsf_frmts/gpkg/ogrgeopackagedriver.cpp [10:10]
+        ogr/ogrsf_frmts/gpkg/ogrgeopackagelayer.cpp [11:11]
+        ogr/ogrsf_frmts/gpkg/ogrgeopackageselectlayer.cpp [10:10]
+        ogr/ogrsf_frmts/gpkg/ogrgeopackagetablelayer.cpp [11:11]
+        ogr/ogrsf_frmts/gpkg/ogrgeopackageutility.cpp [10:10]
+        ogr/ogrsf_frmts/gpkg/ogrgeopackageutility.h [10:10]
+        ogr/ogrsf_frmts/gpsbabel/ogr_gpsbabel.h [10:10]
+        ogr/ogrsf_frmts/gpsbabel/ogrgpsbabeldatasource.cpp [10:10]
+        ogr/ogrsf_frmts/gpsbabel/ogrgpsbabeldriver.cpp [10:10]
+        ogr/ogrsf_frmts/gpsbabel/ogrgpsbabelwritedatasource.cpp [10:10]
+        ogr/ogrsf_frmts/gpx/ogr_gpx.h [10:10]
+        ogr/ogrsf_frmts/gpx/ogrgpxdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/gpx/ogrgpxdriver.cpp [10:10]
+        ogr/ogrsf_frmts/gpx/ogrgpxlayer.cpp [10:10]
+        ogr/ogrsf_frmts/gtfs/ogrgtfsdriver.cpp [10:10]
+        ogr/ogrsf_frmts/idrisi/ogr_idrisi.h [10:10]
+        ogr/ogrsf_frmts/idrisi/ogridrisidatasource.cpp [10:10]
+        ogr/ogrsf_frmts/idrisi/ogridrisidriver.cpp [11:11]
+        ogr/ogrsf_frmts/idrisi/ogridrisilayer.cpp [10:10]
+        ogr/ogrsf_frmts/jml/ogr_jml.h [10:10]
+        ogr/ogrsf_frmts/jml/ogrjmldataset.cpp [10:10]
+        ogr/ogrsf_frmts/jml/ogrjmllayer.cpp [9:9]
+        ogr/ogrsf_frmts/jml/ogrjmlwriterlayer.cpp [9:9]
+        ogr/ogrsf_frmts/jsonfg/ogr_jsonfg.h [10:10]
+        ogr/ogrsf_frmts/jsonfg/ogrjsonfgdataset.cpp [10:10]
+        ogr/ogrsf_frmts/jsonfg/ogrjsonfgdriver.cpp [10:10]
+        ogr/ogrsf_frmts/jsonfg/ogrjsonfgmemlayer.cpp [10:10]
+        ogr/ogrsf_frmts/jsonfg/ogrjsonfgreader.cpp [10:10]
+        ogr/ogrsf_frmts/jsonfg/ogrjsonfgstreamedlayer.cpp [10:10]
+        ogr/ogrsf_frmts/jsonfg/ogrjsonfgstreamingparser.cpp [10:10]
+        ogr/ogrsf_frmts/jsonfg/ogrjsonfgwritelayer.cpp [10:10]
+        ogr/ogrsf_frmts/kml/kml.cpp [11:11]
+        ogr/ogrsf_frmts/kml/kml.h [11:11]
+        ogr/ogrsf_frmts/kml/kmlnode.cpp [11:11]
+        ogr/ogrsf_frmts/kml/kmlnode.h [11:11]
+        ogr/ogrsf_frmts/kml/kmlutility.h [11:11]
+        ogr/ogrsf_frmts/kml/kmlvector.cpp [11:11]
+        ogr/ogrsf_frmts/kml/kmlvector.h [10:10]
+        ogr/ogrsf_frmts/kml/ogr_kml.h [14:14]
+        ogr/ogrsf_frmts/kml/ogrkmldatasource.cpp [13:13]
+        ogr/ogrsf_frmts/kml/ogrkmldriver.cpp [12:12]
+        ogr/ogrsf_frmts/kml/ogrkmllayer.cpp [12:12]
+        ogr/ogrsf_frmts/lvbag/ogr_lvbag.h [10:10]
+        ogr/ogrsf_frmts/lvbag/ogrlvbagdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/lvbag/ogrlvbagdriver.cpp [10:10]
+        ogr/ogrsf_frmts/lvbag/ogrlvbaglayer.cpp [10:10]
+        ogr/ogrsf_frmts/mapml/ogrmapmldataset.cpp [10:10]
+        ogr/ogrsf_frmts/miramon/mm_gdal_functions.c [15:15]
+        ogr/ogrsf_frmts/miramon/mm_rdlayr.c [15:15]
+        ogr/ogrsf_frmts/miramon/mm_wrlayr.c [15:15]
+        ogr/ogrsf_frmts/miramon/ogrmiramon.h [9:9]
+        ogr/ogrsf_frmts/miramon/ogrmiramondatasource.cpp [9:9]
+        ogr/ogrsf_frmts/miramon/ogrmiramondriver.cpp [9:9]
+        ogr/ogrsf_frmts/miramon/ogrmiramonlayer.cpp [9:9]
+        ogr/ogrsf_frmts/mitab/mitab.h [13:13]
+        ogr/ogrsf_frmts/mitab/mitab_datfile.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_feature.cpp [13:13]
+        ogr/ogrsf_frmts/mitab/mitab_feature_mif.cpp [13:13]
+        ogr/ogrsf_frmts/mitab/mitab_geometry.cpp [13:13]
+        ogr/ogrsf_frmts/mitab/mitab_geometry.h [13:13]
+        ogr/ogrsf_frmts/mitab/mitab_idfile.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_imapinfofile.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_indfile.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_mapcoordblock.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_mapfile.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_mapheaderblock.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_mapindexblock.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_mapobjectblock.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_maptoolblock.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_middatafile.cpp [13:13]
+        ogr/ogrsf_frmts/mitab/mitab_miffile.cpp [16:16]
+        ogr/ogrsf_frmts/mitab/mitab_ogr_datasource.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_ogr_driver.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_ogr_driver.h [13:13]
+        ogr/ogrsf_frmts/mitab/mitab_priv.h [13:13]
+        ogr/ogrsf_frmts/mitab/mitab_rawbinblock.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_tabfile.cpp [15:15]
+        ogr/ogrsf_frmts/mitab/mitab_tabseamless.cpp [14:14]
+        ogr/ogrsf_frmts/mitab/mitab_tabview.cpp [15:15]
+        ogr/ogrsf_frmts/mitab/mitab_tooldef.cpp [13:13]
+        ogr/ogrsf_frmts/mitab/mitab_utils.cpp [12:12]
+        ogr/ogrsf_frmts/mitab/mitab_utils.h [12:12]
+        ogr/ogrsf_frmts/mvt/mvt_tile.cpp [10:10]
+        ogr/ogrsf_frmts/mvt/mvt_tile.h [10:10]
+        ogr/ogrsf_frmts/mvt/mvtutils.cpp [10:10]
+        ogr/ogrsf_frmts/mvt/mvtutils.h [10:10]
+        ogr/ogrsf_frmts/mvt/ogrmvtdataset.cpp [10:10]
+        ogr/ogrsf_frmts/ngw/gdalngwdataset.cpp [11:11]
+        ogr/ogrsf_frmts/ngw/ngw_api.cpp [11:11]
+        ogr/ogrsf_frmts/ngw/ogr_ngw.h [11:11]
+        ogr/ogrsf_frmts/ngw/ogrngwdriver.cpp [11:11]
+        ogr/ogrsf_frmts/ngw/ogrngwfielddomain.cpp [11:11]
+        ogr/ogrsf_frmts/ngw/ogrngwlayer.cpp [11:11]
+        ogr/ogrsf_frmts/oapif/ogroapifdriver.cpp [10:10]
+        ogr/ogrsf_frmts/ods/ods_formula.cpp [11:11]
+        ogr/ogrsf_frmts/ods/ods_formula.h [12:12]
+        ogr/ogrsf_frmts/ods/ods_formula_node.cpp [12:12]
+        ogr/ogrsf_frmts/ods/ods_formula_parser.cpp [87:87]
+        ogr/ogrsf_frmts/ods/ogr_ods.h [10:10]
+        ogr/ogrsf_frmts/ods/ogrodsdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/ods/ogrodsdriver.cpp [10:10]
+        ogr/ogrsf_frmts/ogr_attrind.h [10:10]
+        ogr/ogrsf_frmts/ogrsf_frmts.h [11:11]
+        ogr/ogrsf_frmts/openfilegdb/filegdb_coordprec_read.h [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdb_coordprec_write.h [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdb_fielddomain.h [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdb_gdbtoogrfieldtype.h [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdb_relationship.h [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdb_reserved_keywords.h [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdbindex.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdbindex_write.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdbtable.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdbtable.h [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdbtable_freelist.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdbtable_priv.h [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdbtable_write.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/filegdbtable_write_fields.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/gdalopenfilegdbrasterband.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/ogr_openfilegdb.h [10:10]
+        ogr/ogrsf_frmts/openfilegdb/ogropenfilegdb_generate_uuid.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/ogropenfilegdbdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/ogropenfilegdbdatasource_write.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/ogropenfilegdbdriver.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/ogropenfilegdbdrivercore.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/ogropenfilegdbdrivercore.h [10:10]
+        ogr/ogrsf_frmts/openfilegdb/ogropenfilegdblayer.cpp [10:10]
+        ogr/ogrsf_frmts/openfilegdb/ogropenfilegdblayer_write.cpp [10:10]
+        ogr/ogrsf_frmts/osm/gpb.h [10:10]
+        ogr/ogrsf_frmts/osm/ogr_osm.h [10:10]
+        ogr/ogrsf_frmts/osm/ogrosmdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/osm/ogrosmdriver.cpp [10:10]
+        ogr/ogrsf_frmts/osm/ogrosmlayer.cpp [10:10]
+        ogr/ogrsf_frmts/osm/osm_parser.cpp [10:10]
+        ogr/ogrsf_frmts/osm/osm_parser.h [10:10]
+        ogr/ogrsf_frmts/pds/ogr_pds.h [10:10]
+        ogr/ogrsf_frmts/pds/ogrpdsdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/pds/ogrpdsdriver.cpp [10:10]
+        ogr/ogrsf_frmts/pds/ogrpdslayer.cpp [10:10]
+        ogr/ogrsf_frmts/pg/ogr_pg.h [11:11]
+        ogr/ogrsf_frmts/pg/ogrpgdatasource.cpp [11:11]
+        ogr/ogrsf_frmts/pg/ogrpgdriver.cpp [10:10]
+        ogr/ogrsf_frmts/pg/ogrpgdrivercore.cpp [10:10]
+        ogr/ogrsf_frmts/pg/ogrpgdrivercore.h [10:10]
+        ogr/ogrsf_frmts/pg/ogrpglayer.cpp [13:13]
+        ogr/ogrsf_frmts/pg/ogrpgresultlayer.cpp [12:12]
+        ogr/ogrsf_frmts/pg/ogrpgtablelayer.cpp [12:12]
+        ogr/ogrsf_frmts/pg/ogrpgutility.cpp [10:10]
+        ogr/ogrsf_frmts/pg/ogrpgutility.h [10:10]
+        ogr/ogrsf_frmts/pgdump/ogr_pgdump.h [10:10]
+        ogr/ogrsf_frmts/pgdump/ogrpgdumpdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/pgdump/ogrpgdumpdriver.cpp [10:10]
+        ogr/ogrsf_frmts/pgdump/ogrpgdumplayer.cpp [10:10]
+        ogr/ogrsf_frmts/plscenes/ogr_plscenes.h [10:10]
+        ogr/ogrsf_frmts/plscenes/ogrplscenesdatav1dataset.cpp [10:10]
+        ogr/ogrsf_frmts/plscenes/ogrplscenesdatav1layer.cpp [10:10]
+        ogr/ogrsf_frmts/plscenes/ogrplscenesdriver.cpp [10:10]
+        ogr/ogrsf_frmts/plscenes/ogrplscenesdrivercore.cpp [10:10]
+        ogr/ogrsf_frmts/plscenes/ogrplscenesdrivercore.h [10:10]
+        ogr/ogrsf_frmts/pmtiles/include_pmtiles.h [10:10]
+        ogr/ogrsf_frmts/pmtiles/ogr_pmtiles.h [10:10]
+        ogr/ogrsf_frmts/pmtiles/ogrpmtilesdataset.cpp [10:10]
+        ogr/ogrsf_frmts/pmtiles/ogrpmtilesdriver.cpp [10:10]
+        ogr/ogrsf_frmts/pmtiles/ogrpmtilesfrommbtiles.cpp [10:10]
+        ogr/ogrsf_frmts/pmtiles/ogrpmtilesfrommbtiles.h [10:10]
+        ogr/ogrsf_frmts/pmtiles/ogrpmtilestileiterator.cpp [10:10]
+        ogr/ogrsf_frmts/pmtiles/ogrpmtilesvectorlayer.cpp [10:10]
+        ogr/ogrsf_frmts/pmtiles/ogrpmtileswriterdataset.cpp [10:10]
+        ogr/ogrsf_frmts/pmtiles/vsipmtiles.cpp [10:10]
+        ogr/ogrsf_frmts/pmtiles/vsipmtiles.h [10:10]
+        ogr/ogrsf_frmts/s57/ddfrecordindex.cpp [12:12]
+        ogr/ogrsf_frmts/s57/ogr_s57.h [11:11]
+        ogr/ogrsf_frmts/s57/ogrs57datasource.cpp [11:11]
+        ogr/ogrsf_frmts/s57/ogrs57driver.cpp [11:11]
+        ogr/ogrsf_frmts/s57/ogrs57layer.cpp [11:11]
+        ogr/ogrsf_frmts/s57/s57.h [13:13]
+        ogr/ogrsf_frmts/s57/s57classregistrar.cpp [12:12]
+        ogr/ogrsf_frmts/s57/s57featuredefns.cpp [11:11]
+        ogr/ogrsf_frmts/s57/s57filecollector.cpp [12:12]
+        ogr/ogrsf_frmts/s57/s57reader.cpp [11:11]
+        ogr/ogrsf_frmts/s57/s57writer.cpp [11:11]
+        ogr/ogrsf_frmts/selafin/io_selafin.cpp [9:9]
+        ogr/ogrsf_frmts/selafin/io_selafin.h [9:9]
+        ogr/ogrsf_frmts/selafin/ogr_selafin.h [9:9]
+        ogr/ogrsf_frmts/selafin/ogrselafindatasource.cpp [9:9]
+        ogr/ogrsf_frmts/selafin/ogrselafindriver.cpp [9:9]
+        ogr/ogrsf_frmts/selafin/ogrselafinlayer.cpp [9:9]
+        ogr/ogrsf_frmts/shape/ogrshape.h [12:12]
+        ogr/ogrsf_frmts/shape/ogrshapedatasource.cpp [11:11]
+        ogr/ogrsf_frmts/shape/ogrshapedriver.cpp [10:10]
+        ogr/ogrsf_frmts/shape/ogrshapelayer.cpp [11:11]
+        ogr/ogrsf_frmts/shape/shape2ogr.cpp [12:12]
+        ogr/ogrsf_frmts/shape/shp_vsi.c [11:11]
+        ogr/ogrsf_frmts/shape/shp_vsi.h [11:11]
+        ogr/ogrsf_frmts/sqlite/ogr_sqlite.h [11:11]
+        ogr/ogrsf_frmts/sqlite/ogrsqliteapiroutines.c [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitebase.h [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitedatasource.cpp [18:18]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitedriver.cpp [18:18]
+        ogr/ogrsf_frmts/sqlite/ogrsqliteexecutesql.cpp [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqliteexecutesql.h [11:11]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitelayer.cpp [20:20]
+        ogr/ogrsf_frmts/sqlite/ogrsqliteregexp.cpp [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqliteregexp.h [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqliteselectlayer.cpp [12:12]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitesinglefeaturelayer.cpp [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitesqlfunctions.cpp [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitesqlfunctions.h [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitesqlfunctionscommon.cpp [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitetablelayer.cpp [11:11]
+        ogr/ogrsf_frmts/sqlite/ogrsqliteutility.cpp [11:11]
+        ogr/ogrsf_frmts/sqlite/ogrsqliteutility.h [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitevfs.cpp [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitevfs.h [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqliteviewlayer.cpp [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitevirtualogr.cpp [10:10]
+        ogr/ogrsf_frmts/sqlite/ogrsqlitevirtualogr.h [10:10]
+        ogr/ogrsf_frmts/sqlite/rasterlite2.cpp [17:17]
+        ogr/ogrsf_frmts/sqlite/rasterlite2_header.h [17:17]
+        ogr/ogrsf_frmts/sqlite/sqlite_rtree_bulk_load/sqlite_rtree_bulk_load.c [10:10]
+        ogr/ogrsf_frmts/sqlite/sqlite_rtree_bulk_load/sqlite_rtree_bulk_load.h [10:10]
+        ogr/ogrsf_frmts/sxf/ogr_sxf.h [12:12]
+        ogr/ogrsf_frmts/sxf/ogrsxfdatasource.cpp [15:15]
+        ogr/ogrsf_frmts/sxf/ogrsxfdriver.cpp [13:13]
+        ogr/ogrsf_frmts/sxf/ogrsxflayer.cpp [14:14]
+        ogr/ogrsf_frmts/sxf/org_sxf_defs.h [14:14]
+        ogr/ogrsf_frmts/vdv/data/vdv452.xml [11:11]
+        ogr/ogrsf_frmts/vdv/data/vdv452.xsd [11:11]
+        ogr/ogrsf_frmts/vdv/ogr_vdv.h [10:10]
+        ogr/ogrsf_frmts/vdv/ogrvdvdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/vfk/ogr_vfk.h [10:10]
+        ogr/ogrsf_frmts/vfk/ogrvfkdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/vfk/ogrvfkdriver.cpp [10:10]
+        ogr/ogrsf_frmts/vfk/ogrvfkdrivercore.cpp [10:10]
+        ogr/ogrsf_frmts/vfk/ogrvfkdrivercore.h [10:10]
+        ogr/ogrsf_frmts/vfk/ogrvfklayer.cpp [10:10]
+        ogr/ogrsf_frmts/vfk/vfkdatablock.cpp [11:11]
+        ogr/ogrsf_frmts/vfk/vfkdatablocksqlite.cpp [11:11]
+        ogr/ogrsf_frmts/vfk/vfkfeature.cpp [11:11]
+        ogr/ogrsf_frmts/vfk/vfkfeaturesqlite.cpp [10:10]
+        ogr/ogrsf_frmts/vfk/vfkproperty.cpp [10:10]
+        ogr/ogrsf_frmts/vfk/vfkpropertydefn.cpp [10:10]
+        ogr/ogrsf_frmts/vfk/vfkreader.cpp [11:11]
+        ogr/ogrsf_frmts/vfk/vfkreader.h [10:10]
+        ogr/ogrsf_frmts/vfk/vfkreaderp.h [10:10]
+        ogr/ogrsf_frmts/vfk/vfkreadersqlite.cpp [11:11]
+        ogr/ogrsf_frmts/vrt/data/ogrvrt.xsd [11:11]
+        ogr/ogrsf_frmts/vrt/ogr_vrt.h [11:11]
+        ogr/ogrsf_frmts/vrt/ogrvrtdatasource.cpp [11:11]
+        ogr/ogrsf_frmts/vrt/ogrvrtdriver.cpp [11:11]
+        ogr/ogrsf_frmts/vrt/ogrvrtlayer.cpp [11:11]
+        ogr/ogrsf_frmts/wasp/ogrwasp.h [10:10]
+        ogr/ogrsf_frmts/wasp/ogrwaspdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/wasp/ogrwaspdriver.cpp [10:10]
+        ogr/ogrsf_frmts/wasp/ogrwasplayer.cpp [10:10]
+        ogr/ogrsf_frmts/wfs/ogr_wfs.h [10:10]
+        ogr/ogrsf_frmts/wfs/ogrwfsdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/wfs/ogrwfsdriver.cpp [10:10]
+        ogr/ogrsf_frmts/wfs/ogrwfsjoinlayer.cpp [10:10]
+        ogr/ogrsf_frmts/wfs/ogrwfslayer.cpp [10:10]
+        ogr/ogrsf_frmts/xlsx/ogr_xlsx.h [10:10]
+        ogr/ogrsf_frmts/xlsx/ogrxlsxdatasource.cpp [10:10]
+        ogr/ogrsf_frmts/xlsx/ogrxlsxdriver.cpp [10:10]
+        ogr/ogrspatialreference.cpp [11:11]
+        ogr/ogrsurface.cpp [10:10]
+        ogr/ogrtriangle.cpp [11:11]
+        ogr/ogrtriangulatedsurface.cpp [11:11]
+        ogr/ogrutils.cpp [12:12]
+        ogr/swq_expr_node.cpp [12:12]
+        ogr/swq_op_general.cpp [13:13]
+        ogr/swq_op_registrar.cpp [12:12]
+        ogr/swq_parser.cpp [86:86]
+        ogr/swq_select.cpp [11:11]
+        port/cpl_alibaba_oss.cpp [11:11]
+        port/cpl_alibaba_oss.h [11:11]
+        port/cpl_atomic_ops.cpp [11:11]
+        port/cpl_atomic_ops.h [11:11]
+        port/cpl_aws.cpp [11:11]
+        port/cpl_aws.h [11:11]
+        port/cpl_aws_win32.cpp [10:10]
+        port/cpl_azure.h [9:9]
+        port/cpl_compressor.cpp [9:9]
+        port/cpl_compressor.h [9:9]
+        port/cpl_conv.cpp [11:11]
+        port/cpl_conv.h [12:12]
+        port/cpl_cpu_features.cpp [10:10]
+        port/cpl_cpu_features.h [10:10]
+        port/cpl_csv.cpp [11:11]
+        port/cpl_csv.h [11:11]
+        port/cpl_curl_priv.h [9:9]
+        port/cpl_error.cpp [13:13]
+        port/cpl_error.h [11:11]
+        port/cpl_error_internal.h [11:11]
+        port/cpl_findfile.cpp [11:11]
+        port/cpl_getexecpath.cpp [10:10]
+        port/cpl_google_cloud.cpp [9:9]
+        port/cpl_google_cloud.h [9:9]
+        port/cpl_google_oauth2.cpp [12:12]
+        port/cpl_hash_set.cpp [11:11]
+        port/cpl_hash_set.h [11:11]
+        port/cpl_http.cpp [11:11]
+        port/cpl_http.h [11:11]
+        port/cpl_json.cpp [9:9]
+        port/cpl_json.h [9:9]
+        port/cpl_json_header.h [10:10]
+        port/cpl_json_streaming_parser.cpp [10:10]
+        port/cpl_json_streaming_parser.h [10:10]
+        port/cpl_json_streaming_writer.cpp [10:10]
+        port/cpl_json_streaming_writer.h [10:10]
+        port/cpl_list.cpp [12:12]
+        port/cpl_list.h [11:11]
+        port/cpl_mask.h [11:11]
+        port/cpl_minixml.cpp [11:11]
+        port/cpl_minixml.h [10:10]
+        port/cpl_multiproc.cpp [11:11]
+        port/cpl_multiproc.h [11:11]
+        port/cpl_noncopyablevector.h [10:10]
+        port/cpl_path.cpp [11:11]
+        port/cpl_port.h [12:12]
+        port/cpl_progress.cpp [10:10]
+        port/cpl_progress.h [10:10]
+        port/cpl_quad_tree.cpp [13:13]
+        port/cpl_quad_tree.h [13:13]
+        port/cpl_safemaths.hpp [11:11]
+        port/cpl_sha1.cpp [14:14]
+        port/cpl_sha1.h [14:14]
+        port/cpl_spawn.cpp [10:10]
+        port/cpl_spawn.h [10:10]
+        port/cpl_string.cpp [12:12]
+        port/cpl_string.h [12:12]
+        port/cpl_strtod.cpp [11:11]
+        port/cpl_swift.h [9:9]
+        port/cpl_threadsafe_queue.hpp [10:10]
+        port/cpl_time.h [11:11]
+        port/cpl_userfaultfd.cpp [11:11]
+        port/cpl_userfaultfd.h [11:11]
+        port/cpl_vax.cpp [10:10]
+        port/cpl_vax.h [10:10]
+        port/cpl_virtualmem.cpp [11:11]
+        port/cpl_virtualmem.h [11:11]
+        port/cpl_vsi.h [12:12]
+        port/cpl_vsi_error.cpp [12:12]
+        port/cpl_vsi_error.h [12:12]
+        port/cpl_vsi_mem.cpp [11:11]
+        port/cpl_vsi_virtual.h [14:14]
+        port/cpl_vsil.cpp [12:12]
+        port/cpl_vsil_abstract_archive.cpp [10:10]
+        port/cpl_vsil_adls.cpp [10:10]
+        port/cpl_vsil_az.cpp [10:10]
+        port/cpl_vsil_buffered_reader.cpp [10:10]
+        port/cpl_vsil_cache.cpp [11:11]
+        port/cpl_vsil_chunked_write_handle.cpp [10:10]
+        port/cpl_vsil_crypt.cpp [10:10]
+        port/cpl_vsil_curl.cpp [10:10]
+        port/cpl_vsil_curl_class.h [10:10]
+        port/cpl_vsil_curl_priv.h [10:10]
+        port/cpl_vsil_curl_streaming.cpp [10:10]
+        port/cpl_vsil_gs.cpp [10:10]
+        port/cpl_vsil_gzip.cpp [10:10]
+        port/cpl_vsil_hdfs.cpp [11:11]
+        port/cpl_vsil_libarchive.cpp [10:10]
+        port/cpl_vsil_oss.cpp [10:10]
+        port/cpl_vsil_plugin.cpp [10:10]
+        port/cpl_vsil_plugin.h [10:10]
+        port/cpl_vsil_s3.cpp [10:10]
+        port/cpl_vsil_sparsefile.cpp [11:11]
+        port/cpl_vsil_stdin.cpp [10:10]
+        port/cpl_vsil_stdout.cpp [10:10]
+        port/cpl_vsil_subfile.cpp [11:11]
+        port/cpl_vsil_swift.cpp [10:10]
+        port/cpl_vsil_tar.cpp [10:10]
+        port/cpl_vsil_unix_stdio_64.cpp [12:12]
+        port/cpl_vsil_uploadonclose.cpp [10:10]
+        port/cpl_vsil_webhdfs.cpp [10:10]
+        port/cpl_vsil_win32.cpp [11:11]
+        port/cpl_vsisimple.cpp [11:11]
+        port/cpl_worker_thread_pool.cpp [10:10]
+        port/cpl_worker_thread_pool.h [10:10]
+        port/cpl_xml_validate.cpp [10:10]
+        port/cpl_zlib_header.h [10:10]
+        port/cplgetsymbol.cpp [11:11]
+        port/cplkeywordparser.cpp [14:14]
+        port/cplkeywordparser.h [13:13]
+        port/cplstring.cpp [11:11]
+        port/cplstringlist.cpp [11:11]
+        port/gdal_csv.h [12:12]
+
+KEEP     BSD-3-Clause         320292500326ddf98ba956d04677b727
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ogr/ogrsf_frmts/pmtiles/pmtiles/LICENSE [3:11]
+
+KEEP     Zlib                 32cdc2cff75eacb247b05e0709283f34
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 92.42
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        port/cpl_base64.cpp [169:185]
+
+KEEP     BSD-3-Clause         32d2d0671fdd6378a6cbe6e2a30b1174
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.89
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ogr/ogrsf_frmts/dxf/intronurbs.cpp [16:44]
+
+KEEP     Public-Domain        368aacf49ca4eddac50b7d5473023b61
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/flatgeobuf/LICENSE found in files: PROVENANCE.TXT at line 352
+FILE_INCLUDE ogr/ogrsf_frmts/pmtiles/pmtiles/LICENSE found in files: PROVENANCE.TXT at line 352
+FILE_INCLUDE third_party/LercLib/LICENSE found in files: PROVENANCE.TXT at line 352
+    License text:
+        * Contains copy of libgeotiff, license terms not made clear.  A review of libgeotiff's LICENSE file makes it clear code is public domain unless otherwise noted (which would be FrankW's MIT code)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 16.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        PROVENANCE.TXT [352:352]
+
+KEEP     Public-Domain AND Public-Domain 36cb89b1b320372c268551c35137696d
+BELONGS ya.make
+    License text:
+         * are in the public domain.  No warranty is given or implied, and no
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        frmts/rmf/rmflzw.cpp [18:18]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        frmts/rmf/rmflzw.cpp [18:18]
+
+KEEP     Apache-2.0           36d449828c885827bf0c276779a0a99e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.TXT [367:375]
+        frmts/mrf/BitMask2D.h [3:11]
+        frmts/mrf/LERCV1/Lerc1Image.h [3:11]
+        frmts/mrf/LERC_band.cpp [3:11]
+        frmts/mrf/Packer.h [3:11]
+        frmts/mrf/Packer_RLE.cpp [3:11]
+        frmts/mrf/Packer_RLE.h [3:11]
+
+KEEP     MIT                  370163b63b4e77aa4969ccd95881d83d
+BELONGS ya.make
+    License text:
+                        CPLStrdup("GDAL/OGR is released under the MIT license.\n"
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        gcore/gdal_misc.cpp [2973:2973]
+
+KEEP     LicenseRef-scancode-warranty-disclaimer 3733fe9ea521c2cc159dbb2c45a31a3a
+BELONGS ya.make
+    License text:
+        DISCLAIMER The United States Government makes no warranty, expressed or
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 90.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        LICENSE.TXT [125:125]
+        frmts/grib/degrib/LICENSE.TXT [10:10]
+
+KEEP     Public-Domain        3845d6ef049b415f8f54f4d7e362f22e
+BELONGS ya.make
+    License text:
+         * The algorithm is due to Ron Rivest.  This code was
+         * written by Colin Plumb in 1993, no copyright is claimed.
+         * This code is in the public domain; do with it what you wish.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        port/cpl_md5.cpp [3:5]
+
+KEEP     Libpng               3a05dbc8218dced9bf7960ae06850ddd
+BELONGS ya.make
+    License text:
+         * This code is released under the libpng license.
+         * For conditions of distribution and use, see the disclaimer
+         * and license in png.h
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        frmts/png/filter_sse2_intrinsics.c [8:10]
+
+KEEP     BSD-3-Clause         3f61ae6fc513a9b4fb0d72ae17e9ea0d
+BELONGS ya.make
+    License text:
+        * cpl_minizip* files come from the "minizip" distribution. Placed under a modified BSD Licence (see port/LICENCE_minizip). Added to gdal/LICENSE.TXT
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        PROVENANCE.TXT [101:101]
+
+KEEP     Sunpro               422fbee1034f90a34082783fd34246ec
+BELONGS ya.make
+    License text:
+         * Developed at SunSoft, a Sun Microsystems, Inc. business.
+         * Permission to use, copy, modify, and distribute this
+         * software is freely granted, provided that this notice
+         * is preserved.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-sunpro
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/sunpro.LICENSE
+    Files with this license:
+        alg/thinplatespline.cpp [209:212]
+
+KEEP     LicenseRef-scancode-unknown-license-reference AND MIT AND LGPL-2.0-or-later 43b87d07297719d7a1692b3142a4efd7
+BELONGS ya.make
+    License text:
+        * inline copy of Shapelib which is dual licensed MIT and LGPL.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        PROVENANCE.TXT [245:245]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        PROVENANCE.TXT [245:245]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        PROVENANCE.TXT [245:245]
+
+KEEP     MIT                  45024496db3e28e98611f391d60cd02e
+BELONGS ya.make
+    License text:
+        * llrasterize.c: Derived from GD which has compatible MIT license.  Properly noted in header.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        PROVENANCE.TXT [116:116]
+
+KEEP     MIT                  461f9356f9260e0b89120c63358f1be7
+BELONGS ya.make
+    License text:
+        - Switch to MIT-style license
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ogr/ogrsf_frmts/avc/HISTORY.TXT [133:133]
+
+KEEP     MIT                  46a598673e4eb2a28f2e9ab590b06ec5
+BELONGS ya.make
+    License text:
+        /** Libertiff is a C++11 simple, header-only, TIFF reader. It is MIT licensed.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/libertiff/libertiff.hpp [34:34]
+
+KEEP     ISC                  4892946b91eab2f8493c048f9caf3661
+BELONGS ya.make
+    License text:
+        ISC License
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE.TXT [417:417]
+        LICENSE.TXT [436:436]
+        ogr/ogrsf_frmts/flatgeobuf/LICENSE [3:3]
+        ogr/ogrsf_frmts/flatgeobuf/LICENSE [21:21]
+
+KEEP     MIT                  490b0f7886bb8810c9eb9764edf4448f
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: port/cpl_azure.cpp at line 22, port/cpl_swift.cpp at line 22
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 97.52
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        port/cpl_azure.cpp [9:24]
+        port/cpl_swift.cpp [9:24]
+
+KEEP     MIT                  4cc0871eba2af8cdcb5ae64d294cc959
+BELONGS ya.make
+    License text:
+          * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ogr/ogrsf_frmts/cad/libopencad/cadclasses.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadclasses.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadcolors.cpp [11:11]
+        ogr/ogrsf_frmts/cad/libopencad/cadcolors.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/caddictionary.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/caddictionary.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadfile.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadfile.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadfileio.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadfileio.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadfilestreamio.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadfilestreamio.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadgeometry.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadgeometry.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadheader.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadheader.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadlayer.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadlayer.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadobjects.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadobjects.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadtables.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/cadtables.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/dwg/io.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/dwg/io.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/dwg/r2000.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/dwg/r2000.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/opencad.cpp [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/opencad.h [13:13]
+        ogr/ogrsf_frmts/cad/libopencad/opencad_api.h [13:13]
+
+KEEP     Public-Domain        4f1fe8159202f044650a04f00bc590ca
+BELONGS ya.make
+    License text:
+        if SELF_TEST is defined.  You can use this free for any purpose.  It's in
+        the public domain.  It has no warranty.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 94.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/linkhash.c [82:83]
+
+KEEP     LicenseRef-scancode-other-permissive 514d7e5821ef366ab27bb6a30d764059
+BELONGS ya.make
+    License text:
+                 Well, here is my little proof of concept program. I hereby give
+        you permission to distribute it freely, modify for your own use, etc.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 17.07
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        frmts/bsb/bsb_read.c [85:86]
+
+KEEP     Apache-2.0 AND LicenseRef-scancode-unknown-license-reference 52416899bee2ebb8a47c09fe267e5560
+BELONGS ya.make
+    License text:
+        The right to practice this patent is hereby granted under the Apache V2.0 License Agreement,
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        frmts/mrf/LERCV1/NOTICE [11:11]
+        third_party/LercLib/NOTICE [11:11]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        frmts/mrf/LERCV1/NOTICE [11:11]
+        third_party/LercLib/NOTICE [11:11]
+
+KEEP     Public-Domain        5880c5b7262330f66350fcc60c7a4733
+BELONGS ya.make
+    License text:
+        copyright in any changes I have made; this code remains in the
+        public domain.  */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        port/cpl_md5.cpp [23:24]
+
+KEEP     MIT                  59ac28ac697a663ceb2660ff1d486e23
+BELONGS ya.make
+FILE_INCLUDE frmts/bsb/bsb_read.c found in files: frmts/bsb/README.dist at line 27
+    License text:
+        License
+        -------
+        MIT license ... see header of bsb_read.c.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        frmts/bsb/README.dist [24:27]
+
+KEEP     LicenseRef-scancode-cavium-malloc 5b0b8cbab67513caa7748d68b91bcb02
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-cavium-malloc
+        Score           : 12.67
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/cavium-malloc.LICENSE
+    Files with this license:
+        frmts/grib/degrib/LICENSE.TXT [29:32]
+
+KEEP     BSD-3-Clause         5ca7786ba3ed9ae1c6358c1ab2530d16
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.TXT [88:114]
+
+KEEP     MIT                  5f00f483f9150575b0f3c1015a70eff7
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: gnm/gnm.h at line 25, gnm/gnm_api.h at line 25, gnm/gnm_frmts/db/gnmdb.h at line 25, gnm/gnm_frmts/db/gnmdbdriver.cpp at line 25, gnm/gnm_frmts/db/gnmdbnetwork.cpp at line 25, gnm/gnm_frmts/file/gnmfile.h at line 25, gnm/gnm_frmts/file/gnmfiledriver.cpp at line 25, gnm/gnm_frmts/file/gnmfilenetwork.cpp at line 25, gnm/gnm_frmts/gnm_frmts.h at line 25, gnm/gnm_frmts/gnmregisterall.cpp at line 25, gnm/gnm_priv.h at line 25, gnm/gnmgenericnetwork.cpp at line 25, gnm/gnmgraph.cpp at line 25, gnm/gnmgraph.h at line 25, gnm/gnmlayer.cpp at line 25, gnm/gnmnetwork.cpp at line 25, gnm/gnmresultlayer.cpp at line 25, gnm/gnmrule.cpp at line 25
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        gnm/gnm.h [12:28]
+        gnm/gnm_api.h [12:28]
+        gnm/gnm_frmts/db/gnmdb.h [12:28]
+        gnm/gnm_frmts/db/gnmdbdriver.cpp [12:28]
+        gnm/gnm_frmts/db/gnmdbnetwork.cpp [12:28]
+        gnm/gnm_frmts/file/gnmfile.h [12:28]
+        gnm/gnm_frmts/file/gnmfiledriver.cpp [12:28]
+        gnm/gnm_frmts/file/gnmfilenetwork.cpp [12:28]
+        gnm/gnm_frmts/gnm_frmts.h [12:28]
+        gnm/gnm_frmts/gnmregisterall.cpp [12:28]
+        gnm/gnm_priv.h [12:28]
+        gnm/gnmgenericnetwork.cpp [12:28]
+        gnm/gnmgraph.cpp [12:28]
+        gnm/gnmgraph.h [12:28]
+        gnm/gnmlayer.cpp [12:28]
+        gnm/gnmnetwork.cpp [12:28]
+        gnm/gnmresultlayer.cpp [12:28]
+        gnm/gnmrule.cpp [12:28]
+
+KEEP     CC-BY-4.0 AND CC-BY-3.0 5fc178619905bcc2721fdd9d74be48a0
+BELONGS ya.make
+    License text:
+        /* Veness distributed under a CC-BY 3.0 licence, whose conditions is that the */
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        frmts/iris/irisdataset.cpp [604:604]
+    Scancode info:
+        Original SPDX id: CC-BY-3.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/licenses/by/3.0/, http://creativecommons.org/licenses/by/3.0/legalcode, https://spdx.org/licenses/CC-BY-3.0
+    Files with this license:
+        frmts/iris/irisdataset.cpp [604:604]
+
+KEEP     LGPL-2.1-only        63cc68d252dc0446db32a7c8b15ccbee
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/COPYING found in files: ogr/ogrsf_frmts/geojson/libjson/json_pointer.h at line 5
+    License text:
+         * This is free software; you can redistribute it and/or modify
+         * it under the terms of the MIT license. See COPYING for details.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 54.29
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/json_pointer.h [4:5]
+
+KEEP     GPL-1.0-or-later AND GPL-1.0-or-later 68ee8b80dbf55aadef45361ecfcec6a2
+BELONGS ya.make
+    License text:
+        * xritheaderparser.cpp, xritheaderparser.h: Copyright ITC and R. Alblas and released under the GPL.   (#1821)  The GPL code has been removed and reimplemented a different way.  Problem resolved.
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        PROVENANCE.TXT [439:439]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 85.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        PROVENANCE.TXT [439:439]
+
+KEEP     MIT                  6a853a9fdcf9414b27b206e0804d52e1
+BELONGS ya.make
+    License text:
+        /* The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        port/cpl_sha256.cpp [5:5]
+        port/cpl_sha256.h [2:2]
+
+KEEP     BSD-3-Clause AND BSD-3-Clause 6b924bda5746820204fcd241d18a6da8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 91.30
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        frmts/mrf/JPEG_band.cpp [6:29]
+        frmts/mrf/PNG_band.cpp [6:29]
+        frmts/mrf/mrf_util.cpp [6:29]
+        frmts/mrf/mrfdrivercore.cpp [6:29]
+        frmts/mrf/mrfdrivercore.h [6:29]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 97.67
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        frmts/mrf/marfa.h [6:29]
+        frmts/mrf/marfa_dataset.cpp [6:29]
+        frmts/mrf/mrf_band.cpp [6:29]
+
+KEEP     BSD-3-Clause         6e5f8959fa57d1a72489f978e74b94d6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.79
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.TXT [384:409]
+
+KEEP     MIT                  6e75cf09bcb23153f39ef068bb413c44
+BELONGS ya.make
+    License text:
+         * The copyrights to the contents of this file are licensed under the MIT License
+         * (http://www.opensource.org/licenses/mit-license.php)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/json_tokener.c [12:13]
+        ogr/ogrsf_frmts/geojson/libjson/printbuf.c [12:13]
+        ogr/ogrsf_frmts/geojson/libjson/printbuf.h [12:13]
+
+KEEP     Public-Domain        6f73b312395754a90fe2614a46eb72b4
+BELONGS ya.make
+    License text:
+        lookup3.c, by Bob Jenkins, May 2006, Public Domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/linkhash.c [77:77]
+
+KEEP     GPL-3.0-or-later AND Bison-exception-2.2 705ef661452b55b1550628d44060da41
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        ogr/ogrsf_frmts/ods/ods_formula_parser.cpp [1:32]
+        ogr/swq_parser.cpp [1:32]
+    Scancode info:
+        Original SPDX id: Bison-exception-2.2
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/Bison-exception-2.2
+    Files with this license:
+        ogr/ogrsf_frmts/ods/ods_formula_parser.cpp [1:32]
+        ogr/swq_parser.cpp [1:32]
+
+KEEP     MIT AND LicenseRef-scancode-free-unknown 7350ee291e4c60d90f2a33a03bd08cd7
+BELONGS ya.make
+    License text:
+          formats that is released under an MIT style Open Source License by the Open
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 80.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        CITATION.cff [9:9]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        CITATION.cff [9:9]
+
+KEEP     MIT                  76245a5d0d1fea267190ff0c5f2c8da5
+BELONGS ya.make
+FILE_INCLUDE ogr/ogr_swq.h found in files: PROVENANCE.TXT at line 270
+    License text:
+        * ogr_swq.h, swq.c: Has alternate form of MIT license.  On review this license is functionally equivalent to the general GDAL license.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        PROVENANCE.TXT [270:270]
+
+KEEP     MIT                  7cd524a945832a00fec763d86ba98665
+BELONGS ya.make
+    License text:
+        * tif_float.c: Industrial Light and Magic - MIT style, but with a credit requirement. Added license notice in gdal/LICENSE.TXT, setup ticket #1819 to streamline it's use.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 80.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        PROVENANCE.TXT [349:349]
+
+KEEP     Public-Domain        7fcee3e376e90040464a53bc0f448c4d
+BELONGS ya.make
+    License text:
+                       Derived from modules of GRASS 4.1 (public domain), properly noted in the headers.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        PROVENANCE.TXT [136:136]
+
+KEEP     BSD-3-Clause         81f1634e09063200aeea05033ac4ac7c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.TXT [316:340]
+
+KEEP     MIT                  8384d75c38c570f3edb87cf9f64f2ec2
+BELONGS ya.make
+    License text:
+        // SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        frmts/snap_tiff/snaptiffdriver.cpp [1:1]
+        ogr/ogresrijsongeometry.cpp [1:1]
+        ogr/ogresrijsongeometry.h [1:1]
+        ogr/ogrgeojsongeometry.cpp [1:1]
+        ogr/ogrgeojsongeometry.h [1:1]
+        ogr/ogrlibjsonutils.cpp [1:1]
+        ogr/ogrlibjsonutils.h [1:1]
+        ogr/ogrmitabspatialref.cpp [1:1]
+        ogr/ogrmitabspatialref.h [1:1]
+        ogr/ogrvrtgeometrytypes.cpp [1:1]
+        ogr/ogrvrtgeometrytypes.h [1:1]
+        port/cpl_levenshtein.cpp [1:1]
+        port/cpl_levenshtein.h [1:1]
+        third_party/libertiff/libertiff.hpp [1:1]
+
+KEEP     BSD-3-Clause         83b94f5ff4a1a27a50fe68e4ccb2c8a9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 98.59
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        port/cpl_float.cpp [19:42]
+        port/cpl_float.h [20:43]
+
+KEEP     MIT                  84e9e2e2e79f6d91c13655651633aa5f
+BELONGS ya.make
+    License text:
+        * libungif is under the MIT license as established in ticket #1818.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        PROVENANCE.TXT [340:340]
+
+KEEP     MIT                  85214b0e870730b72f7afd9d6695df8d
+BELONGS ya.make
+    License text:
+        /* (c) 2008-2010 David Troy, davetroy@gmail.com, (The MIT License) */
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ogr/ogrsf_frmts/elastic/ogrelasticlayer.cpp [1387:1387]
+
+KEEP     MIT                  85545b6051abd36fce0fc9cd8d2d53cc
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: ogr/ogrsf_frmts/mitab/README.TXT at line 48
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ogr/ogrsf_frmts/mitab/README.TXT [35:51]
+
+KEEP     Apache-2.0           86a0725dcd00b87b9929258039db566c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.TXT [457:467]
+
+KEEP     BSD-3-Clause         8743450d0b71ab335ac392e897ce30da
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.87
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        frmts/mrf/Tif_band.cpp [4:28]
+
+KEEP     Apache-2.0           87a3b063a58bf07da8349329b4e22ee9
+BELONGS ya.make
+FILE_INCLUDE frmts/mrf/LERCV1/NOTICE found in files: ogr/ogr_recordbatch.h at line 2, ogr/ogrsf_frmts/adbc/ogr_adbc_internal.h at line 2
+FILE_INCLUDE third_party/LercLib/NOTICE found in files: ogr/ogr_recordbatch.h at line 2, ogr/ogrsf_frmts/adbc/ogr_adbc_internal.h at line 2
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        ogr/ogr_recordbatch.h [1:16]
+        ogr/ogrsf_frmts/adbc/ogr_adbc_internal.h [1:16]
+
+KEEP     Info-Zip             87cb1c27adb766065df055986f85c52b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-info-zip-2005-02
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : ftp://ftp.info-zip.org/pub/infozip/doc/license, http://www.info-zip.org/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/info-zip-2005-02.LICENSE
+    Files with this license:
+        LICENSE.TXT [158:212]
+        port/LICENCE_minizip [1:55]
+
+KEEP     Public-Domain        887ea7583fff8ee688b48cd5c4ffd555
+BELONGS ya.make
+FILE_INCLUDE frmts/nitf/mgrs.h found in files: PROVENANCE.TXT at line 452
+    License text:
+        * mgrs.h, mgrs.c: Derived from Geotrans (public domain), not current copyright header.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        PROVENANCE.TXT [452:452]
+
+KEEP     Public-Domain        9097f4bb4ce20ab016df9e2139417c4d
+BELONGS ya.make
+    License text:
+         * hashlittle from lookup3.c, by Bob Jenkins, May 2006, Public Domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/linkhash.c [69:69]
+
+KEEP     Public-Domain        9149761704e94d4ba485dacc0b7c3ca5
+BELONGS ya.make
+    License text:
+        // Based on public domain code at
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        ogr/ogrsf_frmts/flatgeobuf/packedrtree.cpp [72:72]
+
+KEEP     MIT                  91d6605e34a562319b274dca76d0dfc3
+BELONGS ya.make
+    License text:
+         * Switch to MIT-style license
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ogr/ogrsf_frmts/avc/avc.h [67:67]
+        ogr/ogrsf_frmts/avc/avc_bin.cpp [65:65]
+        ogr/ogrsf_frmts/avc/avc_e00gen.cpp [41:41]
+        ogr/ogrsf_frmts/avc/avc_e00parse.cpp [54:54]
+        ogr/ogrsf_frmts/avc/avc_e00read.cpp [69:69]
+        ogr/ogrsf_frmts/avc/avc_mbyte.h [24:24]
+        ogr/ogrsf_frmts/avc/avc_misc.cpp [35:35]
+        ogr/ogrsf_frmts/avc/avc_rawbin.cpp [27:27]
+
+KEEP     BSD-3-Clause         93e54479ca6cac639ecbcad7305709b7
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: PROVENANCE.TXT at line 463
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/COPYING found in files: PROVENANCE.TXT at line 463, PROVENANCE.TXT at line 464
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.07
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        PROVENANCE.TXT [463:495]
+
+KEEP     LGPL-2.0-or-later    940a94f12cc5cc718283a82a3b2e372a
+BELONGS ya.make
+    License text:
+          * Change license from LGPL to MIT
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/ChangeLog [487:487]
+
+KEEP     MIT AND LGPL-2.0-or-later 9614d0849e6506777ee899ae5b5dfd16
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: MIT OR LGPL-2.0-or-later
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ogr/ogrsf_frmts/shape/dbfopen.c [11:11]
+        ogr/ogrsf_frmts/shape/sbnsearch.c [10:10]
+        ogr/ogrsf_frmts/shape/shapefil.h [14:14]
+        ogr/ogrsf_frmts/shape/shapefil_private.h [14:14]
+        ogr/ogrsf_frmts/shape/shpopen.c [11:11]
+        ogr/ogrsf_frmts/shape/shptree.c [11:11]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        ogr/ogrsf_frmts/shape/dbfopen.c [11:11]
+        ogr/ogrsf_frmts/shape/sbnsearch.c [10:10]
+        ogr/ogrsf_frmts/shape/shapefil.h [14:14]
+        ogr/ogrsf_frmts/shape/shapefil_private.h [14:14]
+        ogr/ogrsf_frmts/shape/shpopen.c [11:11]
+        ogr/ogrsf_frmts/shape/shptree.c [11:11]
+
+KEEP     MIT                  9e77615000d72a0556d3760858bfacaa
+BELONGS ya.make
+    License text:
+        * Replace MIT license long text with 'SPDX-License-Identifier: MIT' (#10903)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        NEWS.md [1518:1518]
+
+KEEP     Apache-2.0           9f1f6cacd42c16a1a991fe6d52db694b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        frmts/mrf/LERCV1/Lerc1Image.cpp [4:14]
+        third_party/LercLib/BitMask.cpp [4:14]
+        third_party/LercLib/BitMask.h [4:14]
+        third_party/LercLib/BitStuffer2.cpp [4:14]
+        third_party/LercLib/BitStuffer2.h [4:14]
+        third_party/LercLib/Defines.h [4:14]
+        third_party/LercLib/Huffman.cpp [4:14]
+        third_party/LercLib/Huffman.h [4:14]
+        third_party/LercLib/Lerc.cpp [4:14]
+        third_party/LercLib/Lerc.h [4:14]
+        third_party/LercLib/Lerc2.cpp [4:14]
+        third_party/LercLib/Lerc2.h [4:14]
+        third_party/LercLib/Lerc_c_api.h [4:14]
+        third_party/LercLib/Lerc_c_api_impl.cpp [4:14]
+        third_party/LercLib/RLE.cpp [4:14]
+        third_party/LercLib/RLE.h [4:14]
+
+KEEP     Apache-2.0           a07fc4adc52a0985d6002406c9bff792
+BELONGS ya.make
+    License text:
+            // Adapted from the LLVM Project, under the Apache License v2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        port/cpl_float.h [544:544]
+
+KEEP     BSD-Source-Code      a08d1663f8419bab47c8617c0b5abcda
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 43.96
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.TXT [357:362]
+
+KEEP     ISC                  a1a9c92890333752b564a27bf103e3a3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE.TXT [421:431]
+        ogr/ogrsf_frmts/flatgeobuf/LICENSE [7:17]
+
+KEEP     Unlicense            a2b34ee41516273492628e0fcb9cc132
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: port/utf8.h at line 25
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Unlicense
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://unlicense.org/, https://spdx.org/licenses/Unlicense, https://unlicense.org/
+    Files with this license:
+        port/utf8.h [7:30]
+
+KEEP     Public-Domain        a4a7dfcac2f7fe4ab1d7d2c464b9be08
+BELONGS ya.make
+    License text:
+         * Portions derived from GRASS 4.1 (public domain) See
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        apps/gdaldem_lib.cpp [13:13]
+
+KEEP     LGPL-2.0-or-later    a60253a3533e11a9ef52f82180e4c3cc
+BELONGS ya.make
+    License text:
+        * iom source code is all LGPL (per iom/README.src.txt) but none of the source files have a copyright or license header.  Action: this file has been removed. (#1812)
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        PROVENANCE.TXT [185:185]
+
+KEEP     MIT                  a6034fb7c779f57733cb695d6d542a9a
+BELONGS ya.make
+    License text:
+        * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        apps/gdalalg_main.cpp [10:10]
+
+KEEP     BSD-3-Clause         a8f20d9b19bcfcf8edb4b313ab806d55
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.06
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.TXT [228:250]
+
+KEEP     Public-Domain        a9ed0b941cfb929588b18fa0459af902
+BELONGS ya.make
+    License text:
+        <!-- This file is under the public domain -->
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        ogr/ogrsf_frmts/gmlas/data/gmlasconf.xml [1:1]
+
+KEEP     Zlib                 aa58f308323ed48be51ebc4b5d89fdbf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        frmts/zlib/README [88:105]
+        port/cpl_vsil_gzip.cpp [18:35]
+
+KEEP     LGPL-2.0-or-later    aa9ecc902ab276034ea130387b766d6e
+BELONGS ya.make
+    License text:
+         * Support linking against podofo library (LGPL) instead of poppler --> however
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        NEWS-1.x.md [1964:1964]
+
+KEEP     MIT                  ab583fbb8fe7599e077481cbe9cdeee5
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: LICENSE.TXT at line 31
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.TXT [18:34]
+
+KEEP     Apache-2.0           b2f04b455629919a940e7a4bdee92ce8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        frmts/mrf/JPEG12_band.cpp [3:13]
+        frmts/mrf/JPEG_band.cpp [33:43]
+        frmts/mrf/JPNG_band.cpp [6:16]
+        frmts/mrf/PNG_band.cpp [33:43]
+        frmts/mrf/Tif_band.cpp [32:42]
+        frmts/mrf/marfa.h [33:43]
+        frmts/mrf/marfa_dataset.cpp [33:43]
+        frmts/mrf/mrf_band.cpp [33:43]
+        frmts/mrf/mrf_overview.cpp [3:13]
+        frmts/mrf/mrf_util.cpp [33:43]
+        frmts/mrf/mrfdrivercore.cpp [33:43]
+        frmts/mrf/mrfdrivercore.h [33:43]
+        frmts/wms/minidriver_mrf.cpp [13:23]
+
+KEEP     LGPL-2.0-or-later    b374bd66903c571cfbd74a7dc11bcd40
+BELONGS ya.make
+    License text:
+         * Relies on using the Java Jackcess library (LGPL) through JNI.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        NEWS-1.x.md [2256:2256]
+
+KEEP     MIT                  b94f4a7d047d319669750fe92daf9e8a
+BELONGS ya.make
+    License text:
+        GDAL is an open source MIT licensed translator library for raster and vector geospatial data formats.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [23:23]
+
+KEEP     Public-Domain        b9f5fe99c0c48faff5a94015ea7e6c19
+BELONGS ya.make
+    License text:
+         * This file is in the public domain, so clarified as of
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        port/cpl_time.cpp [20:20]
+
+KEEP     MIT                  bcd0ac739e8838814b197da4b36951c4
+BELONGS ya.make
+    License text:
+        Licensed under the MIT License <http://opensource.org/licenses/MIT>.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        apps/argparse/argparse.hpp [8:8]
+
+SKIP     AGPL-3.0-or-later    bdc82a91f5480099bde7302b70a3659a
+BELONGS ya.make
+	# Not a license, but a totally unrelated string constant
+    License text:
+           /* 54 */ {"agpl", "INST. PRECIPITABLE WATER", "Kg/m2", UC_NONE},
+    Scancode info:
+        Original SPDX id: AGPL-3.0-or-later
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/agpl-3.0.html, http://www.gnu.org/licenses/agpl.txt, https://spdx.org/licenses/AGPL-3.0-or-later
+    Files with this license:
+        frmts/grib/degrib/degrib/grib1tab.cpp [7578:7578]
+
+KEEP     MIT                  be75e57bfa4550ce300fe07fefc77277
+BELONGS ya.make
+    License text:
+         * It was later adapted for direct inclusion in GDAL and relicensed under
+         * the GDAL MIT license (pulled from the OpenEV distribution).
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        alg/llrasterize.cpp [54:55]
+
+KEEP     CC-BY-3.0            be961c2ae57bb04692b3a0cb935c252c
+BELONGS ya.make
+    License text:
+         *           Chris Veness under a CC-BY 3.0 licence
+    Scancode info:
+        Original SPDX id: CC-BY-3.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/licenses/by/3.0/, http://creativecommons.org/licenses/by/3.0/legalcode, https://spdx.org/licenses/CC-BY-3.0
+    Files with this license:
+        frmts/iris/irisdataset.cpp [7:7]
+
+KEEP     LGPL-2.0-or-later    bfa1ec0e912667eb76bd4283e0e762ec
+BELONGS ya.make
+    License text:
+        * gdalrasterize.cpp: Derived from OpenEV code.  Relicensed from LGPL to MIT by explicit grant from copyright holder (Frank Warmerdam).
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        PROVENANCE.TXT [114:114]
+
+KEEP     LicenseRef-scancode-unknown-license-reference AND LicenseRef-scancode-free-unknown c1bf6e2d6294b7b973c19fa9c9c85624
+BELONGS ya.make
+    License text:
+        ! and datum.txt file to be distributed under the GDAL open source license.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        ogr/data/pci_datum.txt [5:5]
+        ogr/data/pci_ellips.txt [5:5]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        ogr/data/pci_datum.txt [5:5]
+        ogr/data/pci_ellips.txt [5:5]
+
+KEEP     Apache-2.0           c6b24ebf7332a6c9f3026da52e716492
+BELONGS ya.make
+    License text:
+         * Update data/esri_extra.wkt and add data/esri_epsg.wkt, taken from https://github.com/Esri/projection-engine-db-doc (Apache v2 license) (#2163)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NEWS-2.x.md [674:674]
+        NEWS-2.x.md [1159:1159]
+
+KEEP     GPL-3.0-or-later AND Bison-exception-2.2 c77482e4a9af37fd1ed4ec8eb32e2c2c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        ogr/ogrsf_frmts/ods/ods_formula_parser.hpp [1:32]
+        ogr/swq_parser.hpp [1:32]
+    Scancode info:
+        Original SPDX id: Bison-exception-2.2
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/Bison-exception-2.2
+    Files with this license:
+        ogr/ogrsf_frmts/ods/ods_formula_parser.hpp [1:32]
+        ogr/swq_parser.hpp [1:32]
+
+KEEP     Public-Domain        cabe189a7fc9af84c5660be38a24505f
+BELONGS ya.make
+    License text:
+        /// Below functions are adapted from Public Domain VICAR project
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        frmts/pds/vicardataset.cpp [572:572]
+
+KEEP     libtiff              cb289c781ede561c455760d78519a374
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libtiff
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://fedoraproject.org/wiki/Licensing/libtiff, https://spdx.org/licenses/libtiff
+    Files with this license:
+        frmts/aigrid/aigccitt.c [15:32]
+        frmts/gtiff/tif_jxl.h [5:22]
+
+KEEP     Sunpro               d1319923068ce7d940d989577b0d35d2
+BELONGS ya.make
+    License text:
+        Developed at SunSoft, a Sun Microsystems, Inc. business.
+        Permission to use, copy, modify, and distribute this
+        software is freely granted, provided that this notice
+        is preserved.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-sunpro
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/sunpro.LICENSE
+    Files with this license:
+        LICENSE.TXT [260:263]
+
+KEEP     NTP                  d2ac1c920e19a0805636c403a416b250
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NTP
+        Score           : 91.49
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_.28no_advertising_without_permission.29, https://spdx.org/licenses/NTP
+    Files with this license:
+        frmts/nitf/nitfimage.c [3475:3483]
+        frmts/nitf/rpftocfile.cpp [18:26]
+
+KEEP     MIT                  d315aa93ef77fa0fcfff524f01a8cccf
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: ogr/ogrsf_frmts/geojson/libjson/COPYING at line 17, ogr/ogrsf_frmts/geojson/libjson/COPYING at line 39
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/COPYING [4:20]
+        ogr/ogrsf_frmts/geojson/libjson/COPYING [26:42]
+
+KEEP     Public-Domain        d5899436a30ae08d7ccccf4454658e1d
+BELONGS ya.make
+    License text:
+         The information on government servers are in the public domain, unless
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE.TXT [133:133]
+        frmts/grib/degrib/LICENSE.TXT [18:18]
+
+KEEP     Public-Domain        d8d2a8ddb139caa71c41256abd7a8bbf
+BELONGS ya.make
+    License text:
+         * SHA1 computation coming from Public Domain code at:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        port/cpl_sha1.cpp [7:7]
+        port/cpl_sha1.h [7:7]
+
+KEEP     Libpng               d931c0691636841be46c49ded124e0b7
+BELONGS ya.make
+    License text:
+        * libpng has a roughly MIT-like license but with explicit indication that notice is only required in source distributions.   http://www.gdal.org/srctree/frmts/png/libpng/LICENSE
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        PROVENANCE.TXT [501:501]
+
+KEEP     BSD-3-Clause         dc296f6ff032e932bf091ed8f47e321c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        frmts/pdf/pdfdataset.cpp [1696:1720]
+
+KEEP     LicenseRef-scancode-unknown-license-reference e32199ff1435908265a4baa3a45632c3
+BELONGS ya.make
+    License text:
+        * Original SGI code used with permission of Paul Bourke.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        PROVENANCE.TXT [526:526]
+
+KEEP     JSON                 e512aae73d22efbe1008fd03a939050c
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: port/cpl_base64.cpp at line 30
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: JSON
+        Score           : 89.14
+        Match type      : TEXT
+        Links           : http://www.json.org/license.html, https://spdx.org/licenses/JSON
+    Files with this license:
+        port/cpl_base64.cpp [15:33]
+
+KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        port/cpl_mem_cache.h [19:29]
+        port/cpl_recode.cpp [13:23]
+        port/cpl_recode_iconv.cpp [13:23]
+        port/cpl_recode_stub.cpp [19:29]
+
+KEEP     BSD-3-Clause         ed016f813f6f2d7d440d7d968c214267
+BELONGS ya.make
+    License text:
+        * doxy2swig.py is imported from outside, but is under a compatible BSD license
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        PROVENANCE.TXT [563:563]
+
+KEEP     BSD-3-Clause         ee0a95b5d631438aa49a064399f16e47
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.06
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.TXT [45:68]
+
+KEEP     Info-Zip             ee8a0fae5329f2348455e0956fe1545c
+BELONGS ya.make
+    License text:
+          also may be found at:  ftp://ftp.info-zip.org/pub/infozip/license.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-info-zip-2009-01
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : ftp://ftp.info-zip.org/pub/infozip/license.html, http://www.info-zip.org/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/info-zip-2009-01.LICENSE
+    Files with this license:
+        port/cpl_minizip_unzip.cpp [34:34]
+
+KEEP     Public-Domain AND Public-Domain ef0ed39eaab4bc09e1e8b7a57f1cd813
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 76.47
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        ogr/ogrsf_frmts/sqlite/ogrsqliteregexp.cpp [26:29]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 51.72
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        ogr/ogrsf_frmts/sqlite/ogrsqliteregexp.cpp [26:29]
+
+KEEP     Zlib                 f105e95eefda9be95681307aa51879f0
+BELONGS ya.make
+    License text:
+         * For conditions of distribution and use, see copyright notice in zlib.h
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        frmts/zlib/contrib/infback9/infback9.c [3:3]
+        frmts/zlib/contrib/infback9/infback9.h [3:3]
+        frmts/zlib/contrib/infback9/inflate9.h [3:3]
+        frmts/zlib/contrib/infback9/inftree9.c [3:3]
+        frmts/zlib/contrib/infback9/inftree9.h [5:5]
+        frmts/zlib/contrib/infback9/minified_zutil.c [3:3]
+        frmts/zlib/contrib/infback9/minified_zutil.h [3:3]
+
+KEEP     MIT                  f2aef546b3cb4dddf79c3ee0c3d650a7
+BELONGS ya.make
+    License text:
+         *  The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ogr/ogrsf_frmts/cad/gdalcaddataset.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadclasses.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadclasses.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadcolors.cpp [7:7]
+        ogr/ogrsf_frmts/cad/libopencad/cadcolors.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/caddictionary.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/caddictionary.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadfile.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadfile.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadfileio.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadfileio.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadfilestreamio.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadfilestreamio.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadgeometry.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadgeometry.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadheader.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadheader.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadlayer.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadlayer.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadobjects.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadobjects.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadtables.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/cadtables.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/dwg/io.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/dwg/io.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/dwg/r2000.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/dwg/r2000.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/opencad.cpp [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/opencad.h [8:8]
+        ogr/ogrsf_frmts/cad/libopencad/opencad_api.h [8:8]
+        ogr/ogrsf_frmts/cad/ogr_cad.h [8:8]
+        ogr/ogrsf_frmts/cad/ogrcaddriver.cpp [8:8]
+        ogr/ogrsf_frmts/cad/ogrcaddrivercore.cpp [8:8]
+        ogr/ogrsf_frmts/cad/ogrcaddrivercore.h [8:8]
+        ogr/ogrsf_frmts/cad/ogrcadlayer.cpp [8:8]
+        ogr/ogrsf_frmts/cad/vsilfileio.cpp [8:8]
+        ogr/ogrsf_frmts/cad/vsilfileio.h [8:8]
+        ogr/ogrsf_frmts/ngw/gdalngwdataset.cpp [7:7]
+        ogr/ogrsf_frmts/ngw/ngw_api.cpp [7:7]
+        ogr/ogrsf_frmts/ngw/ogr_ngw.h [7:7]
+        ogr/ogrsf_frmts/ngw/ogrngwdriver.cpp [7:7]
+        ogr/ogrsf_frmts/ngw/ogrngwfielddomain.cpp [7:7]
+        ogr/ogrsf_frmts/ngw/ogrngwlayer.cpp [7:7]
+
+KEEP     BSD-3-Clause AND GPL-2.0-only AND LGPL-2.1-only AND MIT f5d77e3f981da85261c7b8e9e7b86a88
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/COPYING found in files: ogr/ogrsf_frmts/geojson/libjson/printbuf.c at line 8, ogr/ogrsf_frmts/geojson/libjson/printbuf.h at line 8
+    License text:
+         * This library is free software; you can redistribute it and/or modify
+         * it under the terms of the MIT license. See COPYING for details.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 72.35
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/arraylist.c [7:8]
+        ogr/ogrsf_frmts/geojson/libjson/debug.c [7:8]
+        ogr/ogrsf_frmts/geojson/libjson/json_object.c [6:7]
+        ogr/ogrsf_frmts/geojson/libjson/json_util.c [7:8]
+        ogr/ogrsf_frmts/geojson/libjson/linkhash.c [8:9]
+        ogr/ogrsf_frmts/geojson/libjson/random_seed.c [7:8]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 58.33
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/arraylist.h [7:8]
+        ogr/ogrsf_frmts/geojson/libjson/debug.h [8:9]
+        ogr/ogrsf_frmts/geojson/libjson/json.h [8:9]
+        ogr/ogrsf_frmts/geojson/libjson/json_c_version.c [4:5]
+        ogr/ogrsf_frmts/geojson/libjson/json_c_version.h [4:5]
+        ogr/ogrsf_frmts/geojson/libjson/json_object.h [8:9]
+        ogr/ogrsf_frmts/geojson/libjson/json_object_private.h [7:8]
+        ogr/ogrsf_frmts/geojson/libjson/json_tokener.h [7:8]
+        ogr/ogrsf_frmts/geojson/libjson/json_types.h [4:5]
+        ogr/ogrsf_frmts/geojson/libjson/json_util.h [7:8]
+        ogr/ogrsf_frmts/geojson/libjson/linkhash.h [8:9]
+        ogr/ogrsf_frmts/geojson/libjson/random_seed.h [7:8]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 57.58
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/config.h [7:8]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 52.78
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/json_tokener.c [7:8]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 86.36
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        ogr/ogrsf_frmts/geojson/libjson/printbuf.c [7:8]
+        ogr/ogrsf_frmts/geojson/libjson/printbuf.h [7:8]
+
+KEEP     MIT                  f9921a99685937f108ccf2397f20d987
+BELONGS ya.make
+FILE_INCLUDE ogr/ogrsf_frmts/geojson/libjson/AUTHORS found in files: alg/gdal_crs.cpp at line 48
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        alg/gdal_crs.cpp [35:51]
+
+KEEP     Public-Domain        f9b20a07291de8351e485c7779269a87
+BELONGS ya.make
+    License text:
+         * NOTE: Original code authored by Trent and placed in the public domain as
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        frmts/pds/isis3dataset.cpp [9:9]
+
+KEEP     LicenseRef-scancode-bsd-x11 fcbe2f762d0ba4d7c281d27c567f7ab1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsd-x11
+        Score           : 11.68
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-x11.LICENSE
+    Files with this license:
+        LICENSE.TXT [143:147]
+
+KEEP     GPL-1.0-or-later     feea04d5a9702767bfbd0b4120eb9a4e
+BELONGS ya.make
+    License text:
+                        // Spatialite builds against (GPL) liblwgeom
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        ogr/ogrsf_frmts/sqlite/ogrsqlitesqlfunctions.cpp [1246:1246]

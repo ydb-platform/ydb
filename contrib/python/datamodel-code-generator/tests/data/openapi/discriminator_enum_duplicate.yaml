@@ -1,0 +1,64 @@
+# Example from https://docs.pydantic.dev/latest/concepts/unions/#discriminated-unions
+openapi: 3.1.0
+components:
+  schemas:
+    Cat:
+      properties:
+        pet_type:
+          const: "cat"
+          title: "Pet Type"
+        meows:
+          title: Meows
+          type: integer
+      required:
+        - pet_type
+        - meows
+      title: Cat
+      type: object
+    Dog:
+      properties:
+        pet_type:
+          const: "dog"
+          title: "Pet Type"
+        barks:
+          title: Barks
+          type: number
+      required:
+        - pet_type
+        - barks
+      title: Dog
+      type: object
+    Lizard:
+      properties:
+        pet_type:
+          enum:
+            - reptile
+            - lizard
+          title: Pet Type
+          type: string
+        scales:
+          title: Scales
+          type: boolean
+      required:
+        - pet_type
+        - scales
+      title: Lizard
+      type: object
+    Animal:
+      properties:
+        pet:
+          discriminator:
+            mapping:
+              cat: '#/components/schemas/Cat'
+              dog: '#/components/schemas/Dog'
+              lizard: '#/components/schemas/Lizard'
+              reptile: '#/components/schemas/Lizard'
+            propertyName: pet_type
+          oneOf:
+            - $ref: '#/components/schemas/Cat'
+            - $ref: '#/components/schemas/Dog'
+            - $ref: '#/components/schemas/Lizard'
+          title: Pet
+        'n':
+          title: 'N'
+          type: integer

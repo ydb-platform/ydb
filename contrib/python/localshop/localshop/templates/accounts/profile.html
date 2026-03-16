@@ -1,0 +1,21 @@
+{% extends "accounts/base.html" %}
+{% load i18n %}
+
+
+
+
+{% block content_panel %}
+    <div class="panel panel-default">
+        <div class="panel-heading">Change profile</div>
+        <div class="panel-body">
+            <form method="post" action="" class="form-stacked">
+                {% include "partial/_form_fields.html" %}
+                {% csrf_token %}
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary"><span class="icon-ok icon-white"></span> Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}
+

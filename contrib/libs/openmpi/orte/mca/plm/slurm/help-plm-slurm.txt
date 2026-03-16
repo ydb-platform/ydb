@@ -1,0 +1,55 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2014-2017 Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+[multiple-prefixes]
+The SLURM process starter for Open MPI does not support multiple
+different --prefix options to mpirun.  You can specify at most one
+unique value for the --prefix option (in any of the application
+contexts); it will be applied to all the application contexts of your
+parallel job.
+
+Put simply, you must have Open MPI installed in the same location on
+all of your SLURM nodes.
+
+Multiple different --prefix options were specified to mpirun.  This is
+a fatal error for the SLURM process starter in Open MPI.
+
+The first two prefix values supplied were:
+    %s
+and %s
+#
+[no-hosts-in-list]
+The SLURM process starter for Open MPI didn't find any hosts in
+the map for this application. This can be caused by a lack of
+an allocation, or by an error in the Open MPI code. Please check
+to ensure you have a SLURM allocation. If you do, then please pass
+the error to the Open MPI user's mailing list for assistance.
+#
+[no-local-slave-support]
+A call was made to launch a local slave process, but no support
+is available for doing so. Launching a local slave requires support
+for either rsh or ssh on the backend nodes where MPI processes
+are running.
+
+Please consult with your system administrator about obtaining
+such support.
+[no-srun]
+The SLURM process starter for OpenMPI was unable to locate a
+usable "srun" command in its path. Please check your path
+and try again.

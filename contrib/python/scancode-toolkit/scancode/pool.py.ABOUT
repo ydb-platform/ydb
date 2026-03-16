@@ -1,0 +1,26 @@
+about_resource: pool.py
+name: pool
+version: 2017-02
+
+download_url: https://gist.github.com/aljungberg/626518
+
+notes: >
+    Monkeypatch Pool iterators so that Ctrl-C interrupts everything properly
+    derived from https://gist.github.com/aljungberg/626518
+    based on a private email exchange:
+    On 11 February 2017 at 11:58:47, Philippe Ombredanne (pombredanne@nexb.com) wrote:
+    > Alexander:
+    > [...] Therefore, I would need to know what is the license for your gist?
+    On Mon, Feb 13, 2017 at 12:55 PM, Alexander Ljungberg <aljungberg@slevenbits.com> wrote:
+    > Wow I barely even remember publishing that snippet. Glad you found it
+    > useful.
+    >
+    > Let’s go with MIT license.
+    > Alexander
+
+copyright: >
+    Copyright (c) Alexander Ljungberg. All rights reserved.
+    Copyright (c) Chris Arndt. All rights reserved.
+
+license_expression: mit
+notice_file: pool.py.LICENSE

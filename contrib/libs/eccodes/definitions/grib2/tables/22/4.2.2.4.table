@@ -1,0 +1,14 @@
+# Code table 4.2 - Parameter number by product discipline and parameter category
+0 0 Fire outlook (Code table 4.224)
+1 1 Fire outlook due to dry thunderstorm (Code table 4.224)
+2 2 Haines index (Numeric)
+3 3 Fire burned area (%)
+4 4 Fosberg index (Numeric)
+5 5 Forest Fire Weather Index (Canadian Forest Service) (Numeric)
+6 6 Fine Fuel Moisture Code (Canadian Forest Service) (Numeric)
+7 7 Duff Moisture Code (Canadian Forest Service) (Numeric)
+8 8 Drought Code (Canadian Forest Service) (Numeric)
+9 9 Initial Fire Spread Index (Canadian Forest Service) (Numeric)
+10 10 Fire Buildup Index (Canadian Forest Service) (Numeric)
+11 11 Fire Daily Severity Rating (Canadian Forest Service) (Numeric)
+255 255 Missing

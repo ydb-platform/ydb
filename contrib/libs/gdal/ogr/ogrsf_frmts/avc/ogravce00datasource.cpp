@@ -1,0 +1,231 @@
+/******************************************************************************
+ *
+ * Project:  OGR
+ * Purpose:  Implements OGRAVCE00DataSource class.
+ * Author:   Frank Warmerdam, warmerdam@pobox.com
+ *           James Flemer <jflemer@alum.rpi.edu>
+ *
+ ******************************************************************************
+ * Copyright (c) 2002, Frank Warmerdam <warmerdam@pobox.com>
+ * Copyright (c) 2006, James Flemer <jflemer@alum.rpi.edu>
+ *
+ * SPDX-License-Identifier: MIT
+ ****************************************************************************/
+
+#include "ogr_avc.h"
+#include "cpl_conv.h"
+#include "cpl_string.h"
+
+/************************************************************************/
+/*                        OGRAVCE00DataSource()                         */
+/************************************************************************/
+
+OGRAVCE00DataSource::OGRAVCE00DataSource()
+    : nLayers(0), psE00(nullptr), papoLayers(nullptr)
+{
+}
+
+/************************************************************************/
+/*                        ~OGRAVCE00DataSource()                        */
+/************************************************************************/
+
+OGRAVCE00DataSource::~OGRAVCE00DataSource()
+
+{
+    if (psE00)
+    {
+        AVCE00ReadCloseE00(psE00);
+        psE00 = nullptr;
+    }
+
+    for (int i = 0; i < nLayers; i++)
+        delete papoLayers[i];
+
+    CPLFree(papoLayers);
+}
+
+/************************************************************************/
+/*                                Open()                                */
+/************************************************************************/
+
+int OGRAVCE00DataSource::Open(const char *pszNewName, int bTestOpen)
+
+{
+    /* -------------------------------------------------------------------- */
+    /*      Open the source file.  Suppress error reporting if we are in    */
+    /*      TestOpen mode.                                                  */
+    /* -------------------------------------------------------------------- */
+    bool bCompressed = false;
+
+    if (bTestOpen)
+        CPLPushErrorHandler(CPLQuietErrorHandler);
+
+    psE00 = AVCE00ReadOpenE00(pszNewName);
+
+    if (CPLGetLastErrorNo() == CPLE_OpenFailed &&
+        strstr(CPLGetLastErrorMsg(), "compressed E00") != nullptr)
+    {
+        bCompressed = true;
+    }
+
+    if (bTestOpen)
+    {
+        CPLPopErrorHandler();
+        CPLErrorReset();
+    }
+
+    if (psE00 == nullptr)
+    {
+        if (bCompressed)
+        {
+            CPLError(CE_Failure, CPLE_OpenFailed,
+                     "This looks like a compressed E00 file and cannot be "
+                     "processed directly. You may need to uncompress it "
+                     "first using the E00compr library or the e00conv "
+                     "program.");
+        }
+        return FALSE;
+    }
+
+    /* pszCoverageName = CPLStrdup( psE00->pszCoverName ); */
+    pszCoverageName = CPLStrdup(pszNewName);
+
+    /* -------------------------------------------------------------------- */
+    /*      Create layers for the "interesting" sections of the coverage.   */
+    /* -------------------------------------------------------------------- */
+    papoLayers = static_cast<OGRAVCE00Layer **>(
+        CPLCalloc(sizeof(OGRAVCE00Layer *), psE00->numSections));
+    nLayers = 0;
+
+    for (int iSection = 0; iSection < psE00->numSections; iSection++)
+    {
+        AVCE00Section *psSec = psE00->pasSections + iSection;
+
+        switch (psSec->eType)
+        {
+            case AVCFileARC:
+            case AVCFilePAL:
+            case AVCFileCNT:
+            case AVCFileLAB:
+            case AVCFileRPL:
+            case AVCFileTXT:
+                papoLayers[nLayers++] = new OGRAVCE00Layer(this, psSec);
+                break;
+
+            case AVCFileTX6:
+                break;
+
+            case AVCFileTABLE:
+                CheckAddTable(psSec);
+                break;
+
+            case AVCFilePRJ:
+            {
+#if 0
+              poSRS = new OGRSpatialReference();
+              poSRS->SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+              AVCE00File *hFile
+                  = AVCE00ReadOpen( psE00->pszCoverPath,
+                                    psSec->pszFilename,
+                                    psE00->eCoverType,
+                                    psSec->eType,
+                                    psE00->psDBCSInfo);
+              if( hFile && poSRS == NULL )
+              {
+                  char **papszPRJ = AVCE00ReadNextPrj( hFile );
+
+                  poSRS = new OGRSpatialReference();
+                  poSRS->SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+                  if( poSRS->importFromESRI( papszPRJ ) != OGRERR_NONE )
+                  {
+                      CPLError( CE_Warning, CPLE_AppDefined,
+                                "Failed to parse PRJ section, ignoring." );
+                      delete poSRS;
+                      poSRS = NULL;
+                  }
+                  AVCE00ReadClose( hFile );
+              }
+#endif
+            }
+            break;
+
+            default:;
+        }
+    }
+
+    return nLayers > 0;
+}
+
+int OGRAVCE00DataSource::CheckAddTable(AVCE00Section *psTblSection)
+{
+    int nCount = 0;
+    for (int i = 0; i < nLayers; ++i)
+    {
+        if (papoLayers[i]->CheckSetupTable(psTblSection))
+            ++nCount;
+    }
+    return nCount;
+}
+
+/************************************************************************/
+/*                           TestCapability()                           */
+/************************************************************************/
+
+int OGRAVCE00DataSource::TestCapability(const char * /* pszCap */)
+{
+    return FALSE;
+}
+
+/************************************************************************/
+/*                              GetLayer()                              */
+/************************************************************************/
+
+OGRLayer *OGRAVCE00DataSource::GetLayer(int iLayer)
+
+{
+    if (iLayer < 0 || iLayer >= nLayers)
+        return nullptr;
+
+    return papoLayers[iLayer];
+}
+
+/************************************************************************/
+/*                           GetSpatialRef()                            */
+/************************************************************************/
+OGRSpatialReference *OGRAVCE00DataSource::DSGetSpatialRef()
+{
+    if (m_bSRSFetched)
+        return poSRS;
+    m_bSRSFetched = true;
+    if (psE00 == nullptr)
+        return nullptr;
+
+    for (int iSection = 0; iSection < psE00->numSections; iSection++)
+    {
+        AVCE00Section *psSec = psE00->pasSections + iSection;
+        if (psSec->eType == AVCFilePRJ)
+        {
+            AVCE00ReadGotoSectionE00(psE00, psSec, 0);
+            void *obj = AVCE00ReadNextObjectE00(psE00);
+            if (psE00->hParseInfo->eFileType == AVCFilePRJ)
+            {
+                char **pszPRJ = static_cast<char **>(obj);
+                if (pszPRJ)
+                {
+                    poSRS = new OGRSpatialReference();
+                    poSRS->SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+                    if (poSRS->importFromESRI(pszPRJ) != OGRERR_NONE)
+                    {
+                        CPLError(CE_Warning, CPLE_AppDefined,
+                                 "Failed to parse PRJ section, ignoring.");
+                        delete poSRS;
+                        poSRS = nullptr;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    return poSRS;
+}

@@ -1,0 +1,100 @@
+--- contrib/python/django-moderation/moderation/helpers.py	(index)
++++ contrib/python/django-moderation/moderation/helpers.py	(working tree)
+@@ -23,6 +23,13 @@ def import_moderator(app):
+     from importlib import import_module
+     import imp
+ 
++    # Yandex specific
++    try:
++        return import_module("%s.moderator" % app)
++    except ImportError:
++        pass
++    # End Yandex specific
++
+     try:
+         app_path = import_module(app).__path__
+     except AttributeError:
+--- contrib/python/django-moderation/moderation/migrations/0001_initial.py	(index)
++++ contrib/python/django-moderation/moderation/migrations/0001_initial.py	(working tree)
+@@ -1,10 +1,9 @@
+ # -*- coding: utf-8 -*-
+ from __future__ import unicode_literals
+ 
+-import datetime
+-
+ from django.conf import settings
+ from django.db import models, migrations
++from django.utils.timezone import now
+ 
+ from ..fields import SerializedObjectField
+ 
+@@ -23,7 +22,7 @@ class Migration(migrations.Migration):
+                 ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
+                 ('object_pk', models.PositiveIntegerField(null=True, editable=False, blank=True)),
+                 ('date_created', models.DateTimeField(auto_now_add=True)),
+-                ('date_updated', models.DateTimeField(default=datetime.datetime.now, auto_now=True)),
++                ('date_updated', models.DateTimeField(default=now, auto_now=True)),
+                 ('moderation_state', models.SmallIntegerField(default=1, editable=False, choices=[(0, 'Ready for moderation'), (1, 'Draft')])),
+                 ('moderation_status', models.SmallIntegerField(default=2, editable=False, choices=[(1, 'Approved'), (2, 'Pending'), (0, 'Rejected')])),
+                 ('moderation_date', models.DateTimeField(null=True, editable=False, blank=True)),
+--- contrib/python/django-moderation/moderation/models.py	(index)
++++ contrib/python/django-moderation/moderation/models.py	(working tree)
+@@ -1,9 +1,8 @@
+-import datetime
+-
+ from django.conf import settings
+ from django.contrib.contenttypes.fields import GenericForeignKey
+ from django.contrib.contenttypes.models import ContentType
+ from django.db import models, transaction
++from django.utils.timezone import now
+ from django.utils.translation import ugettext_lazy as _
+ from model_utils import Choices
+ 
+@@ -178,7 +177,7 @@ class ModeratedObject(models.Model):
+             self.state = MODERATION_READY_STATE
+ 
+         self.status = new_status
+-        self.on = datetime.datetime.now()
++        self.on = now()
+         self.by = by
+         self.reason = reason
+         self.save()
+--- contrib/python/django-moderation/moderation/moderator.py	(index)
++++ contrib/python/django-moderation/moderation/moderator.py	(working tree)
+@@ -1,5 +1,4 @@
+ from django.contrib.auth.models import Group
+-from django.contrib.sites.models import Site
+ from django.core.exceptions import ObjectDoesNotExist
+ from django.db.models.fields import BooleanField
+ from django.db.models.manager import Manager
+@@ -126,10 +125,16 @@ class GenericModerator:
+ 
+     def send(self, content_object, subject_template, message_template,
+              recipient_list, extra_context=None):
++        try:
++            from django.contrib.sites.models import Site
++            site = Site.objects.get_current()
++        except RuntimeError:
++            site = None
++
+         context = {
+             'moderated_object': content_object.moderated_object,
+             'content_object': content_object,
+-            'site': Site.objects.get_current(),
++            'site': site,
+             'content_type': content_object.moderated_object.content_type}
+ 
+         if extra_context:
+@@ -146,7 +151,11 @@ class GenericModerator:
+ 
+     def send_many(self, queryset, subject_template, message_template,
+                   extra_context=None):
+-        site = Site.objects.get_current()
++        try:
++            from django.contrib.sites.models import Site
++            site = Site.objects.get_current()
++        except RuntimeError:
++            site = None
+ 
+         ctx = extra_context if extra_context else {}
+ 

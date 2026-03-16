@@ -1,0 +1,6 @@
+exclude_from_macros:
+  - THIRD-PARTY-NOTICES
+copy:
+  - THIRD-PARTY-NOTICES
+disable_includes:
+  - sys/byteorder.h

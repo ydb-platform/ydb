@@ -1,0 +1,18 @@
+--- contrib/python/aiohttp-apispec/tests/test_documentation.py	(index)
++++ contrib/python/aiohttp-apispec/tests/test_documentation.py	(working tree)
+@@ -1,5 +1,7 @@
+ import json
+ 
++import pytest
++
+ from aiohttp import web
+ from aiohttp.web_urldispatcher import StaticResource
+ from aiohttp_apispec import setup_aiohttp_apispec
+@@ -166,6 +168,7 @@ async def test_not_register_route_for_none_url():
+     assert routes_count == routes_count_after_setup_apispec
+ 
+ 
++@pytest.mark.skip
+ async def test_register_route_for_relative_url():
+     app = web.Application()
+     routes_count = len(app.router.routes())

@@ -1,0 +1,21 @@
+{% extends "admin/base_site.html" %}
+
+<!-- LOADING -->
+{% load i18n %}
+
+<!-- BREADCRUMBS -->
+{% block breadcrumbs %}
+    <ul class="grp-horizontal-list">
+        <li><a href="{% url 'admin:index' %}">{% trans "Home" %}</a></li>
+        <li>{% trans "Server error" %}</li>
+    </ul>
+{% endblock %}
+
+<!-- TITLE -->
+{% block title %}{% trans "Server error (500)" %}{% endblock %}
+
+<!-- CONTENT -->
+{% block content %}
+    <h1>{% trans "Server Error <em>(500)</em>" %}</h1>
+    <p>{% trans "There's been an error. It's been reported to the site administrators via e-mail and should be fixed shortly. Thanks for your patience." %}</p>
+{% endblock %}

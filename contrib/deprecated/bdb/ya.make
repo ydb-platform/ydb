@@ -1,0 +1,389 @@
+LIBRARY()
+
+LICENSE(
+    Artistic-1.0 AND
+    BSD-2-Clause AND
+    BSD-3-Clause AND
+    BSD-4-Clause-UC AND
+    Public-Domain AND
+    Sleepycat AND
+    blessing
+)
+
+LICENSE_RESTRICTION_EXCEPTIONS(
+    # BerkeleyDB is deprecated, allow license violations in it
+    contrib/deprecated/bdb
+)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
+VERSION(5.3.21)
+
+IF (NOT MSVC)
+    CFLAGS(
+        -fPIC # workaround for ugly q_upper_bundle script
+    )
+ENDIF()
+
+#NO_UTIL()
+NO_COMPILER_WARNINGS()
+
+IF (OS_LINUX)
+    EXTRALIBS(-lrt)
+    CFLAGS(
+        -DHAVE_FDATASYNC=1
+    )
+ENDIF()
+
+ADDINCLSELF()
+
+SET(
+    __dirs_
+    contrib/deprecated/bdb/src
+    contrib/deprecated/bdb/src/mutex
+    contrib/deprecated/bdb/src/btree
+    contrib/deprecated/bdb/src/clib
+    contrib/deprecated/bdb/src/common
+    contrib/deprecated/bdb/src/crypto
+    contrib/deprecated/bdb/src/crypto/mersenne
+    contrib/deprecated/bdb/src/crypto/rijndael
+    contrib/deprecated/bdb/src/db
+    contrib/deprecated/bdb/src/dbreg
+    contrib/deprecated/bdb/src/env
+    contrib/deprecated/bdb/src/fileops
+    contrib/deprecated/bdb/src/hash
+    contrib/deprecated/bdb/src/heap
+    contrib/deprecated/bdb/src/hmac
+    contrib/deprecated/bdb/src/lock
+    contrib/deprecated/bdb/src/log
+    contrib/deprecated/bdb/src/mp
+    contrib/deprecated/bdb/src/qam
+    contrib/deprecated/bdb/src/rep
+    contrib/deprecated/bdb/src/repmgr
+    contrib/deprecated/bdb/src/sequence
+    contrib/deprecated/bdb/src/txn
+    contrib/deprecated/bdb/src/xa
+    contrib/deprecated/bdb/lang/cxx
+)
+
+SRCDIR(${__dirs_})
+
+ADDINCL(
+    ${__dirs_}
+)
+
+IF (OS_WINDOWS)
+    SRCDIR(contrib/deprecated/bdb/src/os_windows)
+    ADDINCL(
+        contrib/deprecated/bdb/src/os_windows
+    )
+    SRCS(
+        # File 'mut_win.c' was renamed since orignial name 'mut_win32.c' conflicts
+        # with OS_WINDOWS variable (cmake complains about OS_WINDOWS missing file)
+        mut_win.c
+        repmgr_windows.c
+        strsep.c
+        getopt.c
+    )
+ELSE()
+    SRCDIR(contrib/deprecated/bdb/src/os)
+    ADDINCL(
+        contrib/deprecated/bdb/src/os
+    )
+    SRCS(
+        repmgr_posix.c
+    )
+ENDIF()
+
+SRCS(
+    os/os_abort.c
+    os/os_addrinfo.c
+    os/os_alloc.c
+    os/os_ctime.c
+    os/os_pid.c
+    os/os_root.c
+    os/os_path.c
+    os/os_rpath.c
+    os/os_stack.c
+    os/os_tmpdir.c
+    os/os_uid.c
+    bt_compare.c
+    bt_compress.c
+    bt_conv.c
+    bt_curadj.c
+    bt_cursor.c
+    bt_delete.c
+    bt_method.c
+    bt_open.c
+    bt_put.c
+    bt_rec.c
+    bt_reclaim.c
+    bt_recno.c
+    bt_rsearch.c
+    bt_search.c
+    bt_split.c
+    bt_stat.c
+    bt_compact.c
+    bt_upgrade.c
+    btree_auto.c
+    btree_autop.c
+    hash.c
+    hash_auto.c
+    hash_autop.c
+    hash_compact.c
+    hash_conv.c
+    hash_dup.c
+    hash_meta.c
+    hash_method.c
+    hash_open.c
+    hash_page.c
+    hash_rec.c
+    hash_reclaim.c
+    hash_stat.c
+    hash_upgrade.c
+    hash_verify.c
+    heap.c
+    heap_auto.c
+    heap_autop.c
+    heap_backup.c
+    heap_conv.c
+    heap_method.c
+    heap_open.c
+    heap_rec.c
+    heap_reclaim.c
+    heap_stat.c
+    heap_verify.c
+    qam.c
+    qam_auto.c
+    qam_autop.c
+    qam_conv.c
+    qam_files.c
+    qam_method.c
+    qam_open.c
+    qam_rec.c
+    qam_stat.c
+    qam_upgrade.c
+    qam_verify.c
+    rep_automsg.c
+    rep_backup.c
+    rep_elect.c
+    rep_lease.c
+    rep_log.c
+    rep_method.c
+    rep_record.c
+    rep_region.c
+    rep_stat.c
+    rep_util.c
+    rep_verify.c
+    repmgr_auto.c
+    repmgr_autop.c
+    repmgr_automsg.c
+    repmgr_elect.c
+    repmgr_method.c
+    repmgr_msg.c
+    repmgr_net.c
+    repmgr_queue.c
+    repmgr_rec.c
+    repmgr_sel.c
+    repmgr_stat.c
+    repmgr_util.c
+    db_ovfl_vrfy.c
+    db_vrfy.c
+    db_vrfyutil.c
+    bt_verify.c
+    log_verify.c
+    log_verify_util.c
+    log_verify_int.c
+    log_verify_auto.c
+    lock.c
+    lock_deadlock.c
+    lock_failchk.c
+    lock_id.c
+    lock_list.c
+    lock_method.c
+    lock_region.c
+    lock_stat.c
+    lock_timer.c
+    lock_util.c
+    mut_alloc.c
+    mut_failchk.c
+    mut_method.c
+    mut_region.c
+    mut_stat.c
+    aes_method.c
+    crypto.c
+    mt19937db.c
+    rijndael-alg-fst.c
+    rijndael-api-fst.c
+    clock.c
+    crdel_auto.c
+    crdel_autop.c
+    crdel_rec.c
+    db.c
+    db_am.c
+    db_auto.c
+    db_autop.c
+    db_backup.c
+    db_byteorder.c
+    db_cam.c
+    db_cds.c
+    db_compact.c
+    db_compint.c
+    db_conv.c
+    db_copy.c
+    db_dispatch.c
+    db_dup.c
+    db_err.c
+    db_getlong.c
+    db_idspace.c
+    db_iface.c
+    db_join.c
+    db_log2.c
+    db_meta.c
+    db_method.c
+    db_open.c
+    db_overflow.c
+    db_pr.c
+    db_rec.c
+    db_reclaim.c
+    db_remove.c
+    db_rename.c
+    db_ret.c
+    db_setid.c
+    db_setlsn.c
+    db_shash.c
+    db_sort_multiple.c
+    db_stati.c
+    db_truncate.c
+    db_upg.c
+    db_upg_opd.c
+    dbreg.c
+    dbreg_stat.c
+    dbreg_auto.c
+    dbreg_autop.c
+    dbreg_rec.c
+    dbreg_util.c
+    dbt.c
+    env_alloc.c
+    env_config.c
+    env_backup.c
+    env_failchk.c
+    env_file.c
+    env_globals.c
+    env_open.c
+    env_method.c
+    env_name.c
+    env_recover.c
+    env_region.c
+    env_register.c
+    env_sig.c
+    env_stat.c
+    fileops_auto.c
+    fileops_autop.c
+    fop_basic.c
+    fop_rec.c
+    fop_util.c
+    hash_func.c
+    hmac.c
+    log.c
+    log_archive.c
+    log_compare.c
+    log_debug.c
+    log_get.c
+    log_method.c
+    log_print.c
+    log_put.c
+    log_stat.c
+    mkpath.c
+    mp_alloc.c
+    mp_backup.c
+    mp_bh.c
+    mp_fget.c
+    mp_fmethod.c
+    mp_fopen.c
+    mp_fput.c
+    mp_fset.c
+    mp_method.c
+    mp_mvcc.c
+    mp_region.c
+    mp_register.c
+    mp_resize.c
+    mp_stat.c
+    mp_sync.c
+    mp_trickle.c
+    openflags.c
+    os_abs.c
+    os_clock.c
+    os_cpu.c
+    os_config.c
+    os_dir.c
+    os_errno.c
+    os_fid.c
+    os_flock.c
+    os_fsync.c
+    os_getenv.c
+    os_handle.c
+    os_map.c
+    os_method.c
+    os_mkdir.c
+    os_open.c
+    os_rename.c
+    os_rw.c
+    os_seek.c
+    os_stat.c
+    os_truncate.c
+    os_unlink.c
+    os_yield.c
+    partition.c
+    seq_stat.c
+    sequence.c
+    sha1.c
+    snprintf.c
+    txn.c
+    txn_auto.c
+    txn_autop.c
+    txn_chkpt.c
+    txn_failchk.c
+    txn_method.c
+    txn_rec.c
+    txn_recover.c
+    txn_region.c
+    txn_stat.c
+    txn_util.c
+    xa.c
+    xa_map.c
+    zerofill.c
+    util_sig.c
+    util_log.c
+    util_cache.c
+    cxx_channel.cpp
+    cxx_db.cpp
+    cxx_dbc.cpp
+    cxx_dbt.cpp
+    cxx_env.cpp
+    cxx_except.cpp
+    cxx_lock.cpp
+    cxx_logc.cpp
+    cxx_mpool.cpp
+    cxx_multi.cpp
+    cxx_rid.cpp
+    cxx_seq.cpp
+    cxx_site.cpp
+    cxx_txn.cpp
+)
+
+IF (ARCH_AARCH64 OR ARCH_PPC64LE)
+    SRCS(
+        mut_pthread.c
+    )
+ELSE()
+    SRCS(
+        mut_tas.c
+    )
+ENDIF()
+
+END()
+
+RECURSE(
+    ut
+)

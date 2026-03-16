@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+
+package yandex.cloud.marketplace.v1.metering;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/marketplace/v1/metering;metering";

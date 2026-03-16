@@ -1,0 +1,18 @@
+interface IResource {
+    id: ID!
+}
+
+type Employee implements IResource {
+    id: ID!
+    firstName: String
+    lastName: String
+}
+
+type Car implements IResource {
+    id: ID!
+    passengerCapacity: Int!
+}
+
+union Resource = Employee | Car
+
+union TechnicalResource = Car

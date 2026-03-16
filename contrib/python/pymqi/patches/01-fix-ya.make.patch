@@ -1,0 +1,19 @@
+--- contrib/python/pymqi/ya.make	(index)
++++ contrib/python/pymqi/ya.make	(working tree)
+@@ -15,3 +29,13 @@ NO_LINT()
+-CFLAGS(
+-    -I${IBM_MQ_RESOURCE_GLOBAL}/opt/mqm/inc
+-)
++IF (OS_LINUX)
++    DECLARE_EXTERNAL_RESOURCE(IBM_MQ sbr:1634844472) # ibm_mq_for_pymqi.tar.gz
++
++    CFLAGS(
++        -I${IBM_MQ_RESOURCE_GLOBAL}/opt/mqm/inc
++    )
++
++    # rpath - appends "/opt/mqm/lib64" to search paths for *.so files
++    # so you don't need to set ENV variable LD_LIBRARY_PATH to find libmqic_r.so
++    LDFLAGS("-Wl,-L${IBM_MQ_RESOURCE_GLOBAL},-l:opt/mqm/lib64/libmqic_r.so,-rpath='/opt/mqm/lib64'")
++ELSE()
++    MESSAGE(FATAL_ERROR "Unsupported platform")
++ENDIF()

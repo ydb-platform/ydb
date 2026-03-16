@@ -1,0 +1,12 @@
+[
+    {
+        "pk": 1, 
+        "model": "tests.userprofile",
+        "fields": {
+            "url": "http://www.google.com", 
+            "user_id": 1,
+            "description": "Old description"
+        }
+    }
+    
+]

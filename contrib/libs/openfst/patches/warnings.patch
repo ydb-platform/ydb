@@ -1,0 +1,7 @@
+--- a/src/include/fst/const-fst.h
++++ b/src/include/fst/const-fst.h
+@@ -323,2 +323,2 @@ bool ConstFst<Arc, Unsigned>::WriteFst(const FST &fst, std::ostream &strm,
+-  size_t num_arcs = 0;    // To silence -Wsometimes-uninitialized warnings.
+-  size_t num_states = 0;  // Ditto.
++  int64_t num_arcs = 0;    // To silence -Wsometimes-uninitialized warnings.
++  int64_t num_states = 0;  // Ditto.

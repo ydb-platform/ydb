@@ -1,0 +1,2 @@
+keep:
+  - storages/backends/s3boto.py

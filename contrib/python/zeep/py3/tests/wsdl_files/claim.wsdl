@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions
+    name="ClaimService"
+    targetNamespace="http://risky-stuff.com/soap/GetClaimDetails/"
+    xmlns="http://schemas.xmlsoap.org/wsdl/"
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+    xmlns:tns="http://risky-stuff.com/soap/GetClaimDetails/"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <types>
+        <schema elementFormDefault="qualified"
+            targetNamespace="http://risky-stuff.com/soap/GetClaimDetails/"
+            xmlns="http://www.w3.org/2001/XMLSchema"
+            xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/"
+            xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
+            <simpleType name="ClaimID">
+                <restriction base="string"/>
+            </simpleType>
+        </schema>
+    </types>
+    <message name="GetClaimDetailsInput">
+    <part name="ClaimID" type="tns:ClaimID"/>
+    </message>
+    <message name="GetClaimDetailsOutput"/>
+    <portType name="GetClaimDetailsPortType">
+        <operation name="GetClaimDetails">
+            <input message="tns:GetClaimDetailsInput"/>
+            <output message="tns:GetClaimDetailsOutput"/>
+        </operation>
+    </portType>
+    <binding name="GetClaimDetailsBinding" type="tns:GetClaimDetailsPortType">
+        <soap:binding style="rpc" transport="http://schemas.xmlsoap.org/soap/http"/>
+        <operation name="GetClaimDetails">
+            <soap:operation soapAction="http://schemas.risk-stuff.com/soap/action/#GetClaimDetails"/>
+                <input>
+                    <soap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" namespace="http://schemas.risk-stuff.com/soap/" use="encoded"/>
+                </input>
+                <output>
+                    <soap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" namespace="http://schemas.risk-stuff.com/soap/" use="encoded"/>
+                </output>
+        </operation>
+    </binding>
+    <service name="GetClaimDetailsService">
+        <port binding="tns:GetClaimDetailsBinding" name="GetClaimDetailsPort">
+            <soap:address location="https://www.risky-stuff.com/claim.svc"/>
+        </port>
+    </service>
+</definitions>

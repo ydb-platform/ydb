@@ -1,0 +1,194 @@
+[
+  {
+    "primary": true,
+    "name": "AEGEAN BALTIC BANK S.A.",
+    "short_name": "AEGEAN BALTIC BANK",
+    "bank_code": "056",
+    "bic": "AEBAGRAAXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "ALPHA BANK S.A.",
+    "short_name": "ALPHA BANK",
+    "bank_code": "014",
+    "bic": "CRBAGRAA",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "ATTICA BANK S.A.",
+    "short_name": "ATTICA BANK",
+    "bank_code": "016",
+    "bic": "ATTIGRAA",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "BANK OF AMERICA EUROPE DESIGNATED ACTIVITY COMPANY - ATHENS BRANCH",
+    "short_name": "BANK OF AMERICA EUROPE DESIGNATED ACTIVITY COMPANY",
+    "bank_code": "081",
+    "bic": "BOFAGR2XXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "BANK OF CHINA (LUXEMBOURG) S.A. ATHENS BRANCH",
+    "short_name": "BANK OF CHINA",
+    "bank_code": "121",
+    "bic": "BKCHGRAAXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "BANK OF GREECE S.A.",
+    "short_name": "BANK OF GREECE",
+    "bank_code": "010",
+    "bic": "BNGRGRAA",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "BLACK SEA TRADE AND DEVELOPMENT BANK",
+    "short_name": "BLACK SEA TRADE AND DEVELOPMENT BANK",
+    "bank_code": "",
+    "bic": "BSTDGR2TXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "BNP PARIBAS SECURITIES SERVICES",
+    "short_name": "BNP PARIBAS SECURITIES SERVICES",
+    "bank_code": "039",
+    "bic": "PARBGRAXXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "CITIBANK EUROPE PLC (CEP)",
+    "short_name": "CITIBANK EUROPE PLC (CEP)",
+    "bank_code": "084",
+    "bic": "CITIGRAAXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "COOPERATIVE BANK OF DRAMA",
+    "short_name": "COOPERATIVE BANK OF DRAMA",
+    "bank_code": "088",
+    "bic": "STEOGR21XXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "ENEX CLEARING HOUSE S.A.",
+    "short_name": "ENEX CLEARING HOUSE",
+    "bank_code": "",
+    "bic": "ENCHGRAAXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "EUROBANK S.A.",
+    "short_name": "EUROBANK",
+    "bank_code": "026",
+    "bic": "ERBKGRAA",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "HSBC CONTINENTAL EUROPE GREECE",
+    "short_name": "HSBC CONTINENTAL EUROPE GREECE",
+    "bank_code": "071",
+    "bic": "MIDLGRAAXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "NATIONAL BANK OF GREECE S.A.",
+    "short_name": "NATIONAL BANK OF GREECE",
+    "bank_code": "011",
+    "bic": "ETHNGRAA",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "OPTIMA BANK S.A.",
+    "short_name": "OPTIMA BANK",
+    "bank_code": "034",
+    "bic": "IBOGGRAA",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "PANCRETA BANK S.A.",
+    "short_name": "PANCRETA BANK",
+    "bank_code": "087",
+    "bic": "STPGGRAA",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "PIRAEUS BANK S.A.",
+    "short_name": "PIRAEUS BANK",
+    "bank_code": "017",
+    "bic": "PIRBGRAA",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "PROCREDIT BANK (BULGARIA) EAD",
+    "short_name": "PROCREDIT BANK (BULGARIA) EAD",
+    "bank_code": "116",
+    "bic": "PRCBGRAAXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "T.C. ZIRAAT BANKASI A.S.",
+    "short_name": "T.C. ZIRAAT BANKASI A.S.",
+    "bank_code": "109",
+    "bic": "TCZBGRATXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "UNICREDIT BANK AG (HYPOVEREINSBANK) ATHENS",
+    "short_name": "UNICREDIT BANK AG (HYPOVEREINSBANK) ATHENS",
+    "bank_code": "072",
+    "bic": "HYVEGRAAXXX",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "VIVA PAYMENT SERVICES SINGLE MEMBER S.A.",
+    "short_name": "VIVA PAYMENT SERVICES S.A.",
+    "bank_code": "701",
+    "bic": "VPAYGRAA",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "VIVABANK SINGLE MEMBER BANKING S.A",
+    "short_name": "VIVABANK SINGLE MEMBER BANKING",
+    "bank_code": "057",
+    "bic": "PRXBGRAA",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "COOPERATIVE BANK OF CHANIA COOPERATIVE OF LIMITED LIABILITIES",
+    "short_name": "COOPERATIVE BANK OF CHANIA",
+    "bank_code": "069",
+    "bic": "STXAGRA1",
+    "country_code": "GR"
+  },
+  {
+    "primary": true,
+    "name": "COOPERATIVE BANK OF KARDITSA",
+    "short_name": "COOPERATIVE BANK OF KARDITSA",
+    "bank_code": "089",
+    "bic": "STKAGRA1",
+    "country_code": "GR"
+  }
+]

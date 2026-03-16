@@ -1,0 +1,18 @@
+{% load i18n static %}
+<h3>{% blocktrans with filter_title=title %} By {{ filter_title }} {% endblocktrans %}</h3>
+<link rel="stylesheet" type="text/css" href="{% static "admin/css/widgets.css" %}" />
+<style>
+    .DynamicRawIDFilter input {
+        width: 90%;
+    }
+</style>
+<form method="GET" action="">
+    <script type="text/javascript" src="{% url 'admin:jsi18n' %}"></script>
+    {{ spec.form.media }}
+    <div class="DynamicRawIDFilter">
+        {{ spec.form.as_p }}
+    </div>
+    <p>
+    <input type="submit" value="{% trans "Search" %}">
+    </p>
+</form>

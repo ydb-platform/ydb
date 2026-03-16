@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.eventrouter.v1;
+
+import "google/protobuf/empty.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/eventrouter/v1;eventrouter";
+option java_outer_classname = "PERES";
+option java_package = "yandex.cloud.api.serverless.eventrouter.v1";
+
+// Service for put events to bus for serverless eventrouter.
+service EventService {
+  // Puts event to bus.
+  rpc Put (PutEventRequest) returns (google.protobuf.Empty);
+
+  // Send events to bus.
+  rpc Send (SendEventsRequest) returns (google.protobuf.Empty);
+}
+
+message PutEventRequest {
+  // ID of the bus to put event.
+  string bus_id = 1 [(required) = true];
+
+  // Event body.
+  string body = 2 [(required) = true, (length) = "<=262144"];
+}
+
+message SendEventsRequest {
+  // ID of the connector to send events.
+  string connector_id = 1 [(required) = true];
+
+  // Batch of events bodies.
+  repeated string message = 2 [(size) = "1-100", (length) = "<=262144"];
+}

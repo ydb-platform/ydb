@@ -1,0 +1,3 @@
+requirements:
+  - contrib/libs/libmagic
+  - library/python/symbols/libmagic

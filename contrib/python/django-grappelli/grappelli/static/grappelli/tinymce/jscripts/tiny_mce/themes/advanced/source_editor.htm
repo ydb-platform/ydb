@@ -1,0 +1,26 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<title>{#advanced_dlg.code_title}</title>
+	<script type="text/javascript" src="../../tiny_mce_popup.js"></script>
+	<script type="text/javascript" src="js/source_editor.js"></script>
+	<base target="_self" />
+</head>
+<body onresize="resizeInputs();" style="display:none; overflow:visible;">
+    <form name="source" onsubmit="saveContent();return false;" action="#">
+        <div style="float: left" class="title">{#advanced_dlg.code_title}</div>
+        <div id="wrapline" style="float: right">
+            <input type="checkbox" name="wraped" id="wraped" onclick="toggleWordWrap(this);" class="wordWrapCode" />
+            <label for="wraped" class="additional">{#advanced_dlg.code_wordwrap}</label>
+        </div>
+        <br clear="all" />
+        <div id="textareaContainer"><textarea name="htmlSource" id="htmlSource" rows="15" cols="100" dir="ltr" wrap="off" class="mceFocus"></textarea></div>
+        <div class="mceActionPanel grp-module grp-submit-row">
+            <ul class="submit-row">
+                <li class="grp-float-left"><input type="button" name="cancel" value="{#cancel}" onclick="tinyMCEPopup.close();" id="cancel" class="grp-button grp-cancel-link" /></li>
+                <li><input type="submit" name="insert" value="{#update}" id="insert" class="grp-button grp-default" /></li>
+            </ul>
+        </div>
+    </form>
+</body>
+</html>
+

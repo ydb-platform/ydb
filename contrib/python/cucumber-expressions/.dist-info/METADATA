@@ -1,0 +1,35 @@
+Metadata-Version: 2.4
+Name: cucumber-expressions
+Version: 19.0.0
+Summary: Cucumber Expressions - a simpler alternative to Regular Expressions
+Keywords: cucumber,BDD,testing,expressions
+Author: Jason Allen
+Author-email: Jason Allen <jsa34@noreply.github.com>
+License-Expression: MIT
+License-File: LICENSE
+Classifier: Development Status :: 3 - Alpha
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Testing
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: License :: OSI Approved :: MIT License
+Requires-Python: >=3.10
+Project-URL: Homepage, https://github.com/cucumber/cucumber-expressions
+Project-URL: Repository, https://github.com/cucumber/cucumber-expressions.git
+Project-URL: Download, https://pypi.python.org/pypi/cucumber-expressions
+Project-URL: Issues, https://github.com/cucumber/cucumber-expressions/issues
+Project-URL: Changelog, https://github.com/cucumber/cucumber-expressions/releases
+Description-Content-Type: text/markdown
+
+# Cucumber Expressions for Python
+
+[The main docs are here](https://github.com/cucumber/cucumber-expressions#readme).

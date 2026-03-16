@@ -1,0 +1,36 @@
+{% load i18n sitetree %}
+{% load static %}
+
+{% get_static_prefix as STATIC_URL %}
+
+<style type="text/css">
+    .ctl { width: 14px; height: 12px; display: inline-block;}
+    .arr_up { background: url('{{ STATIC_URL }}admin/img/sorting-icons.svg') 0 -28px no-repeat; }
+    .arr_dn { background: url('{{ STATIC_URL }}admin/img/sorting-icons.svg') 0px -56px no-repeat; }
+</style>
+{% for item in sitetree_items %}
+	<tr>
+		<td class="align-center"><img src="{{ STATIC_URL }}admin/img/icon-{{ item.hidden|yesno:"yes,no" }}{{ icon_ext }}" alt="{{ item.hidden }}" /></td>
+		<td class="align-center"><img src="{{ STATIC_URL }}admin/img/icon-{{ item.inmenu|yesno:"yes,no" }}{{ icon_ext }}" alt="{{ item.inmenu }}" /></td>
+		<td class="align-center"><img src="{{ STATIC_URL }}admin/img/icon-{{ item.inbreadcrumbs|yesno:"yes,no" }}{{ icon_ext }}" alt="{{ item.inbreadcrumbs }}" /></td>
+		<td class="align-center"><img src="{{ STATIC_URL }}admin/img/icon-{{ item.insitetree|yesno:"yes,no" }}{{ icon_ext }}" alt="{{ item.insitetree }}" /></td>
+		<td class="align-center"><img src="{{ STATIC_URL }}admin/img/icon-{{ item.access_restricted|yesno:"yes,no" }}{{ icon_ext }}" alt="{{ item.access_restricted }}" /></td>
+        <td class="align-center"><img src="{{ STATIC_URL }}admin/img/icon-{{ item.access_loggedin|yesno:"yes,no" }}{{ icon_ext }}" alt="{{ item.access_loggedin }}" /></td>
+        <td class="align-center"><img src="{{ STATIC_URL }}admin/img/icon-{{ item.access_guest|yesno:"yes,no" }}{{ icon_ext }}" alt="{{ item.access_guest }}" /></td>
+		<td>
+            {% for d in item.depth_range %}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{% endfor %}
+            {% if item.parent %}|&#8212;{% endif %}
+            {% if item.is_dynamic %}{{ item.title }}{% else %}<a href="item_{{ item.id }}/">{{ item.title }}</a>{% endif %}
+        </td>
+		<td>{{ item.url }}</td>
+		<td>
+			&nbsp;&nbsp;
+			<a href="item_{{ item.id }}/move_up/" class="ctl arr_up" title="{% trans "Move up" %}"/></a>
+			&nbsp;&nbsp;&nbsp;
+			<a href="item_{{ item.id }}/move_down/" class="ctl arr_dn" title="{% trans "Move down" %}"/></a>
+		</td>
+	</tr>
+	{% if item.has_children %}
+		{% sitetree_children of item for sitetree template "admin/sitetree/tree/tree.html" %}
+	{% endif %}
+{% endfor %}

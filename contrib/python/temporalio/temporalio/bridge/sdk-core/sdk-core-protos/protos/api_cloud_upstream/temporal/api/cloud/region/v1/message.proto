@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package temporal.api.cloud.region.v1;
+
+option go_package = "go.temporal.io/api/cloud/region/v1;region";
+option java_package = "io.temporal.api.cloud.region.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Cloud::Region::V1";
+option csharp_namespace = "Temporalio.Api.Cloud.Region.V1";
+
+message Region {
+    // The id of the temporal cloud region.
+    string id = 1;
+    // The name of the cloud provider that's hosting the region.
+    // Currently only "aws" is supported.
+    // Deprecated: Not supported after v0.3.0 api version. Use cloud_provider instead. 
+    // temporal:versioning:max_version=v0.3.0
+    string cloud_provider_deprecated = 2 [deprecated = true];
+    // The cloud provider that's hosting the region.
+    // temporal:versioning:min_version=v0.3.0
+    // temporal:enums:replaces=cloud_provider_deprecated
+    CloudProvider cloud_provider = 5;
+    // The region identifier as defined by the cloud provider.
+    string cloud_provider_region = 3;
+    // The human readable location of the region.
+    string location = 4;
+
+    // The cloud provider that's hosting the region.
+    enum CloudProvider {
+        CLOUD_PROVIDER_UNSPECIFIED = 0;
+        CLOUD_PROVIDER_AWS = 1;
+	CLOUD_PROVIDER_GCP = 2;
+    }
+}

@@ -1,0 +1,5 @@
+# CODE TABLE 1, Flag indication relative to section 2 and 3
+1 0 Section 2 omited
+1 1 Section 2 included
+2 0 Section 3 omited
+2 1 Section 3 included

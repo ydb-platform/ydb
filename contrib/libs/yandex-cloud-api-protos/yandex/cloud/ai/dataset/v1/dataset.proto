@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.dataset.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/dataset/v1;fomo";
+option java_package = "yandex.cloud.api.ai.dataset.v1";
+
+// Information about the dataset.
+message DatasetInfo {
+    // Status of the dataset.
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        DRAFT = 1;
+        VALIDATING = 2;
+        READY = 3;
+        INVALID = 4;
+        DELETING = 5;
+    }
+
+    // ID of the dataset.
+    string dataset_id = 1;
+    // Folder ID of the dataset.
+    string folder_id = 2;
+    // Name of the dataset.
+    string name = 3;
+    // Description of the dataset.
+    string description = 4;
+
+    // Metadata of the dataset.
+    string metadata = 5;
+    // Status of the dataset.
+    Status status = 6;
+    // Task type of the dataset.
+    string task_type = 7;
+
+    // Create dataset timestamp.
+    google.protobuf.Timestamp created_at = 8;
+    // Update dataset timestamp.
+    google.protobuf.Timestamp updated_at = 9;
+
+    // Number of rows in the dataset.
+    int64 rows = 10;
+    // Size of the dataset.
+    int64 size_bytes = 11;
+
+    //Deprecated. Use created_by instead
+    string created_by_id = 12 [deprecated = true];
+    // Labels of the dataset
+    map<string, string> labels = 13;
+
+    // User ID of the dataset's creator.
+    string created_by = 14;
+    // User ID of the dataset's last updater.
+    string updated_by = 15;
+
+    repeated ValidationError validation_error = 21;
+
+    // Allow to use the dataset to improve the models quality. Default false.
+    bool allow_data_log = 22;
+
+    reserved 16 to 20;
+}
+
+// Information about dataset validation error.
+message ValidationError {
+    // Name of the validation error.
+    string error = 1;
+    // Description of the validation error.
+    string error_description = 2;
+    // Row numbers in which the error occurred.
+    repeated int64 row_numbers = 3;
+}
+
+message DatasetUploadSchema {
+    string task_type = 1;
+    string upload_format = 2;
+    string schema = 3;
+}
+
+message DatasetFileDownloadUrl {
+    string key = 1;
+    string url = 2;
+}

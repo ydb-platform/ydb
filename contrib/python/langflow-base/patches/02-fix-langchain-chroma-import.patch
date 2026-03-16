@@ -1,0 +1,14 @@
+--- a/langflow/api/v1/knowledge_bases.py
++++ b/langflow/api/v1/knowledge_bases.py
+@@ -5,7 +5,11 @@ from pathlib import Path
+
+ import pandas as pd
+ from fastapi import APIRouter, HTTPException
+-from langchain_chroma import Chroma
++
++try:
++    from langchain_chroma import Chroma
++except ImportError:
++    Chroma = None
+ from lfx.log import logger
+ from pydantic import BaseModel

@@ -1,0 +1,16 @@
+{
+  "jupyter.lab.setting-icon-class": "jp-PanelIcon",
+  "jupyter.lab.setting-icon-label": "Panel Preview",
+  "title": "Panel Preview",
+  "description": "Panel Preview Extension",
+  "properties": {
+    "renderOnSave": {
+      "title": "Render Preview on Save",
+      "description": "Render the Panel preview automatically after saving the notebook",
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object"
+}

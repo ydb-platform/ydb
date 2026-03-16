@@ -1,0 +1,3 @@
+[console_scripts]
+lunar-find = lunarcalendar.command:find
+

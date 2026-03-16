@@ -1,0 +1,4 @@
+var i=Object.prototype.hasOwnProperty;function u(t,e){var n,r;if(t===e)return  true;if(t&&e&&(n=t.constructor)===e.constructor){if(n===Date)return t.getTime()===e.getTime();if(n===RegExp)return t.toString()===e.toString();if(n===Array){if((r=t.length)===e.length)for(;r--&&u(t[r],e[r]););return r===-1}if(!n||typeof t=="object"){r=0;for(n in t)if(i.call(t,n)&&++r&&!i.call(e,n)||!(n in e)||!u(t[n],e[n]))return  false;return Object.keys(e).length===r}}return t!==t&&e!==e}
+
+export { u };
+//# sourceMappingURL=index9-7JZOG94_.js.map

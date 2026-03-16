@@ -1,0 +1,73 @@
+commit db1177ad78c9e6290502e8a429ab14c766404810 (HEAD -> murmurhash-patch)
+author: thegeorg
+date: 2021-06-18T11:21:56+03:00
+
+    Fix unaligned read in MurmurHash2.cpp
+
+--- a/MurmurHash2.cpp
++++ b/MurmurHash2.cpp
+@@ -14,6 +14,7 @@
+ //    machines.
+ 
+ #include "MurmurHash2.h"
++#include <string.h>
+ 
+ //-----------------------------------------------------------------------------
+ // Platform-specific functions and macros
+@@ -22,17 +23,37 @@
+ 
+ #if defined(_MSC_VER)
+ 
++#define FORCE_INLINE    __forceinline
++
+ #define BIG_CONSTANT(x) (x)
+ 
+ // Other compilers
+ 
+ #else	// defined(_MSC_VER)
+ 
++#define FORCE_INLINE inline __attribute__((always_inline))
++
+ #define BIG_CONSTANT(x) (x##LLU)
+ 
+ #endif // !defined(_MSC_VER)
+ 
+ //-----------------------------------------------------------------------------
++// Block read - if your platform needs to do endian-swapping or can only
++// handle aligned reads, do the conversion here
++
++FORCE_INLINE uint32_t getblock32 ( const uint32_t * p, int i )
++{
++  uint32_t res;
++  memcpy(&res, p + i, sizeof(res));
++  return res;
++}
++
++FORCE_INLINE uint64_t getblock64 ( const uint64_t * p, int i )
++{
++  uint64_t res;
++  memcpy(&res, p + i, sizeof(res));
++  return res;
++}
+ 
+ uint32_t MurmurHash2 ( const void * key, size_t len, uint32_t seed )
+ {
+@@ -52,7 +73,7 @@ uint32_t MurmurHash2 ( const void * key, size_t len, uint32_t seed )
+ 
+   while(len >= 4)
+   {
+-    uint32_t k = *(uint32_t*)data;
++    uint32_t k = getblock32((const uint32_t*)data, 0);
+ 
+     k *= m;
+     k ^= k >> r;
+@@ -105,7 +126,8 @@ uint64_t MurmurHash64A ( const void * key, size_t len, uint64_t seed )
+ 
+   while(data != end)
+   {
+-    uint64_t k = *data++;
++    uint64_t k = getblock64(data, 0);
++	data++;
+ 
+     k *= m; 
+     k ^= k >> r; 

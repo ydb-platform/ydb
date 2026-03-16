@@ -1,0 +1,7 @@
+# Code table 5.5 - Missing value management for complex packing
+0 0 No explicit missing values included within data values
+1 1 Primary missing values included within data values
+2 2 Primary and secondary missing values included within data values
+# 3-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

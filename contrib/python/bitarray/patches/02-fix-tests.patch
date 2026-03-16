@@ -1,0 +1,22 @@
+--- contrib/python/bitarray/bitarray/test_bitarray.py	(index)
++++ contrib/python/bitarray/bitarray/test_bitarray.py	(working tree)
+@@ -6,2 +6,3 @@
+ """
++import pytest
+ import re
+@@ -1510,1 +1511,2 @@ class MiscTests(unittest.TestCase, Util):
++    @pytest.mark.skip(reason="Need over 32Gb RAM, fail on distbuild")
+     def test_overflow(self):
+@@ -3388,1 +3390,2 @@ class FileTests(unittest.TestCase, Util):
+-        path = os.path.join(os.path.dirname(__file__), fn)
++        import yatest.common as yc
++        path = os.path.join(os.path.dirname(yc.source_path(__file__)), fn)
+--- contrib/python/bitarray/bitarray/test_util.py       (index)
++++ contrib/python/bitarray/bitarray/test_util.py       (working tree)
+@@ -17,1 +17,1 @@ from collections import Counter
+-from bitarray.test_bitarray import Util, skipIf, is_pypy, urandom_2, PTRSIZE
++from .test_bitarray import Util, skipIf, is_pypy, urandom_2, PTRSIZE
+@@ -1725,1 +1725,2 @@ class TestsCanonicalHuffman(unittest.TestCase, Util):
+-        with open(__file__, 'rb') as f:
++        import yatest.common as yc
++        with open(yc.source_path(__file__), 'rb') as f:

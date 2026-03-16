@@ -1,0 +1,7 @@
+alias mars.number  = perturbationNumber;
+alias mars.refdate = referenceDate;
+alias mars.origin  = centre;
+unalias mars.date;
+
+alias mars.method = methodNumber;
+if (class is "od") { alias mars.system = systemNumber; }

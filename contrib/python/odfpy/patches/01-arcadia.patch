@@ -1,0 +1,56 @@
+--- contrib/python/odfpy/odf/odf2moinmoin.py	(index)
++++ contrib/python/odfpy/odf/odf2moinmoin.py	(working tree)
+@@ -22,6 +22,7 @@
+ 
+ import sys, zipfile, xml.dom.minidom
+ from odf.namespaces import nsdict
++from odf import utils
+ from odf.elementtypes import *
+ 
+ IGNORED_TAGS = [
+@@ -288,6 +289,7 @@ class ODF2MoinMoin(object):
+     def load(self, filepath):
+         """ Loads an ODT file. """
+ 
++        filepath = utils.prefetch_from_memory(filepath)
+         zip = zipfile.ZipFile(filepath)
+ 
+         styles_doc = xml.dom.minidom.parseString(zip.read("styles.xml"))
+--- contrib/python/odfpy/odf/opendocument.py	(index)
++++ contrib/python/odfpy/odf/opendocument.py	(working tree)
+@@ -34,6 +34,7 @@ sys.path.append(os.path.dirname(__file__))
+ # convert strings or unicode to bytes, which is valid for Python 2 and 3.
+ from io import StringIO, BytesIO
+ 
++from odf import utils
+ from odf.namespaces import *
+ import odf.manifest as manifest
+ import odf.meta as meta
+@@ -979,6 +980,8 @@ def load(odffile):
+     an open readable stream
+     @return a reference to the structure (an OpenDocument instance)
+     """
++
++    odffile = utils.prefetch_from_memory(odffile)
+     z = zipfile.ZipFile(odffile)
+     mimetype = __detectmimetype(z, odffile)
+     doc = OpenDocument(mimetype, add_generator=False)
+--- contrib/python/odfpy/odf/userfield.py	(index)
++++ contrib/python/odfpy/odf/userfield.py	(working tree)
+@@ -24,6 +24,7 @@
+ import sys
+ import zipfile
+ 
++from odf import utils
+ from odf.text import UserFieldDecl
+ from odf.namespaces import OFFICENS
+ from odf.opendocument import load
+@@ -64,7 +65,7 @@ class UserFields(object):
+         """
+         assert(src==None or 'rb' in repr(src) or 'BufferedReader' in repr(src) or 'BytesIO' in repr(src) or type(src)==type(u""))
+         assert(dest==None or 'wb' in repr(dest) or 'BufferedWriter' in repr(dest) or 'BytesIO' in repr(dest) or type(dest)==type(u""))
+-        self.src_file = src
++        self.src_file = utils.prefetch_from_memory(src)
+         self.dest_file = dest
+         self.document = None
+ 

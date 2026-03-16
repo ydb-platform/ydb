@@ -1,0 +1,55 @@
+# (C) Copyright 2005- ECMWF.
+
+position offsetSection2;
+section_length[4] section2Length ;
+
+meta section2Pointer section_pointer(offsetSection2,section2Length,2);
+unsigned[1] numberOfSection = 2 :read_only;
+
+alias tiggeSuiteID = zero;
+
+# This is a workaround for TIGGE: allow creation of an 'empty' section 2
+# so we can create bit-identical grib 2 files for backward compatibility
+transient addEmptySection2 = 0;
+
+if ( addEmptySection2 == 0 ) {
+    if ( grib2LocalSectionPresent==1 or ( section2Length>5 or new() ) ) {
+        alias section2Used=true;
+
+        if(productionStatusOfProcessedData == 8 || productionStatusOfProcessedData == 9) {
+            # This for adding an expver other than prod/test to UERRA
+            codetable[2] uerraLocalVersion 'grib2/uerraLocalVersion.table' = 1 : dump;
+            template  uerraSection "grib2/local.uerra.[uerraLocalVersion:l].def";
+        }
+
+        if(productionStatusOfProcessedData == 4 || productionStatusOfProcessedData == 5) {
+            # This is TIGGE-LAM because of the productionStatusOfProcessedData and the non-empty section 2
+            codetable[2] tiggeLocalVersion 'grib2/tiggeLocalVersion.table' = 1 : dump;
+            template  tiggeSection "grib2/local.tigge.[tiggeLocalVersion:l].def";
+        }
+
+        if(productionStatusOfProcessedData == 10 || productionStatusOfProcessedData == 11) {
+            # crra = Copernicus Regional ReAnalysis
+            codetable[2] crraLocalVersion 'grib2/crraLocalVersion.table' = 1 : dump;
+            template  crraSection "grib2/local.crra.[crraLocalVersion:l].def";
+        }
+
+        if(productionStatusOfProcessedData == 12 || productionStatusOfProcessedData == 13) {
+            # destine = Destination Earth
+            codetable[2] destineLocalVersion 'grib2/destineLocalVersion.table' = 1 : dump;
+            template  destineSection "grib2/local.destine.[destineLocalVersion:l].def";
+        }
+
+        codetable[2] grib2LocalSectionNumber 'grib2/grib2LocalSectionNumber.[centreForLocal:l].table' = 1 : dump;
+
+        if (grib2LocalSectionNumber!=0) {
+            template_nofail local "grib2/local.[centreForLocal:l].def";
+        } else {
+            constant deleteLocalDefinition=1;
+        }
+        position offsetAfterCentreLocalSection;
+    }
+}
+
+section_padding section2Padding : read_only;
+

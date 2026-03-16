@@ -1,0 +1,9 @@
+title: Pet
+type: object
+additionalProperties: false
+properties:
+  kind:
+    description: The kind of the pet
+    type: string
+    allOf:
+      - $ref: ./animal.yaml#/properties/kind

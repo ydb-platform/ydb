@@ -1,0 +1,7 @@
+# Code table 3.11 - Interpretation of list of numbers at end of section 3
+0 0 There is no appended list
+1 1 Numbers define number of points corresponding to full coordinate circles (i.e. parallels), coordinate values on each circle are multiple of the circle mesh, and extreme coordinate values given in grid definition (i.e. extreme longitudes) may not be reached in all rows
+2 2 Numbers define number of points corresponding to coordinate lines delimited by extreme coordinate values given in grid definition (i.e. extreme longitudes) which are present in each row
+3 3 Numbers define the actual latitudes for each row in the grid. The list of numbers are integer values of the valid latitudes in microdegrees (scaled by 10-6) or in unit equal to the ratio of the basic angle and the subdivisions number for each row, in the same order as specified in the scanning mode flag (bit no. 2)
+# 4-254 Reserved
+255 255 Missing

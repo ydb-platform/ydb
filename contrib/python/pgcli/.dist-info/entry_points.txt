@@ -1,0 +1,4 @@
+
+        [console_scripts]
+        pgcli=pgcli.main:cli
+    

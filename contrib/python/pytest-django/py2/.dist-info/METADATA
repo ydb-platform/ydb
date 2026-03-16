@@ -1,0 +1,113 @@
+Metadata-Version: 2.1
+Name: pytest-django
+Version: 3.10.0
+Summary: A Django plugin for pytest.
+Home-page: https://pytest-django.readthedocs.io/
+Author: Andreas Pelme
+Author-email: andreas@pelme.se
+Maintainer: Andreas Pelme
+Maintainer-email: andreas@pelme.se
+License: BSD-3-Clause
+Project-URL: Source, https://github.com/pytest-dev/pytest-django
+Project-URL: Changelog, https://pytest-django.readthedocs.io/en/latest/changelog.html
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 1.8
+Classifier: Framework :: Django :: 1.9
+Classifier: Framework :: Django :: 1.10
+Classifier: Framework :: Django :: 1.11
+Classifier: Framework :: Django :: 2.0
+Classifier: Framework :: Django :: 2.1
+Classifier: Framework :: Django :: 2.2
+Classifier: Framework :: Django :: 3.0
+Classifier: Framework :: Django :: 3.1
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Testing
+Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*
+Requires-Dist: pytest (>=3.6)
+Requires-Dist: pathlib2 ; python_version < "3.4"
+Provides-Extra: docs
+Requires-Dist: sphinx ; extra == 'docs'
+Requires-Dist: sphinx-rtd-theme ; extra == 'docs'
+Provides-Extra: testing
+Requires-Dist: Django ; extra == 'testing'
+Requires-Dist: django-configurations (>=2.0) ; extra == 'testing'
+Requires-Dist: six ; extra == 'testing'
+
+.. image:: https://img.shields.io/pypi/v/pytest-django.svg?style=flat
+    :alt: PyPI Version
+    :target: https://pypi.python.org/pypi/pytest-django
+
+.. image:: https://img.shields.io/pypi/pyversions/pytest-django.svg
+    :alt: Supported Python versions
+    :target: https://pypi.python.org/pypi/pytest-django
+
+.. image:: https://travis-ci.org/pytest-dev/pytest-django.svg?branch=master
+    :alt: Build Status
+    :target: https://travis-ci.org/pytest-dev/pytest-django
+
+.. image:: https://img.shields.io/codecov/c/github/pytest-dev/pytest-django.svg?style=flat
+    :alt: Coverage
+    :target: https://codecov.io/gh/pytest-dev/pytest-django
+
+Welcome to pytest-django!
+=========================
+
+pytest-django allows you to test your Django project/applications with the
+`pytest testing tool <https://pytest.org/>`_.
+
+* `Quick start / tutorial
+  <https://pytest-django.readthedocs.io/en/latest/tutorial.html>`_
+* `Changelog <https://pytest-django.readthedocs.io/en/latest/changelog.html>`_
+* Full documentation: https://pytest-django.readthedocs.io/en/latest/
+* `Contribution docs
+  <https://pytest-django.readthedocs.io/en/latest/contributing.html>`_
+* Version compatibility:
+
+  * Django: 1.8-1.11, 2.0-2.2,
+    and latest master branch (compatible at the time of each release)
+  * Python: CPython 2.7, 3.4-3.7 or PyPy 2, 3
+  * pytest: >=3.6
+
+* Licence: BSD
+* Project maintainers: Andreas Pelme, Floris Bruynooghe and Daniel Hahler
+* `All contributors <https://github.com/pytest-dev/pytest-django/contributors>`_
+* GitHub repository: https://github.com/pytest-dev/pytest-django
+* `Issue tracker <http://github.com/pytest-dev/pytest-django/issues>`_
+* `Python Package Index (PyPI) <https://pypi.python.org/pypi/pytest-django/>`_
+
+Install pytest-django
+---------------------
+
+::
+
+    pip install pytest-django
+
+Why would I use this instead of Django's `manage.py test` command?
+------------------------------------------------------------------
+
+Running your test suite with pytest-django allows you to tap into the features
+that are already present in pytest. Here are some advantages:
+
+* `Manage test dependencies with pytest fixtures. <https://pytest.org/en/latest/fixture.html>`_
+* Less boilerplate tests: no need to import unittest, create a subclass with methods. Write tests as regular functions.
+* Database re-use: no need to re-create the test database for every test run.
+* Run tests in multiple processes for increased speed (with the pytest-xdist plugin).
+* Make use of other `pytest plugins <https://pytest.org/en/latest/plugins.html>`_.
+* Works with both worlds: Existing unittest-style TestCase's still work without any modifications.
+
+See the `pytest documentation <https://pytest.org/en/latest/>`_ for more information on pytest itself.
+
+

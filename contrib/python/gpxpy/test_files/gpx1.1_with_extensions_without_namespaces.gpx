@@ -1,0 +1,12 @@
+<gpx version="1.1" creator="nawagers" xmlns="http://www.topografix.com/GPX/1/1">
+    <wpt lat="12.3" lon="45.6">
+        <extensions>
+            <aaa jjj="kkk">bbb</aaa>hhh
+            <ccc>
+                <ddd lll="mmm" nnn="ooo">eee
+                    <fff>ggg</fff>iii
+                </ddd>
+            </ccc>
+        </extensions>
+    </wpt>
+</gpx>

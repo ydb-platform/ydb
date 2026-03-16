@@ -1,0 +1,24 @@
+Metadata-Version: 2.0
+Name: mkdocs-material
+Version: 4.1.1
+Summary: A Material Design theme for MkDocs
+Home-page: https://squidfunk.github.io/mkdocs-material/
+Author: Martin Donath
+Author-email: martin.donath@squidfunk.com
+License: MIT
+Description-Content-Type: UNKNOWN
+Keywords: mkdocs,documentation,theme
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: JavaScript
+Classifier: Programming Language :: Python
+Classifier: Topic :: Documentation
+Classifier: Topic :: Text Processing :: Markup :: HTML
+Requires-Dist: mkdocs (>=1)
+Requires-Dist: Pygments (>=2.2)
+Requires-Dist: pymdown-extensions (>=4.11)
+
+UNKNOWN
+
+

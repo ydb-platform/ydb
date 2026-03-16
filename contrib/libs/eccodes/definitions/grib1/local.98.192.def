@@ -1,0 +1,40 @@
+# (C) Copyright 2005- ECMWF.
+# Multiple ECMWF local definitions
+
+# The mars labeling must be inline
+# template mars_labeling "grib1/mars_labeling.def";
+
+constant GRIBEXSection1Problem = 0 ;
+
+codetable[1]   thisMarsClass  "mars/class.table" = "od" : dump,string_type,lowercase;
+codetable[1]   thisMarsType   "mars/type.table" = "an" : dump,string_type,lowercase;
+codetable[2]   thisMarsStream "mars/stream.table" = "oper" : dump,string_type,lowercase ;
+ksec1expver[4] thisExperimentVersionNumber = "0001" : dump;
+
+alias ls.dataType = thisMarsType;
+alias mars.class  = thisMarsClass;
+alias mars.type   = thisMarsType;
+alias mars.stream = thisMarsStream;
+alias mars.expver = thisExperimentVersionNumber;
+
+# zeroForCompatibilityWithMars
+pad padding_loc192_1(2);
+
+unsigned[1] numberOfLocalDefinitions = 2  : dump;
+
+if (numberOfLocalDefinitions == 2 ) {
+  unsigned[2] subLocalDefinitionLength1  = 7 : dump;
+  unsigned[1] subLocalDefinitionNumber1 = 1  : dump;
+  codetable[1]   marsClass1   "mars/class.table" = "od" : dump,string_type,lowercase;
+  codetable[1]   marsType1   "mars/type.table" = "an" : dump,string_type,lowercase;
+  codetable[2]   marsStream1 "mars/stream.table" = "oper" : dump,string_type,lowercase;
+  ksec1expver[4] experimentVersionNumber1 = "0001" : dump;
+  template  subDefinitions1  "grib1/local_no_mars.98.[subLocalDefinitionNumber1].def";
+  unsigned[2] subLocalDefinitionLength2  = 9 : dump;
+  unsigned[1] subLocalDefinitionNumber2 = 24  : dump;
+  codetable[1]   marsClass2   "mars/class.table" = "od" : dump,string_type,lowercase;
+  codetable[1]   marsType2   "mars/type.table" = "an" : dump,string_type,lowercase;
+  codetable[2]   marsStream2 "mars/stream.table" = "oper" : dump,string_type,lowercase;
+  ksec1expver[4] experimentVersionNumber2 = "0001" : dump;
+  template  subDefinitions2  "grib1/local_no_mars.98.[subLocalDefinitionNumber2].def";
+}

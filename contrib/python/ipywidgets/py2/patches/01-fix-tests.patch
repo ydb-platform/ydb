@@ -1,0 +1,38 @@
+--- contrib/python/ipywidgets/py2/ipywidgets/tests/test_embed.py	(index)
++++ contrib/python/ipywidgets/py2/ipywidgets/tests/test_embed.py	(working tree)
+@@ -10,2 +10,2 @@ import shutil
+-from ..widgets import IntSlider, IntText, Text, Widget, jslink, HBox, widget_serialization
+-from ..embed import embed_data, embed_snippet, embed_minimal_html, dependency_state
++from ipywidgets.widgets import IntSlider, IntText, Text, Widget, jslink, HBox, widget_serialization
++from ipywidgets.embed import embed_data, embed_snippet, embed_minimal_html, dependency_state
+--- contrib/python/ipywidgets/py2/ipywidgets/widgets/tests/test_link.py	(index)
++++ contrib/python/ipywidgets/py2/ipywidgets/widgets/tests/test_link.py	(working tree)
+@@ -6,1 +6,1 @@
+-from .. import jslink, jsdlink, ToggleButton
++from ipywidgets.widgets import jslink, jsdlink, ToggleButton
+--- contrib/python/ipywidgets/py2/ipywidgets/widgets/tests/test_send_state.py	(index)
++++ contrib/python/ipywidgets/py2/ipywidgets/widgets/tests/test_send_state.py	(working tree)
+@@ -8,1 +8,1 @@ from traitlets import Bool, Tuple, List
+-from ..widget import Widget
++from ipywidgets.widgets.widget import Widget
+@@ -10,1 +10,1 @@ from traitlets import Bool, Tuple, List
+-from ..._version import __control_protocol_version__
++from ipywidgets._version import __control_protocol_version__
+--- contrib/python/ipywidgets/py2/ipywidgets/widgets/tests/test_widget.py	(index)
++++ contrib/python/ipywidgets/py2/ipywidgets/widgets/tests/test_widget.py	(working tree)
+@@ -10,2 +10,2 @@ from IPython.core.interactiveshell import InteractiveShell
+-from ..widget import Widget
+-from ..widget_button import Button
++from ipywidgets.widgets.widget import Widget
++from ipywidgets.widgets.widget_button import Button
+--- contrib/python/ipywidgets/py2/ipywidgets/widgets/tests/test_widget_string.py	(index)
++++ contrib/python/ipywidgets/py2/ipywidgets/widgets/tests/test_widget_string.py	(working tree)
+@@ -4,1 +4,1 @@
+-from ..widget_string import Combobox
++from ipywidgets.widgets.widget_string import Combobox
+--- contrib/python/ipywidgets/py2/ipywidgets/widgets/tests/test_interaction.py	(index)
++++ contrib/python/ipywidgets/py2/ipywidgets/widgets/tests/test_interaction.py	(working tree)
+@@ -734,1 +734,2 @@ def test_state_schema():
+-    with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../', 'state.schema.json')) as f:
++    import yatest.common as yc
++    with open(yc.source_path('contrib/python/ipywidgets/py2/ipywidgets/state.schema.json')) as f:

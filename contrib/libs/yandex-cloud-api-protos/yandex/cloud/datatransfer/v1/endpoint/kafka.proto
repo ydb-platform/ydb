@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package yandex.cloud.datatransfer.v1.endpoint;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datatransfer/v1/endpoint;endpoint";
+option java_package = "yandex.cloud.api.datatransfer.v1.endpoint";
+option csharp_namespace = "Yandex.Cloud.Datatransfer.V1.EndPoint"; // there is a clash with class Endpoint in namespace Yandex.Cloud.Datatransfer.V1
+
+import "yandex/cloud/datatransfer/v1/endpoint/common.proto";
+import "yandex/cloud/datatransfer/v1/endpoint/parsers.proto";
+import "yandex/cloud/datatransfer/v1/endpoint/serializers.proto";
+
+enum KafkaMechanism {
+    KAFKA_MECHANISM_UNSPECIFIED = 0;
+    KAFKA_MECHANISM_SHA256 = 1;
+    KAFKA_MECHANISM_SHA512 = 2;
+}
+message KafkaConnectionOptions {
+    oneof connection {
+        // Managed Service for Kafka cluster ID. 
+        // Set only one of: cluster_id/on_premise/connection_manager_connection
+        string cluster_id = 1;
+        // Connection options for on-premise Kafka
+        // Set only one of: cluster_id/on_premise/connection_manager_connection
+        OnPremiseKafka on_premise = 2;
+        // Get Kafka installation params and credentials from Connection Manager
+        // Set only one of: cluster_id/on_premise/connection_manager_connection
+        ConnectionManagerConnection connection_manager_connection = 3;
+    }
+}
+// On-premise Kafka installation options
+message OnPremiseKafka {
+    reserved 2 to 3;
+    // Kafka broker URLs
+    repeated string broker_urls = 1;
+    // Identifier of the Yandex Cloud VPC subnetwork to user for accessing the
+    // database. 
+    // If omitted, the server has to be accessible via Internet
+    string subnet_id = 4;
+    // TLS settings for broker connection. Disabled by default.
+    TLSMode tls_mode = 5;
+}
+message KafkaAuth {
+    oneof security {
+        // Authentication with SASL
+        KafkaSaslSecurity sasl = 1;
+        // No authentication
+        NoAuth no_auth = 2;
+    }
+}
+message KafkaSaslSecurity {
+    reserved 2;
+    // User name
+    string user = 1;
+    // SASL mechanism for authentication, use one of: KAFKA_MECHANISM_SHA256,
+    // KAFKA_MECHANISM_SHA512
+    KafkaMechanism mechanism = 3;
+    // Password for user
+    Secret password = 4;
+}
+// Settings specific to the Kafka source endpoint
+message KafkaSource {
+    reserved 6;
+    // Connection settings
+    KafkaConnectionOptions connection = 1;
+    // Authentication settings
+    KafkaAuth auth = 2;
+    // List of security groups that the transfer associated with this endpoint should
+    // use
+    repeated string security_groups = 3;
+    // **Deprecated**. Please use `topic_names` instead
+    // Full source topic name
+    string topic_name = 4 [deprecated = true];
+    // Transform data with a custom Cloud Function
+    DataTransformationOptions transformer = 5;
+    // Data parsing parameters. If not set, the source messages are read in raw
+    Parser parser = 7;
+    // List of full source topic names to read
+    repeated string topic_names = 8;
+}
+// Settings specific to the Kafka target endpoint
+message KafkaTarget {
+    reserved 4 to 6;
+    // Connection settings
+    KafkaConnectionOptions connection = 1;
+    // Authentication settings
+    KafkaAuth auth = 2;
+    // List of security groups that the transfer associated with this endpoint should
+    // use
+    repeated string security_groups = 3;
+    // Target topic settings
+    KafkaTargetTopicSettings topic_settings = 7;
+    // Data serialization format settings
+    Serializer serializer = 8;
+}
+message KafkaTargetTopicSettings {
+    oneof topic_settings {
+        // All messages will be sent to one topic
+        KafkaTargetTopic topic = 1;
+        // Topic prefix
+        // Messages will be sent to topic with name <topic_prefix>.<schema>.<table_name>.
+        // Analogue of the Debezium setting database.server.name.
+        string topic_prefix = 2;
+    }
+}
+message KafkaTargetTopic {
+    // Full topic name
+    string topic_name = 1;
+    // Save transactions order
+    // Not to split events queue into separate per-table queues.
+    bool save_tx_order = 2;
+}

@@ -1,0 +1,11 @@
+--- contrib/python/pyzbar/ya.make	(index)
++++ contrib/python/pyzbar/ya.make	(working tree)
+@@ -22,7 +22,7 @@ NO_COMPILER_WARNINGS()
+ NO_LINT()
+ 
+ SRCS(
+-    syms.cpp
++    GLOBAL syms.cpp
+ )
+ 
+ PY_SRCS(

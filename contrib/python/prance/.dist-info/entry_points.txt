@@ -1,0 +1,2 @@
+[console_scripts]
+prance = prance.cli:cli [cli]

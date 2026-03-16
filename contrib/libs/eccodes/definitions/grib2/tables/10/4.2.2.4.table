@@ -1,0 +1,6 @@
+# Code table 4.2 - Parameter number by product discipline and parameter category. Product discipline 2 - Land surface products, parameter category 4: fire weather products
+0 0 Fire outlook (Code table 4.224)
+1 1 Fire outlook due to dry thunderstorm (Code table 4.224)
+2 2 Haines Index (Numeric)
+3 3 Fire burned area (%)
+255 255 Missing

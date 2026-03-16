@@ -1,0 +1,19 @@
+--- a/modules/python/src2/hdr_parser.py
++++ b/modules/python/src2/hdr_parser.py
+@@ -148,14 +148,10 @@ def evaluate_conditional_inclusion_directive(directive, preprocessor_definitions
+                                   locals=preprocessor_definitions)
+         else:
+             eval_directive = eval(directive,
+-                                  {"__builtins__": {}},
++                                  {},
+                                   preprocessor_definitions)
+     except Exception as e:
+-        raise ValueError(
+-            "Failed to evaluate '{}' directive, stripped down to '{}'".format(
+-                input_directive, directive
+-            )
+-        ) from e
++        raise e
+ 
+     if not isinstance(eval_directive, (bool, int)):
+         raise TypeError(

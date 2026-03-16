@@ -1,0 +1,30 @@
+Metadata-Version: 2.1
+Name: supervenn
+Version: 0.5.0
+Summary: supervenn is a tool for visualization of relations of many sets using matplotlib
+Home-page: https://github.com/gecko984/supervenn
+Author: Fedor Indukaev
+Author-email: gecko984@gmail.com
+License: MIT
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Scientific/Engineering :: Visualization
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Intended Audience :: Science/Research
+Classifier: Intended Audience :: Developers
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: matplotlib (>=2.2.5)
+Requires-Dist: pandas
+
+See https://github.com/gecko984/supervenn/blob/master/README.md
+

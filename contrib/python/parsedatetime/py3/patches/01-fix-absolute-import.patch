@@ -1,0 +1,11 @@
+--- contrib/python/parsedatetime/py3/parsedatetime/pdt_locales/icu.py	(index)
++++ contrib/python/parsedatetime/py3/parsedatetime/pdt_locales/icu.py	(working tree)
+@@ -5,6 +5,8 @@ pdt_locales
+ 
+ All of the included locale classes shipped with pdt.
+ """
++from __future__ import absolute_import
++
+ import datetime
+ 
+ try:

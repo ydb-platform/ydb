@@ -1,0 +1,9 @@
+meta originatingClass evaluate(inputProcessIdentifier/1000);
+
+concept originOfPostProcessing(unknown) {
+ 'ecmf_od' = { originatingClass =  1; inputOriginatingCentre = 98; }
+ 'ecmf_ea' = { originatingClass = 23; inputOriginatingCentre = 98; }
+}
+
+alias mars.origin = originOfPostProcessing;
+alias mars.model = postProcessing ;

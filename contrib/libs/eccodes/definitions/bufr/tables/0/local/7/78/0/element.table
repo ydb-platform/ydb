@@ -1,0 +1,306 @@
+#code|abbreviation|type|name|unit|scale|reference|width|crex_unit|crex_scale|crex_width
+001192|icaoLocationIndicator|string|ICAO LOCATION INDICATOR|CCITT IA5|0|0|32
+001193|typeOfData|table|TYPE OF DATA|Code table|0|0|3
+001194|typeOfReccoObservation|table|TYPE OF RECCO OBSERVATION|Code table|0|0|2
+001195|areaOfMinQnhForecast|long|AREA OF MIN QNH FORECAST|Numeric|0|0|4
+001196|templateVersion|double|TEMPLATE VERSION|Numeric|1|0|7
+001197|sensorIndex|long|SENSOR INDEX|Numeric|0|0|5
+001201|placeOfObsOfVisibiltyOrCloudCover|long|PLACE OF OBS. OF VISIBILTY/CLOUD COVER|Numeric|0|0|4
+001241|stateOrFederalStateIdentifier|string|STATE/FEDERAL STATE IDENTIFIER|CCITT IA5|0|0|32
+001242|highwayDesignator|string|HIGHWAY DESIGNATOR|CCITT IA5|0|0|40
+001243|routesKilometerOfRoad|double|ROUTES KILOMETER OF ROAD|m|-2|0|14
+002192|corMessageMark|table|COR MESSAGE MARK|Code table|0|0|8
+002193|pseudoReport|flag|PSEUDO REPORT|Flag table|0|0|2
+002201|overallQualityBits|table|OVERALL QUALITY BITS|Code table|0|0|5
+002221|unitsOfElevationOrConfidenceFactor|table|UNITS OF ELEVATION/CONFIDENCE FACTOR|Code table|0|0|4
+002222|satellDataProcessTechnUsedFTropop|table|SATELL.DATA PROCESS.TECHN.USED F.TROPOP.|Code table|0|0|4
+002231|verificationObservationCodeType|table|VERIFICATION: OBSERVATION CODE TYPE|Code table|0|0|8
+002241|nameOfRoadSensorManufacturer|table|NAME OF ROAD SENSOR MANUFACTURER|Code table|0|0|4
+002242|positionOfRoadSensors|table|POSITION OF ROAD SENSORS|Code table|0|0|4
+002243|extendedTypeOfStation|flag|EXTENDED TYPE OF STATION|Flag table|0|0|6
+002244|typeOfRoad|table|TYPE OF ROAD|Code table|0|0|5
+002245|typeOfConstruction|table|TYPE OF CONSTRUCTION|Code table|0|0|4
+004192|durationOfTimeRelatToFollowValue|table|DURATION OF TIME RELAT.TO FOLLOW.VALUE|Code table|0|0|4
+004193|dayOfOccOfDataValOfPrevElement|long|DAY OF OCC.OF DATA VAL.OF PREV.ELEMENT|d|0|0|6
+004194|durationOfPrecipitDuringPastHour|long|DURATION OF PRECIPIT.DURING PAST HOUR|min|0|0|6
+004201|numberOfDaysWithPrecipitationGe1mm|long|NUMBER OF DAYS WITH PRECIPITATION GE 1MM|Numeric|0|0|6
+004202|numberOfDaysWithSpecWeaPhenomena|long|NUMBER OF DAYS WITH SPEC.WEA.PHENOMENA|d|0|0|6
+004214|actualHourOfObservation|long|ACTUAL HOUR OF OBSERVATION|h|0|0|5
+004215|actualMinuteOfObservation|long|ACTUAL MINUTE OF OBSERVATION|min|0|0|6
+005195|ensembleMemberNumberEcmf|long|ENSEMBLE MEMBER NUMBER (ECMF)|Numeric|0|0|7
+005231|verifXCoordOfRefModelGridPoint|long|VERIF.:X-COORD.OF REF.MODEL GRID POINT|Numeric|0|0|12
+005232|verifNumberOfGridPointsInXDirect|long|VERIF.:NUMBER OF GRID POINTS IN X DIRECT|Numeric|0|0|12
+006192|distanceRecco|table|DISTANCE (RECCO)|Code table|0|0|4
+006231|verifYCoordOfRefModelGridPoint|long|VERIF.:Y-COORD.OF REF.MODEL GRID POINT|Numeric|0|0|12
+006232|verifNumberOfGridPointsInYDirect|long|VERIF.:NUMBER OF GRID POINTS IN Y DIRECT|Numeric|0|0|12
+007231|heightOfModelOrography|long|HEIGHT OF MODEL OROGRAPHY|m|0|-400|15
+008192|fieldFromWhichDeviationIsCalculated|table|FIELD FROM WHICH DEVIATION IS CALCULATED|Code table|0|0|6
+008193|seaLevelPressureOrGeopHeightSign|table|SEA-LEVEL PRESSURE OR GEOP. HEIGHT SIGN.|Code table|0|0|4
+008195|dataTypeEcmf|table|DATA TYPE (ECMF)|Code table|0|0|7
+008196|amountOfIceSingificance|table|AMOUNT OF ICE SINGIFICANCE|Code table|0|0|3
+008197|openingsInTheIceSignificance|table|OPENINGS IN THE ICE SIGNIFICANCE|Code table|0|0|3
+008198|dataGroup|table|DATA GROUP|Code table|0|0|4
+008231|verificationReportCharacteristics|table|VERIFICATION: REPORT CHARACTERISTICS|Code table|0|0|10
+010192|depthOfRoots|double|DEPTH OF ROOTS|m|2|0|10
+011192|uComponentAt10M|double|U-COMPONENT AT 10 M|m/s|1|-4096|13
+011193|vComponentAt10M|double|V-COMPONENT AT 10 M|m/s|1|-4096|13
+011194|boundaryLayerDepth|long|BOUNDARY LAYER DEPTH|m|0|0|13
+011195|radiusOfZone|double|RADIUS OF ZONE|m|4|0|35
+011196|angleOfPropagation|double|ANGLE OF PROPAGATION|degree true|-1|0|4
+011197|sizeOfZone|double|SIZE OF ZONE|m|4|0|35
+011198|probabilityOfGusts|long|PROBABILITY OF GUSTS|%|0|0|7
+011199|forceOfSurfaceWindBeaufortScale|table|FORCE OF SURFACE WIND (BEAUFORT SCALE)|Code table|0|0|4
+011200|turbulence|table|TURBULENCE|Code table|0|0|4
+011201|typeOfWindAtFlightLevel|table|TYPE OF WIND AT FLIGHT LEVEL|Code table|0|0|4
+011202|meanWindSpeedFrom610minMeasurement|double|MEAN WIND SPEED FROM 6 10MIN-MEASUREMENT|m/s|1|0|12
+011203|quotientOfVectUScalMeanOfWindSp|double|QUOTIENT OF VECT.U.SCAL.MEAN OF WIND SP.|Numeric|2|0|12
+011204|squareRootOfTheEwVarianceOfFf|double|SQUARE ROOT OF THE EW VARIANCE OF FF|m/s|3|0|15
+011205|signedCovarianceOfWindSpeed|double|SIGNED COVARIANCE OF WIND SPEED|m/s|3|-16384|16
+011206|squareRootOfNwVarianceOfWindSpeed|double|SQUARE ROOT OF NW VARIANCE OF WIND SPEED|m/s|3|0|15
+011207|minimumWindSpeed|double|MINIMUM WIND SPEED|m/s|1|0|12
+011208|reliabilityOfWindAtFlightLevel|table|RELIABILITY OF WIND AT FLIGHT LEVEL|Code table|0|0|4
+012192|groundMinimumTempPast10HoursClim|double|GROUND MINIMUM TEMP.,PAST 10 HOURS(CLIM)|K|1|0|12
+012193|depthOfSnowAboveGroundMinimumTherm|double|DEPTH OF SNOW ABOVE GROUND MINIMUM THERM|m|2|-2|10
+012194|groundMinimumTempPeriodSpecified|double|GROUND MINIMUM TEMP.,PERIOD SPECIFIED|K|1|0|12
+012195|snowAboveGroundMinimumThermYOrN|table|SNOW ABOVE GROUND MINIMUM THERM., Y/N|Code table|0|0|2
+012196|inverseMoninObukhovLength|double|INVERSE MONIN-OBUKHOV LENGTH|m-1|3|-100000|18
+012197|airStability|table|AIR STABILITY|Code table|0|0|4
+012199|maxTemperAt2MPast6HoursEcmf|double|MAX. TEMPER. AT 2 M, PAST 6 HOURS, ECMF|K|1|0|12
+012200|minTemperAt2MPast6HoursEcmf|double|MIN. TEMPER. AT 2 M, PAST 6 HOURS, ECMF|K|1|0|12
+012201|waterOrIceOrSignWetBulbTemperature|table|WATER/ICE/SIGN(WET BULB TEMPERATURE)|Code table|0|0|4
+012202|meanTemperatureAt2m|double|MEAN TEMPERATURE AT 2M|K|2|0|16
+012211|dryBulbTempAt2MDeviatFromNormal|double|DRY BULB TEMP.AT 2 M, DEVIAT.FROM NORMAL|K|1|-128|8
+012221|temperatAtBottomOfMiddleSoilLayer|double|TEMPERAT.AT BOTTOM OF MIDDLE SOIL LAYER|K|1|0|12
+012222|temperatureOfSnowCover|double|TEMPERATURE OF SNOW COVER|K|1|0|12
+012223|temperatureAtTopOfMiddleSoilLayer|double|TEMPERATURE AT TOP OF MIDDLE SOIL LAYER|K|1|0|12
+012224|bodyTemperatureOfThePyrgeometer|double|BODY TEMPERATURE OF THE PYRGEOMETER|K|2|0|16
+012225|coverTemperatureOfThePyrgeometer|double|COVER TEMPERATURE OF THE PYRGEOMETER|K|2|0|16
+012241|roadSurfaceTemperature|double|ROAD SURFACE TEMPERATURE|K|2|0|16
+012242|roadSubSurfaceTemperature|double|ROAD SUB-SURFACE TEMPERATURE|K|2|0|16
+013192|frequencyGroupPrecUntil1Nov94|table|FREQUENCY GROUP, PREC. (UNTIL 1 NOV 94)|Code table|0|0|4
+013193|totalPrecipitationForTheMonth|long|TOTAL PRECIPITATION FOR THE MONTH|%|0|0|12
+013194|maximumOfDailyPrecipitation|double|MAXIMUM OF DAILY PRECIPITATION|m|4|-1|14
+013195|atp45StabilityCategory|table|ATP 45 STABILITY CATEGORY|Code table|0|0|4
+013196|typeOfPrecipitation|table|TYPE OF PRECIPITATION|Code table|0|0|3
+013198|probabilityOfPrecipitation|long|PROBABILITY OF PRECIPITATION|%|0|0|7
+013201|totalDepthOfSnowAtSnowSampler|double|TOTAL DEPTH OF SNOW AT SNOW SAMPLER|m|2|-2|16
+013202|totalWaterEquivalentAtSnowSampler|double|TOTAL WATER EQUIVALENT AT SNOW SAMPLER|m|4|-1|14
+013203|totalWaterEquivalentAtSnowSampler|double|TOTAL WATER EQUIVALENT AT SNOW SAMPLER|M/M|2|0|7
+013204|snowLargeScale+Convective|double|SNOW, LARGE SCALE + CONVECTIVE|kg m-2|1|-1|14
+013205|largeScalePrecipitionRainAndSnow|double|LARGE SCALE PRECIPITION (RAIN AND SNOW)|m|4|0|14
+013206|convectivePrecipitionRainAndSnow|double|CONVECTIVE PRECIPITION (RAIN AND SNOW)|m|4|0|14
+013207|skinReservoirContent|double|SKIN RESERVOIR CONTENT|m|5|0|20
+013208|surfaceWaterRunoff|double|SURFACE WATER RUNOFF|kg m-2|2|-1|19
+013209|groundWaterRunoff|double|GROUND WATER RUNOFF|kg m-2|2|-1|19
+013211|soilHumidity|double|SOIL HUMIDITY|m|-3|0|7
+013221|totalWaterContentsInLowerSoilLayer|double|TOTAL WATER CONTENTS IN LOWER SOIL LAYER|m|4|0|14
+013222|totalWaterContentsIMiddleSoilLayer|double|TOTAL WATER CONTENTS I.MIDDLE SOIL LAYER|m|4|0|14
+013223|totalWaterContentsIUpperSoilLayer|double|TOTAL WATER CONTENTS I.UPPER SOIL LAYER|m|4|0|14
+013224|specificHumidityAtSurfOrEarthOrSnow|double|SPECIFIC HUMIDITY AT SURF./EARTH OR SNOW|kg/kg|5|0|14
+013225|largeScaleRainDuringForecastTime|double|LARGE SCALE RAIN DURING FORECAST TIME|m|4|0|14
+013226|largeScaleSnowDuringForecastTime|double|LARGE SCALE SNOW DURING FORECAST TIME|m|4|0|14
+013227|convectiveRainDuringForecastTime|double|CONVECTIVE RAIN DURING FORECAST TIME|m|4|0|14
+013228|convectiveSnowDuringForecastTime|double|CONVECTIVE SNOW DURING FORECAST TIME|m|4|0|14
+013229|mixingRatioInFog|double|MIXING RATIO IN FOG|kg/kg|5|0|14
+013230|cloudWaterContent|double|CLOUD WATER CONTENT|kg/kg|7|0|14
+013231|totalPrecipitationPast10Minutes|double|TOTAL PRECIPITATION PAST 10 MINUTES|kg m-2|2|-1|14
+013232|precipitationOccured|table|PRECIPITATION OCCURED|Code table|0|0|2
+013233|humidTemperature|double|HUMID TEMPERATURE|K|2|0|16
+013234|stateOfHumidity|table|STATE OF HUMIDITY|Code table|0|0|2
+013235|numberOfDaysForControllingMeasurme|long|NUMBER OF DAYS FOR CONTROLLING MEASURME.|d|0|0|5
+013236|blockOfPrecipitationAndSnowCover|string|BLOCK OF PRECIPITATION AND SNOW COVER|CCITT IA5|0|0|64
+013241|waterFilmThickness|double|WATER FILM THICKNESS|m|3|0|7
+014192|totalSunshineForTheMonth|long|TOTAL SUNSHINE FOR THE MONTH|%|0|0|9
+014193|surfaceHeatFluxDensity|double|SURFACE HEAT FLUX DENSITY|W m-2|1|-5000|14
+014198|sunshine|long|SUNSHINE|%|0|0|7
+014201|photosytheticActiveRadiationAtSurf|double|PHOTOSYTHETIC ACTIVE RADIATION AT SURF.|J m-2|-3|-2048|12
+014202|albedoOfSurfaceShortWave|long|ALBEDO OF SURFACE (SHORT WAVE)|%|0|0|7
+014203|thermalRadiationOfTheAtmosphere|double|THERMAL RADIATION OF THE ATMOSPHERE|J m-2|-2|0|16
+014204|durationOfSunshineUsingTheWoz|long|DURATION OF SUNSHINE USING THE WOZ|min|0|0|11
+015192|ozoneVerticallyIntegrated|double|OZONE, VERTICALLY INTEGRATED|Pa|4|0|14
+015193|pressureOfOzoneMaximum|double|PRESSURE OF OZONE MAXIMUM|Pa|-1|0|14
+020192|typeOfSpecialWeatherPhenomena|table|TYPE OF SPECIAL WEATHER PHENOMENA|Code table|0|0|5
+020193|additionalWeatherPhenomena|table|ADDITIONAL WEATHER PHENOMENA|Code table|0|0|7
+020194|heightOfTopOfPhenomena|double|HEIGHT OF TOP OF PHENOMENA|m|-1|-40|11
+020195|weatherPhenomena|table|WEATHER PHENOMENA|Code table|0|0|4
+020196|directionOfMainOccOfWeatherPhen|long|DIRECTION OF MAIN OCC.OF WEATHER PHEN.|deg|0|0|12
+020197|baseOfCloudClass|long|BASE OF CLOUD CLASS|Numeric|0|0|4
+020198|numberOfValuesInBaseOfCloudClass|long|NUMBER OF VALUES IN BASE OF CLOUD CLASS|Numeric|0|0|4
+020199|lowestHeightOBaseOCloudDurLastH|double|LOWEST HEIGHT O.BASE O.CLOUD DUR.LAST H.|m|-1|-40|11
+020200|amountOfConvectiveClouds|long|AMOUNT OF (CONVECTIVE) CLOUDS|%|0|0|7
+020201|precipitAtTimeOfObservAutomStat|table|PRECIPIT.AT TIME OF OBSERV.(AUTOM.STAT.)|Code table|0|0|2
+020202|presentWeatherClimatologObservation|table|PRESENT WEATHER (CLIMATOLOG.OBSERVATION)|Code table|0|0|8
+020203|formOfPrecipitation|table|FORM OF PRECIPITATION|Code table|0|0|4
+020204|fallenPrecipitationDayBefore|table|FALLEN PRECIPITATION (DAY BEFORE)|Code table|0|0|6
+020205|dewRimeEtcDayBefore|table|DEW, RIME ETC. (DAY BEFORE)|Code table|0|0|7
+020206|otherWeatherDayBefore|table|OTHER WEATHER (DAY BEFORE)|Code table|0|0|4
+020207|flightConditions|table|FLIGHT CONDITIONS|Code table|0|0|3
+020208|presentWeatherMawec|table|PRESENT WEATHER (MAWEC)|Code table|0|0|4
+020209|moistureOfGround|table|MOISTURE OF GROUND|Code table|0|0|3
+020210|significantWeatrherPhenomenaMetgm|table|SIGNIFICANT WEATRHER PHENOMENA (METGM)|Code table|0|0|4
+020211|precipitationDuringPrecedingHourYOrN|table|PRECIPITATION DURING PRECEDING HOUR Y/N|Code table|0|0|2
+020212|amountOfSeaIce|table|AMOUNT OF SEA ICE|Code table|0|0|4
+020213|amountOfFastIce|table|AMOUNT OF FAST ICE|Code table|0|0|4
+020214|seaIceTopography|table|SEA-ICE TOPOGRAPHY|Code table|0|0|4
+020215|seaIceOpenings|table|SEA-ICE OPENINGS|Code table|0|0|4
+020217|significantWeatherPhenomenaNbcCdm|table|SIGNIFICANT WEATHER PHENOMENA (NBC CDM)|Code table|0|0|4
+020218|cloudCoverNbcCdm|table|CLOUD COVER (NBC CDM)|Code table|0|0|2
+020219|presentWeatherSuprep|table|PRESENT WEATHER (SUPREP)|Code table|0|0|4
+020220|amplificationOfPheRepBy020219|table|AMPLIFICATION OF PHE. REP. BY 020219|Code table|0|0|4
+020221|intensityOrProximityOfWeather|table|INTENSITY OR PROXIMITY OF WEATHER|Code table|0|0|3
+020222|descriptorOfWeather|string|DESCRIPTOR OF WEATHER|CCITT IA5|0|0|16
+020223|weatherPhenomenaMetar|string|WEATHER PHENOMENA (METAR)|CCITT IA5|0|0|48
+020224|stateOfRoadInVicinityOfObsPoint|table|STATE OF ROAD IN VICINITY OF OBS POINT|Code table|0|0|4
+020225|stateOfTerrainPrevInViciOfObsP|table|STATE OF TERRAIN PREV. IN VICI. OF OBS P|Code table|0|0|4
+020226|presentWeatherTarwi|table|PRESENT WEATHER (TARWI)|Code table|0|0|4
+020230|cloudCoverOfTheHillCodeTable50|table|CLOUD COVER OF THE HILL - CODE TABLE 50|Code table|0|0|4
+020231|verticalCloudAmount|long|VERTICAL CLOUD AMOUNT|%|0|0|7
+020232|modifiedCloudAmount|long|MODIFIED CLOUD AMOUNT|%|0|0|7
+020233|verificationDerivedLowCloudCover|long|VERIFICATION: DERIVED LOW CLOUD COVER|%|0|0|7
+020234|maxMeteorologOpticalRange|long|MAX. METEOROLOG. OPTICAL RANGE|m|0|0|14
+020235|minMeteorologOpticalRange|long|MIN. METEOROLOG. OPTICAL RANGE|m|0|0|14
+020236|meteorologOpticalRange|long|METEOROLOG. OPTICAL RANGE|m|0|0|14
+020237|meteorologicalOpticalRange|long|METEOROLOGICAL OPTICAL RANGE|m|0|0|18
+020238|minimumMeteorologicalOpticalRange|long|MINIMUM METEOROLOGICAL OPTICAL RANGE|m|0|0|18
+020239|maximumMeteorologicalOpticalRange|long|MAXIMUM METEOROLOGICAL OPTICAL RANGE|m|0|0|18
+020241|roadSurfaceCondition|table|ROAD SURFACE CONDITION|Code table|0|0|4
+021192|orientationOfEllipse|table|ORIENTATION OF ELLIPSE|Code table|0|0|4
+021193|echoWidthOrDiameter|double|ECHO WIDTH OR DIAMETER|m|-1|0|15
+021194|lengthOfEchoAxis|double|LENGTH OF ECHO AXIS|m|-1|0|15
+021195|characterOfEcho|table|CHARACTER OF ECHO|Code table|0|0|3
+021196|intensityOfEcho|table|INTENSITY OF ECHO|Code table|0|0|3
+022192|lengthOfSwellMetgm|double|LENGTH OF SWELL (METGM)|m|-2|0|2
+022193|stateOfWaterSurface|table|STATE OF WATER SURFACE|Code table|0|0|4
+022194|directionOfApproachOfWavesToBeach|table|DIRECTION OF APPROACH OF WAVES TO BEACH|Code table|0|0|2
+022195|widthOfSurfZone|table|WIDTH OF SURF ZONE|Code table|0|0|3
+024192|typeOfObservation|table|TYPE OF OBSERVATION|Code table|0|0|4
+024193|methodOfObservation|table|METHOD OF OBSERVATION|Code table|0|0|7
+024194|statusOfObservation|table|STATUS OF OBSERVATION|Code table|0|0|7
+024195|nuclid|table|NUCLID|Code table|0|0|10
+024196|baseOfObservedValue|long|BASE OF OBSERVED VALUE|Numeric|0|0|10
+024197|exponentOfObservedValue|long|EXPONENT OF OBSERVED VALUE|Numeric|0|-15|5
+024198|indicatorOnObservedValue|table|INDICATOR ON OBSERVED VALUE|Code table|0|0|2
+024199|unitOfObservedValue|table|UNIT OF OBSERVED VALUE|Code table|0|0|7
+024200|errorOfObservedData|double|ERROR OF OBSERVED DATA|%|1|0|10
+024201|routineOrSpecialOrTestObservation|table|ROUTINE/SPECIAL/TEST OBSERVATION|Code table|0|0|2
+025192|dewPointAircraftAlti+airTtIdRecco|table|DEW POINT,AIRCRAFT ALTI+AIR TT ID(RECCO)|Code table|0|0|4
+051192|shortDistanceLightning|long|SHORT DISTANCE LIGHTNING|Numeric|0|0|7
+051193|distantLightning|long|DISTANT LIGHTNING|Numeric|0|0|7
+052192|landSeaRatio|long|LAND SEA RATIO|%|0|0|7
+052193|coeffOfTurbTranfOfImpulseSurface|table|COEFF.OF TURB.TRANF.OF IMPULSE,SURFACE|Code table|5|0|17
+052194|coeffOfTurbTranfOfHeatOrHumSurface|table|COEFF.OF TURB.TRANF.OF HEAT/HUM.,SURFACE|Code table|5|0|17
+052195|impulseFlowUAtSurfPeriodSpecif|long|IMPULSE FLOW(U) AT SURF.,PERIOD SPECIF.|G/(M*S**2)|0|-2048|12
+052196|impulseFlowVAtSurfPeriodSpecif|long|IMPULSE FLOW(V) AT SURF.,PERIOD SPECIF.|G/(M*S**2)|0|-2048|12
+052197|flowOfSensHeatAtSurfPeriodSpec|double|FLOW OF SENS.HEAT AT SURF.,PERIOD SPEC.|J m-2|-3|-16384|15
+052198|flowOfLatHeatAtSurfPeriodSpecif|double|FLOW OF LAT.HEAT AT SURF.,PERIOD SPECIF.|J m-2|-3|-16384|15
+052199|roughnessLengthMultipliedByG|double|ROUGHNESS LENGTH (MULTIPLIED BY G)|m2 s-2|2|0|12
+052200|boundaryLayerDissipation|double|BOUNDARY LAYER DISSIPATION|J m-2|-3|-2048|12
+052201|soilHeatFluxSurface|double|SOIL HEAT FLUX, SURFACE|J m-2|-2|-16384|15
+052202|soilHeatFluxBottomOfLayer1|double|SOIL HEAT FLUX, BOTTOM OF LAYER 1|J m-2|-2|-16384|15
+052210|referenceNoAndDdOfTheHillTab32|table|REFERENCE NO AND DD OF THE HILL - TAB 32|Code table|0|0|4
+053001|geopotentialDevFromFirstGuess|long|GEOPOTENTIAL,DEV.FROM FIRST GUESS|m2 s-2|0|-10000|16
+053002|uComponentDevFromFirstGuess|double|U-COMPONENT,DEV.FROM FIRST GUESS|m/s|1|-2000|13
+053003|vComponentDevFromFirstGuess|double|V-COMPONENT,DEV.FROM FIRST GUESS|m/s|1|-2000|13
+053004|relHumidityDevFromFirstGuess|double|REL.HUMIDITY,DEV.FROM FIRST GUESS|%|1|-1000|12
+053005|thicknessDevFromFirstGuess|long|THICKNESS,DEV.FROM FIRST GUESS|m2 s-2|0|-10000|16
+053011|geopotentialDevFromAnalysis|long|GEOPOTENTIAL,DEV.FROM ANALYSIS|m2 s-2|0|-10000|16
+053012|uComponentDevFromAnalysis|double|U-COMPONENT,DEV.FROM ANALYSIS|m/s|1|-2000|13
+053013|vComponentDevFromAnalysis|double|V-COMPONENT,DEV.FROM ANALYSIS|m/s|1|-2000|13
+053014|relHumidityDevFromAnalysis|double|REL.HUMIDITY,DEV.FROM ANALYSIS|%|1|-1000|12
+053015|thicknessDevFromAnalysis|long|THICKNESS,DEV.FROM ANALYSIS|m2 s-2|0|-10000|16
+053021|geopotentialDevFrInitializedAnalysis|long|GEOPOTENTIAL,DEV.FR.INITIALIZED ANALYSIS|m2 s-2|0|-10000|16
+053022|uComponentDevFrInitializedAnalysis|double|U-COMPONENT,DEV.FR.INITIALIZED ANALYSIS|m/s|1|-2000|13
+053023|vComponentDevFrInitializedAnalysis|double|V-COMPONENT,DEV.FR.INITIALIZED ANALYSIS|m/s|1|-2000|13
+053024|relHumidityDevFrInitializedAnalysis|double|REL.HUMIDITY,DEV.FR.INITIALIZED ANALYSIS|%|1|-1000|12
+053025|thicknessDevFrInitializedAnalysis|long|THICKNESS,DEV.FR.INITIALIZED ANALYSIS|m2 s-2|0|-10000|16
+053031|geopotentialDevFromForecastA|long|GEOPOTENTIAL,DEV.FROM FORECAST A|m2 s-2|0|-10000|16
+053032|uComponentDevFromForecastA|double|U-COMPONENT,DEV.FROM FORECAST A|m/s|1|-2000|13
+053033|vComponentDevFromForecastA|double|V-COMPONENT,DEV.FROM FORECAST A|m/s|1|-2000|13
+053034|relHumidityDevFromForecastA|double|REL.HUMIDITY,DEV.FROM FORECAST A|%|1|-1000|12
+053035|thicknessDevFromForecastA|long|THICKNESS,DEV.FROM FORECAST A|m2 s-2|0|-10000|16
+053041|geopotentialDevFromForecastB|long|GEOPOTENTIAL,DEV.FROM FORECAST B|m2 s-2|0|-10000|16
+053042|uComponentDevFromForecastB|double|U-COMPONENT,DEV.FROM FORECAST B|m/s|1|-2000|13
+053043|vComponentDevFromForecastB|double|V-COMPONENT,DEV.FROM FORECAST B|m/s|1|-2000|13
+053044|relHumidityDevFromForecastB|double|REL.HUMIDITY,DEV.FROM FORECAST B|%|1|-1000|12
+053045|thicknessDevFromForecastB|long|THICKNESS,DEV.FROM FORECAST B|m2 s-2|0|-10000|16
+053051|geopotentialDevFromForecastC|long|GEOPOTENTIAL,DEV.FROM FORECAST C|m2 s-2|0|-10000|16
+053052|uComponentDevFromForecastC|double|U-COMPONENT,DEV.FROM FORECAST C|m/s|1|-2000|13
+053053|vComponentDevFromForecastC|double|V-COMPONENT,DEV.FROM FORECAST C|m/s|1|-2000|13
+053054|relHumidityDevFromForecastC|double|REL.HUMIDITY,DEV.FROM FORECAST C|%|1|-1000|12
+053055|thicknessDevFromForecastC|long|THICKNESS,DEV.FROM FORECAST C|m2 s-2|0|-10000|16
+053061|geopotentialQualityFlags|flag|GEOPOTENTIAL, QUALITY FLAGS|Flag table|0|0|32
+053062|uComponentQualityFlags|flag|U-COMPONENT, QUALITY FLAGS|Flag table|0|0|32
+053063|vComponentQualityFlags|flag|V-COMPONENT, QUALITY FLAGS|Flag table|0|0|32
+053064|relHumidityQualityFlags|flag|REL.HUMIDITY, QUALITY FLAGS|Flag table|0|0|32
+053065|thicknessQualityFlags|flag|THICKNESS, QUALITY FLAGS|Flag table|0|0|32
+053066|temperatureQualityFlags|flag|TEMPERATURE,QUALITY FLAGS|Flag table|0|0|32
+053067|pressureAtObsLevelQualityFlags|flag|PRESSURE AT OBS.LEVEL,QUALITY FLAGS|Flag table|0|0|32
+053068|dewPointTemperatureQualityFlags|flag|DEW POINT TEMPERATURE,QUALITY FLAGS|Flag table|0|0|32
+053069|maxWindGustsQualityFlags|flag|MAX WIND (GUSTS), QUALITY FLAGS|Flag table|0|0|32
+053070|maxTemperature2mQualityFlags|flag|MAX TEMPERATURE(2M), QUALITY FLAGS|Flag table|0|0|32
+053071|minTemperature2mQualityFlags|flag|MIN TEMPERATURE(2M), QUALITY FLAGS|Flag table|0|0|32
+053072|groundMinTemperatureQualityFlags|flag|GROUND MIN.TEMPERATURE, QUALITY FLAGS|Flag table|0|0|32
+053073|cloudCoverQualityFlags|flag|CLOUD COVER, QUALITY FLAGS|Flag table|0|0|32
+053074|lowCloudCoverQualityFlags|flag|LOW CLOUD COVER, QUALITY FLAGS|Flag table|0|0|32
+053075|horizontalVisibilityQualityFlags|flag|HORIZONTAL VISIBILITY, QUALITY FLAGS|Flag table|0|0|32
+053076|totalPrecipitationQualityFlags|flag|TOTAL PRECIPITATION, QUALITY FLAGS|Flag table|0|0|32
+053077|globalRadiationQualityFlags|flag|GLOBAL RADIATION, QUALITY FLAGS|Flag table|0|0|32
+053101|geopotentialDevFrDefField|long|GEOPOTENTIAL,DEV.FR.DEF.FIELD|m2 s-2|0|-16384|15
+053102|uComponentDevFrDefField|double|U-COMPONENT,DEV.FR.DEF.FIELD|m/s|1|-2048|12
+053103|vComponentDevFrDefField|double|V-COMPONENT,DEV.FR.DEF.FIELD|m/s|1|-2048|12
+053104|relativeHumidityDevFrDefField|double|RELATIVE HUMIDITY,DEV.FR.DEF.FIELD|%|1|-1024|11
+053105|thicknessDevFrDefField|long|THICKNESS,DEV.FR.DEF.FIELD|m2 s-2|0|-16384|15
+053106|temperatureDevFrDefField|double|TEMPERATURE,DEV.FR.DEF.FIELD|K|2|-8096|14
+053107|pressureAtObsLevelDevFrDefField|long|PRESSURE AT OBS.LEVEL,DEV.FR.DEF.FIELD|Pa|0|-16384|15
+053108|dewPointTemperatureDevFrDefField|double|DEW POINT TEMPERATURE,DEV.FR.DEF.FIELD|K|1|-1024|11
+053109|maxWindGustsDevFrDefField|double|MAX WIND (GUSTS),DEV.FR.DEF.FIELD|m/s|1|-2048|12
+053110|maxTemperature2mDevFrDefField|double|MAX TEMPERATURE(2M),DEV.FR.DEF.FIELD|K|1|-1024|11
+053111|minTemperature2mDevFrDefField|double|MIN TEMPERATURE(2M),DEV.FR.DEF.FIELD|K|1|-1024|11
+053112|groundMinTemperatureDevFrDefField|double|GROUND MIN.TEMPERATURE,DEV.FR.DEF.FIELD|K|1|-1024|11
+053113|cloudCoverDevFrDefField|long|CLOUD COVER,DEV.FR.DEF.FIELD|%|0|-128|8
+053114|lowCloudCoverDevFrDefField|long|LOW CLOUD COVER,DEV.FR.DEF.FIELD|%|0|-128|8
+053115|horizontalVisibilityDevFrDefField|double|HORIZONTAL VISIBILITY,DEV.FR.DEF.FIELD|m|-1|-8192|14
+053116|totalPrecipitationDevFrDefField|double|TOTAL PRECIPITATION,DEV.FR.DEF.FIELD|kg m-2|1|-16384|15
+053117|globalRadiationDevFrDefField|double|GLOBAL RADIATION,DEV.FR.DEF.FIELD|J m-2|-4|-32768|16
+054201|yearOfDecoding|long|YEAR OF DECODING|a|0|0|12
+054202|monthOfDecoding|long|MONTH OF DECODING|mon|0|0|4
+054203|dayOfDecoding|long|DAY OF DECODING|d|0|0|6
+054204|hourOfDecoding|long|HOUR OF DECODING|h|0|0|5
+054205|minuteOfDecoding|long|MINUTE OF DECODING|min|0|0|6
+054211|numberOfDayOfMrzBackUpFile|long|NUMBER OF DAY OF MRZ BACK-UP FILE|d|0|0|6
+054212|numberOfRecordOnMrzBackUpFile|long|NUMBER OF RECORD ON MRZ BACK-UP FILE|Numeric|0|0|18
+054213|decodingRunningOnMfaOrMfbValues1Or0|long|DECODING RUNNING ON MFA/MFB (VALUES 1/0)|Numeric|0|0|2
+055192|kindOfPlants|table|KIND OF PLANTS|Code table|0|0|7
+055193|stepOfGrowth|table|STEP OF GROWTH|Code table|0|0|7
+055194|progressOfGrowth|table|PROGRESS OF GROWTH|Code table|0|0|4
+055195|plantDamage|table|PLANT DAMAGE|Code table|0|0|4
+055196|landUse|table|LAND USE|Code table|0|0|3
+055201|typeOfLandSurface|table|TYPE OF LAND SURFACE|Code table|0|0|5
+055202|plantCover|long|PLANT COVER|%|0|0|7
+055203|leafAreaIndex|long|LEAF AREA INDEX|%|0|0|7
+056001|flightConditionsRecco|table|FLIGHT CONDITIONS (RECCO)|Code table|0|0|4
+056002|presentWeatherRecco|table|PRESENT WEATHER (RECCO)|Code table|0|0|4
+056003|significantWeatherChanges|table|SIGNIFICANT WEATHER CHANGES|Code table|0|0|4
+056004|distantWeather|table|DISTANT WEATHER|Code table|0|0|4
+056005|rateOfIcing|table|RATE OF ICING|Code table|0|0|2
+056006|typeOfIcingAndTypeOfContrails|table|TYPE OF ICING AND TYPE OF CONTRAILS|Code table|0|0|4
+056007|altitudeOfBaseOfLayerInWhichIOcc|double|ALTITUDE OF BASE OF LAYER IN WHICH I OCC|m|-1|-40|11
+056008|altitudeOfTopOfLayerInWhichIOcc|double|ALTITUDE OF TOP OF LAYER IN WHICH I OCC|m|-1|-40|11
+056009|inFlightHorizontalVisibility|table|IN-FLIGHT HORIZONTAL VISIBILITY|Code table|0|0|2
+056010|amountOfIce|table|AMOUNT OF ICE|Code table|0|0|4
+056011|iceTopography|table|ICE TOPOGRAPHY|Code table|0|0|4
+056012|icePuddles|table|ICE PUDDLES|Code table|0|0|4
+056013|orientationOfOpeningsInTheIce|table|ORIENTATION OF OPENINGS IN THE ICE|Code table|0|0|4
+056014|widthOfTheOpeningsInTheIce|double|WIDTH OF THE OPENINGS IN THE ICE|m|-1|0|13
+056015|intensityOfBirdstrikeWarning|long|INTENSITY OF BIRDSTRIKE WARNING|Numeric|0|0|4
+056192|blockOfTheContinuousWeatherTrend|string|BLOCK OF THE CONTINUOUS WEATHER TREND|CCITT IA5|0|0|64
+056193|blockOfTheNotes|string|BLOCK OF THE NOTES|CCITT IA5|0|0|64
+056194|blockOfDangerousWeather|string|BLOCK OF DANGEROUS WEATHER|CCITT IA5|0|0|64
+056195|blockOfWinterSportsObservation|string|BLOCK OF WINTER SPORTS OBSERVATION|CCITT IA5|0|0|64
+056196|blockOfOrnithologicalObservation|string|BLOCK OF ORNITHOLOGICAL OBSERVATION|CCITT IA5|0|0|64
+056197|blockOfWeatherHistory|string|BLOCK OF WEATHER HISTORY|CCITT IA5|0|0|64
+056198|blockOfAdditionalObservation|string|BLOCK OF ADDITIONAL OBSERVATION|CCITT IA5|0|0|64
+056199|blockOf9spspspsp|string|BLOCK OF 9SPSPSPSP|CCITT IA5|0|0|64
+056200|blockOfPhaenologicalReport|string|BLOCK OF PHAENOLOGICAL REPORT|CCITT IA5|0|0|64
+056201|blockOfAdditionalComment|string|BLOCK OF ADDITIONAL COMMENT|CCITT IA5|0|0|64
+056202|blockOfAdditionalComment|string|BLOCK OF ADDITIONAL COMMENT|CCITT IA5|0|0|200

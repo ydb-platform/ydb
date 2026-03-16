@@ -1,0 +1,113 @@
+# Brazilian Portuguese translation for django-simple-history
+# Copyright (C) 2017
+# This file is distributed under the same license as the django-simple-history package.
+# Eduardo Cuducos <cuducos@github.com>, 2017.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-simple-history\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2017-06-01 11:02-0300\n"
+"PO-Revision-Date: 2017-06-01 15:47-0300\n"
+"Last-Translator: Eduardo Cuducos <cuducos@github.com>\n"
+"Language-Team: Brazilian Portuguese <django-commons@github.com>\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Generator: Poedit 1.8.11\n"
+
+#: simple_history/admin.py:73
+#, python-format
+msgid "Change history: %s"
+msgstr "Histórico de modificações: %s"
+
+#: simple_history/admin.py:92
+#, python-format
+msgid "The %(name)s \"%(obj)s\" was changed successfully."
+msgstr "%(name)s \"%(obj)s\" modificados com sucesso."
+
+#: simple_history/admin.py:98
+msgid "You may edit it again below"
+msgstr "Você pode fazer novas modificações abaixo:"
+
+#: simple_history/admin.py:156
+#, python-format
+msgid "Revert %s"
+msgstr "Reverter %s"
+
+#: simple_history/models.py:209
+msgid "Created"
+msgstr "Criado"
+
+#: simple_history/models.py:210
+msgid "Changed"
+msgstr "Modificado"
+
+#: simple_history/models.py:211
+msgid "Deleted"
+msgstr "Excluído"
+
+#: simple_history/templates/simple_history/object_history.html:10
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr ""
+"Escolha a data desejada na lista a seguir para reverter as modificações "
+"feitas nesse objeto."
+
+#: simple_history/templates/simple_history/object_history.html:46
+msgid "This object doesn't have a change history."
+msgstr "Esse objeto não tem um histórico de modificações."
+
+#: simple_history/templates/simple_history/object_history_form.html:7
+msgid "Home"
+msgstr "Início"
+
+#: simple_history/templates/simple_history/object_history_form.html:11
+msgid "History"
+msgstr "Histórico"
+
+#: simple_history/templates/simple_history/object_history_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Reverter %(verbose_name)s"
+
+#: simple_history/templates/simple_history/object_history_form.html:21
+msgid ""
+"Press the 'Revert' button below to revert to this version of the object."
+msgstr ""
+"Clique em 'Reverter' para reverter as modificações feitas nesse objeto."
+
+#: simple_history/templates/simple_history/object_history_form.html:21
+msgid "Or press the 'Change History' button to edit the history."
+msgstr "Ou clique em 'Histórico de Modificações' para modificar o histórico."
+
+#: simple_history/templates/simple_history/object_history_list.html:9
+msgid "Object"
+msgstr "Objeto"
+
+#: simple_history/templates/simple_history/object_history_list.html:13
+msgid "Date/time"
+msgstr "Data/hora"
+
+#: simple_history/templates/simple_history/object_history_list.html:14
+msgid "Comment"
+msgstr "Comentário"
+
+#: simple_history/templates/simple_history/object_history_list.html:15
+msgid "Changed by"
+msgstr "Modificado por"
+
+#: simple_history/templates/simple_history/object_history_list.html:42
+msgid "None"
+msgstr "-"
+
+#: simple_history/templates/simple_history/submit_line.html:3
+msgid "Revert"
+msgstr "Reverter"
+
+#: simple_history/templates/simple_history/submit_line.html:4
+msgid "Change History"
+msgstr "Histórico de Modificações"

@@ -1,0 +1,569 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.kafka.v1;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/mdb/kafka/v1/common.proto";
+import "yandex/cloud/mdb/kafka/v1/maintenance.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/kafka/v1;kafka";
+option java_package = "yandex.cloud.api.mdb.kafka.v1";
+
+// An Apache Kafka® cluster resource.
+// For more information, see the [Concepts](/docs/managed-kafka/concepts) section of the documentation.
+message Cluster {
+  enum Environment {
+    // Unspecified environment.
+    ENVIRONMENT_UNSPECIFIED = 0;
+
+    // Stable environment with a conservative update policy when only hotfixes are applied during regular maintenance.
+    PRODUCTION = 1;
+
+    // Environment with a more aggressive update policy when new versions are rolled out irrespective of backward compatibility.
+    PRESTABLE = 2;
+  }
+
+  enum Health {
+
+    // State of the cluster is unknown ([Host.health] of all hosts in the cluster is `UNKNOWN`).
+    HEALTH_UNKNOWN = 0;
+
+    // Cluster is alive and well ([Host.health] of all hosts in the cluster is `ALIVE`).
+    ALIVE = 1;
+
+    // Cluster is inoperable ([Host.health] of all hosts in the cluster is `DEAD`).
+    DEAD = 2;
+
+    // Cluster is in degraded state ([Host.health] of at least one of the hosts in the cluster is not `ALIVE`).
+    DEGRADED = 3;
+  }
+
+  enum Status {
+
+    // Cluster state is unknown.
+    STATUS_UNKNOWN = 0;
+
+    // Cluster is being created.
+    CREATING = 1;
+
+    // Cluster is running normally.
+    RUNNING = 2;
+
+    // Cluster encountered a problem and cannot operate.
+    ERROR = 3;
+
+    // Cluster is being updated.
+    UPDATING = 4;
+
+    // Cluster is stopping.
+    STOPPING = 5;
+
+    // Cluster stopped.
+    STOPPED = 6;
+
+    // Cluster is starting.
+    STARTING = 7;
+  }
+
+  // ID of the Apache Kafka® cluster.
+  // This ID is assigned at creation time.
+  string id = 1;
+
+  // ID of the folder that the Apache Kafka® cluster belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the Apache Kafka® cluster.
+  // The name must be unique within the folder. 1-63 characters long. Value must match the regular expression `[a-zA-Z0-9_-]*`.
+  string name = 4;
+
+  // Description of the Apache Kafka® cluster. 0-256 characters long.
+  string description = 5;
+
+  // Custom labels for the Apache Kafka® cluster as `key:value` pairs.
+  // A maximum of 64 labels per resource is allowed.
+  map<string, string> labels = 6;
+
+  // Deployment environment of the Apache Kafka® cluster.
+  Environment environment = 7;
+
+  // Description of monitoring systems relevant to the Apache Kafka® cluster.
+  // * The field is ignored for response of List method.
+  repeated Monitoring monitoring = 8;
+
+  // Configuration of the Apache Kafka® cluster.
+  // * The field is ignored for response of List method.
+  ConfigSpec config = 9;
+
+  // ID of the network that the cluster belongs to.
+  string network_id = 10;
+
+  // Aggregated cluster health.
+  Health health = 11;
+
+  // Current state of the cluster.
+  Status status = 12;
+
+  // User security groups
+  repeated string security_group_ids = 13;
+
+  // Host groups hosting VMs of the cluster.
+  repeated string host_group_ids = 14;
+
+  // Deletion Protection inhibits deletion of the cluster
+  bool deletion_protection = 15;
+
+  // Window of maintenance operations.
+  MaintenanceWindow maintenance_window = 16;
+
+  // Scheduled maintenance operation.
+  MaintenanceOperation planned_operation = 17;
+
+  message KafkaUI {
+    // URL for connection to kafka ui
+    string url = 1;
+  }
+  // KafkaUI state.
+  KafkaUI kafka_ui = 18;
+  // ID of the key to encrypt cluster disks.
+  google.protobuf.StringValue disk_encryption_key_id = 19;
+}
+
+// Metadata of monitoring system.
+message Monitoring {
+  // Name of the monitoring system.
+  string name = 1;
+
+  // Description of the monitoring system.
+  string description = 2;
+
+  // Link to the monitoring system charts for the Apache Kafka® cluster.
+  string link = 3;
+}
+
+message ConfigSpec {
+  message Kafka {
+    reserved 2 to 3;
+
+    // Resources allocated to Kafka brokers.
+    Resources resources = 1;
+
+    // Kafka broker configuration.
+    oneof kafka_config {
+      // Configuration of an Apache Kafka® 2.8 broker.
+      KafkaConfig2_8 kafka_config_2_8 = 4 [json_name = "kafkaConfig_2_8"];
+      // Configuration of an Apache Kafka® 3.x broker.
+      KafkaConfig3 kafka_config_3 = 5 [json_name = "kafkaConfig_3"];
+      // Configuration of an Apache Kafka® 4.x broker.
+      KafkaConfig4 kafka_config_4 = 6 [json_name="kafkaConfig_4"];
+    }
+  }
+
+  message Zookeeper {
+    // Resources allocated to ZooKeeper hosts.
+    Resources resources = 1;
+  }
+
+  message KRaft {
+    // Resources allocated to KRaft controller hosts.
+    Resources resources = 1;
+  }
+
+  // Version of Apache Kafka® used in the cluster. Possible values: `2.8`, `3.0`, `3.1`, `3.2`, `3.3`, `3.4`, `3.5`, `3.6`.
+  string version = 1;
+
+  // Configuration and resource allocation for Kafka brokers.
+  Kafka kafka = 2;
+
+  // Configuration and resource allocation for ZooKeeper hosts.
+  Zookeeper zookeeper = 3;
+
+  // IDs of availability zones where Kafka brokers reside.
+  repeated string zone_id = 4;
+
+  // The number of Kafka brokers deployed in each availability zone.
+  google.protobuf.Int64Value brokers_count = 5;
+
+  // The flag that defines whether a public IP address is assigned to the cluster.
+  // If the value is `true`, then Apache Kafka® cluster is available on the Internet via it's public IP address.
+  bool assign_public_ip = 6;
+
+  // Allows to manage topics via AdminAPI
+  // Deprecated. Feature enabled permanently.
+  bool unmanaged_topics = 7 [deprecated = true];
+
+  // Enables managed schema registry on cluster
+  bool schema_registry = 8;
+
+  // Access policy for external services.
+  Access access = 9;
+
+  message RestAPIConfig {
+    // Is REST API enabled for this cluster.
+    bool enabled = 1;
+  }
+
+  // Configuration of REST API.
+  RestAPIConfig rest_api_config = 10;
+
+  // DiskSizeAutoscaling settings
+  DiskSizeAutoscaling disk_size_autoscaling = 11;
+
+  // Configuration and resource allocation for KRaft-controller hosts.
+  KRaft kraft = 12;
+
+  message KafkaUIConfig {
+    // Is Kafka UI enabled for this cluster.
+    bool enabled = 1;
+  }
+
+  // Configuration of Kafka UI.
+  KafkaUIConfig kafka_ui_config = 13;
+  // Patch or release version ex. 3.9.1, 4.0.1 etc
+  string patch_version = 14;
+}
+
+message Resources {
+  // ID of the preset for computational resources available to a host (CPU, memory, etc.).
+  // All available presets are listed in the [documentation](/docs/managed-kafka/concepts/instance-types).
+  string resource_preset_id = 1;
+
+  // Volume of the storage available to a host, in bytes. Must be greater than 2 * partition segment size in bytes * partitions count, so each partition can have one active segment file and one closed segment file that can be deleted.
+  int64 disk_size = 2;
+
+  // Type of the storage environment for the host.
+  string disk_type_id = 3;
+}
+
+// Kafka version 2.8 broker configuration.
+message KafkaConfig2_8 {
+  // Cluster topics compression type.
+  CompressionType compression_type = 1;
+
+  // The number of messages accumulated on a log partition before messages are flushed to disk.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig2_8.flush_messages] setting.
+  google.protobuf.Int64Value log_flush_interval_messages = 2;
+
+  // The maximum time (in milliseconds) that a message in any topic is kept in memory before flushed to disk.
+  // If not set, the value of [log_flush_scheduler_interval_ms] is used.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig2_8.flush_ms] setting.
+  google.protobuf.Int64Value log_flush_interval_ms = 3;
+
+  // The frequency of checks (in milliseconds) for any logs that need to be flushed to disk.
+  // This check is done by the log flusher.
+  google.protobuf.Int64Value log_flush_scheduler_interval_ms = 4;
+
+  // Partition size limit; Kafka will discard old log segments to free up space if `delete` [TopicConfig2_8.cleanup_policy] is in effect.
+  // This setting is helpful if you need to control the size of a log due to limited disk space.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig2_8.retention_bytes] setting.
+  google.protobuf.Int64Value log_retention_bytes = 5;
+
+  // The number of hours to keep a log segment file before deleting it.
+  google.protobuf.Int64Value log_retention_hours = 6;
+
+  // The number of minutes to keep a log segment file before deleting it.
+  //
+  // If not set, the value of [log_retention_hours] is used.
+  google.protobuf.Int64Value log_retention_minutes = 7;
+
+  // The number of milliseconds to keep a log segment file before deleting it.
+  //
+  // If not set, the value of [log_retention_minutes] is used.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig2_8.retention_ms] setting.
+  google.protobuf.Int64Value log_retention_ms = 8;
+
+  // The maximum size of a single log file.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig2_8.segment_bytes] setting.
+  google.protobuf.Int64Value log_segment_bytes = 9;
+
+  // Should pre allocate file when create new segment?
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig2_8.preallocate] setting.
+  // Deprecated. Feature useless for Yandex Cloud.
+  google.protobuf.BoolValue log_preallocate = 10 [deprecated = true];
+
+  // The SO_SNDBUF buffer of the socket server sockets. If the value is -1, the OS default will be used.
+  google.protobuf.Int64Value socket_send_buffer_bytes = 11;
+
+  // The SO_RCVBUF buffer of the socket server sockets. If the value is -1, the OS default will be used.
+  google.protobuf.Int64Value socket_receive_buffer_bytes = 12;
+
+  // Enable auto creation of topic on the server
+  google.protobuf.BoolValue auto_create_topics_enable = 13;
+
+  // Default number of partitions per topic on the whole cluster
+  google.protobuf.Int64Value num_partitions = 14;
+
+  // Default replication factor of the topic on the whole cluster
+  google.protobuf.Int64Value default_replication_factor = 15;
+
+  // The largest record batch size allowed by Kafka. Default value: 1048588.
+  google.protobuf.Int64Value message_max_bytes = 16;
+
+  // The number of bytes of messages to attempt to fetch for each partition. Default value: 1048576.
+  google.protobuf.Int64Value replica_fetch_max_bytes = 17;
+
+  // A list of cipher suites.
+  repeated string ssl_cipher_suites = 18;
+
+  // Offset storage time after a consumer group loses all its consumers. Default: 10080.
+  google.protobuf.Int64Value offsets_retention_minutes = 19;
+
+  // The list of SASL mechanisms enabled in the Kafka server. Default: [SCRAM_SHA_512].
+  repeated SaslMechanism sasl_enabled_mechanisms = 20;
+}
+
+// Kafka version 3.x broker configuration.
+message KafkaConfig3 {
+  // Cluster topics compression type.
+  CompressionType compression_type = 1;
+
+  // The number of messages accumulated on a log partition before messages are flushed to disk.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig3.flush_messages] setting.
+  google.protobuf.Int64Value log_flush_interval_messages = 2;
+
+  // The maximum time (in milliseconds) that a message in any topic is kept in memory before flushed to disk.
+  // If not set, the value of [log_flush_scheduler_interval_ms] is used.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig3.flush_ms] setting.
+  google.protobuf.Int64Value log_flush_interval_ms = 3;
+
+  // The frequency of checks (in milliseconds) for any logs that need to be flushed to disk.
+  // This check is done by the log flusher.
+  google.protobuf.Int64Value log_flush_scheduler_interval_ms = 4;
+
+  // Partition size limit; Kafka will discard old log segments to free up space if `delete` [TopicConfig3.cleanup_policy] is in effect.
+  // This setting is helpful if you need to control the size of a log due to limited disk space.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig3.retention_bytes] setting.
+  google.protobuf.Int64Value log_retention_bytes = 5;
+
+  // The number of hours to keep a log segment file before deleting it.
+  google.protobuf.Int64Value log_retention_hours = 6;
+
+  // The number of minutes to keep a log segment file before deleting it.
+  //
+  // If not set, the value of [log_retention_hours] is used.
+  google.protobuf.Int64Value log_retention_minutes = 7;
+
+  // The number of milliseconds to keep a log segment file before deleting it.
+  //
+  // If not set, the value of [log_retention_minutes] is used.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig3.retention_ms] setting.
+  google.protobuf.Int64Value log_retention_ms = 8;
+
+  // The maximum size of a single log file.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig3.segment_bytes] setting.
+  google.protobuf.Int64Value log_segment_bytes = 9;
+
+  // Should pre allocate file when create new segment?
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig3.preallocate] setting.
+  // Deprecated. Feature useless for Yandex Cloud.
+  google.protobuf.BoolValue log_preallocate = 10 [deprecated = true];
+
+  // The SO_SNDBUF buffer of the socket server sockets. If the value is -1, the OS default will be used.
+  google.protobuf.Int64Value socket_send_buffer_bytes = 11;
+
+  // The SO_RCVBUF buffer of the socket server sockets. If the value is -1, the OS default will be used.
+  google.protobuf.Int64Value socket_receive_buffer_bytes = 12;
+
+  // Enable auto creation of topic on the server
+  google.protobuf.BoolValue auto_create_topics_enable = 13;
+
+  // Default number of partitions per topic on the whole cluster
+  google.protobuf.Int64Value num_partitions = 14;
+
+  // Default replication factor of the topic on the whole cluster
+  google.protobuf.Int64Value default_replication_factor = 15;
+
+  // The largest record batch size allowed by Kafka. Default value: 1048588.
+  google.protobuf.Int64Value message_max_bytes = 16;
+
+  // The number of bytes of messages to attempt to fetch for each partition. Default value: 1048576.
+  google.protobuf.Int64Value replica_fetch_max_bytes = 17;
+
+  // A list of cipher suites.
+  repeated string ssl_cipher_suites = 18;
+
+  // Offset storage time after a consumer group loses all its consumers. Default: 10080.
+  google.protobuf.Int64Value offsets_retention_minutes = 19;
+
+  // The list of SASL mechanisms enabled in the Kafka server. Default: [SCRAM_SHA_512].
+  repeated SaslMechanism sasl_enabled_mechanisms = 20;
+}
+
+// Kafka version 4.x broker configuration.
+message KafkaConfig4 {
+  reserved 10;
+
+  // Cluster topics compression type.
+  CompressionType compression_type = 1;
+
+  // The number of messages accumulated on a log partition before messages are flushed to disk.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig3.flush_messages] setting.
+  google.protobuf.Int64Value log_flush_interval_messages = 2;
+
+  // The maximum time (in milliseconds) that a message in any topic is kept in memory before flushed to disk.
+  // If not set, the value of [log_flush_scheduler_interval_ms] is used.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig4.flush_ms] setting.
+  google.protobuf.Int64Value log_flush_interval_ms = 3;
+
+  // The frequency of checks (in milliseconds) for any logs that need to be flushed to disk.
+  // This check is done by the log flusher.
+  google.protobuf.Int64Value log_flush_scheduler_interval_ms = 4;
+
+  // Partition size limit; Kafka will discard old log segments to free up space if `delete` [TopicConfig4.cleanup_policy] is in effect.
+  // This setting is helpful if you need to control the size of a log due to limited disk space.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig3.retention_bytes] setting.
+  google.protobuf.Int64Value log_retention_bytes = 5;
+
+  // The number of hours to keep a log segment file before deleting it.
+  google.protobuf.Int64Value log_retention_hours = 6;
+
+  // The number of minutes to keep a log segment file before deleting it.
+  //
+  // If not set, the value of [log_retention_hours] is used.
+  google.protobuf.Int64Value log_retention_minutes = 7;
+
+  // The number of milliseconds to keep a log segment file before deleting it.
+  //
+  // If not set, the value of [log_retention_minutes] is used.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig4.retention_ms] setting.
+  google.protobuf.Int64Value log_retention_ms = 8;
+
+  // The maximum size of a single log file.
+  //
+  // This is the global cluster-level setting that can be overridden on a topic level by using the [TopicConfig4.segment_bytes] setting.
+  google.protobuf.Int64Value log_segment_bytes = 9;
+
+  // NOTE: log_preallocate was removed in Kafka 4.x.
+
+  // The SO_SNDBUF buffer of the socket server sockets. If the value is -1, the OS default will be used.
+  google.protobuf.Int64Value socket_send_buffer_bytes = 11;
+
+  // The SO_RCVBUF buffer of the socket server sockets. If the value is -1, the OS default will be used.
+  google.protobuf.Int64Value socket_receive_buffer_bytes = 12;
+
+  // Enable auto creation of topic on the server
+  google.protobuf.BoolValue auto_create_topics_enable = 13;
+
+  // Default number of partitions per topic on the whole cluster
+  google.protobuf.Int64Value num_partitions = 14;
+
+  // Default replication factor of the topic on the whole cluster
+  google.protobuf.Int64Value default_replication_factor = 15;
+
+  // The largest record batch size allowed by Kafka. Default value: 1048588.
+  google.protobuf.Int64Value message_max_bytes = 16;
+
+  // The number of bytes of messages to attempt to fetch for each partition. Default value: 1048576.
+  google.protobuf.Int64Value replica_fetch_max_bytes = 17;
+
+  // A list of cipher suites.
+  repeated string ssl_cipher_suites = 18;
+
+  // Offset storage time after a consumer group loses all its consumers. Default: 10080.
+  google.protobuf.Int64Value offsets_retention_minutes = 19;
+
+  // The list of SASL mechanisms enabled in the Kafka server. Default: [SCRAM_SHA_512].
+  repeated SaslMechanism sasl_enabled_mechanisms = 20;
+}
+
+// Cluster host metadata.
+message Host {
+  reserved 7;
+  enum Role {
+    // Role of the host is unspecified. Default value.
+    ROLE_UNSPECIFIED = 0;
+
+    // The host is a Kafka broker.
+    KAFKA = 1;
+
+    // The host is a ZooKeeper server.
+    ZOOKEEPER = 2;
+
+    // The host is a Kafka KRaft controller broker.
+    KRAFT = 3;
+  }
+
+  enum Health {
+
+    // Health of the host is unknown. Default value.
+    UNKNOWN = 0;
+
+    // The host is performing all its functions normally.
+    ALIVE = 1;
+
+    // The host is inoperable and cannot perform any of its essential functions.
+    DEAD = 2;
+
+    // The host is degraded and can perform only some of its essential functions.
+    DEGRADED = 3;
+  }
+
+  // Name of the host.
+  string name = 1;
+
+  // ID of the Apache Kafka® cluster.
+  string cluster_id = 2;
+
+  // ID of the availability zone where the host resides.
+  string zone_id = 3;
+
+  // Host role. If the field has default value, it is not returned in the response.
+  Role role = 4;
+
+  // Computational resources allocated to the host.
+  Resources resources = 5;
+
+  // Aggregated host health data. If the field has default value, it is not returned in the response.
+  Health health = 6;
+
+  // ID of the subnet the host resides in.
+  string subnet_id = 8;
+
+  // The flag that defines whether a public IP address is assigned to the node.
+  //
+  // If the value is `true`, then this node is available on the Internet via it's public IP address.
+  bool assign_public_ip = 9;
+}
+
+message Access {
+  // Allow access for DataTransfer.
+  bool data_transfer = 1;
+}
+
+message DiskSizeAutoscaling {
+  // Threshold of storage usage (in percent) that triggers automatic scaling of the storage during the maintenance window. Zero value means disabled threshold.
+  int64 planned_usage_threshold = 1 [
+    (required) = false,
+    (value) = "0-100"
+  ];
+
+  // Threshold of storage usage (in percent) that triggers immediate automatic scaling of the storage. Zero value means disabled threshold.
+  int64 emergency_usage_threshold = 2 [
+    (required) = false,
+    (value) = "0-100"
+  ];
+
+  // New storage size (in bytes) that is set when one of the thresholds is achieved.
+  int64 disk_size_limit = 3;
+}

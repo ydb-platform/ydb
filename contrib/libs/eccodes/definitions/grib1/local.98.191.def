@@ -1,0 +1,35 @@
+# (C) Copyright 2005- ECMWF.
+
+template mars_labeling "grib1/mars_labeling.def";
+
+# zeroForCompatibilityWithMars
+pad padding_loc191_1(2);
+
+unsigned[1] formatVersionMajorNumber  : dump;
+
+unsigned[1] formatVersionMinorNumber  : dump;
+
+unsigned[1] originalSubCentreIdentifier  : dump;
+
+# This does not belong here, this is for class=ms,country=de
+alias mars.levelist = level;
+
+
+# setToZero
+
+pad padding_loc191_2(4);
+
+unsigned[2] numberOfBytesOfFreeFormatData  : dump;
+
+position offsetFreeFormData;
+#freeFormDataList list(numberOfBytesOfFreeFormatData) {
+#    unsigned[1] freeFormData;
+#}
+
+unsigned[1] freeFormData[numberOfBytesOfFreeFormatData]  : dump;
+
+# padToAMultipleOf80Bytes
+# -1 comes from gribex
+padtomultiple padding_loc191_3(offsetFreeFormData,80);
+position offsetAfterPadding;
+constant GRIBEXSection1Problem = ( offsetAfterPadding - offsetFreeFormData) % 80 ;

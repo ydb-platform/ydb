@@ -1,0 +1,20 @@
+{
+  "$id": "foo.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Foo",
+  "type": "object",
+  "properties": {
+    "loggerLevel": {
+      "$ref": "bar.json#/definitions/logLevels"
+    },
+    "AnotherLoggerLevel": {
+      "$ref": "nested_bar/bar.json#/definitions/logLevels"
+    },
+    "OtherLoggerLevels": {
+      "items": {
+        "$ref": "nested_bar/bar.json#/definitions/logLevels"
+      },
+      "default": ["INFO", "ERROR", "INVALID"]
+    }
+  }
+}

@@ -1,0 +1,41 @@
+Metadata-Version: 2.1
+Name: pyfst
+Version: 0.2.3
+Summary: A Python interface to OpenFst.
+Home-page: http://pyfst.github.io
+Author: Victor Chahuneau
+Author-email: UNKNOWN
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Topic :: Text Processing :: Linguistic
+Classifier: Programming Language :: Cython
+Classifier: Programming Language :: C++
+Classifier: Intended Audience :: Education
+Classifier: Intended Audience :: Science/Research
+
+pyfst
+=====
+
+A Python interface for the OpenFst_ library.
+
+.. _OpenFst: http://www.openfst.org
+
+- Documentation: http://pyfst.github.io
+- Source code: https://github.com/vchahun/pyfst
+
+Example usage::
+
+    import fst
+
+    t = fst.Transducer()
+
+    t.add_arc(0, 1, 'a', 'A', 0.5)
+    t.add_arc(0, 1, 'b', 'B', 1.5)
+    t.add_arc(1, 2, 'c', 'C', 2.5)
+
+    t[2].final = 3.5
+
+    t.shortest_path() # 2 -(a:A/0.5)-> 1 -(c:C/2.5)-> 0/3.5 
+
+
+

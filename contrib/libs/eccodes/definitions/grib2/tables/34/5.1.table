@@ -1,0 +1,6 @@
+# Code table 5.1 - Type of original field values
+0 0 Floating point
+1 1 Integer
+# 2-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

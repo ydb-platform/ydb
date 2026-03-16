@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pet",
+  "allOf": [
+    {
+      "$ref": "#/definitions/Home"
+    },
+    {
+      "$ref": "#/definitions/Kind"
+    },
+    {
+      "$ref": "#/definitions/Id"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    }
+  ],
+  "type": [
+    "object"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "age": {
+      "type": "integer"
+    }
+  },
+  "definitions": {
+    "Home": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "zip": {
+          "type": "string"
+        }
+      }
+    },
+    "Kind": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "Id": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

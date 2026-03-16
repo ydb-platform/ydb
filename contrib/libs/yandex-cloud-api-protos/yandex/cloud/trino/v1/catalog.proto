@@ -1,0 +1,627 @@
+syntax = "proto3";
+
+package yandex.cloud.trino.v1;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/trino/v1;trino";
+option java_package = "yandex.cloud.api.trino.v1";
+
+// Connector configuration. Exactly one connector type must be specified.
+message Connector {
+  oneof type {
+    option (exactly_one) = true;
+
+    // Hive connector configuration.
+    HiveConnector hive = 1;
+
+    // Iceberg connector configuration.
+    IcebergConnector iceberg = 2;
+
+    // Delta Lake connector configuration.
+    DeltaLakeConnector delta_lake = 3;
+
+    // PostgreSQL connector configuration.
+    PostgresqlConnector postgresql = 4;
+
+    // ClickHouse connector configuration.
+    ClickhouseConnector clickhouse = 5;
+
+    // TPC-H connector for synthetic benchmarking.
+    TPCHConnector tpch = 6;
+
+    // TPC-DS connector for synthetic benchmarking.
+    TPCDSConnector tpcds = 7;
+
+    // Oracle connector configuration for connecting to Oracle Database instances.
+    OracleConnector oracle = 8;
+
+    // SQLServer connector configuration for connecting to SQLServer Database instances.
+    SQLServerConnector sqlserver = 9;
+
+    // Hudi connector configuration.
+    HudiConnector hudi = 10;
+
+    // MySQL connector configuration for connecting to MySQL Database instances.
+    MysqlConnector mysql = 11;
+
+    // Greenplum connector configuration for connecting to Greenplum or Cloudberry Database instances.
+    GreenplumConnector greenplum = 12;
+  }
+}
+
+// Catalog is a logical Trino catalog backed by a specific connector.
+message Catalog {
+  // ID of the catalog.
+  string id = 1;
+
+  // Name of the catalog.
+  string name = 2;
+
+  // Connector backing this catalog.
+  Connector connector = 3;
+
+  // Description of the catalog.
+  string description = 4;
+
+  // Labels associated with the catalog.
+  map<string, string> labels = 5;
+}
+
+// CatalogSpec defines the desired state of a new catalog.
+message CatalogSpec {
+  // Name of the catalog.
+  // Must be unique within a Trino cluster.
+  string name = 1 [
+    (required) = true,
+    (length) = "<=63",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Connector backing this catalog.
+  Connector connector = 2 [(required) = true];
+
+  // Description of the catalog.
+  string description = 3 [(length) = "<=256"];
+
+  // Labels associated with the catalog.
+  map<string, string> labels = 4 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+}
+
+// CatalogUpdateSpec defines changes to an existing catalog.
+// Fields are optional and only provided fields will be updated.
+message CatalogUpdateSpec {
+  // New name of the catalog.
+  string name = 1 [
+    (length) = "<=63",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Updated connector configuration.
+  // If specified, replaces the existing connector.
+  Connector connector = 2;
+
+  // Description of the catalog.
+  string description = 3 [(length) = "<=256"];
+
+  // Labels associated with the catalog.
+  map<string, string> labels = 4 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+}
+
+// Metastore configuration.
+message Metastore {
+  // Configuration of Hive's metastore type.
+  message HiveMetastore {
+    oneof connection {
+      option (exactly_one) = true;
+      // URI or cluster ID of the Hive Metastore.
+      string uri = 1;
+    }
+  }
+
+  oneof type {
+    option (exactly_one) = true;
+    // Apache Hive Metastore.
+    HiveMetastore hive = 1;
+  }
+}
+
+// Configuration of file system used by a connector.
+message FileSystem {
+  // Describes YandexCloud native S3 file system.
+  // Currently does not require configuration.
+  message S3FileSystem {
+  }
+
+  // Describes External S3 compatible file system.
+  message ExternalS3FileSystem {
+    // AWS access key.
+    string aws_access_key = 1 [(required) = true];
+
+    // AWS secret key.
+    string aws_secret_key = 2 [(required) = true];
+
+    // AWS endpoint.
+    string aws_endpoint = 3 [(required) = true];
+
+    // AWS region.
+    string aws_region = 4 [(required) = true];
+  }
+
+  oneof type {
+    option (exactly_one) = true;
+
+    // Yandex Cloud S3 filesystem.
+    S3FileSystem s3 = 1;
+
+    // External S3 filesystem.
+    ExternalS3FileSystem external_s3 = 2;
+  }
+}
+
+message HiveConnector {
+  // Metastore configuration.
+  Metastore metastore = 1 [(required) = true];
+
+  // File system configuration.
+  FileSystem filesystem = 2 [(required) = true];
+
+  // Additional properties.
+  map<string, string> additional_properties = 3 [
+    (yandex.cloud.size) = "<=256",
+    (length) = "<=128",
+    (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+    (map_key).length = "1-128",
+    (map_key).pattern = "[a-z][-_0-9a-z.]*"
+  ];
+}
+
+message IcebergConnector {
+  // Metastore configuration.
+  Metastore metastore = 1 [(required) = true];
+
+  // File system configuration.
+  FileSystem filesystem = 2 [(required) = true];
+
+  // Additional properties.
+  map<string, string> additional_properties = 3 [
+    (yandex.cloud.size) = "<=256",
+    (length) = "<=128",
+    (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+    (map_key).length = "1-128",
+    (map_key).pattern = "[a-z][-_0-9a-z.]*"
+  ];
+}
+
+message DeltaLakeConnector {
+  // Metastore configuration.
+  Metastore metastore = 1 [(required) = true];
+
+  // File system configuration.
+  FileSystem filesystem = 2 [(required) = true];
+
+  // Additional properties.
+  map<string, string> additional_properties = 3 [
+    (yandex.cloud.size) = "<=256",
+    (length) = "<=128",
+    (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+    (map_key).length = "1-128",
+    (map_key).pattern = "[a-z][-_0-9a-z.]*"
+  ];
+}
+
+message HudiConnector {
+    // Metastore configuration.
+    Metastore metastore = 1 [(required) = true];
+
+    // File system configuration.
+    FileSystem filesystem = 2 [(required) = true];
+
+    // Additional properties.
+    map<string, string> additional_properties = 3 [
+        (yandex.cloud.size) = "<=256",
+        (length) = "<=128",
+        (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+        (map_key).length = "1-128",
+        (map_key).pattern = "[a-z][-_0-9a-z.]*"
+    ];
+}
+
+message PostgresqlConnection {
+  message OnPremise {
+    // Connection to the Postgresql.
+    string connection_url = 1 [
+      (required) = true,
+      (pattern) = "^jdbc:postgresql://(?:.+:\\d+)/(?:.*)$"
+    ];
+
+    // Name of the Postgresql user.
+    string user_name = 2 [
+      (required) = true,
+      (length) = "<=63",
+      (pattern) = "[a-zA-Z0-9_-]*"
+    ];
+
+    // Password of the Postgresql user.
+    string password = 3 [
+      (required) = true,
+      (length) = "0-128"
+    ];
+  }
+
+  message ConnectionManager {
+    // Connection ID.
+    string connection_id = 1 [
+      (required) = true,
+      (length) = "1-50"
+    ];
+
+    // Database.
+    string database = 2 [
+      (required) = true,
+      (length) = "<=63",
+      (pattern) = "[a-zA-Z0-9_-]*"
+    ];
+
+    // Additional connection properties.
+    map<string, string> connection_properties = 3 [
+      (yandex.cloud.size) = "<=256",
+      (length) = "<=128",
+      (pattern) = "[-_0-9a-zA-Z.,:\\/_]*",
+      (map_key).length = "1-128",
+      (map_key).pattern = "[a-zA-Z]*"
+    ];
+  }
+
+  oneof type {
+    option (exactly_one) = true;
+
+    // Connection configured manually.
+    OnPremise on_premise = 1;
+
+    // Connection configured using Yandex Cloud Connection Manager.
+    ConnectionManager connection_manager = 2;
+  }
+}
+
+message PostgresqlConnector {
+  // Connection configuration.
+  PostgresqlConnection connection = 1;
+
+  // Additional properties.
+  map<string, string> additional_properties = 2 [
+    (yandex.cloud.size) = "<=256",
+    (length) = "<=128",
+    (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+    (map_key).length = "1-128",
+    (map_key).pattern = "[a-z][-_0-9a-z.]*"
+  ];
+}
+
+message ClickhouseConnection {
+  message OnPremise {
+    // Connection to the Clickhouse.
+    string connection_url = 1 [
+      (required) = true,
+      (pattern) = "^jdbc:clickhouse://(?:.+:\\d+)/(?:.*)$"
+    ];
+
+    // Name of the Clickhouse user.
+    string user_name = 2 [
+      (required) = true,
+      (length) = "<=63",
+      (pattern) = "[a-zA-Z0-9_-]*"
+    ];
+
+    // Password of the Clickhouse user.
+    string password = 3 [
+      (required) = true,
+      (length) = "0-128"
+    ];
+  }
+
+  message ConnectionManager {
+    // Connection ID.
+    string connection_id = 1 [
+      (required) = true,
+      (length) = "1-50"
+    ];
+
+    // Database.
+    string database = 2 [
+      (required) = true,
+      (length) = "<=63",
+      (pattern) = "[a-zA-Z0-9_-]*"
+    ];
+
+    // Additional connection properties.
+    map<string, string> connection_properties = 3 [
+      (yandex.cloud.size) = "<=256",
+      (length) = "<=128",
+      (pattern) = "[-_0-9a-zA-Z.,:\\/_]*",
+      (map_key).length = "1-128",
+      (map_key).pattern = "[a-zA-Z_]*"
+    ];
+  }
+
+  oneof type {
+    option (exactly_one) = true;
+
+    // Connection configured manually.
+    OnPremise on_premise = 1;
+
+    // Connection configured using Yandex Cloud Connection Manager.
+    ConnectionManager connection_manager = 2;
+  }
+}
+
+message ClickhouseConnector {
+    // Connection configuration.
+    ClickhouseConnection connection = 1;
+
+    // Additional properties.
+    map<string, string> additional_properties = 2 [
+        (yandex.cloud.size) = "<=256",
+        (length) = "<=128",
+        (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+        (map_key).length = "1-128",
+        (map_key).pattern = "[a-z][-_0-9a-z.]*"
+    ];
+}
+
+message TPCHConnector {
+  // Additional properties.
+  map<string, string> additional_properties = 1 [
+    (yandex.cloud.size) = "<=256",
+    (length) = "<=128",
+    (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+    (map_key).length = "1-128",
+    (map_key).pattern = "[a-z][-_0-9a-z.]*"
+  ];
+}
+
+message TPCDSConnector {
+  // Additional properties.
+  map<string, string> additional_properties = 1 [
+    (yandex.cloud.size) = "<=256",
+    (length) = "<=128",
+    (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+    (map_key).length = "1-128",
+    (map_key).pattern = "[a-z][-_0-9a-z.]*"
+  ];
+}
+
+message OracleConnection {
+  message OnPremise {
+    // Connection to the Oracle.
+    string connection_url = 1 [
+      (required) = true,
+      (pattern) = "^jdbc:oracle:(?s:.*)$"
+    ];
+
+    // Name of the Oracle user.
+    string user_name = 2 [
+      (required) = true,
+      (length) = "<=63",
+      (pattern) = "[a-zA-Z0-9_-]*"
+    ];
+
+    // Password of the Oracle user.
+    string password = 3 [
+      (required) = true,
+      (length) = "0-128"
+    ];
+  }
+
+  oneof type {
+    option (exactly_one) = true;
+
+    // Connection configured manually.
+    OnPremise on_premise = 1;
+  }
+}
+
+message OracleConnector {
+  // Connection configuration.
+  OracleConnection connection = 1;
+
+  // Additional properties.
+  map<string, string> additional_properties = 2 [
+    (yandex.cloud.size) = "<=256",
+    (length) = "<=128",
+    (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+    (map_key).length = "1-128",
+    (map_key).pattern = "[a-z][-_0-9a-z.]*"
+  ];
+}
+
+message SQLServerConnection {
+  message OnPremise {
+    // Connection to the SQLServer.
+    string connection_url = 1 [
+      (required) = true,
+      (pattern) = "^jdbc:sqlserver:(?s:.*)$"
+    ];
+
+    // Name of the SQLServer user.
+    string user_name = 2 [
+      (required) = true,
+      (length) = "<=63",
+      (pattern) = "[a-zA-Z0-9_-]*"
+    ];
+
+    // Password of the SQLServer user.
+    string password = 3 [
+      (required) = true,
+      (length) = "0-128"
+    ];
+  }
+
+  oneof type {
+    option (exactly_one) = true;
+
+    // Connection configured manually.
+    OnPremise on_premise = 1;
+  }
+}
+
+message SQLServerConnector {
+  // Connection configuration.
+  SQLServerConnection connection = 1;
+
+  // Additional properties.
+  map<string, string> additional_properties = 2 [
+    (yandex.cloud.size) = "<=256",
+    (length) = "<=128",
+    (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+    (map_key).length = "1-128",
+    (map_key).pattern = "[a-z][-_0-9a-z.]*"
+  ];
+}
+
+message MysqlConnection {
+  message OnPremise {
+    // Connection to the MySQL.
+    string connection_url = 1 [
+      (required) = true,
+      (pattern) = "^jdbc:mysql://(?:.+:\\d+)(?:/?.*)$"
+    ];
+
+    // Name of the MySQL user.
+    string user_name = 2 [
+      (required) = true,
+      (length) = "<=63",
+      (pattern) = "[a-zA-Z0-9_-]*"
+    ];
+
+    // Password of the MySQL user.
+    string password = 3 [
+      (required) = true,
+      (length) = "0-128"
+    ];
+  }
+
+  message ConnectionManager {
+    // Connection ID.
+    string connection_id = 1 [
+      (required) = true,
+      (length) = "1-50"
+    ];
+
+    // Additional connection properties.
+    map<string, string> connection_properties = 2 [
+      (yandex.cloud.size) = "<=256",
+      (length) = "<=128",
+      (pattern) = "[-_0-9a-zA-Z.,:\\/_]*",
+      (map_key).length = "1-128",
+      (map_key).pattern = "[a-zA-Z_]*"
+    ];
+  }
+
+  oneof type {
+    option (exactly_one) = true;
+
+    // Connection configured manually.
+    OnPremise on_premise = 1;
+
+    // Connection configured using Yandex Cloud Connection Manager.
+    ConnectionManager connection_manager = 2;
+  }
+}
+
+message MysqlConnector {
+  // Connection configuration.
+  MysqlConnection connection = 1;
+
+  // Additional properties.
+  map<string, string> additional_properties = 2 [
+    (yandex.cloud.size) = "<=256",
+    (length) = "<=128",
+    (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+    (map_key).length = "1-128",
+    (map_key).pattern = "[a-z][-_0-9a-z.]*"
+  ];
+}
+
+message GreenplumConnection {
+    message OnPremise {
+        // Connection to the Greenplum/Cloudberry.
+        string connection_url = 1 [
+            (required) = true,
+            (pattern) = "^jdbc:postgresql://(?:.+:\\d+)/(?:.*)$"
+        ];
+
+        // Name of the Greenplum/Cloudberry user.
+        string user_name = 2 [
+            (required) = true,
+            (length) = "<=63",
+            (pattern) = "[a-zA-Z0-9_-]*"
+        ];
+
+        // Password of the Greenplum/Cloudberry user.
+        string password = 3 [
+            (required) = true,
+            (length) = "0-128"
+        ];
+    }
+
+    message ConnectionManager {
+        // Connection ID.
+        string connection_id = 1 [
+            (required) = true,
+            (length) = "1-50"
+        ];
+
+        // Database.
+        string database = 2 [
+            (required) = true,
+            (length) = "<=63",
+            (pattern) = "[a-zA-Z0-9_-]*"
+        ];
+
+        // Additional connection properties.
+        map<string, string> connection_properties = 3 [
+            (yandex.cloud.size) = "<=256",
+            (length) = "<=128",
+            (pattern) = "[-_0-9a-zA-Z.,:\\/_]*",
+            (map_key).length = "1-128",
+            (map_key).pattern = "[a-zA-Z]*"
+        ];
+    }
+
+    oneof type {
+        option (exactly_one) = true;
+
+        // Connection configured manually.
+        OnPremise on_premise = 1;
+
+        // Connection configured using Yandex Cloud Connection Manager.
+        ConnectionManager connection_manager = 2;
+    }
+}
+
+message GreenplumConnector {
+    // Connection configuration
+    GreenplumConnection connection = 1;
+
+    // Additional properties.
+    map<string, string> additional_properties = 2 [
+        (yandex.cloud.size) = "<=256",
+        (length) = "<=128",
+        (pattern) = "[-_0-9a-zA-Z.,:\\/_ ]*",
+        (map_key).length = "1-128",
+        (map_key).pattern = "[a-z][-_0-9a-z.]*"
+    ];
+}

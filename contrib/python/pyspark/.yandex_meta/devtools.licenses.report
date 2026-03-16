@@ -1,0 +1,449 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           15cad51e9948e41b3b4055a4d0f99be3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        pyspark/sql/connect/proto/base.proto [2:15]
+        pyspark/sql/connect/proto/catalog.proto [2:15]
+        pyspark/sql/connect/proto/commands.proto [2:15]
+        pyspark/sql/connect/proto/common.proto [2:15]
+        pyspark/sql/connect/proto/example_plugins.proto [2:15]
+        pyspark/sql/connect/proto/expressions.proto [2:15]
+        pyspark/sql/connect/proto/relations.proto [2:15]
+        pyspark/sql/connect/proto/types.proto [2:15]
+    Belongs difference:
+        + ya.make
+        - pyspark/sql/connect/proto/ya.make
+
+KEEP     BSD-3-Clause         29f8296b2f403d0c3fbe77af65475b3e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 98.14
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        pyspark/cloudpickle/cloudpickle.py [18:41]
+
+KEEP     Apache-2.0           600eb0f9698ecfef96737b2c008f6f33
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        pyspark/errors/error_classes.py [2:15]
+        pyspark/ml/param/shared.py [2:15]
+        pyspark/sql/pandas/functions.py [2:15]
+
+KEEP     Apache-2.0           73a2ee546f736cdfbb890e0d2a7834dc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        pyspark/__init__.py [2:15]
+        pyspark/accumulators.py [2:15]
+        pyspark/broadcast.py [2:15]
+        pyspark/conf.py [2:15]
+        pyspark/context.py [2:15]
+        pyspark/daemon.py [2:15]
+        pyspark/errors/__init__.py [2:15]
+        pyspark/errors/exceptions/__init__.py [2:15]
+        pyspark/errors/exceptions/base.py [2:15]
+        pyspark/errors/exceptions/captured.py [2:15]
+        pyspark/errors/exceptions/connect.py [2:15]
+        pyspark/errors/utils.py [2:15]
+        pyspark/files.py [2:15]
+        pyspark/find_spark_home.py [4:17]
+        pyspark/install.py [2:15]
+        pyspark/instrumentation_utils.py [3:16]
+        pyspark/java_gateway.py [2:15]
+        pyspark/ml/__init__.py [2:15]
+        pyspark/ml/base.py [2:15]
+        pyspark/ml/classification.py [2:15]
+        pyspark/ml/clustering.py [2:15]
+        pyspark/ml/common.py [2:15]
+        pyspark/ml/connect/__init__.py [2:15]
+        pyspark/ml/connect/base.py [2:15]
+        pyspark/ml/connect/classification.py [2:15]
+        pyspark/ml/connect/evaluation.py [2:15]
+        pyspark/ml/connect/feature.py [2:15]
+        pyspark/ml/connect/functions.py [2:15]
+        pyspark/ml/connect/io_utils.py [2:15]
+        pyspark/ml/connect/pipeline.py [2:15]
+        pyspark/ml/connect/summarizer.py [2:15]
+        pyspark/ml/connect/tuning.py [2:15]
+        pyspark/ml/connect/util.py [2:15]
+        pyspark/ml/deepspeed/__init__.py [2:15]
+        pyspark/ml/deepspeed/deepspeed_distributor.py [2:15]
+        pyspark/ml/dl_util.py [2:15]
+        pyspark/ml/evaluation.py [2:15]
+        pyspark/ml/feature.py [2:15]
+        pyspark/ml/fpm.py [2:15]
+        pyspark/ml/functions.py [2:15]
+        pyspark/ml/image.py [2:15]
+        pyspark/ml/linalg/__init__.py [2:15]
+        pyspark/ml/model_cache.py [2:15]
+        pyspark/ml/param/__init__.py [2:15]
+        pyspark/ml/param/_shared_params_code_gen.py [2:15]
+        pyspark/ml/param/_shared_params_code_gen.py [21:34]
+        pyspark/ml/pipeline.py [2:15]
+        pyspark/ml/recommendation.py [2:15]
+        pyspark/ml/regression.py [2:15]
+        pyspark/ml/stat.py [2:15]
+        pyspark/ml/torch/__init__.py [2:15]
+        pyspark/ml/torch/data.py [2:15]
+        pyspark/ml/torch/distributor.py [2:15]
+        pyspark/ml/torch/log_communication.py [2:15]
+        pyspark/ml/torch/torch_run_process_wrapper.py [2:15]
+        pyspark/ml/tree.py [2:15]
+        pyspark/ml/tuning.py [2:15]
+        pyspark/ml/util.py [2:15]
+        pyspark/ml/wrapper.py [2:15]
+        pyspark/mllib/__init__.py [2:15]
+        pyspark/mllib/classification.py [2:15]
+        pyspark/mllib/clustering.py [2:15]
+        pyspark/mllib/common.py [2:15]
+        pyspark/mllib/evaluation.py [2:15]
+        pyspark/mllib/feature.py [2:15]
+        pyspark/mllib/fpm.py [2:15]
+        pyspark/mllib/linalg/__init__.py [2:15]
+        pyspark/mllib/linalg/distributed.py [2:15]
+        pyspark/mllib/random.py [2:15]
+        pyspark/mllib/recommendation.py [2:15]
+        pyspark/mllib/regression.py [2:15]
+        pyspark/mllib/stat/KernelDensity.py [2:15]
+        pyspark/mllib/stat/__init__.py [2:15]
+        pyspark/mllib/stat/_statistics.py [2:15]
+        pyspark/mllib/stat/distribution.py [2:15]
+        pyspark/mllib/stat/test.py [2:15]
+        pyspark/mllib/tree.py [2:15]
+        pyspark/mllib/util.py [2:15]
+        pyspark/pandas/__init__.py [2:15]
+        pyspark/pandas/_typing.py [2:15]
+        pyspark/pandas/accessors.py [2:15]
+        pyspark/pandas/base.py [2:15]
+        pyspark/pandas/categorical.py [2:15]
+        pyspark/pandas/config.py [2:15]
+        pyspark/pandas/correlation.py [2:15]
+        pyspark/pandas/data_type_ops/__init__.py [2:15]
+        pyspark/pandas/data_type_ops/base.py [2:15]
+        pyspark/pandas/data_type_ops/binary_ops.py [2:15]
+        pyspark/pandas/data_type_ops/boolean_ops.py [2:15]
+        pyspark/pandas/data_type_ops/categorical_ops.py [2:15]
+        pyspark/pandas/data_type_ops/complex_ops.py [2:15]
+        pyspark/pandas/data_type_ops/date_ops.py [2:15]
+        pyspark/pandas/data_type_ops/datetime_ops.py [2:15]
+        pyspark/pandas/data_type_ops/null_ops.py [2:15]
+        pyspark/pandas/data_type_ops/num_ops.py [2:15]
+        pyspark/pandas/data_type_ops/string_ops.py [2:15]
+        pyspark/pandas/data_type_ops/timedelta_ops.py [2:15]
+        pyspark/pandas/data_type_ops/udt_ops.py [2:15]
+        pyspark/pandas/datetimes.py [2:15]
+        pyspark/pandas/exceptions.py [2:15]
+        pyspark/pandas/extensions.py [2:15]
+        pyspark/pandas/frame.py [2:15]
+        pyspark/pandas/generic.py [2:15]
+        pyspark/pandas/groupby.py [2:15]
+        pyspark/pandas/indexes/__init__.py [2:15]
+        pyspark/pandas/indexes/base.py [2:15]
+        pyspark/pandas/indexes/category.py [2:15]
+        pyspark/pandas/indexes/datetimes.py [2:15]
+        pyspark/pandas/indexes/multi.py [2:15]
+        pyspark/pandas/indexes/numeric.py [2:15]
+        pyspark/pandas/indexes/timedelta.py [2:15]
+        pyspark/pandas/indexing.py [2:15]
+        pyspark/pandas/internal.py [2:15]
+        pyspark/pandas/missing/__init__.py [2:15]
+        pyspark/pandas/missing/common.py [2:15]
+        pyspark/pandas/missing/frame.py [2:15]
+        pyspark/pandas/missing/general_functions.py [2:15]
+        pyspark/pandas/missing/groupby.py [2:15]
+        pyspark/pandas/missing/indexes.py [2:15]
+        pyspark/pandas/missing/resample.py [2:15]
+        pyspark/pandas/missing/scalars.py [2:15]
+        pyspark/pandas/missing/series.py [2:15]
+        pyspark/pandas/missing/window.py [2:15]
+        pyspark/pandas/mlflow.py [2:15]
+        pyspark/pandas/namespace.py [2:15]
+        pyspark/pandas/numpy_compat.py [2:15]
+        pyspark/pandas/plot/__init__.py [2:15]
+        pyspark/pandas/plot/core.py [2:15]
+        pyspark/pandas/plot/matplotlib.py [2:15]
+        pyspark/pandas/plot/plotly.py [2:15]
+        pyspark/pandas/resample.py [2:15]
+        pyspark/pandas/series.py [2:15]
+        pyspark/pandas/spark/__init__.py [2:15]
+        pyspark/pandas/spark/accessors.py [2:15]
+        pyspark/pandas/spark/functions.py [2:15]
+        pyspark/pandas/spark/utils.py [2:15]
+        pyspark/pandas/sql_formatter.py [2:15]
+        pyspark/pandas/sql_processor.py [2:15]
+        pyspark/pandas/strings.py [2:15]
+        pyspark/pandas/supported_api_gen.py [2:15]
+        pyspark/pandas/typedef/__init__.py [2:15]
+        pyspark/pandas/typedef/typehints.py [2:15]
+        pyspark/pandas/usage_logging/__init__.py [2:15]
+        pyspark/pandas/usage_logging/usage_logger.py [2:15]
+        pyspark/pandas/utils.py [2:15]
+        pyspark/pandas/window.py [2:15]
+        pyspark/profiler.py [2:15]
+        pyspark/python/pyspark/shell.py [2:15]
+        pyspark/rdd.py [2:15]
+        pyspark/rddsampler.py [2:15]
+        pyspark/resource/__init__.py [2:15]
+        pyspark/resource/information.py [2:15]
+        pyspark/resource/profile.py [2:15]
+        pyspark/resource/requests.py [2:15]
+        pyspark/resultiterable.py [2:15]
+        pyspark/serializers.py [2:15]
+        pyspark/shell.py [2:15]
+        pyspark/shuffle.py [2:15]
+        pyspark/sql/__init__.py [2:15]
+        pyspark/sql/avro/__init__.py [2:15]
+        pyspark/sql/avro/functions.py [2:15]
+        pyspark/sql/catalog.py [2:15]
+        pyspark/sql/column.py [2:15]
+        pyspark/sql/conf.py [2:15]
+        pyspark/sql/connect/__init__.py [2:15]
+        pyspark/sql/connect/_typing.py [2:15]
+        pyspark/sql/connect/avro/__init__.py [2:15]
+        pyspark/sql/connect/avro/functions.py [2:15]
+        pyspark/sql/connect/catalog.py [2:15]
+        pyspark/sql/connect/client/__init__.py [2:15]
+        pyspark/sql/connect/client/artifact.py [2:15]
+        pyspark/sql/connect/client/core.py [2:15]
+        pyspark/sql/connect/client/reattach.py [2:15]
+        pyspark/sql/connect/column.py [2:15]
+        pyspark/sql/connect/conf.py [2:15]
+        pyspark/sql/connect/conversion.py [2:15]
+        pyspark/sql/connect/dataframe.py [2:15]
+        pyspark/sql/connect/expressions.py [2:15]
+        pyspark/sql/connect/functions.py [2:15]
+        pyspark/sql/connect/group.py [2:15]
+        pyspark/sql/connect/plan.py [2:15]
+        pyspark/sql/connect/proto/__init__.py [2:15]
+        pyspark/sql/connect/protobuf/__init__.py [2:15]
+        pyspark/sql/connect/protobuf/functions.py [2:15]
+        pyspark/sql/connect/readwriter.py [2:15]
+        pyspark/sql/connect/session.py [2:15]
+        pyspark/sql/connect/streaming/__init__.py [2:15]
+        pyspark/sql/connect/streaming/query.py [2:15]
+        pyspark/sql/connect/streaming/readwriter.py [2:15]
+        pyspark/sql/connect/streaming/worker/__init__.py [2:15]
+        pyspark/sql/connect/streaming/worker/foreach_batch_worker.py [2:15]
+        pyspark/sql/connect/streaming/worker/listener_worker.py [2:15]
+        pyspark/sql/connect/types.py [2:15]
+        pyspark/sql/connect/udf.py [2:15]
+        pyspark/sql/connect/udtf.py [2:15]
+        pyspark/sql/connect/utils.py [2:15]
+        pyspark/sql/connect/window.py [2:15]
+        pyspark/sql/context.py [2:15]
+        pyspark/sql/dataframe.py [2:15]
+        pyspark/sql/functions.py [2:15]
+        pyspark/sql/group.py [2:15]
+        pyspark/sql/observation.py [2:15]
+        pyspark/sql/pandas/__init__.py [2:15]
+        pyspark/sql/pandas/conversion.py [2:15]
+        pyspark/sql/pandas/group_ops.py [2:15]
+        pyspark/sql/pandas/map_ops.py [2:15]
+        pyspark/sql/pandas/serializers.py [2:15]
+        pyspark/sql/pandas/typehints.py [2:15]
+        pyspark/sql/pandas/types.py [2:15]
+        pyspark/sql/pandas/utils.py [2:15]
+        pyspark/sql/protobuf/__init__.py [2:15]
+        pyspark/sql/protobuf/functions.py [2:15]
+        pyspark/sql/readwriter.py [2:15]
+        pyspark/sql/session.py [2:15]
+        pyspark/sql/sql_formatter.py [2:15]
+        pyspark/sql/streaming/__init__.py [2:15]
+        pyspark/sql/streaming/listener.py [2:15]
+        pyspark/sql/streaming/query.py [2:15]
+        pyspark/sql/streaming/readwriter.py [2:15]
+        pyspark/sql/streaming/state.py [2:15]
+        pyspark/sql/types.py [2:15]
+        pyspark/sql/udf.py [2:15]
+        pyspark/sql/udtf.py [2:15]
+        pyspark/sql/utils.py [2:15]
+        pyspark/sql/window.py [2:15]
+        pyspark/statcounter.py [2:15]
+        pyspark/status.py [2:15]
+        pyspark/storagelevel.py [2:15]
+        pyspark/streaming/__init__.py [2:15]
+        pyspark/streaming/context.py [2:15]
+        pyspark/streaming/dstream.py [2:15]
+        pyspark/streaming/kinesis.py [2:15]
+        pyspark/streaming/listener.py [2:15]
+        pyspark/streaming/util.py [2:15]
+        pyspark/taskcontext.py [2:15]
+        pyspark/testing/connectutils.py [2:15]
+        pyspark/testing/pandasutils.py [2:15]
+        pyspark/traceback_utils.py [2:15]
+        pyspark/util.py [3:16]
+        pyspark/worker.py [2:15]
+        pyspark/worker_util.py [2:15]
+    Belongs difference:
+        - pyspark/sql/connect/proto/ya.make
+
+KEEP     Python-2.0           7ea83b9275cc9b7f4e2c75053e96a36d
+BELONGS ya.make
+    License text:
+        \# limitations under the License.
+        \#
+        """
+        Python package for statistical functions in MLlib.
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        pyspark/mllib/stat/__init__.py [15:19]
+
+KEEP     BSD-3-Clause         8d0298e3204042b3bd63d709098b19af
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.06
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        pyspark/join.py [5:31]
+
+KEEP     Python-2.0           8e01fa5cc00f64d48506fa5fc5617e41
+BELONGS ya.make
+    License text:
+        \# limitations under the License.
+        \#
+        """
+        Python package for random data generation.
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        pyspark/mllib/random.py [15:19]
+
+KEEP     Apache-2.0           903e92f30c2746fa5357d50df79b1d0a
+BELONGS ya.make
+    License text:
+        Classifier: License :: OSI Approved :: Apache Software License
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        .dist-info/METADATA [11:11]
+
+KEEP     Python-2.0           b66f4e6be8fa7060cb2f0776dfefd833
+BELONGS ya.make
+    License text:
+        \# limitations under the License.
+        \#
+        """
+        Python package for feature in MLlib.
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        pyspark/mllib/feature.py [15:19]
+
+KEEP     Apache-2.0           e9219941ff215d5d18d4858990dbb3ca
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        pyspark/_globals.py [2:15]
+        pyspark/testing/__init__.py [2:15]
+        pyspark/testing/mllibutils.py [2:15]
+        pyspark/testing/mlutils.py [2:15]
+        pyspark/testing/objects.py [2:15]
+        pyspark/testing/sqlutils.py [2:15]
+        pyspark/testing/streamingutils.py [2:15]
+        pyspark/testing/utils.py [2:15]
+
+KEEP     Apache-2.0           edd658e1c859022a17fde815756c5bf4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        pyspark/_typing.pyi [2:17]
+        pyspark/ml/_typing.pyi [2:17]
+        pyspark/mllib/_typing.pyi [2:17]
+        pyspark/sql/_typing.pyi [2:17]
+        pyspark/sql/pandas/_typing/__init__.pyi [2:17]
+        pyspark/sql/pandas/_typing/protocols/__init__.pyi [2:17]
+        pyspark/sql/pandas/_typing/protocols/frame.pyi [2:17]
+        pyspark/sql/pandas/_typing/protocols/series.pyi [2:17]
+        pyspark/sql/pandas/functions.pyi [2:17]
+
+KEEP     Apache-2.0           f926ad4edbcb978de38206dc62e2bcb7
+BELONGS ya.make
+    License text:
+        License: http://www.apache.org/licenses/LICENSE-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        .dist-info/METADATA [8:8]

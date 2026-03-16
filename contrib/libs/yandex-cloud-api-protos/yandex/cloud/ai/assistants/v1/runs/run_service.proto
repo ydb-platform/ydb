@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.assistants.v1.runs;
+
+import "yandex/cloud/ai/common/common.proto";
+import "yandex/cloud/ai/assistants/v1/common.proto";
+import "yandex/cloud/ai/assistants/v1/threads/message.proto";
+import "yandex/cloud/ai/assistants/v1/runs/run.proto";
+import "yandex/cloud/validation.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/assistants/v1/runs;runs";
+option java_package = "yandex.cloud.api.ai.assistants.v1.runs";
+
+// RunService provides operations for managing runs.
+service RunService {
+  // Create a new run for a given assistant and thread.
+  rpc Create(CreateRunRequest) returns (Run) {
+    option (google.api.http) = {post: "/assistants/v1/runs" body: "*"};
+  }
+
+  // Listen to events from a specific run.
+  // If the run was created with `stream = false`, Listen will only respond with the final status of the run
+  // and will not stream partial messages or intermediate events.
+  rpc Listen(ListenRunRequest) returns (stream StreamEvent) {
+    option (google.api.http) = {get: "/assistants/v1/runs/listen"};
+  }
+
+  // Bi-directional streaming method to interact with a specific run.
+  // Like `Listen`, `Attach` streams events from the run, but also allows clients to send events back.
+  // For example, it can be used to submit function call results when the run is waiting for user input.
+  rpc Attach(stream AttachRunRequest) returns (stream StreamEvent);
+
+  // Retrieve details of a specific run by its ID.
+  rpc Get(GetRunRequest) returns (Run) {
+    option (google.api.http) = {get: "/assistants/v1/runs/{run_id}"};
+  }
+
+  // Retrieves the most recent run for a specific thread.
+  rpc GetLastByThread(GetLastRunByThreadRequest) returns (Run) {
+    option (google.api.http) = {get: "/assistants/v1/runs:getByThread"};
+  }
+
+  // List runs in a specific folder.
+  rpc List(ListRunsRequest) returns (ListRunsResponse) {
+    option (google.api.http) = {get: "/assistants/v1/runs"};
+  }
+
+  // Submit event to run
+  // For example, submit function call results when the run is waiting for user input.
+  rpc Submit(SubmitToRunRequest) returns (SubmitToRunResponse) {
+    option (google.api.http) = {patch: "/assistants/v1/runs/submit" body: "*"};
+  };
+}
+
+// Request message for creating a new run.
+message CreateRunRequest {
+  // ID of the assistant for which the run is being created
+  string assistant_id = 1 [(required) = true];
+
+  // ID of the thread associated with the run.
+  string thread_id = 2 [(required) = true];
+
+  // Set of key-value pairs to label the run.
+  map<string, string> labels = 3;
+
+  // Additional messages that will be written to the thread before the run starts.
+  repeated yandex.cloud.ai.assistants.v1.threads.MessageData additional_messages = 4;
+
+  // Configuration options for truncating the prompt when the token count exceeds a specified limit.
+  // If specified, these options will override the assistant's prompt truncation settings for this run.
+  yandex.cloud.ai.assistants.v1.PromptTruncationOptions custom_prompt_truncation_options = 5;
+
+  // Configuration options for completion generation.
+  // If specified, these options will override the assistant's completion settings for this run.
+  yandex.cloud.ai.assistants.v1.CompletionOptions custom_completion_options = 6;
+
+  // Enables streaming of intermediate events, such as partial messages.
+  bool stream = 7;
+
+  // List of tools that are available for the assistant to use in this run.
+  repeated yandex.cloud.ai.assistants.v1.Tool tools = 8;
+
+  // Specifies the format of the model's response.
+  yandex.cloud.ai.assistants.v1.ResponseFormat custom_response_format = 9;
+}
+
+// Request message for listing to a run events.
+message ListenRunRequest {
+  // ID of the run to listen to.
+  string run_id = 1 [(required) = true];
+
+  // Starting index for events. If provided, listening will start from this event.
+  google.protobuf.Int64Value events_start_idx = 2;
+}
+
+message AttachRunRequest {
+  // ID of the run to listen to.
+  string run_id = 1 [(required) = true];
+
+  // Starting index for events. If provided, listening will start from this event.
+  google.protobuf.Int64Value events_start_idx = 2;
+
+  // Event to submit to the run.
+  oneof Event {
+    // A list of tool results to submit to the run, such as the output of a function call.
+    yandex.cloud.ai.assistants.v1.ToolResultList tool_result_list = 3;
+  }
+}
+
+// Request message for retrieving a specific run by its ID.
+message GetRunRequest {
+  // ID of the run to retrieve.
+  string run_id = 1 [(required) = true];
+}
+
+// Request message for retrieving the last run associated with a specific thread.
+message GetLastRunByThreadRequest {
+  // ID of the thread for which the last run is being fetched.
+  string thread_id = 1 [(required) = true];
+}
+
+// Request message for listing runs.
+message ListRunsRequest {
+  // Folder ID from which to list runs.
+  string folder_id = 1 [(required) = true];
+
+  // Maximum number of threads to return per page.
+  int64 page_size = 2;
+
+  // Token to retrieve the next page of results.
+  string page_token = 3;
+}
+
+// Response message for the list operation.
+message ListRunsResponse {
+  // List of runs in the specified folder.
+  repeated Run runs = 1;
+
+  // Token to retrieve the next page of results.
+  string next_page_token = 2;
+}
+
+// Represents the cursor position in a stream of events.
+message StreamCursor {
+  // Index of the current event in the stream.
+  int64 current_event_idx = 1;
+
+  // The number of user events received so far.
+  int64 num_user_events_received = 2;
+}
+
+// Represents an event in the stream of a run.
+message StreamEvent {
+  // Enum representing events that can occur in the stream.
+  enum EventType {
+    // Unspecified event type.
+    EVENT_TYPE_UNSPECIFIED = 0;
+
+    // Partial message is available.
+    PARTIAL_MESSAGE = 1;
+
+    // Run has failed due to an error.
+    ERROR = 2;
+
+    // The run has completed.
+    DONE = 3;
+
+    // The run is waiting for tool calls to be executed and their results to be submitted.
+    TOOL_CALLS = 4;
+  }
+
+  // The type of event.
+  EventType event_type = 1;
+
+  // The current position in the stream.
+  StreamCursor stream_cursor = 2;
+
+  // Event data, which can be one of several types.
+  oneof EventData {
+    // Error information if the run has failed.
+    yandex.cloud.ai.common.Error error = 3;
+
+    // Partially generated message.
+    yandex.cloud.ai.assistants.v1.threads.MessageContent partial_message = 4;
+
+    // Final message generated by an assistant if a run has completed successfully.
+    yandex.cloud.ai.assistants.v1.threads.Message completed_message = 5;
+
+    // A list of tool calls requested by the assistant.
+    yandex.cloud.ai.assistants.v1.ToolCallList tool_call_list = 6;
+  }
+}
+
+message SubmitToRunRequest {
+  // ID of the run to submit to.
+  string run_id = 1 [(required) = true];
+
+  // Event to submit to the run.
+  oneof Event {
+    // A list of tool results to submit to the run, such as the output of a function call.
+    yandex.cloud.ai.assistants.v1.ToolResultList tool_result_list = 2;
+  }
+}
+
+message SubmitToRunResponse {
+
+}

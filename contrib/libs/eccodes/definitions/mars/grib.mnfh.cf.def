@@ -1,0 +1,6 @@
+#assert(local=23)
+alias mars.method  = methodNumber;
+alias mars.origin  = centre;
+
+alias mars.refdate = referenceDate;
+if (class is "od") { alias mars.system = systemNumber; }

@@ -1,0 +1,3 @@
+exclude:
+  - google/**/*_pb2.py
+  - google/**/*_pb2_grpc.py

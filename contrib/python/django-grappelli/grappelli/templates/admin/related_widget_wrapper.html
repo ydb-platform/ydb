@@ -1,0 +1,42 @@
+{% load i18n static %}
+<div class="grp-related-widget-wrapper related-widget-wrapper">
+    {{ widget }}
+    {% block links %}
+        {% if can_change_related or can_add_related or can_delete_related %}
+            <ul class="grp-tools grp-related-widget-tools">
+                {% comment %}
+                {% if can_change_related %}
+                    <li>
+                        <a class="grp-related-widget-wrapper-link grp-change-related related-widget-wrapper-link change-related" id="change_id_{{ name }}"
+                            data-href-template="{{ change_related_template_url }}?{{ url_params }}"
+                            title="{% blocktrans %}Change selected {{ model }}{% endblocktrans %}">
+                            <img src="{% static 'admin/img/icon-changelink.svg' %}" width="10" height="10"
+                                alt="{% trans 'Change' %}"/>
+                        </a>
+                    </li>
+                {% endif %}
+                {% endcomment %}
+                {% if can_add_related %}
+                    <li>
+                        <a class="grp-related-widget-wrapper-link grp-add-related grp-add-another related-widget-wrapper-link add-related add-another" id="add_id_{{ name }}"
+                            href="{{ add_related_url }}?{{ url_params }}"
+                            title="{% blocktrans %}Add another {{ model }}{% endblocktrans %}">
+                        </a>
+                    </li>
+                {% endif %}
+                {% comment %}
+                {% if can_delete_related %}
+                    <li>
+                        <a class="grp-related-widget-wrapper-link grp-delete-related related-widget-wrapper-link delete-related" id="delete_id_{{ name }}"
+                            data-href-template="{{ delete_related_template_url }}?{{ url_params }}"
+                            title="{% blocktrans %}Delete selected {{ model }}{% endblocktrans %}">
+                            <img src="{% static 'admin/img/icon-deletelink.svg' %}" width="10" height="10"
+                                alt="{% trans 'Delete' %}"/>
+                        </a>
+                    </li>
+                {% endif %}
+                {% endcomment %}
+            </ul>
+        {% endif %}
+    {% endblock %}
+</div>

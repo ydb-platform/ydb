@@ -1,0 +1,11 @@
+{
+  "properties": {
+    "type_": {
+      "const": "a",
+      "default": "a",
+      "title": "Type "
+    }
+  },
+  "title": "Type1",
+  "type": "object"
+}

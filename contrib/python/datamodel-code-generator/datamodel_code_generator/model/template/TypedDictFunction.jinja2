@@ -1,0 +1,16 @@
+{%- if description %}
+"""
+{{ description | indent(4) }}
+"""
+{%- endif %}
+{{ class_name }} = TypedDict('{{ class_name }}', {
+{%- for field in all_fields %}
+    '{{ field.key }}': {{ field.type_hint }},
+    {%- if field.docstring %}
+    """
+    {{ field.docstring | indent(4) }}
+    """
+    {%- endif %}
+{%- endfor -%}
+})
+

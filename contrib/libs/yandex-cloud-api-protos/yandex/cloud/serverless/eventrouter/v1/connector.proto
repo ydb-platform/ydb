@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.eventrouter.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/eventrouter/v1;eventrouter";
+option java_outer_classname = "PERC";
+option java_package = "yandex.cloud.api.serverless.eventrouter.v1";
+
+message Connector {
+  // Status of the connector.
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    RUNNING = 1;
+    // disabled by user
+    STOPPED = 2;
+    // source does not exist
+    RESOURCE_NOT_FOUND = 3;
+    // service account does not have read permission on source
+    PERMISSION_DENIED = 4;
+    // service account not found
+    SUBJECT_NOT_FOUND = 5;
+    // deletion in progress
+    DELETING = 7;
+    // creation in progress
+    CREATING = 8;
+  }
+
+  // ID of the connector.
+  string id = 1;
+
+  // ID of the bus that the connector belongs to.
+  string bus_id = 2;
+
+  // ID of the folder that the connector resides in.
+  string folder_id = 3;
+
+  // ID of the cloud that the connector resides in.
+  string cloud_id = 4;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 5;
+
+  // Name of the connector.
+  string name = 6;
+
+  // Description of the connector.
+  string description = 7;
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 8;
+
+  // Source of the connector.
+  Source source = 9;
+
+  // Deletion protection.
+  bool deletion_protection = 10;
+
+  // Status of the connector.
+  Status status = 11;
+}
+
+message Source {
+  oneof source {
+    option (exactly_one) = true;
+    DataStream data_stream = 1;
+    MessageQueue message_queue = 2;
+    Timer timer = 3;
+    EventServiceSource event_service_source = 4;
+    AuditTrails audit_trails = 5;
+  }
+}
+
+message DataStream {
+  // Stream database. 
+  // example: /ru-central1/aoegtvhtp8ob********/cc8004q4lbo6********
+  string database = 1 [(required) = true];
+
+
+  // Stream name, absolute or relative.
+  string stream_name = 2 [(required) = true];
+
+  // Consumer name.
+  string consumer = 3 [(required) = true];
+
+  // Service account which has read permission on the stream.
+  string service_account_id = 4 [(required) = true];
+}
+
+message MessageQueue {
+  // Queue ARN.
+  // Example: yrn:yc:ymq:ru-central1:aoe***:test
+  string queue_arn = 1 [(required) = true];
+
+  // Service account which has read access to the queue.
+  string service_account_id = 2 [(required) = true, (length) = "<=50"];
+
+  // Queue visibility timeout override.
+  google.protobuf.Duration visibility_timeout = 3 [(value) = "<=12h"];
+
+  // Batch size for polling.
+  int64 batch_size = 4 [(value) = "<=10"];
+ 
+  // Queue polling timeout.
+  google.protobuf.Duration polling_timeout = 5 [(value) = "<=20s"];
+}
+
+message EventServiceSource {
+}
+
+message Timer {
+  // cron expression, with second precision
+  string cron_expression = 1 [(required) = true, (length) = "<=100"];
+
+  // time zone, e.g. Europe/Moscow 
+  string time_zone = 2;
+
+  reserved 3;
+
+  // payload to send to target
+  string payload = 4 [(length) = "<=4096"];
+}
+
+message AuditTrails {
+}

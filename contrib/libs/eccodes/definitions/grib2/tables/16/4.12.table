@@ -1,0 +1,5 @@
+# Code table 4.12 - Operating mode
+0 0 Maintenance mode
+1 1 Clear air
+2 2 Precipitation
+255 255 Missing

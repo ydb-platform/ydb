@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+
+package yandex.cloud.clouddesktop.v1.api;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/clouddesktop/v1;clouddesktop";

@@ -1,0 +1,12 @@
+alias mars.origin = centre;
+
+meta    forecastperiod    g1fcperiod(P1,P2,timeRangeIndicator,indicatorOfUnitOfTimeRange) : no_copy;
+alias   mars.fcperiod = forecastperiod;
+
+include "mars/mars.quantile.def"
+
+# TODO: Check why they are set in the first place
+unalias mars.step;
+unalias mars.number;
+alias mars.method = methodNumber;
+if (class is "od") { alias mars.system = systemNumber; }

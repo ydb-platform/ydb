@@ -1,0 +1,141 @@
+<head>
+    <style>
+        #pageContainer {
+            margin: auto;
+            max-width: 1200px;
+        }
+
+        #heroContentGrid {
+            align-content: center;
+            display: grid;
+            flex-grow: 1;
+            grid-gap: 15px;
+            grid-template-columns: auto auto;
+            grid-template-rows: auto auto;
+        }
+
+        #heroContentGrid > div {
+            align-self: center;
+        }
+
+        #hero: {
+            align-items: center;
+            display: flex;
+        }
+
+        #heroLogo {
+            grid-column: 1;
+            grid-row: 1;
+            text-align: right;
+        }
+
+        #heroTitle {
+            font-family: 'Roboto', sans-serif;
+            font-size: 50px;
+            grid-column: 2;
+            grid-row: 1;
+            line-height: 59px;
+            text-align: left;
+        }
+
+        .collapsible {
+          background-color: white;
+          cursor: pointer;
+          width: 100%;
+          border: none;
+          text-align: left;
+          outline: none;
+          font-size: 15px;
+        }
+
+        .active, .collapsible:hover {
+          color: white;
+          background-color: #555;
+        }
+
+        .collapsible:after {
+          content: '\002B';
+          color: white;
+          font-weight: bold;
+          float: right;
+          margin-left: 5px;
+        }
+
+        .active:after {
+          content: "\2212";
+        }
+
+        .content {
+          padding: 0 18px;
+          max-height: 0;
+          overflow: hidden;
+          transition: max-height 0.2s ease-out;
+          background-color: #f1f1f1;
+        }
+    </style>
+</head>
+
+{% if image_data_base64 -%}
+<div id="pageContainer">
+    <section id="hero" role="region" aria-label="Header image">
+        <div id="heroContentGrid">
+            <div id="heroLogo">
+                <img src="data:{{ image_mime_type }};base64,{{ image_data_base64 }}" role="img" aria-label="Header image" />
+            </div>
+        </div>
+    </section>
+</div>
+{%- endif %}
+
+<h3>Sarif Summary: <b>{{ report_type }}</b></h3>
+<h4>Document generated on: <b>{{ report_date }}</b></h4>
+<h4>Total number of distinct issues of all severities ({{ severities }}): <b>{{ total }}</b></h4>
+{% if filtered -%}
+<p>{{ filtered }}</p>
+{%- endif %}
+
+{% if chart_image_data_base64 -%}
+<img src="data:image/png;base64,{{ chart_image_data_base64 }}" role="img" aria-label="Pie chart" />
+{%- endif %}
+
+{% for problem in problems %}
+<h3>Severity : {{ problem.type }} [ {{ problem.count }} ]</h3>
+<ul>
+    {%- for error in problem.details %}
+    <li>
+        <button class="collapsible">{{- error.code }}: <b>{{ error.count -}}</b></button>
+        <div class="content">
+            <ul>
+            {%- for link in error.links %}
+                <li><a href="{{ link.1 }}" target="_blank">{{ link.0 }}</a></li>
+            {%- endfor %}
+            {%- for line in error.details %}
+                {%- if line.Location %}
+                <li>{{ line.Location }}:{{ line.Line }}</li>
+                {%- else %}
+                <li>{{ line.Description }}</li>
+                {%- endif %}
+            {%- endfor %}
+            </ul>
+        </div>
+    </li>
+    {%- endfor %}
+</ul>
+{%- endfor %}
+
+<script>
+    var coll = document.getElementsByClassName("collapsible");
+    var i;
+
+    for (i = 0; i < coll.length; i++) {
+      coll[i].addEventListener("click", function() {
+        this.classList.toggle("active");
+        var content = this.nextElementSibling;
+        if (content.style.maxHeight){
+          content.style.maxHeight = null;
+        } else {
+          content.style.maxHeight = content.scrollHeight + "px";
+        }
+      });
+    }
+</script>

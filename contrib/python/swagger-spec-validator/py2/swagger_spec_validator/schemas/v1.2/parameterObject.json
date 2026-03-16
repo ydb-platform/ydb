@@ -1,0 +1,73 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "allOf": [
+        {
+            "$ref": "dataTypeBase.json#"
+        },
+        {
+            "properties": {
+                "allowMultiple": {
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "paramType": {
+                    "enum": [
+                        "path",
+                        "query",
+                        "body",
+                        "header",
+                        "form"
+                    ]
+                },
+                "required": {
+                    "type": "boolean"
+                }
+            },
+            "required": [
+                "paramType",
+                "name"
+            ]
+        },
+        {
+            "description": "type File requires special paramType and consumes",
+            "oneOf": [
+                {
+                    "properties": {
+                        "type": {
+                            "not": {
+                                "enum": [
+                                    "File"
+                                ]
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "consumes": {
+                            "enum": [
+                                "multipart/form-data"
+                            ]
+                        },
+                        "paramType": {
+                            "enum": [
+                                "form"
+                            ]
+                        },
+                        "type": {
+                            "enum": [
+                                "File"
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "type": "object"
+}

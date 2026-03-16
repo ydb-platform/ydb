@@ -1,0 +1,10 @@
+enum Color {
+  RED
+  GREEN
+  BLUE
+}
+
+input Car {
+  colorList: [Color!] = [RED]
+  colorOne: Color = GREEN
+}

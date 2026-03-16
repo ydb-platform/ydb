@@ -1,0 +1,212 @@
+syntax = "proto3";
+
+package yandex.cloud.backup.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/backup/v1/policy.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/backup/v1;backup";
+option java_package = "yandex.cloud.api.backup.v1";
+
+// Archive is a container that holds backups of Compute Cloud instance.
+message Archive {
+    // Archive attributes.
+    message ArchiveAttributes {
+
+        // Archive attribute. Default value: `0`.
+        string aaib = 1;
+        // URI of the backup archive.
+        string uri = 2;
+    }
+
+    // Encryption Algorithm for underlying backups: 
+    // `ENCRYPTION_ALGORITHM_UNSPECIFIED`, `NONE`, `AES128`, `AES192`, 
+    // `AES256`.
+    enum EncryptionAlgorithm {
+        ENCRYPTION_ALGORITHM_UNSPECIFIED = 0;
+        NONE = 1;
+        AES128 = 2;
+        AES192 = 3;
+        AES256 = 4;
+    }
+
+    // Action with archive backup: `ACTION_UNSPECIFIED`, `REFRESH`,
+    // `DELETE_BY_AGENT`.
+    enum Action {
+        ACTION_UNSPECIFIED = 0;
+        REFRESH = 1;
+        DELETE_BY_AGENT = 2;
+    }
+
+    // ID of the backup.
+    string id = 1;
+    // Name of the backup.
+    string name = 2;
+    // ID of the backup vault.
+    string vault_id = 3;
+    // Archive attributes.
+    ArchiveAttributes attributes = 4;
+    // Archive size.
+    int64 size = 5;
+    // Compressed data size.
+    int64 compressed_data_size = 6;
+    // Data size.
+    int64 data_size = 7;
+    // Original data size.
+    int64 original_data_size = 8;
+    // Logical size.
+    int64 logical_size = 9;
+    Format format = 10;
+    google.protobuf.Timestamp created_at = 11;
+    google.protobuf.Timestamp updated_at = 12;
+    google.protobuf.Timestamp last_backup_created_at = 13;
+    google.protobuf.Timestamp last_seen_at = 14;
+    // If this field is true, it means that any of encryption algorithm
+    // has been chosen.
+    bool protected_by_password = 15;
+    EncryptionAlgorithm encryption_algorithm = 16;
+    reserved 17 to 19;
+
+    repeated Action actions = 20;
+
+    reserved 21;
+
+    // Backup plan ID.
+    string backup_plan_id = 22;
+    // Backup plan name.
+    string backup_plan_name = 23;
+    // Backup plan description.
+    string description = 24;
+    // Display name, e.g. `INSTANCE_NAME - POLICY_NAME`.
+    string display_name = 25;
+    // Compute Cloud instance ID.
+    string compute_instance_id = 26;
+    // If this field is true, it means that the archive is consistent.
+    bool consistent = 27;
+
+    reserved 28, 29;
+
+    // If this field is true, it means that the archive was deleted.
+    bool deleted = 30;
+    // Resource ID.
+    string resource_id = 31;
+}
+
+message Volume {
+    // Free space in the volume.
+    int64 free_space = 1;
+    // If this field is true, it means that the volume is bootable.
+    bool is_bootable = 2;
+    // If this field is true, it means that the volume is a system volume.
+    bool is_system = 3;
+    // Volume name.
+    string name = 4;
+    // Volume size.
+    int64 size = 5;
+    // Mount string ID.
+    string mount_strid = 6;
+}
+
+message Disk {
+    // Device model.
+    string device_model = 1;
+    // Disk name.
+    string name = 2;
+    // Disk size.
+    int64 size = 3;
+    repeated Volume volumes = 4;
+}
+
+message Backup {
+    // Backup attributes.
+    message BackupAttributes {
+        // Backup stream name.
+        string stream_name = 1;
+        // URI of the backup archive.
+        string uri = 2;
+    }
+
+    // Backup type.
+    // For detailed information, please see [Backup types](/docs/backup/concepts/backup#types).
+    enum Type {
+        TYPE_UNSPECIFIED = 0;
+        FULL = 1;
+        INCREMENTAL = 2;
+    }
+
+    // ID of the backup.
+    string id = 1;
+    // ID of the backup vault.
+    string vault_id = 2;
+    // ID of the backup archive.
+    string archive_id = 3;
+    google.protobuf.Timestamp created_at = 4;
+    google.protobuf.Timestamp last_seen_at = 5;
+    // Backup size.
+    int64 size = 6;
+    // Deduplicated backup size.
+    int64 deduplicated_size = 7;
+    // Backed up data size.
+    int64 backed_up_data_size = 8;
+    // Original data size.
+    int64 original_data_size = 9;
+
+    BackupAttributes attributes = 10;
+
+    // Compute Cloud instance ID.
+    string compute_instance_id = 11;
+
+    reserved 12, 13;
+
+    repeated Disk disks = 14;
+    Type type = 15;
+
+    reserved 16 to 20;
+
+    // If this field is true, it means that the backup was deleted.
+    bool deleted = 21;
+    // [Policy](/docs/backup/concepts/policy) ID.
+    string policy_id = 22;
+    // Resource ID. It identifies Compute Cloud instance in backup service.
+    string resource_id = 23;
+}
+
+// BackupFile represents a single unit of file or directory system inside the backup.
+message BackupFile {
+    // Type of the file.
+    enum Type {
+        TYPE_UNSPECIFIED = 0;
+        TYPE_DIR = 1;
+        TYPE_FILE = 2;
+    }
+
+    message Actions {
+        // Allows to send request to restore item to disk
+        bool restore_to_disk = 1;
+        // Allows to move to location by id.
+        bool go_to_location = 2;
+        // Allows to download requested item.
+        // Will be implemented later.
+        // bool download = 3;
+        reserved 3;
+    }
+
+    // ID of the item. Should be used as source ID in case of listing.
+    string id = 1 [(required) = true];
+    // Might be empty if this is root directory.
+    google.protobuf.StringValue parent_id = 2 [(required) = false];
+    // Type of the item.
+    Type type = 3 [(required) = true];
+    // Absolute path of the item.
+    string full_path = 4 [(required) = true];
+    // Name of the directory / file.
+    string name = 5 [(required) = true];
+    // Size in bytes of the item.
+    int64 size = 6;
+    // Actions that might be done on the object.
+    Actions actions = 7 [(required) = true];
+    google.protobuf.Timestamp modified_at = 8 [(required) = true];
+}

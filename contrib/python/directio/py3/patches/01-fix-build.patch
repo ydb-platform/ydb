@@ -1,0 +1,19 @@
+--- contrib/python/directio/py3/directiomodule.c	(index)
++++ contrib/python/directio/py3/directiomodule.c	(working tree)
+@@ -47,14 +47,14 @@
+ 
+ static size_t alignment = 512;
+ 
+-inline void * 
++static inline void * 
+ aligned_allocate (size_t size)
+ {
+   return mmap(NULL, size, PROT_READ | PROT_WRITE, 
+               MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+ }
+ 
+-inline void 
++static inline void 
+ aligned_free (void *addr, size_t size)
+ {
+   munmap(addr, size);

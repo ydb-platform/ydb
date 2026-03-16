@@ -1,0 +1,89 @@
+hspace = (' '|'\t'|'\f'|('#' (~eol anything)*))
+ws = ('\r' '\n'|'\r' | '\n' | hspace)*
+
+number = ws barenumber
+barenumber = '-'?:sign (('0' ((('x'|'X') hexdigit*:hs -> makeHex(sign, hs))
+                    |floatPart(sign '0')
+                    |octaldigit*:ds -> makeOctal(sign, ds)))
+               |decdigits:ds floatPart(sign ds)
+               |decdigits:ds -> signedInt(sign, ds))
+
+
+exponent = <('e' | 'E') ('+' | '-')? decdigits>
+
+
+floatPart :sign :ds = <('.' decdigits exponent?) | exponent>:tail -> makeFloat(sign, ds, tail)
+
+decdigits = digit:d ((:x ?(isDigit(x)) -> x) | '_' -> "")*:ds -> concat(d, join(ds))
+octaldigit = :x ?(isOctDigit(x)) -> x
+hexdigit = :x ?(isHexDigit(x)) -> x
+
+string = ws '"' (escapedChar | ~('"') anything)*:c '"' -> join(c)
+character = ws '\'' (escapedChar | ~('\''|'\n'|'\r'|'\\') anything):c '\'' -> Character(c)
+escapedUnicode = ('u' <hexdigit hexdigit hexdigit hexdigit>:hs -> unichr(int(hs, 16))
+                   |'U' <hexdigit hexdigit hexdigit hexdigit
+                         hexdigit hexdigit hexdigit hexdigit>:hs -> unichr(int(hs, 16)))
+
+escapedOctal = ( <:a ?(contains("0123", a)) octdigit? octdigit?>
+                 | <:a ?(contains("4567", a)) octdigit?>):os -> int(os, 8)
+
+escapedChar = '\\' ('n' -> '\n'
+                     |'r' -> '\r'
+                     |'t' -> '\t'
+                     |'b' -> '\b'
+                     |'f' -> '\f'
+                     |'"' -> '"'
+                     |'\'' -> '\''
+                     |'?' -> '?'
+                     |'\\' -> '\\'
+                     | escapedUnicode
+                     | escapedOctal
+                     | eol -> "")
+
+eol = hspace* ('\r' '\n'|'\r' | '\n')
+
+uriBody = <(letterOrDigit|'_'|';'|'/'|'?'|':'|'@'|'&'|'='|'+'|'$'|','|'-'|'.'|'!'|'~'|'*'|'\''|'('|')'|'%'|'\\'|'|'|'#')+>
+
+
+literal = string:x -> leafInternal(Tag(".String."), x)
+        | character:x -> leafInternal(Tag(".char."), x)
+        | number:x -> leafInternal(Tag(numberType(x)), x)
+
+tag =  (
+          segment:seg1 (':' ':' sos)*:segs -> makeTag(cons(seg1, segs))
+        | (':' ':' sos)+:segs -> prefixedTag(segs))
+
+sos = segment | (string:s -> tagString(s))
+
+segment = ident | special | uri
+
+ident = segStart:i1 segPart*:ibits -> join(cons(i1, ibits))
+
+segStart = letter | '_' | '$'
+
+segPart = letterOrDigit | '_' | '.' | '-' | '$'
+
+special = '.':a ident:b -> concat(a, b)
+
+uri = '<' uriBody*:uriChars '>' -> concat(b, uriChars, e)
+
+functor = ws (literal | tag:t -> leafInternal(t, None))
+baseTerm = functor:f ('(' argList:a ws ')' -> makeTerm(f, a)
+                     | -> makeTerm(f, None))
+
+arg = term
+
+argList = ((arg:t (ws ',' arg)*:ts ws ','?) -> cons(t, ts)
+            | -> [])
+
+tupleTerm = ws '[' argList:a ws ']' -> Tuple(a)
+
+bagTerm = ws '{' argList:a ws '}' -> Bag(a)
+
+labelledBagTerm = functor:f bagTerm:b -> LabelledBag(f, b)
+
+extraTerm = tupleTerm | labelledBagTerm  | bagTerm | baseTerm
+
+attrTerm = extraTerm:k ws ':' extraTerm:v -> Attr(k, v)
+
+term = ws (attrTerm | extraTerm)

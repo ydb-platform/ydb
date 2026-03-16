@@ -1,0 +1,19 @@
+{
+    "$id": "schema_v2.json",
+    "$schema": "http://json-schema.org/schema#",
+
+    "type": "object",
+    "properties": {
+        "@id": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^http.*$",
+            "title": "Id must be presesnt and must be a URI"
+        },
+        "@type": { "type": "string" },
+        "@+!type": { "type": "string" },
+        "@-!type": { "type": "string" },
+        "profile": { "type": "string" }
+    },
+    "required": ["@id", "@type"]
+}

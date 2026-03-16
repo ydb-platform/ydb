@@ -1,0 +1,11 @@
+--- contrib/python/pure-python-adb/ppadb/sync_async/__init__.py	(index)
++++ contrib/python/pure-python-adb/ppadb/sync_async/__init__.py	(working tree)
+@@ -63,7 +63,7 @@ class SyncAsync:
+                     progress(src, total_size, sent_size)
+ 
+         # DONE
+-        await self._send_length(Protocol.DONE, timestamp)
++        await self._send_length(Protocol.DONE, int(timestamp))
+         await self.connection._check_status()
+ 
+     async def pull(self, src, dest):

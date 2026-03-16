@@ -1,0 +1,38 @@
+Metadata-Version: 2.1
+Name: sqlalchemy-stubs
+Version: 0.4
+Summary: SQLAlchemy stubs and mypy plugin
+Home-page: https://github.com/dropbox/sqlalchemy-stubs
+Author: Ivan Levkivskyi
+Author-email: levkivskyi@gmail.com
+License: MIT License
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Programming Language :: Python :: 3
+Description-Content-Type: text/markdown
+Requires-Dist: mypy (>=0.790)
+Requires-Dist: typing-extensions (>=3.7.4)
+
+# Experimental SQLAlchemy type stubs and mypy plugin
+
+This package contains type stubs and mypy plugin to provide more precise
+static types and type inference for SQLAlchemy framework. SQLAlchemy uses
+dynamic Python features that are hard to understand by static type checkers,
+this is why the plugin is needed in addition to type stubs.
+
+Currently, some basic use cases like inferring model field types are supported.
+The final goal is to be able to get precise types for most common patterns.
+
+## Installation
+
+```
+pip install sqlalchemy-stubs
+```
+
+Important: you need to enable the plugin in your mypy config file:
+```
+[mypy]
+plugins = sqlmypy
+```
+
+

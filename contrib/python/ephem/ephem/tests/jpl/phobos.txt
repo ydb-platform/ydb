@@ -1,0 +1,126 @@
+*******************************************************************************
+Ephemeris / WWW_USER Tue May  6 04:28:27 2008  Pasadena, USA     / Horizons    
+*******************************************************************************
+Target body name: Phobos (401)                    {source: MAR063}
+Center body name: Earth (399)                     {source: DE405}
+Center-site name: GEOCENTRIC
+*******************************************************************************
+Start time      : A.D. 2003-Dec-16 00:00:00.0000 UT      
+Stop  time      : A.D. 2003-Dec-18 00:00:00.0000 UT      
+Step-size       : 60 minutes
+*******************************************************************************
+Target pole/equ : IAU_PHOBOS                      {East-longitude -}
+Target radii    : 13.4 x 11.2 x 9.2 km            {Equator, meridian, pole}    
+Center geodetic : .000000000,.000000000,.00000000 {E-lon(deg),Lat(deg),Alt(km)}
+Center cylindric: .000000000,.000000000,.00000000 {E-lon(deg),Dxy(km),Dz(km)}
+Center pole/equ : High-precision EOP model        {East-longitude +}
+Center radii    : 6378.1 x 6378.1 x 6356.8 km     {Equator, meridian, pole}    
+Target primary  : Mars                            {source: DE405+DE406}
+Interfering body: MOON (Req= 1737.400) km         {source: DE405}
+Deflecting body : Sun, EARTH                      {source: DE405}
+Deflecting GMs  : 1.3271E+11, 3.9860E+05 km^3/s^2                              
+Atmos refraction: NO (AIRLESS)
+RA format       : HMS
+Time format     : CAL 
+EOP file        : eop.080505.p080727                                           
+EOP coverage    : DATA-BASED 1962-JAN-20 TO 2008-MAY-05. PREDICTS-> 2008-JUL-26
+Units conversion: 1 AU= 149597870.691 km, c= 299792.458 km/s, 1 day= 86400.0 s 
+Table cut-offs 1: Elevation (-90.0deg=NO ),Airmass (>38.000=NO), Daylight (NO )
+Table cut-offs 2: Solar Elongation (  0.0,180.0=NO )                           
+*******************************************************************************
+ Date__(UT)__HR:MN     R.A._(ICRF/J2000.0)_DEC R.A.__(a-apparent)__DEC Ang-diam
+*******************************************************************************
+$$SOE
+ 2003-Dec-16 00:00     23 59 13.33 -00 29 05.0 23 59 24.83 -00 27 50.2     .038
+ 2003-Dec-16 01:00     23 59 18.35 -00 28 22.6 23 59 29.85 -00 27 07.8     .038
+ 2003-Dec-16 02:00     23 59 22.97 -00 27 44.9 23 59 34.47 -00 26 30.1     .038
+ 2003-Dec-16 03:00     23 59 27.54 -00 27 11.4 23 59 39.04 -00 25 56.6     .038
+ 2003-Dec-16 04:00     23 59 32.44 -00 26 39.0 23 59 43.94 -00 25 24.2     .038
+ 2003-Dec-16 05:00     23 59 37.84 -00 26 03.7 23 59 49.34 -00 24 48.9     .038
+ 2003-Dec-16 06:00     23 59 43.63 -00 25 23.2 23 59 55.12 -00 24 08.4     .038
+ 2003-Dec-16 07:00     23 59 49.39 -00 24 38.9 00 00 00.89 -00 23 24.1     .038
+ 2003-Dec-16 08:00     23 59 54.75 -00 23 54.4 00 00 06.25 -00 22 39.6     .038
+ 2003-Dec-16 09:00     23 59 59.62 -00 23 13.4 00 00 11.12 -00 21 58.6     .038
+ 2003-Dec-16 10:00     00 00 04.19 -00 22 37.4 00 00 15.69 -00 21 22.6     .038
+ 2003-Dec-16 11:00     00 00 08.84 -00 22 04.7 00 00 20.34 -00 20 49.9     .038
+ 2003-Dec-16 12:00     00 00 13.91 -00 21 31.6 00 00 25.41 -00 20 16.8     .038
+ 2003-Dec-16 13:00     00 00 19.48 -00 20 54.6 00 00 30.98 -00 19 39.8     .038
+ 2003-Dec-16 14:00     00 00 25.31 -00 20 12.5 00 00 36.81 -00 18 57.7     .038
+ 2003-Dec-16 15:00     00 00 30.98 -00 19 27.6 00 00 42.48 -00 18 12.8     .038
+ 2003-Dec-16 16:00     00 00 36.18 -00 18 44.0 00 00 47.67 -00 17 29.2     .038
+ 2003-Dec-16 17:00     00 00 40.91 -00 18 04.7 00 00 52.41 -00 16 49.9     .038
+ 2003-Dec-16 18:00     00 00 45.47 -00 17 30.1 00 00 56.97 -00 16 15.3     .038
+ 2003-Dec-16 19:00     00 00 50.25 -00 16 57.7 00 01 01.74 -00 15 42.9     .038
+ 2003-Dec-16 20:00     00 00 55.50 -00 16 23.6 00 01 07.00 -00 15 08.8     .038
+ 2003-Dec-16 21:00     00 01 01.21 -00 15 44.8 00 01 12.71 -00 14 30.0     .038
+ 2003-Dec-16 22:00     00 01 07.04 -00 15 01.3 00 01 18.54 -00 13 46.5     .038
+ 2003-Dec-16 23:00     00 01 12.57 -00 14 16.4 00 01 24.07 -00 13 01.5     .038
+ 2003-Dec-17 00:00     00 01 17.60 -00 13 34.0 00 01 29.09 -00 12 19.2     .038
+ 2003-Dec-17 01:00     00 01 22.24 -00 12 56.4 00 01 33.74 -00 11 41.6     .038
+ 2003-Dec-17 02:00     00 01 26.84 -00 12 23.0 00 01 38.34 -00 11 08.1     .038
+ 2003-Dec-17 03:00     00 01 31.77 -00 11 50.4 00 01 43.27 -00 10 35.6     .038
+ 2003-Dec-17 04:00     00 01 37.21 -00 11 14.9 00 01 48.71 -00 10 00.0     .038
+ 2003-Dec-17 05:00     00 01 43.01 -00 10 34.2 00 01 54.51 -00 09 19.4     .038
+ 2003-Dec-17 06:00     00 01 48.79 -00 09 49.8 00 02 00.28 -00 08 34.9     .038
+ 2003-Dec-17 07:00     00 01 54.16 -00 09 05.3 00 02 05.65 -00 07 50.4     .038
+ 2003-Dec-17 08:00     00 01 59.04 -00 08 24.4 00 02 10.53 -00 07 09.6     .038
+ 2003-Dec-17 09:00     00 02 03.63 -00 07 48.5 00 02 15.12 -00 06 33.6     .038
+ 2003-Dec-17 10:00     00 02 08.31 -00 07 15.7 00 02 19.81 -00 06 00.9     .038
+ 2003-Dec-17 11:00     00 02 13.42 -00 06 42.5 00 02 24.91 -00 05 27.7     .038
+ 2003-Dec-17 12:00     00 02 19.02 -00 06 05.3 00 02 30.51 -00 04 50.4     .038
+ 2003-Dec-17 13:00     00 02 24.87 -00 05 23.0 00 02 36.36 -00 04 08.2     .038
+ 2003-Dec-17 14:00     00 02 30.54 -00 04 38.0 00 02 42.03 -00 03 23.2     .037
+ 2003-Dec-17 15:00     00 02 35.74 -00 03 54.5 00 02 47.24 -00 02 39.6     .037
+ 2003-Dec-17 16:00     00 02 40.50 -00 03 15.3 00 02 51.99 -00 02 00.4     .037
+ 2003-Dec-17 17:00     00 02 45.09 -00 02 40.7 00 02 56.58 -00 01 25.9     .037
+ 2003-Dec-17 18:00     00 02 49.90 -00 02 08.3 00 03 01.39 -00 00 53.4     .037
+ 2003-Dec-17 19:00     00 02 55.19 -00 01 34.0 00 03 06.68 -00 00 19.1     .037
+ 2003-Dec-17 20:00     00 03 00.92 -00 00 54.9 00 03 12.41 +00 00 19.9     .037
+ 2003-Dec-17 21:00     00 03 06.76 -00 00 11.3 00 03 18.25 +00 01 03.6     .037
+ 2003-Dec-17 22:00     00 03 12.30 +00 00 33.7 00 03 23.78 +00 01 48.5     .037
+ 2003-Dec-17 23:00     00 03 17.33 +00 01 16.0 00 03 28.82 +00 02 30.8     .037
+ 2003-Dec-18 00:00     00 03 22.00 +00 01 53.4 00 03 33.49 +00 03 08.3     .037
+$$EOE
+*******************************************************************************
+Column meaning:
+ 
+TIME
+
+  Prior to 1962, times are UT1. Dates thereafter are UTC. Any 'b' symbol in
+the 1st-column denotes a B.C. date. First-column blank (" ") denotes an A.D.
+date. Calendar dates prior to 1582-Oct-15 are in the Julian calendar system.
+Later calendar dates are in the Gregorian system.
+
+  The uniform Coordinate Time scale is used internally. Conversion between
+CT and the selected non-uniform UT output scale has not been determined for
+UTC times after the next July or January 1st.  The last known leap-second
+is used over any future interval.
+
+  NOTE: "n.a." in output means quantity "not available" at the print-time.
+ 
+ R.A._(ICRF/J2000.0)_DEC =
+   J2000.0 astrometric right ascension and declination of target center.
+Corrected for light-time. Units: HMS (HH MM SS.ff) and DMS (DD MM SS.f)
+ 
+ R.A._(a-apparent)__DEC. =
+   Airless apparent right ascension and declination of the target center with
+respect to the Earth true-equator and the meridian containing the Earth true
+equinox of date.  Corrected for light-time, gravitational deflection of light,
+stellar aberration, precession & nutation.
+   Units: HMS (HH MM SS.ff) and DMS (DD MM SS.f)
+ 
+ Ang-diam =
+   The equatorial angular width of the target body full disk, if it were
+fully visible to the observer.  Units: ARCSECONDS
+
+
+ Computations by ...
+     Solar System Dynamics Group, Horizons On-Line Ephemeris System
+     4800 Oak Grove Drive, Jet Propulsion Laboratory
+     Pasadena, CA  91109   USA
+     Information: http://ssd.jpl.nasa.gov/
+     Connect    : telnet://ssd.jpl.nasa.gov:6775  (via browser)
+                  telnet ssd.jpl.nasa.gov 6775    (via command-line)
+     Author     : Jon.Giorgini@jpl.nasa.gov
+
+*******************************************************************************

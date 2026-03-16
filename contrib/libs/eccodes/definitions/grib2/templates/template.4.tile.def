@@ -1,0 +1,13 @@
+# (C) Copyright 2005- ECMWF.
+
+# Tile specifications
+codetable[1] tileClassification ('4.242.table',masterDir,localDir) : dump;
+unsigned[1]  totalNumberOfTileAttributePairs=1 : dump;
+unsigned[1]  numberOfUsedSpatialTiles=1 : dump;
+unsigned[1]  tileIndex : dump;
+unsigned[1]  numberOfUsedTileAttributes=1 : dump;
+codetable[1] attributeOfTile ('4.241.table',masterDir,localDir) : dump;
+alias NT=totalNumberOfTileAttributePairs;
+alias NUT=numberOfUsedSpatialTiles;
+alias ITN=tileIndex;
+alias NAT=numberOfUsedTileAttributes;

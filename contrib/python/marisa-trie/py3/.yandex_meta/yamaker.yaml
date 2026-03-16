@@ -1,0 +1,7 @@
+cython_directive:
+  - language_level=3
+copy:
+  - marisa-trie/*
+  - src/*
+exclude:
+  - src/marisa_trie.egg-info/*

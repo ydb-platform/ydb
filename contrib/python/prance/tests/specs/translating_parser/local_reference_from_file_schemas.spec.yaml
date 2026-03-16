@@ -1,0 +1,6 @@
+---
+$defs:
+  RefObject:
+    $ref: "#/$defs/PlainObject"
+  PlainObject:
+    type: object

@@ -1,0 +1,10 @@
+--- contrib/libs/nvidia/nccl/src/include/utils.h        (index)
++++ contrib/libs/nvidia/nccl/src/include/utils.h        (working tree)
+@@ -17,6 +17,7 @@
+ #include <algorithm>
+ #include <new>
+ #include <type_traits>
++#include <stdlib.h>
+ 
+ int ncclCudaCompCap();
+ 

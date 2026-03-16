@@ -1,0 +1,153 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2bed1dff82dc8aed9f0a791748633e4c
+BELONGS ya.make
+    License text:
+        Copyright (c) 2002-2019, Lawrence Livermore National Security and Southern Methodist University.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3:4]
+        include/cvodes/cvodes.h [4:7]
+        include/cvodes/cvodes_bandpre.h [5:8]
+        include/cvodes/cvodes_bbdpre.h [5:8]
+        include/cvodes/cvodes_diag.h [4:7]
+        include/cvodes/cvodes_direct.h [4:7]
+        include/cvodes/cvodes_ls.h [5:8]
+        include/cvodes/cvodes_spils.h [4:7]
+        include/idas/idas.h [4:7]
+        include/idas/idas_bbdpre.h [5:8]
+        include/idas/idas_direct.h [4:7]
+        include/idas/idas_ls.h [5:8]
+        include/idas/idas_spils.h [4:7]
+        include/nvector/nvector_serial.h [5:8]
+        include/sundials/sundials_band.h [4:7]
+        include/sundials/sundials_dense.h [4:7]
+        include/sundials/sundials_direct.h [4:7]
+        include/sundials/sundials_iterative.h [4:7]
+        include/sundials/sundials_linearsolver.h [5:8]
+        include/sundials/sundials_math.h [6:9]
+        include/sundials/sundials_matrix.h [5:8]
+        include/sundials/sundials_nonlinearsolver.h [4:7]
+        include/sundials/sundials_nvector.h [4:7]
+        include/sundials/sundials_nvector_senswrapper.h [4:7]
+        include/sundials/sundials_spbcgs.h [8:11]
+        include/sundials/sundials_spgmr.h [9:12]
+        include/sundials/sundials_sptfqmr.h [8:11]
+        include/sundials/sundials_types.h [5:8]
+        include/sundials/sundials_version.h [4:7]
+        include/sunlinsol/sunlinsol_band.h [5:8]
+        include/sunlinsol/sunlinsol_dense.h [5:8]
+        include/sunlinsol/sunlinsol_pcg.h [5:8]
+        include/sunlinsol/sunlinsol_spbcgs.h [7:10]
+        include/sunlinsol/sunlinsol_spfgmr.h [7:10]
+        include/sunlinsol/sunlinsol_spgmr.h [7:10]
+        include/sunlinsol/sunlinsol_sptfqmr.h [6:9]
+        include/sunmatrix/sunmatrix_band.h [7:10]
+        include/sunmatrix/sunmatrix_dense.h [7:10]
+        include/sunmatrix/sunmatrix_sparse.h [8:11]
+        include/sunnonlinsol/sunnonlinsol_fixedpoint.h [4:7]
+        include/sunnonlinsol/sunnonlinsol_newton.h [4:7]
+        src/cvodes/cvodea.c [8:11]
+        src/cvodes/cvodea_io.c [8:11]
+        src/cvodes/cvodes.c [8:11]
+        src/cvodes/cvodes_bandpre.c [6:9]
+        src/cvodes/cvodes_bandpre_impl.h [6:9]
+        src/cvodes/cvodes_bbdpre.c [6:9]
+        src/cvodes/cvodes_bbdpre_impl.h [6:9]
+        src/cvodes/cvodes_diag.c [5:8]
+        src/cvodes/cvodes_diag_impl.h [5:8]
+        src/cvodes/cvodes_direct.c [4:7]
+        src/cvodes/cvodes_impl.h [8:11]
+        src/cvodes/cvodes_io.c [8:11]
+        src/cvodes/cvodes_ls.c [5:8]
+        src/cvodes/cvodes_ls_impl.h [5:8]
+        src/cvodes/cvodes_nls.c [4:7]
+        src/cvodes/cvodes_nls_sim.c [4:7]
+        src/cvodes/cvodes_nls_stg.c [4:7]
+        src/cvodes/cvodes_nls_stg1.c [4:7]
+        src/cvodes/cvodes_spils.c [4:7]
+        src/idas/idaa.c [8:11]
+        src/idas/idaa_io.c [8:11]
+        src/idas/idas.c [5:8]
+        src/idas/idas_bbdpre.c [6:9]
+        src/idas/idas_bbdpre_impl.h [5:8]
+        src/idas/idas_direct.c [4:7]
+        src/idas/idas_ic.c [8:11]
+        src/idas/idas_impl.h [8:11]
+        src/idas/idas_io.c [8:11]
+        src/idas/idas_ls.c [5:8]
+        src/idas/idas_ls_impl.h [5:8]
+        src/idas/idas_nls.c [4:7]
+        src/idas/idas_nls_sim.c [4:7]
+        src/idas/idas_nls_stg.c [4:7]
+        src/idas/idas_spils.c [4:7]
+        src/nvector/serial/nvector_serial.c [5:8]
+        src/sundials/sundials_band.c [8:11]
+        src/sundials/sundials_dense.c [9:12]
+        src/sundials/sundials_direct.c [4:7]
+        src/sundials/sundials_iterative.c [9:12]
+        src/sundials/sundials_linearsolver.c [6:9]
+        src/sundials/sundials_math.c [5:8]
+        src/sundials/sundials_matrix.c [6:9]
+        src/sundials/sundials_nonlinearsolver.c [4:7]
+        src/sundials/sundials_nvector.c [4:7]
+        src/sundials/sundials_nvector_senswrapper.c [4:7]
+        src/sundials/sundials_version.c [4:7]
+        src/sunlinsol/band/sunlinsol_band.c [5:8]
+        src/sunlinsol/dense/sunlinsol_dense.c [5:8]
+        src/sunlinsol/pcg/sunlinsol_pcg.c [6:9]
+        src/sunlinsol/spbcgs/sunlinsol_spbcgs.c [7:10]
+        src/sunlinsol/spfgmr/sunlinsol_spfgmr.c [7:10]
+        src/sunlinsol/spgmr/sunlinsol_spgmr.c [7:10]
+        src/sunlinsol/sptfqmr/sunlinsol_sptfqmr.c [6:9]
+        src/sunmatrix/band/sunmatrix_band.c [8:11]
+        src/sunmatrix/dense/sunmatrix_dense.c [8:11]
+        src/sunmatrix/sparse/sunmatrix_sparse.c [8:11]
+        src/sunnonlinsol/fixedpoint/sunnonlinsol_fixedpoint.c [4:7]
+        src/sunnonlinsol/newton/sunnonlinsol_newton.c [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d9e7a16e5173ca72b1df175ec0c7d5d4
+BELONGS ya.make
+    License text:
+        Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+        1 Letterman Drive
+        Suite D4700
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        CONTRIBUTING.md [29:31]

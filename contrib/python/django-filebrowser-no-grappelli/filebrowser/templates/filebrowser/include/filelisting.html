@@ -1,0 +1,133 @@
+{% load i18n fb_tags fb_versions fb_compat %}
+
+{% for fileobject in page.object_list %}
+
+    <!-- THUMBNAIL-VERSION FOR IMAGE-OBJECT -->
+    {% if fileobject.filetype == "Image" %}
+        {% version fileobject settings_var.ADMIN_THUMBNAIL as thumbnail_version %}
+    {% endif %}
+
+    <tr class="{% cycle 'row1' 'row2' %}{% if fileobject.is_folder %} fb_folder{% endif %}">
+
+        <!-- FILESELECT FOR FILEBROWSEFIELD -->
+        {% if query.pop == "1" %}
+            <td class="fb_icon">
+                {% selectable fileobject.filetype query.type %}
+                {% if selectable %}
+                    <!-- select versions -->
+                    {% if fileobject.filetype == "Image" and settings_var.ADMIN_VERSIONS %}
+                        <div class="pulldown-versions-container">
+                            <a href="javascript://" class="button pulldown-versions-handler" title="{% trans "Versions" %}">&nbsp;</a>
+                            <ul class="pulldown-versions">
+                                {% for version in settings_var.ADMIN_VERSIONS %}
+                                    {% version_setting version %}
+                                    <li><a href="{% url 'filebrowser:fb_version' %}{% query_string '' 'filename, dirname' %}&amp;dir={{ fileobject.dirname|urlencode }}&amp;filename={{ fileobject.filename|urlencode }}&amp;version={{ version }}" title="">{{ version_setting.verbose_name }}</a></li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                    <!-- select original -->
+                    <a class="button" href="#" onclick="FileSubmit('{{ fileobject.path }}', '{{ fileobject.url }}', '{{ thumbnail_version.url }}', '{{ fileobject.filetype }}');">{% trans "Select" %}</a>
+                {% else %}
+                    &nbsp;
+                {% endif %}
+            </td>
+        {% endif %}
+
+        <!-- FILESELECT FOR RTE/TINYMCE -->
+        <!-- we need to use the absolute url here -->
+        {% if query.pop == "2" or query.pop == "4" or query.pop == "5" %}
+            <td class="fb_icon">
+                {% selectable fileobject.filetype query.type %}
+                {% if selectable %}
+                    <!-- select versions -->
+                    {% if fileobject.filetype == "Image" and settings_var.ADMIN_VERSIONS %}
+                        <div class="pulldown-versions-container">
+                            <a href="javascript://" class="button pulldown-versions-handler" title="{% trans "Versions" %}">&nbsp;</a>
+                            <ul class="pulldown-versions">
+                                {% for version in settings_var.ADMIN_VERSIONS  %}
+                                    {% version_setting version %}
+                                    <li><a href="{% url 'filebrowser:fb_version' %}{% query_string '' 'filename' %}&amp;filename={{ fileobject.filename|urlencode }}&amp;version={{ version }}" title="">{{ version_setting.verbose_name }}</a></li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                    <!-- select original -->
+                    <a class="button" href="#" onclick="FileBrowserDialogue.fileSubmit('{{ fileobject.url|escapejs }}');">{% trans "Select" %}</a>
+                {% else %}
+                    &nbsp;
+                {% endif %}
+            </td>
+        {% endif %}
+
+        <!-- FILESELECT FOR CKEDITOR -->
+        {% if query.pop == "3" %}
+            <td class="fb_icon">
+                {% selectable fileobject.filetype query.type %}
+                {% if selectable %}
+                <!-- select versions -->
+                {% if fileobject.filetype == "Image" and settings_var.ADMIN_VERSIONS %}
+                    <div class="pulldown-versions-container">
+                        <a href="javascript://" class="button pulldown-versions-handler" title="{% trans "Versions" %}">&nbsp;</a>
+                        <ul class="pulldown-versions">
+                            {% for version in settings_var.ADMIN_VERSIONS  %}
+                                {% version_setting version %}
+                                <li><a href="" title="" onclick="OpenFile(ProtectPath('{% version fileobject version %}'));return false;">{{ version_setting.verbose_name }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+                <!-- select original -->
+                <a class="button" href="#" onclick="OpenFile(ProtectPath('{{ fileobject.url|escapejs }}'));return false;">{% trans "Select" %}</a>
+                {% else %}
+                    &nbsp;
+                {% endif %}
+            </td>
+        {% endif %}
+
+        <!-- FILEICON -->
+        <td>
+            {% if fileobject.filetype %}
+                <span class="fb_type {{ fileobject.filetype|lower }}">{% trans fileobject.filetype %}</span>
+            {% else %}
+                <span class="fb_type none">&mdash;</span>
+            {% endif %}
+        </td>
+
+        <!-- THUMBNAIL -->
+        <td class="fb_thumbnail">
+            {% if fileobject.filetype == "Image" %}
+                <a href="{{ fileobject.url }}" class="fb_viewlink"><img src="{{ thumbnail_version.url }}" title="{% trans 'View Image' %}" /></a>
+            {% endif %}
+        </td>
+
+        <!-- FILENAME/DIMENSIONS -->
+        {% if fileobject.is_folder %}
+            <td><a href="{% url 'filebrowser:fb_browse' %}{% query_string "" "q,dir,p" %}&amp;dir={{ fileobject.path_relative_directory|urlencode }}"><strong>{{ fileobject.filename }}</strong></a></td>
+        {% else %}
+            <td>
+                <strong>{{ fileobject.filename }}</strong>
+                {% if fileobject.dimensions %}
+                    <br />{{ fileobject.dimensions.0 }} x {{ fileobject.dimensions.1 }} px
+                {% endif %}
+            </td>
+        {% endif %}
+
+        <!-- FOLDER -->
+        {% if query.q and settings_var.SEARCH_TRAVERSE %}
+            <td><a href="{% url 'filebrowser:fb_browse' %}{% query_string "" "dir,p" %}&amp;dir={{ fileobject.folder|urlencode }}"><strong>{{ fileobject.folder }}</strong></a></td>
+        {% endif %}
+
+        <!-- SIZE -->
+        <td>{% if fileobject.filesize %}{{ fileobject.filesize|filesizeformat }}{% else %}&mdash;{% endif %}</td>
+
+        <!-- DATE -->
+        <td>{{ fileobject.datetime|date:"N j, Y" }}</td>
+
+        <!-- EDIT -->
+        <td>
+            <a href="{% url 'filebrowser:fb_detail' %}{% query_string "" "p" %}&amp;filename={{ fileobject.filename|urlencode }}" class="changelink">{% trans "Change" %}</a>
+        </td>
+
+    </tr>
+{% endfor %}

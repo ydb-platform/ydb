@@ -1,0 +1,4 @@
+# Note: This template is deprecated. Template 4.0 should be used instead.
+transient template_is_deprecated = 1 : hidden;
+
+include "grib2/templates/template.4.0.def"

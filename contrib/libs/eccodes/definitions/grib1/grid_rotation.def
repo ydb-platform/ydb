@@ -1,0 +1,12 @@
+# (C) Copyright 2005- ECMWF.
+
+signed[3] latitudeOfSouthernPole : edition_specific, no_copy;
+meta geography.latitudeOfSouthernPoleInDegrees scale(latitudeOfSouthernPole ,oneConstant,grib1divider,truncateDegrees): dump;
+
+signed[3] longitudeOfSouthernPole : edition_specific, no_copy;
+meta geography.longitudeOfSouthernPoleInDegrees scale(longitudeOfSouthernPole ,oneConstant,grib1divider,truncateDegrees): dump;
+
+ibmfloat geography.angleOfRotationInDegrees : dump;
+
+alias angleOfRotation = angleOfRotationInDegrees;
+alias isRotatedGrid = true;

@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1;iam";
+option java_package = "yandex.cloud.api.iam.v1";
+
+// Currently represents only [Yandex account](/docs/iam/concepts/users/accounts#passport).
+message UserAccount {
+  // ID of the user account.
+  string id = 1;
+
+  oneof user_account {
+    option (exactly_one) = true;
+    // A YandexPassportUserAccount resource.
+    YandexPassportUserAccount yandex_passport_user_account = 2;
+    // A SAML federated user.
+    SamlUserAccount saml_user_account = 3;
+  }
+  google.protobuf.Timestamp last_authenticated_at = 4;
+}
+
+// A YandexPassportUserAccount resource.
+// For more information, see [Yandex account](/docs/iam/concepts/users/accounts#passport).
+message YandexPassportUserAccount {
+  // Login of the Yandex user account.
+  string login = 1;
+  // Default email of the Yandex user account.
+  string default_email = 2;
+}
+
+// A SAML federated user.
+// For more information, see [federations](/docs/iam/concepts/federations).
+message SamlUserAccount {
+    message Attribute {
+        repeated string value = 1;
+    }
+    // ID of the federation that the federation belongs to.
+    string federation_id = 1 [(required) = true, (length) = "<=50"];
+    // Name Id of the SAML federated user.
+    // The name is unique within the federation. 1-256 characters long.
+    string name_id = 2 [(required) = true, (length) = "1-256"];
+    // Additional attributes of the SAML federated user.
+    map <string, Attribute> attributes = 3;
+}

@@ -1,0 +1,324 @@
+Metadata-Version: 2.0
+Name: deepdiff
+Version: 3.3.0
+Summary: Deep Difference and Search of any Python object/data.
+Home-page: https://github.com/seperman/deepdiff
+Author: Seperman
+Author-email: sep@zepworks.com
+License: MIT
+Download-URL: https://github.com/seperman/deepdiff/tarball/master
+Platform: UNKNOWN
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: MIT License
+Requires-Dist: jsonpickle
+
+**DeepDiff v 3.3.0**
+
+Deep Difference of dictionaries, iterables, strings and other objects. It will recursively look for all the changes.
+
+Tested on Python 2.7, 3.3, 3.4, 3.5, 3.6, Pypy, Pypy3
+
+Note: Checkout the github repo's readme for complete coverage of features:
+https://github.com/seperman/deepdiff
+
+**Parameters**
+
+In addition to the 2 objects being compared:
+
+- ignore_order
+- report_repetition
+- verbose_level
+
+**Returns**
+
+    A DeepDiff object that has already calculated the difference of the 2 items.
+
+**Supported data types**
+
+int, string, unicode, dictionary, list, tuple, set, frozenset, OrderedDict, NamedTuple and custom objects!
+
+**Examples**
+
+
+Importing
+    >>> from deepdiff import DeepDiff
+    >>> from pprint import pprint
+    >>> from __future__ import print_function # In case running on Python 2
+
+Same object returns empty
+    >>> t1 = {1:1, 2:2, 3:3}
+    >>> t2 = t1
+    >>> print(DeepDiff(t1, t2))
+    {}
+
+Type of an item has changed
+    >>> t1 = {1:1, 2:2, 3:3}
+    >>> t2 = {1:1, 2:"2", 3:3}
+    >>> pprint(DeepDiff(t1, t2), indent=2)
+    { 'type_changes': { 'root[2]': { 'new_type': <class 'str'>,
+                                     'new_value': '2',
+                                     'old_type': <class 'int'>,
+                                     'old_value': 2}}}
+
+Value of an item has changed
+    >>> t1 = {1:1, 2:2, 3:3}
+    >>> t2 = {1:1, 2:4, 3:3}
+    >>> pprint(DeepDiff(t1, t2), indent=2)
+    {'values_changed': {'root[2]': {'new_value': 4, 'old_value': 2}}}
+
+Item added and/or removed
+    >>> t1 = {1:1, 2:2, 3:3, 4:4}
+    >>> t2 = {1:1, 2:4, 3:3, 5:5, 6:6}
+    >>> ddiff = DeepDiff(t1, t2)
+    >>> pprint (ddiff)
+    {'dictionary_item_added': ['root[5]', 'root[6]'],
+     'dictionary_item_removed': ['root[4]'],
+     'values_changed': {'root[2]': {'new_value': 4, 'old_value': 2}}}
+
+String difference
+    >>> t1 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":"world"}}
+    >>> t2 = {1:1, 2:4, 3:3, 4:{"a":"hello", "b":"world!"}}
+    >>> ddiff = DeepDiff(t1, t2)
+    >>> pprint (ddiff, indent = 2)
+    { 'values_changed': { 'root[2]': {'new_value': 4, 'old_value': 2},
+                          "root[4]['b']": { 'new_value': 'world!',
+                                            'old_value': 'world'}}}
+
+
+String difference 2
+    >>> t1 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":"world!\nGoodbye!\n1\n2\nEnd"}}
+    >>> t2 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":"world\n1\n2\nEnd"}}
+    >>> ddiff = DeepDiff(t1, t2)
+    >>> pprint (ddiff, indent = 2)
+    { 'values_changed': { "root[4]['b']": { 'diff': '--- \n'
+                                                    '+++ \n'
+                                                    '@@ -1,5 +1,4 @@\n'
+                                                    '-world!\n'
+                                                    '-Goodbye!\n'
+                                                    '+world\n'
+                                                    ' 1\n'
+                                                    ' 2\n'
+                                                    ' End',
+                                            'new_value': 'world\n1\n2\nEnd',
+                                            'old_value': 'world!\n'
+                                                        'Goodbye!\n'
+                                                        '1\n'
+                                                        '2\n'
+                                                        'End'}}}
+
+    >>> 
+    >>> print (ddiff['values_changed']["root[4]['b']"]["diff"])
+    --- 
+    +++ 
+    @@ -1,5 +1,4 @@
+    -world!
+    -Goodbye!
+    +world
+     1
+     2
+     End
+
+Type change
+    >>> t1 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":[1, 2, 3]}}
+    >>> t2 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":"world\n\n\nEnd"}}
+    >>> ddiff = DeepDiff(t1, t2)
+    >>> pprint (ddiff, indent = 2)
+    { 'type_changes': { "root[4]['b']": { 'new_type': <class 'str'>,
+                                          'new_value': 'world\n\n\nEnd',
+                                          'old_type': <class 'list'>,
+                                          'old_value': [1, 2, 3]}}}
+
+List difference
+    >>> t1 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":[1, 2, 3, 4]}}
+    >>> t2 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":[1, 2]}}
+    >>> ddiff = DeepDiff(t1, t2)
+    >>> pprint (ddiff, indent = 2)
+    {'iterable_item_removed': {"root[4]['b'][2]": 3, "root[4]['b'][3]": 4}}
+
+List difference 2:
+    >>> t1 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":[1, 2, 3]}}
+    >>> t2 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":[1, 3, 2, 3]}}
+    >>> ddiff = DeepDiff(t1, t2)
+    >>> pprint (ddiff, indent = 2)
+    { 'iterable_item_added': {"root[4]['b'][3]": 3},
+      'values_changed': { "root[4]['b'][1]": {'new_value': 3, 'old_value': 2},
+                          "root[4]['b'][2]": {'new_value': 2, 'old_value': 3}}}
+
+List difference ignoring order or duplicates: (with the same dictionaries as above)
+    >>> t1 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":[1, 2, 3]}}
+    >>> t2 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":[1, 3, 2, 3]}}
+    >>> ddiff = DeepDiff(t1, t2, ignore_order=True)
+    >>> print (ddiff)
+    {}
+
+List that contains dictionary:
+    >>> t1 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":[1, 2, {1:1, 2:2}]}}
+    >>> t2 = {1:1, 2:2, 3:3, 4:{"a":"hello", "b":[1, 2, {1:3}]}}
+    >>> ddiff = DeepDiff(t1, t2)
+    >>> pprint (ddiff, indent = 2)
+    { 'dictionary_item_removed': ["root[4]['b'][2][2]"],
+      'values_changed': {"root[4]['b'][2][1]": {'new_value': 3, 'old_value': 1}}}
+
+Sets:
+    >>> t1 = {1, 2, 8}
+    >>> t2 = {1, 2, 3, 5}
+    >>> ddiff = DeepDiff(t1, t2)
+    >>> pprint (DeepDiff(t1, t2))
+    {'set_item_added': ['root[3]', 'root[5]'], 'set_item_removed': ['root[8]']}
+
+Named Tuples:
+    >>> from collections import namedtuple
+    >>> Point = namedtuple('Point', ['x', 'y'])
+    >>> t1 = Point(x=11, y=22)
+    >>> t2 = Point(x=11, y=23)
+    >>> pprint (DeepDiff(t1, t2))
+    {'values_changed': {'root.y': {'new_value': 23, 'old_value': 22}}}
+
+Custom objects:
+    >>> class ClassA(object):
+    ...     a = 1
+    ...     def __init__(self, b):
+    ...         self.b = b
+    ... 
+    >>> t1 = ClassA(1)
+    >>> t2 = ClassA(2)
+    >>> 
+    >>> pprint(DeepDiff(t1, t2))
+    {'values_changed': {'root.b': {'new_value': 2, 'old_value': 1}}}
+
+Object attribute added:
+    >>> t2.c = "new attribute"
+    >>> pprint(DeepDiff(t1, t2))
+    {'attribute_added': ['root.c'],
+     'values_changed': {'root.b': {'new_value': 2, 'old_value': 1}}}
+
+Exclude certain types from comparison:
+    >>> l1 = logging.getLogger("test")
+    >>> l2 = logging.getLogger("test2")
+    >>> t1 = {"log": l1, 2: 1337}
+    >>> t2 = {"log": l2, 2: 1337}
+    >>> print(DeepDiff(t1, t2, exclude_types={logging.Logger}))
+    {}
+
+Exclude part of your object tree from comparison:
+    >>> t1 = {"for life": "vegan", "ingredients": ["no meat", "no eggs", "no dairy"]}
+    >>> t2 = {"for life": "vegan", "ingredients": ["veggies", "tofu", "soy sauce"]}
+    >>> print (DeepDiff(t1, t2, exclude_paths={"root['ingredients']"}))
+    {}
+
+
+Using DeepDiff in unit tests
+result is the output of the function that is being tests.
+expected is the expected output of the function.
+    >>> assertEqual(DeepDiff(result, expected), {})
+
+
+**Difference with Json Patch**
+
+Unlike Json Patch https://tools.ietf.org/html/rfc6902 which is designed only for Json objects, DeepDiff is designed specifically for almost all Python types. In addition to that, DeepDiff checks for type changes and attribute value changes that Json Patch does not cover since there are no such things in Json. Last but not least, DeepDiff gives you the exact path of the item(s) that were changed in Python syntax.
+
+Example in Json Patch for replacing:
+    { "op": "replace", "path": "/a/b/c", "value": 42 }
+
+Example in DeepDiff for the same operation:
+    >>> item1 = {'a':{'b':{'c':'foo'}}}
+    >>> item2 = {'a':{'b':{'c':42}}}
+    >>> DeepDiff(item1, item2)
+    {'type_changes': {"root['a']['b']['c']": {'old_type': <type 'str'>, 'new_value': 42, 'old_value': 'foo', 'new_type': <type '
+
+**Serialization**
+
+DeepDiff uses jsonpickle in order to serialize and deserialize its results into json. This works for both tree view and text view.
+
+Serialize and then deserialize back to deepdiff:
+    >>> t1 = {1: 1, 2: 2, 3: 3}
+    >>> t2 = {1: 1, 2: "2", 3: 3}
+    >>> ddiff = DeepDiff(t1, t2)
+    >>> jsoned = ddiff.json
+    >>> jsoned
+    '{"type_changes": {"root[2]": {"py/object": "deepdiff.helper.RemapDict", "new_type": {"py/type": "__builtin__.str"}, "new_value": "2", "old_type": {"py/type": "__builtin__.int"}, "old_value": 2}}}'
+    >>> ddiff_new = DeepDiff.from_json(jsoned)
+    >>> ddiff == ddiff_new
+    True
+
+
+**Pycon 2016**
+
+I was honored to give a talk about how DeepDiff does what it does at Pycon 2016. Please check out the video and let me know what you think:
+
+Diff It To Dig It Video
+https://www.youtube.com/watch?v=J5r99eJIxF4
+And here is more info:
+http://zepworks.com/blog/diff-it-to-digg-it/
+
+
+**Changelog**
+
+- v3-3-0: Searching for objects and class attributes
+- v3-2-2: Adding help(deepdiff)
+- v3-2-1: Fixing hash of None
+- v3-2-0: Adding grep for search: object | grep(item)
+- v3-1-3: Unicode vs. Bytes default fix
+- v3-1-2: NotPresent Fix when item is added or removed.
+- v3-1-1: Bug fix when item value is None (#58)
+- v3-1-0: Serialization to/from json
+- v3-0-0: Introducing Tree View
+- v2-5-3: Bug fix on logging for content hash.
+- v2-5-2: Bug fixes on content hash.
+- v2-5-0: Adding ContentHash module to fix ignore_order once and for all.
+- v2-1-0: Adding Deep Search. Now you can search for item in an object.
+- v2-0-0: Exclusion patterns better coverage. Updating docs.
+- v1-8-0: Exclusion patterns.
+- v1-7-0: Deep Set comparison.
+- v1-6-0: Unifying key names. i.e newvalue is new_value now. For backward compatibility, newvalue still works.
+- v1-5-0: Fixing ignore order containers with unordered items. Adding significant digits when comparing decimals. Changes property is deprecated.
+- v1-1-0: Changing Set, Dictionary and Object Attribute Add/Removal to be reported as Set instead of List. Adding Pypy compatibility.
+- v1-0-2: Checking for ImmutableMapping type instead of dict
+- v1-0-1: Better ignore order support
+- v1-0-0: Restructuring output to make it more useful. This is NOT backward compatible.
+- v0-6-1: Fixiing iterables with unhashable when order is ignored
+- v0-6-0: Adding unicode support
+- v0-5-9: Adding decimal support
+- v0-5-8: Adding ignore order of unhashables support
+- v0-5-7: Adding ignore order support
+- v0-5-6: Adding slots support
+- v0-5-5: Adding loop detection
+
+**Authors**
+Sep Dehpour
+
+Github:  https://github.com/seperman
+Linkedin:  http://www.linkedin.com/in/sepehr
+ZepWorks:   http://www.zepworks.com
+Article about Deepdiff: http://zepworks.com/blog/diff-it-to-digg-it/
+
+Victor Hahn Castell
+
+- [hahncastell.de](http://hahncastell.de)
+- [flexoptix.net](http://www.flexoptix.net)
+
+Also thanks to:
+
+- nfvs for Travis-CI setup script.
+- brbsix for initial Py3 porting.
+- WangFenjin for unicode support.
+- timoilya for comparing list of sets when ignoring order.
+- Bernhard10 for significant digits comparison.
+- b-jazz for PEP257 cleanup, Standardize on full names, fixing line endings.
+- finnhughes for fixing __slots__
+- moloney for Unicode vs. Bytes default
+- serv-inc for adding help(deepdiff)
+- movermeyer for updating docs
+- maxrothman for search in inherited class attributes
+- maxrothman for search for types/objects
+
+

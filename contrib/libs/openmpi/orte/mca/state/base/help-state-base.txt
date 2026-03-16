@@ -1,0 +1,13 @@
+# -*- text -*-
+#
+# Copyright (c) 2018      Research Organization for Information Science
+#                         and Technology (RIST).  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+#
+[normal-termination-but]
+While %s job %s terminated normally, %d %s. Further examination may be required.

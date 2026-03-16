@@ -1,0 +1,36 @@
+{% load i18n fb_tags %}
+
+{% if results_var.results_total %}
+{% if query.filter_type or query.filter_date or query.q %}
+<div class="module results">
+    <h2>{% trans 'Results' %}</h2>
+    <div class="form-row">
+        <p>{% blocktrans count results_var.results_current as counter %}{{ counter }} result{% plural %}{{ counter }} results{% endblocktrans %}</p>
+        <p><a href="{% query_string "" "filter_date,filter_type,q" %}">{% blocktrans with results_var.results_total as full_result_count %}{{ full_result_count }} total{% endblocktrans %}</a></p>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="module search">
+    <h2>{% trans "Search" %}</h2>
+    <div id="toolbar">
+        <form id="changelist-search" action="." method="get">
+            <div><!-- DIV needed for valid HTML -->
+                <div class="form-row">
+                    <input type="text" size="40" name="q" value="{{ query.q }}" id="searchbar" />
+                    {% if query.filter_type %}<input type="hidden" name="filter_type" value="{{ query.filter_type }}" />{% endif %}
+                    {% if query.filter_date %}<input type="hidden" name="filter_date" value="{{ query.filter_date }}" />{% endif %}
+                    {% if query.o %}<input type="hidden" name="o" value="{{ query.o }}" />{% endif %}
+                    {% if query.ot %}<input type="hidden" name="ot" value="{{ query.ot }}" />{% endif %}
+                    {% if query.pop %}<input type="hidden" name="pop" value="{{ query.pop }}" />{% endif %}
+                    {% if query.type %}<input type="hidden" name="type" value="{{ query.type }}" />{% endif %}
+                    {% if query.format %}<input type="hidden" name="format" value="{{ query.format }}" />{% endif %}
+                    {% if query.dir %}<input type="hidden" name="dir" value="{{ query.dir }}" />{% endif %}
+                    <input type="submit" value="" />
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+<script type="text/javascript">document.getElementById("searchbar").focus();</script>

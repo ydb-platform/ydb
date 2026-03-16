@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package yandex.cloud.cdn.v1;
+
+import "yandex/cloud/cdn/v1/origin.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cdn/v1;cdn";
+option java_package = "yandex.cloud.api.cdn.v1";
+
+// Origin group parameters. For details about the concept, see [documentation](/docs/cdn/concepts/origins#groups).
+message OriginGroup {
+    // ID of the origin group. Generated at creation time.
+    int64 id = 1;
+
+    // ID of the folder that the origin group belongs to.
+    string folder_id = 2;
+
+    // Name of the origin group.
+    string name = 3;
+
+    // This option have two possible conditions:
+    // true - the option is active. In case the origin responds with 4XX or 5XX codes,
+    //        use the next origin from the list.
+    // false - the option is disabled.
+    bool use_next = 4;
+
+    // List of origins.
+    repeated Origin origins = 5;
+
+    // Type of the CDN provider for this origin group.
+    string provider_type = 6;
+
+    // List of CDN resources currently using this origin group.
+    repeated ResourceMetadata resources_metadata = 7;
+}
+
+// Metadata of a CDN resource referencing an origin group.
+message ResourceMetadata {
+    // ID of the CDN resource using the origin group.
+    string id = 1;
+
+    // CNAME of the CDN resource using the origin group.
+    string cname = 2;
+}

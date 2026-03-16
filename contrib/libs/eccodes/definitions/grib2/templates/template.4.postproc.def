@@ -1,0 +1,18 @@
+# (C) Copyright 2005- ECMWF.
+
+# The input process identifier shall have the value of the 'analysis or forecast process identifier' of the
+# original GRIB message used as input of the post-processing
+unsigned[2] inputProcessIdentifier : dump,edition_specific;
+
+# The input originating centre shall have the value of the 'originating centre' of the original GRIB message
+# used as input of the post-processing
+codetable[2] inputOriginatingCentre 'common/c-11.table' : dump,edition_specific,string_type;
+
+# This identifies which post-processing technique was used. This is defined by the originating centre
+unsigned[1] typeOfPostProcessing : dump,edition_specific;
+
+concept postProcessing (unknown,"postProcessingConcept.def",conceptsDir2,conceptsDir1):no_copy;
+
+if (datasetForLocal is "fire") {
+  template_nofail fireTemplate "grib2/fireTemplate.def";
+}

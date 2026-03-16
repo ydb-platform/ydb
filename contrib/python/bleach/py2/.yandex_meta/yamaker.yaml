@@ -1,0 +1,4 @@
+requirements:
+  - html5lib
+exclude:
+  - bleach/_vendor/*

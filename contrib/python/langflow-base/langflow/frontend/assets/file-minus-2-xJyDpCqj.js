@@ -1,0 +1,1 @@
+import{a8 as a}from"./index-Cp3b7MWQ.js";const e=[["path",{d:"M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4",key:"1pf5j1"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"M3 15h6",key:"4e2qda"}]],o=a("file-minus-2",e);export{e as __iconNode,o as default};

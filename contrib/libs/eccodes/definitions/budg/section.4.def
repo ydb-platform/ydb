@@ -1,0 +1,93 @@
+# (C) Copyright 2005- ECMWF.
+
+section_length[3] section4Length ;
+
+unsigned[1] reserved1=0 : hidden;
+
+if (reserved1 == 0) {
+
+flags[1] missingDataFlag 'grib1/1.table';
+
+unsigned[1] numberOfBytesPerInteger ;
+
+unsigned[2] reserved=0 : hidden ;
+
+unsigned[3] numberOfChars ;
+
+unsigned[3] numberOfFloats ;
+
+unsigned[3] numberOfIntegers ;
+alias numberOfInts=numberOfIntegers ;
+
+unsigned[3] numberOfLogicals ;
+
+unsigned[3] numberOfReservedBytes ;
+
+unsigned[4] reserved=0 : hidden;
+unsigned[4] reserved=0 : hidden;
+unsigned[1] reserved=0 : hidden;
+
+ibmfloat floatValues[numberOfFloats];
+alias floatVal=floatValues;
+
+if (numberOfBytesPerInteger == 1) { signed[1] integerValues[numberOfIntegers]; }
+if (numberOfBytesPerInteger == 2) { signed[2] integerValues[numberOfIntegers]; }
+if (numberOfBytesPerInteger == 3) { signed[3] integerValues[numberOfIntegers]; }
+if (numberOfBytesPerInteger == 4) { signed[4] integerValues[numberOfIntegers]; }
+
+if (numberOfChars >= 12) {
+  ascii[2] marsClass;
+  ascii[2] dummy1;
+  ascii[2] marsType;
+  ascii[2] dummy2;
+  ascii[4] experimentVersionNumber;
+
+  alias expver=experimentVersionNumber;
+  alias marsExpver=experimentVersionNumber;
+
+  constant numberOfRemaininChars  = numberOfChars - 12;
+
+  charValues list(numberOfRemaininChars) {
+    ascii[1] char;
+  }
+
+  constant zero = 0;
+  concept isEps(zero)  { 1 = { marsType = "pf"; } }
+  concept isSens(zero) { 1 = { marsType = "sf"; } }
+
+  constant oper = "oper";
+
+  concept marsStream(oper) {
+    "enfo" = { marsType = "pf"; }
+    "enfo" = { marsType = "cf"; }
+    "sens" = { marsType = "sf"; }
+  }
+
+  if (isEps) {
+    constant perturbationNumber = 0;
+    alias mars.number = perturbationNumber;
+  }
+
+  if (isSens) {
+    constant iterationNumber  = 0;
+    constant diagnosticNumber = 0;
+    alias mars.iteration  = iterationNumber;
+    alias mars.diagnostic = diagnosticNumber;
+  }
+
+  # This is commented out because some of the BUDG have the wrong info there
+  alias mars.stream = marsStream;
+  alias mars.class   = marsClass;
+  alias mars.type    = marsType;
+  alias mars.expver  = marsExpver;
+}
+else
+{
+  charValues list(numberOfChars) {
+    ascii[1] char;
+  }
+}
+} else {
+  #TODO: decode properly these old data
+  section_padding padding;
+}

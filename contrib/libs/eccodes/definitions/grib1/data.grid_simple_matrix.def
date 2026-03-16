@@ -1,0 +1,178 @@
+# (C) Copyright 2005- ECMWF.
+
+#used in packing
+constant constantFieldHalfByte=0;
+
+# moved here to allow different bitsPerValue in second order packing
+unsigned[1] bitsPerValue : dump ;
+alias numberOfBitsContainingEachPackedValue = bitsPerValue;
+alias accuracy = bitsPerValue;
+
+unsigned[2] octetAtWichPackedDataBegins;
+flags[1] extendedFlag "grib1/11-2.table";
+
+flagbit matrixOfValues(extendedFlag,3) : dump;
+flagbit secondaryBitmapPresent(extendedFlag,2) : dump;
+flagbit secondOrderOfDifferentWidth(extendedFlag,1) : dump;
+
+alias secondOrderValuesDifferentWidths = secondOrderOfDifferentWidth;
+alias secondaryBitMap=secondaryBitmapPresent;
+
+unsigned[2] NR : dump;
+alias firstDimension = NR;
+
+unsigned[2] NC : dump;
+alias secondDimension = NC;
+
+flags[1] coordinateFlag1 "grib1/12.table" : dump;
+alias firstDimensionCoordinateValueDefinition = coordinateFlag1;
+
+unsigned[1] NC1 : dump;
+alias numberOfCoefficientsOrValuesUsedToSpecifyFirstDimensionCoordinateFunction = NC1;
+
+
+flags[1] coordinateFlag2 "grib1/12.table" : dump;
+alias secondDimensionCoordinateValueDefinition = coordinateFlag2;
+
+unsigned[1] NC2 : dump;
+alias numberOfCoefficientsOrValuesUsedToSpecifySecondDimensionCoordinateFunction = NC2;
+
+flags[1] physicalFlag1    "grib1/13.table" : dump;
+alias firstDimensionPhysicalSignificance = physicalFlag1; # TODO: Check if grib1 and 2 table are the same
+
+
+flags[1] physicalFlag2    "grib1/13.table" : dump;
+alias secondDimensionPhysicalSignificance = physicalFlag2; # TODO: Check if grib1 and 2 table are the same
+
+ibmfloat coefsFirst[NC1] : dump;
+
+ibmfloat coefsSecond[NC2] : dump;
+
+alias data.coefsFirst = coefsFirst;
+alias data.coefsSecond=coefsSecond;
+
+position offsetBeforeData;
+
+if(matrixOfValues == 0)
+{
+	constant matrixBitmapsPresent  = 0;
+	position offsetBeforeData;
+
+	if(bitmapPresent) {
+		# For grib1 -> grib2
+		constant bitMapIndicator = 0;
+
+        meta codedValues data_g1simple_packing(
+               section4Length,
+               offsetBeforeData,
+               offsetSection4,
+               unitsFactor,
+               unitsBias,
+               changingPrecision,
+               numberOfCodedValues,
+               bitsPerValue,
+               referenceValue,
+               binaryScaleFactor,
+               decimalScaleFactor,
+               optimizeScaleFactor,
+               halfByte,
+               packingType
+               #grid_ieee
+        ) : read_only;
+            alias data.packedValues = codedValues;
+        meta values data_apply_bitmap(codedValues,bitmap,missingValue,binaryScaleFactor) : dump;
+        # See GRIB-262: The octetAtWichPackedDataBegins cannot be set to a value bigger than 65535!
+        #               This is historic stuff which no longer applies
+        # when(changed(values)) {set octetAtWichPackedDataBegins=numberOfCodedValues;}
+	} else {
+		# For grib1 -> grib2
+		constant bitMapIndicator = 255;
+
+        meta values data_g1simple_packing(
+              section4Length,
+              offsetBeforeData,
+              offsetSection4,
+              unitsFactor,
+              unitsBias,
+              changingPrecision,
+              numberOfCodedValues,
+              bitsPerValue,
+              referenceValue,
+              binaryScaleFactor,
+              decimalScaleFactor,
+              optimizeScaleFactor,
+              halfByte
+        ) : dump;
+
+        alias data.packedValues = values;
+	}
+} else {
+	#if(secondaryBitmapPresent == 0) { meta error not_implemented(); }
+
+	constant matrixBitmapsPresent  = 1;
+	constant bitMapIndicator = 0;
+
+# From GRIBEX:
+#  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#  ! This is the WMO definition, but it is entirely !
+#  ! inadequate when secondary bit maps are present !
+#  ! eg 3x3 global grid with a matrix of values     !
+#  ! 12x26 at each point. This gives a bit map with !
+#  ! a length of 285480 octets which cannot be given!
+#  ! in 16 bits.                                    !
+#  !                                                !
+#  ! ECMWF uses the following definition  for its   !
+#  ! wave model data.                               !
+#  ! N - Number of secondary bit maps               !
+#  !     (ie the number of points which are 'not    !
+#  !      missing').                                !
+#  !     This definition will accommodate a 1x1     !
+#  !     degree global grid.                        !
+#  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+	  constant datumSize             = NC*NR;
+	  transient secondaryBitmapsCount = octetAtWichPackedDataBegins*datumSize; #
+	  transient secondaryBitmapsSize  = secondaryBitmapsCount/8;
+
+	  #alias numberOfDataPoints = secondaryBitmapsCount; # grib 1 -> 2
+
+	  position offsetBBitmap;
+
+	  meta secondaryBitmaps g1bitmap(
+			  dummy,
+              missingValue,
+              offsetBBitmap,
+              secondaryBitmapsSize,
+              dummy) : read_only;
+
+		position  offsetBeforeData;
+
+	  meta codedValues data_g1simple_packing(
+               section4Length,
+               offsetBeforeData,
+               offsetSection4,
+               unitsFactor,
+               unitsBias,
+               changingPrecision,
+               numberOfCodedValues,
+               bitsPerValue,
+               referenceValue,
+               binaryScaleFactor,
+               decimalScaleFactor,
+               optimizeScaleFactor,
+               halfByte
+            ) : read_only;
+
+	  alias data.packedValues = codedValues;
+
+	  constant expandBy = NC*NR;
+	  meta secondaryBitmap  data_g1secondary_bitmap(bitmap,secondaryBitmaps,missingValue,expandBy,octetAtWichPackedDataBegins);
+
+	  meta values data_apply_bitmap(codedValues,secondaryBitmap,missingValue,binaryScaleFactor) : dump;
+
+}
+meta packingError simple_packing_error(bitsPerValue,binaryScaleFactor,decimalScaleFactor,referenceValue,ibm) : no_copy;
+meta numberOfCodedValues number_of_coded_values(bitsPerValue,offsetBeforeData,offsetAfterData,halfByte,numberOfValues) : dump;
+
+template statistics "common/statistics_grid.def";
+template missing_values "common/missing_values_grid.def";

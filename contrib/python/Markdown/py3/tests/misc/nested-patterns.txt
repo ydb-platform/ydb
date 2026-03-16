@@ -1,0 +1,13 @@
+___[link](http://example.com)___
+***[link](http://example.com)***
+**[*link*](http://example.com)**
+__[_link_](http://example.com)__
+__[*link*](http://example.com)__
+**[_link_](http://example.com)**
+[***link***](http://example.com)
+
+***I am ___italic_ and__ bold* I am `just` bold**
+
+Example __*bold italic*__ on the same line __*bold italic*__.
+
+Example **_bold italic_** on the same line **_bold italic_**.

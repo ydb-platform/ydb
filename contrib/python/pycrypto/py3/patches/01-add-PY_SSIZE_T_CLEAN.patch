@@ -1,0 +1,227 @@
+--- contrib/python/pycrypto/py3/src/AES.c	(index)
++++ contrib/python/pycrypto/py3/src/AES.c	(working tree)
+@@ -26,6 +26,7 @@
+ 
+ #include <assert.h>
+ #include <stdlib.h>
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ 
+ #define MODULE_NAME _AES
+--- contrib/python/pycrypto/py3/src/ARC2.c	(index)
++++ contrib/python/pycrypto/py3/src/ARC2.c	(working tree)
+@@ -42,6 +42,7 @@
+  */
+ 
+ #include <string.h>  
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ 
+ #define MODULE_NAME _ARC2
+--- contrib/python/pycrypto/py3/src/Blowfish.c	(index)
++++ contrib/python/pycrypto/py3/src/Blowfish.c	(working tree)
+@@ -36,6 +36,7 @@
+ #endif
+ #include <assert.h>
+ #include <string.h>
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ 
+ #include "Blowfish-tables.h"
+--- contrib/python/pycrypto/py3/src/CAST.c	(index)
++++ contrib/python/pycrypto/py3/src/CAST.c	(working tree)
+@@ -42,6 +42,7 @@
+ 
+ */
+ 
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ 
+ #define MODULE_NAME _CAST
+--- contrib/python/pycrypto/py3/src/DES.c	(index)
++++ contrib/python/pycrypto/py3/src/DES.c	(working tree)
+@@ -34,6 +34,7 @@
+ #undef DES  /* this is needed because tomcrypt_custom.h defines DES to an empty string */
+ 
+ #include <assert.h>
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ 
+ typedef struct {
+--- contrib/python/pycrypto/py3/src/MD2.c	(index)
++++ contrib/python/pycrypto/py3/src/MD2.c	(working tree)
+@@ -28,6 +28,7 @@
+   
+ 
+ #include <string.h>
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include "pycrypto_compat.h"
+ 
+--- contrib/python/pycrypto/py3/src/MD4.c	(index)
++++ contrib/python/pycrypto/py3/src/MD4.c	(working tree)
+@@ -28,6 +28,7 @@
+   
+ 
+ #include <string.h>
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include "pycrypto_compat.h"
+ 
+--- contrib/python/pycrypto/py3/src/RIPEMD160.c	(index)
++++ contrib/python/pycrypto/py3/src/RIPEMD160.c	(working tree)
+@@ -54,6 +54,7 @@
+ 
+ #include <assert.h>
+ #include <string.h>
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include "pycrypto_compat.h"
+ 
+--- contrib/python/pycrypto/py3/src/XOR.c	(index)
++++ contrib/python/pycrypto/py3/src/XOR.c	(working tree)
+@@ -24,6 +24,7 @@
+  * =======================================================================
+  */
+ 
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ 
+ #define MODULE_NAME _XOR
+--- contrib/python/pycrypto/py3/src/_counter.c	(index)
++++ contrib/python/pycrypto/py3/src/_counter.c	(working tree)
+@@ -25,6 +25,7 @@
+ #include <assert.h>
+ #include <stddef.h>
+ #include <string.h>
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include "pycrypto_compat.h"
+ #include "_counter.h"
+--- contrib/python/pycrypto/py3/src/_fastmath.c	(index)
++++ contrib/python/pycrypto/py3/src/_fastmath.c	(working tree)
+@@ -28,6 +28,7 @@
+ 
+ #include <stdio.h>
+ #include <string.h>
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include "pycrypto_compat.h"
+ #include <longintrepr.h>				/* for conversions */
+--- contrib/python/pycrypto/py3/src/block_template.c	(index)
++++ contrib/python/pycrypto/py3/src/block_template.c	(working tree)
+@@ -33,6 +33,7 @@
+ #include <string.h>
+ #endif
+ 
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include "pycrypto_compat.h"
+ #include "modsupport.h" 
+@@ -123,7 +124,8 @@ ALGnew(PyObject *self, PyObject *args, PyObject *kwdict)
+ {
+ 	unsigned char *key, *IV;
+ 	ALGobject * new=NULL;
+-	int keylen, IVlen=0, mode=MODE_ECB, segment_size=0;
++	Py_ssize_t keylen, IVlen=0;
++	int mode=MODE_ECB, segment_size=0;
+ 	PyObject *counter = NULL;
+ 	int counter_shortcut = 0;
+ #ifdef PCT_ARC2_MODULE
+--- contrib/python/pycrypto/py3/src/hash_SHA2_template.c	(index)
++++ contrib/python/pycrypto/py3/src/hash_SHA2_template.c	(working tree)
+@@ -30,6 +30,7 @@
+  *
+  */
+ 
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include "pycrypto_compat.h"
+ 
+--- contrib/python/pycrypto/py3/src/hash_template.c	(index)
++++ contrib/python/pycrypto/py3/src/hash_template.c	(working tree)
+@@ -30,6 +30,7 @@
+ #ifdef _HAVE_STDC_HEADERS
+ #include <string.h>
+ #endif
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include "pycrypto_compat.h"
+ 
+@@ -163,7 +164,7 @@ static PyObject *
+ ALG_update(ALGobject *self, PyObject *args)
+ {
+ 	unsigned char *cp;
+-	int len;
++	Py_ssize_t len;
+ 
+ 	if (!PyArg_ParseTuple(args, "s#", &cp, &len))
+ 		return NULL;
+@@ -273,7 +274,7 @@ ALG_new(PyObject *self, PyObject *args)
+ {
+         ALGobject *new;
+ 	unsigned char *cp = NULL;
+-	int len;
++	Py_ssize_t len;
+ 	
+ 	if ((new = newALGobject()) == NULL)
+ 		return NULL;
+--- contrib/python/pycrypto/py3/src/pycrypto_compat.h	(index)
++++ contrib/python/pycrypto/py3/src/pycrypto_compat.h	(working tree)
+@@ -23,6 +23,7 @@
+  */
+ #ifndef PYCRYPTO_COMPAT_H
+ #define PYCRYPTO_COMPAT_H
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ 
+ /*
+--- contrib/python/pycrypto/py3/src/stream_template.c	(index)
++++ contrib/python/pycrypto/py3/src/stream_template.c	(working tree)
+@@ -33,6 +33,7 @@
+ #include <string.h>
+ #endif
+ 
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include "pycrypto_compat.h"
+ #include "modsupport.h"
+@@ -100,7 +101,7 @@ ALGnew(PyObject *self, PyObject *args, PyObject *kwdict)
+ {
+ 	unsigned char *key;
+ 	ALGobject * new;
+-	int keylen;
++	Py_ssize_t keylen;
+ 
+ 	new = newALGobject();
+ 	if (!PyArg_ParseTupleAndKeywords(args, kwdict, "s#", kwlist, 
+--- contrib/python/pycrypto/py3/src/strxor.c	(index)
++++ contrib/python/pycrypto/py3/src/strxor.c	(working tree)
+@@ -21,6 +21,7 @@
+  * SOFTWARE.
+  * ===================================================================
+  */
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include <stddef.h>
+ #include <assert.h>
+--- contrib/python/pycrypto/py3/src/winrand.c	(index)
++++ contrib/python/pycrypto/py3/src/winrand.c	(working tree)
+@@ -30,6 +30,7 @@
+ 
+ /* Author: Mark Moraes */
+ 
++#define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+ #include "pycrypto_compat.h"
+ 
+@@ -134,7 +135,8 @@ winrandom_new(PyObject *self, PyObject *args, PyObject *kwdict)
+ static PyObject *
+ WR_get_bytes(WRobject *self, PyObject *args)
+ {
+-	int n, nbytes, len = 0;
++	int n, nbytes;
++	Py_ssize_t len = 0;
+ 	PyObject *res;
+ 	char *buf, *str = NULL;
+ 	

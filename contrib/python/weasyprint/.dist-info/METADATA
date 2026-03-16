@@ -1,0 +1,83 @@
+Metadata-Version: 2.4
+Name: weasyprint
+Version: 68.1
+Summary: The Awesome Document Factory
+Keywords: html,css,pdf,converter
+Author-email: Simon Sapin <simon.sapin@exyr.org>
+Maintainer-email: CourtBouillon <contact@courtbouillon.org>
+Requires-Python: >=3.10
+Description-Content-Type: text/x-rst
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Text Processing :: Markup :: HTML
+Classifier: Topic :: Multimedia :: Graphics :: Graphics Conversion
+Classifier: Topic :: Printing
+License-File: LICENSE
+Requires-Dist: pydyf >=0.11.0
+Requires-Dist: cffi >=0.6
+Requires-Dist: tinyhtml5 >=2.0.0b1
+Requires-Dist: tinycss2 >=1.5.0
+Requires-Dist: cssselect2 >=0.8.0
+Requires-Dist: Pyphen >=0.9.1
+Requires-Dist: Pillow >=9.1.0
+Requires-Dist: fonttools[woff] >=4.59.2
+Requires-Dist: sphinx ; extra == "doc"
+Requires-Dist: furo ; extra == "doc"
+Requires-Dist: pytest ; extra == "test"
+Requires-Dist: ruff ; extra == "test"
+Requires-Dist: Pillow >=12.1.0 ; extra == "test"
+Project-URL: Changelog, https://github.com/Kozea/WeasyPrint/releases
+Project-URL: Code, https://github.com/Kozea/WeasyPrint
+Project-URL: Documentation, https://doc.courtbouillon.org/weasyprint/
+Project-URL: Donation, https://opencollective.com/courtbouillon
+Project-URL: Homepage, https://weasyprint.org/
+Project-URL: Issues, https://github.com/Kozea/WeasyPrint/issues
+Provides-Extra: doc
+Provides-Extra: test
+
+**The Awesome Document Factory**
+
+WeasyPrint is a smart solution helping web developers to create PDF
+documents. It turns simple HTML pages into gorgeous statistical reports,
+invoices, tickets…
+
+From a technical point of view, WeasyPrint is a visual rendering engine for
+HTML and CSS that can export to PDF. It aims to support web standards for
+printing. WeasyPrint is free software made available under a BSD license.
+
+It is based on various libraries but *not* on a full rendering engine like
+WebKit or Gecko. The CSS layout engine is written in Python, designed for
+pagination, and meant to be easy to hack on.
+
+* Free software: BSD license
+* For Python 3.10+, tested on CPython and PyPy
+* Documentation: https://doc.courtbouillon.org/weasyprint
+* Examples: https://weasyprint.org/#samples
+* Changelog: https://github.com/Kozea/WeasyPrint/releases
+* Code, issues, tests: https://github.com/Kozea/WeasyPrint
+* Code of conduct: https://www.courtbouillon.org/code-of-conduct
+* Professional support: https://www.courtbouillon.org
+* Donation: https://opencollective.com/courtbouillon
+
+WeasyPrint has been created and developed by Kozea (https://kozea.fr/).
+Professional support, maintenance and community management is provided by
+CourtBouillon (https://www.courtbouillon.org/).
+
+Copyrights are retained by their contributors, no copyright assignment is
+required to contribute to WeasyPrint. Unless explicitly stated otherwise, any
+contribution intentionally submitted for inclusion is licensed under the BSD
+3-clause license, without any additional terms or conditions. For full
+authorship information, see the version control history.
+

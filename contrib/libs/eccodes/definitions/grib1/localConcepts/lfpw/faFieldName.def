@@ -1,0 +1,572 @@
+'CLPMHAUT.MOD.XFU' = {
+  indicatorOfParameter                               =             165;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'CLPMOCON.MOD.XFU' = {
+  indicatorOfParameter                               =             166;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'CLSHUMI.RELATIVE' = {
+  FMULTM                                             =               1;
+  FMULTE                                             =               2;
+  indicatorOfParameter                               =              52;
+  indicatorOfTypeOfLevel                             =             105;
+  level                                              =               2;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'CLSMAXI.TEMPERAT' = {
+  indicatorOfParameter                               =              15;
+  indicatorOfTypeOfLevel                             =             105;
+  level                                              =               2;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               2;
+}
+'CLSMINI.TEMPERAT' = {
+  indicatorOfParameter                               =              16;
+  indicatorOfTypeOfLevel                             =             105;
+  level                                              =               2;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               2;
+}
+'CLSTEMPERATURE' = {
+  indicatorOfParameter                               =              11;
+  indicatorOfTypeOfLevel                             =             105;
+  level                                              =               2;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'CLSU.RAF.MOD.XFU' = {
+  indicatorOfParameter                               =             163;
+  indicatorOfTypeOfLevel                             =             105;
+  level                                              =              10;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'CLSVENT.MERIDIEN' = {
+  indicatorOfParameter                               =              34;
+  indicatorOfTypeOfLevel                             =             105;
+  level                                              =              10;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'CLSVENT.ZONAL' = {
+  indicatorOfParameter                               =              33;
+  indicatorOfTypeOfLevel                             =             105;
+  level                                              =              10;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'CLSV.RAF.MOD.XFU' = {
+  indicatorOfParameter                               =             164;
+  indicatorOfTypeOfLevel                             =             105;
+  level                                              =              10;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'CLOUD_FRAC' = {
+  indicatorOfParameter                               =              36;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'HUMI_RELAT' = {
+  FMULTM                                             =               1;
+  FMULTE                                             =               2;
+  indicatorOfParameter                               =              52;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'PRESSURE' = {
+  indicatorOfParameter                               =               1;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'RAD_LIQUID' = {
+  indicatorOfParameter                               =              32;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'RAD_SOLID_' = {
+  indicatorOfParameter                               =             247;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               0;
+}
+'TEMPERATUR' = {
+  indicatorOfParameter                               =              11;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'TKE' = {
+  indicatorOfParameter                               =              37;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'VENT_MERID' = {
+  indicatorOfParameter                               =              34;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'VENT_ZONAL' = {
+  indicatorOfParameter                               =              33;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'ISOT_ALTIT' = {
+  indicatorOfParameter                               =               8;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               0;
+}
+'MSLPRESSURE' = {
+  indicatorOfParameter                               =               2;
+  indicatorOfTypeOfLevel                             =             102;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'ABS_VORTIC' = {
+  indicatorOfParameter                               =              41;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'GEOPOTENTI' = {
+  indicatorOfParameter                               =               6;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'POT_VORTIC' = {
+  indicatorOfParameter                               =               4;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'THETA_PRIM' = {
+  indicatorOfParameter                               =              14;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'VITESSE_VE' = {
+  indicatorOfParameter                               =              39;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'DIVERGENCE' = {
+  indicatorOfParameter                               =              44;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'PROFRESERV.EAU' = {
+  bottomLevel                                        =             250;
+  indicatorOfParameter                               =             153;
+  indicatorOfTypeOfLevel                             =             112;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+  topLevel                                           =               0;
+}
+'PROFRESERV.GLACE' = {
+  bottomLevel                                        =             250;
+  indicatorOfParameter                               =             152;
+  indicatorOfTypeOfLevel                             =             112;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+  topLevel                                           =               0;
+}
+'PROFTEMPERATURE' = {
+  indicatorOfParameter                               =              11;
+  indicatorOfTypeOfLevel                             =             111;
+  level                                              =              10;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SOMMFLU.RAY.SOLA' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             113;
+  indicatorOfTypeOfLevel                             =               8;
+  level                                              =               0;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               4;
+}
+'SOMMFLU.RAY.THER' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             114;
+  indicatorOfTypeOfLevel                             =               8;
+  level                                              =               0;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               4;
+}
+'SURFCAPE.MOD.XFU' = {
+  indicatorOfParameter                               =             154;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'SURFCAPE.POS.F00' = {
+  indicatorOfParameter                               =             160;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SURFFLU.CHA.SENS' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             122;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               4;
+}
+'SURFFLU.LAT.MTOT' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             121;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               4;
+}
+'SURFFLU.MTOTA.NE' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =              57;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               4;
+}
+'SURFFLU.RAY.SOLA' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             111;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               4;
+}
+'SURFFLU.RAY.THER' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             112;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               4;
+}
+'SURFISOTPW0.MALT' = {
+  indicatorOfParameter                               =               8;
+  indicatorOfTypeOfLevel                             =              20;
+  level                                              =           27315;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               0;
+}
+'SURFNEBUL.BASSE' = {
+  FMULTM                                             =               1;
+  FMULTE                                             =               2;
+  indicatorOfParameter                               =              73;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SURFNEBUL.CONVEC' = {
+  FMULTM                                             =               1;
+  FMULTE                                             =               2;
+  indicatorOfParameter                               =              72;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SURFNEBUL.HAUTE' = {
+  indicatorOfParameter                               =              75;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SURFNEBUL.MOYENN' = {
+  FMULTM                                             =               1;
+  FMULTE                                             =               2;
+  indicatorOfParameter                               =              74;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SURFNEBUL.TOTALE' = {
+  FMULTM                                             =               1;
+  FMULTE                                             =               2;
+  indicatorOfParameter                               =              71;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SURFPREC.EAU.CON' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =              63;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               4;
+}
+'SURFPREC.EAU.GEC' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =              62;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               4;
+}
+'SURFPREC.NEI.CON' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =              78;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               4;
+}
+'SURFPREC.NEI.GEC' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =              79;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               4;
+}
+'SURFPRESSION' = {
+  indicatorOfParameter                               =               1;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SURFRAYT.LUNE.DE' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             158;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               4;
+}
+'SURFRAYT_SOLA_DE' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             105;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             149;
+  timeRangeIndicator                                 =               4;
+}
+'SURFRAYT_SOL_CL' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             168;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               4;
+}
+'SURFRAYT_THER_CL' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             169;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               4;
+}
+'SURFRAYT_THER_DE' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             104;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             149;
+  timeRangeIndicator                                 =               4;
+}
+'SURFRESERV.EAU' = {
+  bottomLevel                                        =               1;
+  indicatorOfParameter                               =             153;
+  indicatorOfTypeOfLevel                             =             112;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+  topLevel                                           =               0;
+}
+'SURFRESERV.GLACE' = {
+  bottomLevel                                        =               1;
+  indicatorOfParameter                               =             152;
+  indicatorOfTypeOfLevel                             =             112;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+  topLevel                                           =               0;
+}
+'SURFRESERV.NEIGE' = {
+  indicatorOfParameter                               =              65;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SURFTEMPERATURE' = {
+  indicatorOfParameter                               =              11;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SURFTENS.TOTA.ME' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             131;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               4;
+}
+'SURFTENS.TOTA.ZO' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             130;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               4;
+}
+'SURFTOT.WAT.VAPO' = {
+  indicatorOfParameter                               =             167;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'ABS_VORTICIT' = {
+  indicatorOfParameter                               =              41;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'GEOPOTENTIEL' = {
+  indicatorOfParameter                               =               6;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'TEMPE_POTENT' = {
+  indicatorOfParameter                               =              13;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'VENT_MERIDIE' = {
+  indicatorOfParameter                               =              34;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'C002_METEOSAT_09' = {
+  indicatorOfParameter                               =               1;
+  indicatorOfTypeOfLevel                             =             100;
+  level                                              =              62;
+  table2Version                                      =             129;
+  timeRangeIndicator                                 =               0;
+}
+'C006_METEOSAT_09' = {
+  indicatorOfParameter                               =               1;
+  indicatorOfTypeOfLevel                             =             100;
+  level                                              =             108;
+  table2Version                                      =             129;
+  timeRangeIndicator                                 =               0;
+}
+'EDR' = {
+  indicatorOfParameter                               =             135;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               0;
+}
+'SURFISOTPW1.MALT' = {
+  indicatorOfParameter                               =               8;
+  indicatorOfTypeOfLevel                             =              20;
+  level                                              =           27315;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               0;
+}
+'SURFACCGRAUPEL' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =              29;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               4;
+}
+'SURFACCNEIGE' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =              99;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               4;
+}
+'SURFACCPLUIE' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             150;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =               2;
+  timeRangeIndicator                                 =               4;
+}
+'SURFDIAGHAIL' = {
+  indicatorOfParameter                               =             248;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'SURFREFLECT.MAX' = {
+  indicatorOfParameter                               =             217;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'CLOUD_WATE' = {
+  indicatorOfParameter                               =              32;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'GRAUPEL' = {
+  indicatorOfParameter                               =              35;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'ICE_CRYSTA' = {
+  indicatorOfParameter                               =             247;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               0;
+}
+'RAIN' = {
+  indicatorOfParameter                               =              33;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'SNOW' = {
+  indicatorOfParameter                               =              34;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'SIM_REFLEC' = {
+  indicatorOfParameter                               =              31;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'THETA_VIRT' = {
+  indicatorOfParameter                               =              38;
+  table2Version                                      =             159;
+  timeRangeIndicator                                 =               0;
+}
+'VERT.VELOC' = {
+  indicatorOfParameter                               =              40;
+  table2Version                                      =               1;
+  timeRangeIndicator                                 =               0;
+}
+'SURFRAYT_DIR_SUR' = {
+  LSTCUM                                             =               1;
+  indicatorOfParameter                               =             137;
+  indicatorOfTypeOfLevel                             =               1;
+  level                                              =               0;
+  table2Version                                      =             128;
+  timeRangeIndicator                                 =               4;
+}
+'default' = {
+  indicatorOfParameter                               =             255;
+  table2Version                                      =             255;
+}

@@ -1,0 +1,44 @@
+# Adapted by Philipp Rudiger
+# Original Author: Cameron Davidson-Pilon,  # typos: ignore
+# Replicated styles from FiveThirtyEight.com and Bayesian Methods for Hackers
+# See https://www.dataorigami.net/blogs/fivethirtyeight-mpl and
+# https://github.com/CamDavidsonPilon/Probabilistic-Programming-and-Bayesian-Methods-for-Hackers/
+
+axes.color_cycle: 30a2da, fc4f30, e5ae38, 6d904f, 8b8b8b
+axes.facecolor: f0f0f0
+axes.labelsize: medium
+axes.axisbelow: true
+axes.edgecolor: 000000
+axes.linewidth: 1.0
+axes.titlesize: medium
+
+figure.facecolor: ffffff
+figure.figsize: 6.0,4.0
+
+font.size:11
+font.family: DejaVu Sans, Bitstream Vera Sans
+
+grid.linewidth: 1.0
+grid.color: black
+grid.linestyle: :
+
+legend.loc: upper right
+legend.fontsize: small
+legend.fancybox: True
+
+lines.linewidth: 2.5
+lines.solid_capstyle: butt
+
+patch.edgecolor: f0f0f0
+patch.linewidth: 0.5
+
+savefig.edgecolor: f0f0f0
+savefig.facecolor: ffffff
+savefig.dpi: 72
+
+svg.fonttype: path
+
+xtick.major.size: 0.1
+xtick.minor.size: 0
+ytick.major.size: 0.1
+ytick.minor.size: 0

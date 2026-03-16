@@ -1,0 +1,67 @@
+Metadata-Version: 2.4
+Name: can-isotp
+Version: 2.0.7
+Summary: Module enabling the IsoTP protocol defined by ISO-15765
+Home-page: https://github.com/pylessard/python-can-isotp
+Download-URL: https://github.com/pylessard/python-can-isotp/archive/v2.0.7.tar.gz
+Author: Pier-Yves Lessard
+Author-email: py.lessard@gmail.com
+License: MIT
+Keywords: isotp,can,iso-15765,15765,iso15765
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Development Status :: 4 - Beta
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Topic :: Scientific/Engineering :: Interface Engine/Protocol Translator
+Requires-Python: >=3.7
+License-File: LICENSE.txt
+Provides-Extra: test
+Requires-Dist: mypy; extra == "test"
+Requires-Dist: coverage; extra == "test"
+Requires-Dist: python-can; extra == "test"
+Provides-Extra: dev
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: ipdb; extra == "dev"
+Requires-Dist: autopep8; extra == "dev"
+Requires-Dist: coverage; extra == "dev"
+Requires-Dist: python-can; extra == "dev"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: download-url
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-python
+Dynamic: summary
+
+python-can-isotp
+################
+
+.. image:: https://app.travis-ci.com/pylessard/python-can-isotp.svg?branch=master
+
+This project is a Python package meant to provide support for IsoTP (ISO-15765) protocol written in Python 3. The code is published under MIT license on GitHub (`pylessard/python-can-isotp <https://github.com/pylessard/python-can-isotp>`_).
+
+This package contains a Python implementation of the protocol that works in the user space that may or may not be coupled with `python-can <https://python-can.readthedocs.io>`_. It also contains a wrapper for a simplified usage of the `Linux SocketCAN IsoTP kernel module <https://github.com/hartkopp/can-isotp>`__
+
+Documentation
+-------------
+
+The documentation is available here :   https://can-isotp.readthedocs.io
+
+Requirements
+------------
+
+ - Python 3.7+
+
+Installation
+------------
+
+using pip::
+
+    pip install can-isotp

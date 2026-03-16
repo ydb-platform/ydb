@@ -1,0 +1,16 @@
+{
+  "$id": "https://example.com/same_name_objects.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "friends": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "tst1": {
+        "$ref": "person.json#/properties/friends"
+    },
+    "tst2": {
+        "$ref": "person.json#/properties/friends"
+    }
+  }
+}

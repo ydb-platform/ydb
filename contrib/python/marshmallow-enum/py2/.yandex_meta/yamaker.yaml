@@ -1,0 +1,4 @@
+requirements:
+  - enum34
+keep:
+  - tests/*

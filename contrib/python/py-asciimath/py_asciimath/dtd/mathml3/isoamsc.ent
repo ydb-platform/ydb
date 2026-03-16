@@ -1,0 +1,77 @@
+
+<!--
+     File isoamsc.ent produced by the XSL script entities.xsl
+     from input data in unicode.xml.
+
+     Copyright 1998 - 2011 W3C.
+
+     Use and distribution of this code are permitted under the terms of
+     either of the following two licences:
+
+     1) W3C Software Notice and License.
+        http://www.w3.org/Consortium/Legal/2002/copyright-software-20021231.html
+
+
+     2) The license used for the WHATWG HTML specification,
+        which states, in full:
+            You are granted a license to use, reproduce and create derivative
+            works of this document.
+
+ 
+     Please report any errors to David Carlisle
+     via the public W3C list www-math@w3.org.
+
+     The numeric character values assigned to each entity
+     (should) match the Unicode assignments in Unicode 5.x.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1991
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+
+-->
+
+
+<!-- 
+
+       Public identifier: -//W3C//ENTITIES Added Math Symbols: Delimiters//EN//XML
+       System identifier: http://www.w3.org/2003/entities/2007/isoamsc.ent
+
+     The public identifier should always be used verbatim.
+     The system identifier may be changed to suit local requirements.
+
+     Typical invocation:
+
+       <!ENTITY % isoamsc PUBLIC
+         "-//W3C//ENTITIES Added Math Symbols: Delimiters//EN//XML"
+         "http://www.w3.org/2003/entities/2007/isoamsc.ent"
+       >
+       %isoamsc;
+
+-->
+
+<!ENTITY dlcorn           "&#x0231E;" ><!--BOTTOM LEFT CORNER -->
+<!ENTITY drcorn           "&#x0231F;" ><!--BOTTOM RIGHT CORNER -->
+<!ENTITY gtlPar           "&#x02995;" ><!--DOUBLE LEFT ARC GREATER-THAN BRACKET -->
+<!ENTITY langd            "&#x02991;" ><!--LEFT ANGLE BRACKET WITH DOT -->
+<!ENTITY lbrke            "&#x0298B;" ><!--LEFT SQUARE BRACKET WITH UNDERBAR -->
+<!ENTITY lbrksld          "&#x0298F;" ><!--LEFT SQUARE BRACKET WITH TICK IN BOTTOM CORNER -->
+<!ENTITY lbrkslu          "&#x0298D;" ><!--LEFT SQUARE BRACKET WITH TICK IN TOP CORNER -->
+<!ENTITY lceil            "&#x02308;" ><!--LEFT CEILING -->
+<!ENTITY lfloor           "&#x0230A;" ><!--LEFT FLOOR -->
+<!ENTITY lmoust           "&#x023B0;" ><!--UPPER LEFT OR LOWER RIGHT CURLY BRACKET SECTION -->
+<!ENTITY lparlt           "&#x02993;" ><!--LEFT ARC LESS-THAN BRACKET -->
+<!ENTITY ltrPar           "&#x02996;" ><!--DOUBLE RIGHT ARC LESS-THAN BRACKET -->
+<!ENTITY rangd            "&#x02992;" ><!--RIGHT ANGLE BRACKET WITH DOT -->
+<!ENTITY rbrke            "&#x0298C;" ><!--RIGHT SQUARE BRACKET WITH UNDERBAR -->
+<!ENTITY rbrksld          "&#x0298E;" ><!--RIGHT SQUARE BRACKET WITH TICK IN BOTTOM CORNER -->
+<!ENTITY rbrkslu          "&#x02990;" ><!--RIGHT SQUARE BRACKET WITH TICK IN TOP CORNER -->
+<!ENTITY rceil            "&#x02309;" ><!--RIGHT CEILING -->
+<!ENTITY rfloor           "&#x0230B;" ><!--RIGHT FLOOR -->
+<!ENTITY rmoust           "&#x023B1;" ><!--UPPER RIGHT OR LOWER LEFT CURLY BRACKET SECTION -->
+<!ENTITY rpargt           "&#x02994;" ><!--RIGHT ARC GREATER-THAN BRACKET -->
+<!ENTITY ulcorn           "&#x0231C;" ><!--TOP LEFT CORNER -->
+<!ENTITY urcorn           "&#x0231D;" ><!--TOP RIGHT CORNER -->

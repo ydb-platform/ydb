@@ -1,0 +1,10 @@
+# Code table 4.16 - Quality value associated with parameter
+0 0 Confidence index
+1 1 Quality indicator
+2 2 Correlation of product with used calibration product
+3 3 Standard deviation
+4 4 Random error
+5 5 Probability
+# 6-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

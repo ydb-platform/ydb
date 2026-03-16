@@ -1,0 +1,36 @@
+From a4ed01550722f2c81e85f13600d89a8520565493 Mon Sep 17 00:00:00 2001
+From: Orivej Desh <orivej@gmx.fr>
+Date: Mon, 15 Jul 2019 01:14:48 +0000
+Subject: [PATCH] Do not return random ints from init and shutdown
+
+C API defines horovod_init, horovod_init_comm, and horovod_shutdown as returning
+void.  When ctypes interprets their return values as ints, it returns garbage.
+
+Signed-off-by: Orivej Desh <orivej@gmx.fr>
+---
+ horovod/common/basics.py | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/horovod/common/basics.py b/horovod/common/basics.py
+index fcda02a7..ba0b69af 100644
+--- a/horovod/common/basics.py
++++ b/horovod/common/basics.py
+@@ -48,15 +48,15 @@ def init(self, comm=None):
+                 self.MPI_LIB_CTYPES.horovod_init_comm.argtypes = [MPI_Comm]
+ 
+             comm_obj = MPI_Comm.from_address(MPI._addressof(comm))
+-            return self.MPI_LIB_CTYPES.horovod_init_comm(comm_obj)
++            self.MPI_LIB_CTYPES.horovod_init_comm(comm_obj)
+         else:
+             comm_size = len(comm)
+-            return self.MPI_LIB_CTYPES.horovod_init(
++            self.MPI_LIB_CTYPES.horovod_init(
+                 (ctypes.c_int * comm_size)(*comm), ctypes.c_int(comm_size))
+ 
+     def shutdown(self):
+         """A function that shuts Horovod down."""
+-        return self.MPI_LIB_CTYPES.horovod_shutdown()
++        self.MPI_LIB_CTYPES.horovod_shutdown()
+ 
+     def size(self):
+         """A function that returns the number of Horovod processes.

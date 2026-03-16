@@ -1,0 +1,123 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause         3f70c6a6212985fba34f96d1870c8359
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 98.15
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        BSD [5:29]
+
+KEEP     GPL-2.0-only         3fda58c5e738c73adc5ed7bf1f97b383
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: GPL at line 60
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        GPL [1:340]
+
+KEEP     GPL-1.0-or-later AND GPL-1.0-or-later AND LGPL-2.0-or-later 55ff1f19cd6af793259c9b6be42cbef9
+BELONGS ya.make
+FILE_INCLUDE GPL found in files: COPYING at line 3
+FILE_INCLUDE LGPL found in files: COPYING at line 3
+    License text:
+        any of the GPL (see the file GPL), the LGPL (see the file LGPL), or the
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        COPYING [3:3]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        COPYING [3:3]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        COPYING [3:3]
+
+KEEP     LGPL-2.1-only        5a6306e8bc6186ce24a24f743d491171
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: LGPL at line 116
+FILE_INCLUDE GPL found in files: LGPL at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LGPL [1:502]
+
+KEEP     FSFUL                740396fa957eccf74dd0f4c2b474fb71
+BELONGS ya.make
+    License text:
+           This file is free documentation; the Free Software Foundation gives
+        unlimited permission to copy, distribute and modify it.
+    Scancode info:
+        Original SPDX id: FSFUL
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.fsf.org/licensing/licenses/, https://fedoraproject.org/wiki/Licensing/FSF_Unlimited_License, https://spdx.org/licenses/FSFUL
+    Files with this license:
+        INSTALL [7:8]
+
+KEEP     BSD-3-Clause         bdecc4d3129b3a1475a0993772b0f5a9
+BELONGS ya.make
+FILE_INCLUDE BSD found in files: COPYING at line 4
+FILE_INCLUDE GPL found in files: COPYING at line 3
+FILE_INCLUDE LGPL found in files: COPYING at line 3
+    License text:
+        any of the GPL (see the file GPL), the LGPL (see the file LGPL), or the
+        BSD License (see the file BSD).
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [3:4]

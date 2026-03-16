@@ -1,0 +1,88 @@
+Building on AIX
+===============
+
+Install
+=======
+
+AIX seems to ship with a install tool /usr/bin/bsdinstall, unfortunately
+the version of autoconf that unixODBC uses doesn't seem to like this, so
+make sure it doesn't find this. It may be best to define INSTALL as a 
+empty string before building, forcing it to use the builtin install-sh.
+
+Threads
+=======
+
+You need to decide to build with or without threads, if you want threads
+I would do this
+
+export CC=xlc_r
+export CXX=xlC_r
+./configure 
+
+If you don't want threads, do this
+
+export CC=xlc
+export CXX=xlC
+./configure --enable-threads=no
+
+Shared Libs
+===========
+
+Because of the way that AIX builds its shared libs there are a couple of 
+points to remember
+
+1. All drivers need changing into .so
+
+The drivers will be build as a .a, containing a .so, BUT dlopen only is 
+able to open a .so, so to fix this, for each driver that is needed, do
+the following (in this case the postgres driver).
+
+Go to the target lib directory
+
+	cd /usr/local/lib
+
+extract the .so from the .a
+
+	ar -x libodbcpsql.a
+
+This will create libodbcpsql.so.2
+
+The same will need doing for the seyup libs
+
+	ar -x libodbcpsqlS.a
+
+2. Shared libs containing C++ are special
+
+This is only a issue with the libodbcinstQ.a lib that is opened by
+ODBCConfig. There are two things, first because libtool decides that 
+shared libs ar lib*.a the code tries to load libodbcinstQ.a, and also
+we maye have to rebuild the lib using the IBM util makeC++SharedLib 
+(the name gives its away :-)
+
+I have tried this with a current AIX, and it seems that all is needed is to extract the .so 
+from the .a by running ar -x libodbcinstQ.a to get the .so
+
+If that doesn't help, or on older AIX's the following may need doing.
+
+After the make install is done, go into the odbcinstQ dir on thE
+build tree, and do the following
+
+	makeC++SharedLib -p 0 -o libodbcinstQ.so.1.0 -L$QTDIR/lib -lqt -L$PREFIX/lib -lodbc -lodbcinst  .libs/libodbcinstQ.lax/libodbcextraslc.al/strcasecmp.o  *.o ../ini/*.lo
+
+where QTDIR is set to the top of the qt tree, so $QTDIR/lib will contain libqt.a 
+and PREFIX is set to the unixODBC install tree, so $PREFIX/lib contains libodbc.a.
+Ignore any duplicate symbol warnings they are due to the same things being in libodbc.a
+and libodbcinst.a
+
+this will then build a libodbcinstQ.so.1.0, we can copy that to the target lib dir,
+and delete the existing lib, and link it (again replace $PREFIX with the correct path
+
+	cp libodbcinstQ.so.1.0 $PREFIX/lib
+	cd $PREFIX/lib
+	rm libodbcinstQ.a
+	ln -s libodbcinstQ.so.1.0 libodbcinstQ.a
+
+Then all should be OK with ODBCConfig
+
+Nick Gorham
+

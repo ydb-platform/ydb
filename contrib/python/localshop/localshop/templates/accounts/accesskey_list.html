@@ -1,0 +1,74 @@
+{% extends "accounts/base.html" %}
+{% load i18n %}
+
+{% block content_panel %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading">Access keys</div>
+        <div class="panel-body">
+            <p>
+                This is a list of all access keys associated with your account.
+                Remove any keys that you do not recognize.
+            </p>
+            <p>
+                Access keys are simple UUIDs that you can use as Basic Auth credentials
+                when using your localshop via a pip requirement file or when uploading a
+                new package. Simply specify the index with
+                <pre>pip install -i http://&lt;access key&gt;:&lt;secret_key&gt;@{{ current_url }}/simple/ ...</pre>
+            </p>
+            <p>
+                Or edit your ~/.pypirc file and add:
+<pre>username: b45cea78-ccfa-4f43-a526-e0d8b1c167c7
+password: 3ccc61f5-1ecd-4ec3-8f0e-d0fbd050d10b
+repository: http://localhost:8000/repo/your-repo/</pre>
+
+            </p>
+            <p>
+                <strong>Warning:</strong>
+                Please be aware that those credentials are transmitted unencrypted over
+                http unless you setup your localshop instance to run on a server that serves
+                pages via https.
+            </p>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <div class="btn-group pull-right">
+                <a href="{% url 'accounts:access_key_create' %}" class="btn btn-success btn-xs">
+                    <span class="icon-plus icon-white"></span> Create new
+                </a>
+            </div>
+            Access keys
+        </div>
+
+        <table class="table table-striped table-bordered">
+            <thead>
+                <tr>
+                    <th>Access Key</th>
+                    <th>Secret Key</th>
+                    <th>Comment</th>
+                    <th>Last usage</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for key in access_keys %}
+                <tr>
+                    <td title="created {{ key.created }}">{{ key.access_key }}</td>
+                    <td>
+                        <span data-secret-key="{{ key.pk }}" class="secret-keys">
+                        <a href="{% url 'accounts:access_key_secret' pk=key.pk %}" data-access-key="{{ key.pk }}" class="toggle-secret-key"><span class="icon-lock"></span> show</a>
+                    </td>
+                    <td>{{ key.comment }}</td>
+                    <td>{{ key.last_usage }}</td>
+                    <td>
+                        <a href="{% url 'accounts:access_key_edit' pk=key.pk %}"><span class="icon-edit"></span> edit</a>
+                        <a href="{% url 'accounts:access_key_delete' pk=key.pk %}"><span class="icon-edit"></span> delete</a>
+                    </a>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

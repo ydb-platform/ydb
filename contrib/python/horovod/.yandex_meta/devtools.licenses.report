@@ -1,0 +1,229 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  14395d49cccf7dd9c262788c7c3eb609
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/lbfgs/LICENSE.md [9:26]
+
+KEEP     MIT                  28889cb11f12da7b25fb3ae935447b11
+BELONGS ya.make
+    License text:
+        // Under MIT license
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/lbfgs/include/LBFGS.h [2:2]
+        third_party/lbfgs/include/LBFGS/LineSearch.h [2:2]
+        third_party/lbfgs/include/LBFGS/LineSearchBracketing.h [2:2]
+        third_party/lbfgs/include/LBFGS/Param.h [2:2]
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [17:217]
+
+KEEP     Apache-2.0           4248d6c827c367ff9f1b5e59ca41408e
+BELONGS horovod/common/ya.make horovod/tensorflow/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        horovod/common/common.cc [3:13]
+        horovod/common/common.h [4:14]
+        horovod/common/fusion_buffer_manager.cc [3:13]
+        horovod/common/fusion_buffer_manager.h [3:13]
+        horovod/common/global_state.h [4:14]
+        horovod/common/half.cc [3:13]
+        horovod/common/hashes.h [3:13]
+        horovod/common/message.cc [4:14]
+        horovod/common/message.h [4:14]
+        horovod/common/mpi_context.cc [4:14]
+        horovod/common/mpi_context.h [4:14]
+        horovod/common/operations.cc [6:16]
+        horovod/common/operations.h [3:13]
+        horovod/common/ops/collective_operations.cc [4:14]
+        horovod/common/ops/collective_operations.h [4:14]
+        horovod/common/ops/cuda_operations.cc [4:14]
+        horovod/common/ops/cuda_operations.h [4:14]
+        horovod/common/ops/ddl_operations.cc [4:14]
+        horovod/common/ops/ddl_operations.h [4:14]
+        horovod/common/ops/mlsl_operations.cc [5:15]
+        horovod/common/ops/mlsl_operations.h [5:15]
+        horovod/common/ops/mpi_cuda_operations.cc [4:14]
+        horovod/common/ops/mpi_cuda_operations.h [4:14]
+        horovod/common/ops/mpi_operations.cc [4:14]
+        horovod/common/ops/mpi_operations.h [4:14]
+        horovod/common/ops/nccl_operations.cc [4:14]
+        horovod/common/ops/nccl_operations.h [4:14]
+        horovod/common/ops/operation_manager.cc [3:13]
+        horovod/common/ops/operation_manager.h [3:13]
+        horovod/common/optim/bayesian_optimization.cc [4:14]
+        horovod/common/optim/bayesian_optimization.h [4:14]
+        horovod/common/optim/gaussian_process.cc [5:15]
+        horovod/common/optim/gaussian_process.h [5:15]
+        horovod/common/parameter_manager.cc [3:13]
+        horovod/common/parameter_manager.h [3:13]
+        horovod/common/response_cache.cc [3:13]
+        horovod/common/response_cache.h [3:13]
+        horovod/common/timeline.cc [3:13]
+        horovod/common/timeline.h [3:13]
+        horovod/common/wire/message.fbs [4:14]
+        horovod/tensorflow/mpi_ops.cc [4:14]
+
+KEEP     MIT                  5eb1569c25b4eca8d17795b48a1adec1
+BELONGS ya.make
+    License text:
+        \## The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/lbfgs/LICENSE.md [1:1]
+
+KEEP     Apache-2.0           6f445b2044ede028105b9327341574cc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [4:14]
+
+KEEP     Apache-2.0           86e8237b9a37a6951edea992afba41f3
+BELONGS ya.make
+    License text:
+        Classifier: License :: OSI Approved :: Apache Software License
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        .dist-info/METADATA [9:9]
+
+KEEP     Apache-2.0           920b2f581700b4aa528093ed0d2f5a5b
+BELONGS horovod/common/ya.make horovod/tensorflow/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        horovod/_keras/__init__.py [3:13]
+        horovod/_keras/callbacks.py [3:13]
+        horovod/common/basics.py [3:13]
+        horovod/common/util.py [4:14]
+        horovod/run/common/service/driver_service.py [3:13]
+        horovod/run/common/service/task_service.py [3:13]
+        horovod/run/common/util/codec.py [3:13]
+        horovod/run/common/util/env.py [3:13]
+        horovod/run/common/util/host_hash.py [3:13]
+        horovod/run/common/util/network.py [3:13]
+        horovod/run/common/util/safe_shell_exec.py [3:13]
+        horovod/run/common/util/secret.py [3:13]
+        horovod/run/common/util/settings.py [3:13]
+        horovod/run/common/util/timeout.py [3:13]
+        horovod/run/driver/driver_service.py [3:13]
+        horovod/run/run.py [3:13]
+        horovod/run/task/task_service.py [3:13]
+        horovod/run/task_fn.py [3:13]
+        horovod/run/util/cache.py [3:13]
+        horovod/run/util/threads.py [3:13]
+        horovod/tensorflow/__init__.py [4:14]
+        horovod/tensorflow/compression.py [3:13]
+        horovod/tensorflow/keras/__init__.py [3:13]
+        horovod/tensorflow/keras/callbacks.py [3:13]
+        horovod/tensorflow/mpi_ops.py [4:14]
+        horovod/tensorflow/util.py [3:13]
+
+KEEP     Apache-2.0           d3b219aa92ce75896aaf145449b3a9b3
+BELONGS ya.make
+    License text:
+        .. image:: https://img.shields.io/badge/License-Apache%202.0-blue.svg
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.rst [13:13]
+        README.rst [14:14]
+
+KEEP     BSD-3-Clause         f2807aec23ff245a2dae6fb0e3aa1b94
+BELONGS horovod/common/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 97.17
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        horovod/common/half.h [5:23]
+
+KEEP     MIT                  ff4429fddddf74aadb64a3cdd645ed99
+BELONGS ya.make
+    License text:
+        **LBFGS++** is an open source project under the MIT license.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/lbfgs/README.md [98:98]

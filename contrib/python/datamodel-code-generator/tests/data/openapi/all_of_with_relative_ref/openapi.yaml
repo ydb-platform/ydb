@@ -1,0 +1,19 @@
+openapi: 3.1.0
+paths: {}
+components:
+  schemas:
+    Animals:
+      $ref: ./schema/animal.yaml
+    Pets:
+      $ref: ./schema/pet.yaml
+servers:
+  - url: /api
+info:
+  title: Example
+  version: "1.0"
+  description: Example API
+tags:
+  - name: Animals
+    description: Information about Animals.
+  - name: Pets
+    description: Information about Pets.

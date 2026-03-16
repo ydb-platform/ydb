@@ -1,0 +1,97 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.50000, spectral_ieee
+
+constant GRIBEXShBugPresent = 0;
+constant sphericalHarmonics = 1;
+constant complexPacking = 1;
+
+meta codedValues data_g2complex_packing(
+     section7Length,
+     offsetBeforeData,
+     offsetSection7,
+
+     unitsFactor,
+ 	unitsBias,
+     changingPrecision,
+     numberOfValues,
+     bitsPerValue,
+     referenceValue,
+     binaryScaleFactor,
+     decimalScaleFactor,
+     optimizeScaleFactor,
+
+     GRIBEXShBugPresent,
+     unpackedSubsetPrecision,
+
+     laplacianOperatorIsSet,
+     laplacianOperator,
+
+     J, K, M,
+     J, J, J,
+     numberOfValues
+): read_only;
+
+meta data.packedValues data_sh_packed(
+     section7Length,
+     offsetBeforeData,
+     offsetSection7,
+
+     unitsFactor,
+     unitsBias,
+     changingPrecision,
+     numberOfValues,
+     bitsPerValue,
+     referenceValue,
+     binaryScaleFactor,
+     decimalScaleFactor,
+     optimizeScaleFactor,
+
+     GRIBEXShBugPresent,
+     unpackedSubsetPrecision,
+
+     laplacianOperatorIsSet,
+     laplacianOperator,
+
+     J,K, M,
+     J, J, J
+) : read_only;
+
+meta data.unpackedValues data_sh_unpacked(
+     section7Length,
+     offsetBeforeData,
+     offsetSection7,
+
+     unitsFactor,
+     unitsBias,
+     changingPrecision,
+     numberOfValues,
+     bitsPerValue,
+     referenceValue,
+     binaryScaleFactor,
+     decimalScaleFactor,
+     optimizeScaleFactor,
+
+     GRIBEXShBugPresent,
+     unpackedSubsetPrecision,
+
+     laplacianOperatorIsSet,
+     laplacianOperator,
+
+     J, K, M,
+     J, K, M
+ ) : read_only;
+
+meta packingError simple_packing_error(bitsPerValue,binaryScaleFactor,decimalScaleFactor,referenceValue,ieee) : no_copy;
+meta unpackedError simple_packing_error(zero,binaryScaleFactor,decimalScaleFactor,referenceValue,ieee) : no_copy;
+
+meta values data_apply_bitmap(
+     codedValues,
+     bitmap,
+     missingValue,
+     binaryScaleFactor,
+     numberOfDataPoints,
+     numberOfValues
+) : dump;
+
+template statistics "common/statistics_spectral.def";

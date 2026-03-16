@@ -1,0 +1,98 @@
+*******************************************************************************
+Ephemeris / WWW_USER Mon May  5 21:51:47 2008  Pasadena, USA     / Horizons    
+*******************************************************************************
+Target body name: Hyperion (607)                  {source: SAT286xl}
+Center body name: Earth (399)                     {source: DE405}
+Center-site name: GEOCENTRIC
+*******************************************************************************
+Start time      : A.D. 2014-Dec-10 00:00:00.0000 UT      
+Stop  time      : A.D. 2014-Dec-30 00:00:00.0000 UT      
+Step-size       : 1440 minutes
+*******************************************************************************
+Target pole/equ : No model available
+Target radii    : 164.0 x 130.0 x 107.0 km        {Equator, meridian, pole}    
+Center geodetic : .000000000,.000000000,.00000000 {E-lon(deg),Lat(deg),Alt(km)}
+Center cylindric: .000000000,.000000000,.00000000 {E-lon(deg),Dxy(km),Dz(km)}
+Center pole/equ : High-precision EOP model        {East-longitude +}
+Center radii    : 6378.1 x 6378.1 x 6356.8 km     {Equator, meridian, pole}    
+Target primary  : Saturn                          {source: DE405}
+Interfering body: MOON (Req= 1737.400) km         {source: DE405}
+Deflecting body : Sun, EARTH                      {source: DE405}
+Deflecting GMs  : 1.3271E+11, 3.9860E+05 km^3/s^2                              
+Atmos refraction: NO (AIRLESS)
+RA format       : HMS
+Time format     : CAL 
+EOP file        : eop.080505.p080727                                           
+EOP coverage    : DATA-BASED 1962-JAN-20 TO 2008-MAY-05. PREDICTS-> 2008-JUL-26
+Units conversion: 1 AU= 149597870.691 km, c= 299792.458 km/s, 1 day= 86400.0 s 
+Table cut-offs 1: Elevation (-90.0deg=NO ),Airmass (>38.000=NO), Daylight (NO )
+Table cut-offs 2: Solar Elongation (  0.0,180.0=NO )                           
+*******************************************************************************
+ Date__(UT)__HR:MN     R.A._(ICRF/J2000.0)_DEC R.A.__(a-apparent)__DEC Ang-diam
+*******************************************************************************
+$$SOE
+ 2014-Dec-10 00:00     15 45 48.75 -17 53 11.8 15 46 39.14 -17 55 45.8     .042
+ 2014-Dec-11 00:00     15 46 20.37 -17 54 38.7 15 47 10.79 -17 57 12.1     .042
+ 2014-Dec-12 00:00     15 46 51.93 -17 56 10.1 15 47 42.39 -17 58 43.1     .042
+ 2014-Dec-13 00:00     15 47 23.22 -17 57 45.9 15 48 13.71 -18 00 18.4     .042
+ 2014-Dec-14 00:00     15 47 53.99 -17 59 25.5 15 48 44.51 -18 01 57.4     .042
+ 2014-Dec-15 00:00     15 48 24.05 -18 01 08.1 15 49 14.61 -18 03 39.6     .042
+ 2014-Dec-16 00:00     15 48 53.21 -18 02 52.9 15 49 43.79 -18 05 23.9     .042
+ 2014-Dec-17 00:00     15 49 21.28 -18 04 38.4 15 50 11.89 -18 07 08.9     .042
+ 2014-Dec-18 00:00     15 49 48.15 -18 06 23.1 15 50 38.80 -18 08 53.2     .042
+ 2014-Dec-19 00:00     15 50 13.76 -18 08 05.2 15 51 04.45 -18 10 34.8     .042
+ 2014-Dec-20 00:00     15 50 38.16 -18 09 42.4 15 51 28.89 -18 12 11.7     .042
+ 2014-Dec-21 00:00     15 51 01.54 -18 11 13.0 15 51 52.31 -18 13 41.8     .042
+ 2014-Dec-22 00:00     15 51 24.24 -18 12 35.3 15 52 15.05 -18 15 03.8     .042
+ 2014-Dec-23 00:00     15 51 46.70 -18 13 48.8 15 52 37.56 -18 16 17.0     .042
+ 2014-Dec-24 00:00     15 52 09.42 -18 14 54.0 15 53 00.31 -18 17 21.9     .042
+ 2014-Dec-25 00:00     15 52 32.80 -18 15 52.5 15 53 23.74 -18 18 20.2     .042
+ 2014-Dec-26 00:00     15 52 57.14 -18 16 46.7 15 53 48.11 -18 19 14.0     .042
+ 2014-Dec-27 00:00     15 53 22.53 -18 17 39.0 15 54 13.53 -18 20 05.9     .042
+ 2014-Dec-28 00:00     15 53 48.93 -18 18 31.5 15 54 39.96 -18 20 58.0     .042
+ 2014-Dec-29 00:00     15 54 16.20 -18 19 26.0 15 55 07.26 -18 21 52.1     .042
+ 2014-Dec-30 00:00     15 54 44.13 -18 20 23.8 15 55 35.22 -18 22 49.4     .042
+$$EOE
+*******************************************************************************
+Column meaning:
+ 
+TIME
+
+  Prior to 1962, times are UT1. Dates thereafter are UTC. Any 'b' symbol in
+the 1st-column denotes a B.C. date. First-column blank (" ") denotes an A.D.
+date. Calendar dates prior to 1582-Oct-15 are in the Julian calendar system.
+Later calendar dates are in the Gregorian system.
+
+  The uniform Coordinate Time scale is used internally. Conversion between
+CT and the selected non-uniform UT output scale has not been determined for
+UTC times after the next July or January 1st.  The last known leap-second
+is used over any future interval.
+
+  NOTE: "n.a." in output means quantity "not available" at the print-time.
+ 
+ R.A._(ICRF/J2000.0)_DEC =
+   J2000.0 astrometric right ascension and declination of target center.
+Corrected for light-time. Units: HMS (HH MM SS.ff) and DMS (DD MM SS.f)
+ 
+ R.A._(a-apparent)__DEC. =
+   Airless apparent right ascension and declination of the target center with
+respect to the Earth true-equator and the meridian containing the Earth true
+equinox of date.  Corrected for light-time, gravitational deflection of light,
+stellar aberration, precession & nutation.
+   Units: HMS (HH MM SS.ff) and DMS (DD MM SS.f)
+ 
+ Ang-diam =
+   The equatorial angular width of the target body full disk, if it were
+fully visible to the observer.  Units: ARCSECONDS
+
+
+ Computations by ...
+     Solar System Dynamics Group, Horizons On-Line Ephemeris System
+     4800 Oak Grove Drive, Jet Propulsion Laboratory
+     Pasadena, CA  91109   USA
+     Information: http://ssd.jpl.nasa.gov/
+     Connect    : telnet://ssd.jpl.nasa.gov:6775  (via browser)
+                  telnet ssd.jpl.nasa.gov 6775    (via command-line)
+     Author     : Jon.Giorgini@jpl.nasa.gov
+
+*******************************************************************************

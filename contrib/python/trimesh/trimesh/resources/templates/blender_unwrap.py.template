@@ -1,0 +1,40 @@
+# flake8: noqa
+
+import bpy
+from bl_operators.uvcalc_smart_project import main as smart_proj
+import os
+
+
+if __name__ == '__main__':
+    # clear scene of default box
+    bpy.ops.wm.read_homefile()
+    try:
+        bpy.ops.object.mode_set(mode='OBJECT')
+    except BaseException:
+        pass
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.delete(use_global=True)
+
+    # get temporary files from templated locations
+    mesh_pre = $MESH_PRE
+    mesh_post = os.path.abspath(r'$MESH_POST')
+
+    # use data.objects instead of context.scene.objects
+    bpy.ops.import_scene.obj(filepath=os.path.abspath(mesh_pre[0]))
+    bpy.ops.object.select_all(action='SELECT')
+
+    mesh = bpy.data.objects[0]
+    # Make sure mesh is the active object
+    try:
+        # earlier than blender <2.8
+        bpy.context.scene.objects.active = mesh
+    except AttributeError:
+        # blender 2.8 changed this
+        bpy.context.view_layer.objects.active = mesh
+
+    smart_proj(bpy.context, $ISLAND_MARGIN, $ANGLE_LIMIT, 0, True, True)
+
+    bpy.ops.export_scene.obj(
+        filepath=mesh_post,
+        use_mesh_modifiers=False,
+        use_uvs=True)

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block navbar %}
+{% module Template("navbar.html", active_tab="broker") %}
+{% end %}
+
+{% block container %}
+<div class="container-fluid">
+  <figure class="table-responsive mt-3">
+    <table id="queue-table" class="table table-bordered table-striped caption-top">
+      <caption>{{ broker_url }}</caption>
+      <thead>
+        <tr>
+          <th>Queue</th>
+          <th>Messages</th>
+          <th>Unacked</th>
+          <th>Ready</th>
+          <th>Consumers</th>
+          <th>Idle since</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for queue in queues %}
+        <tr id="{{ url_escape(queue['name']) }}">
+          <td>{{ queue['name'] }}</td>
+          <td>{{ queue.get('messages', 'N/A') }}</td>
+          <td>{{ queue.get('messages_unacknowledged', 'N/A') }}</td>
+          <td>{{ queue.get('messages_ready', 'N/A') }}</td>
+          <td>{{ queue.get('consumers', 'N/A') }}</td>
+          <td>{{ queue.get('idle_since', 'N/A') }}</td>
+        </tr>
+        {% end %}
+      </tbody>
+    </table>
+  </figure>
+</div>
+{% end %}

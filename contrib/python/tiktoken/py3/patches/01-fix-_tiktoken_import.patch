@@ -1,0 +1,11 @@
+--- contrib/python/tiktoken/py3/tiktoken/core.py        (index)
++++ contrib/python/tiktoken/py3/tiktoken/core.py        (working tree)
+@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
+ 
+ import regex
+ 
++import _tiktoken
+-from tiktoken import _tiktoken
+ 
+ 
+ class Encoding:

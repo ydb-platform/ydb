@@ -1,0 +1,435 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.tuning.v1;
+
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/ai/tuning/v1/tuning_task.proto";
+import "yandex/cloud/ai/tuning/v1/tuning_types.proto";
+import "yandex/cloud/ai/tuning/v1/tuning_optimizers.proto";
+import "yandex/cloud/ai/tuning/v1/tuning_schedulers.proto";
+import "yandex/cloud/ai/tuning/v1/tuning_error.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/tuning/v1;fomo";
+option java_package = "yandex.cloud.api.ai.tuning.v1";
+
+service TuningService {
+  rpc Tune (TuningRequest) returns (yandex.cloud.operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "TuningMetadata"
+      response: "TuningResponse"
+    };
+  }
+
+  rpc List(ListTuningsRequest) returns (ListTuningsResponse);
+  rpc Describe(DescribeTuningRequest) returns (DescribeTuningResponse);
+  rpc Cancel(CancelTuningRequest) returns (CancelTuningResponse);
+  rpc GetMetricsUrl(GetMetricsUrlRequest) returns (GetMetricsUrlResponse);
+  rpc GetOptions(GetOptionsRequest) returns (GetOptionsResponse);
+  rpc ListErrors(ListErrorsRequest) returns (ListErrorsResponse);
+
+  // Unimplemented
+  rpc CreateDraft(CreateTuningDraftRequest) returns (CreateTuningDraftResponse);
+  // Unimplemented
+  rpc UpdateDraft(UpdateTuningDraftRequest) returns (UpdateTuningDraftResponse);
+  // Unimplemented
+  rpc DeleteDraft(DeleteTuningDraftRequest) returns (DeleteTuningDraftResponse);
+  // Unimplemented
+  rpc TuneDraft(TuneDraftRequest) returns (yandex.cloud.operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "TuningMetadata"
+      response: "TuningResponse"
+    };
+  }
+
+  rpc Archive(ArchiveTuningRequest) returns (yandex.cloud.operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "ArchiveTuningMetadata"
+      response: "ArchiveTuningResponse"
+    };
+  }
+
+  rpc EnableBilling(EnableBillingRequest) returns (yandex.cloud.operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "EnableBillingMetadata"
+      response: "EnableBillingResponse"
+    };
+  }
+}
+
+message ListTuningsRequest {
+
+  // Required field. ID of the folder to list tunings in.
+  string folder_id = 1 [(required) = true];
+
+  // Maximum number of tuning tasks to return per page.
+  int64 page_size = 2;
+
+  // Token to retrieve the next page of results.
+  string page_token = 3;
+
+  TuningTask.Status status = 4;
+}
+
+message ListTuningsResponse {
+  // List of tuning tasks in the specified folder.
+  repeated TuningTask tuning_tasks = 1;
+
+  // Token to retrieve the next page of results.
+  string next_page_token = 2;
+}
+
+message DescribeTuningRequest {
+  string tuning_task_id = 1 [(required) = true];
+}
+
+message DescribeTuningResponse {
+  TuningTask tuning_task = 1;
+}
+
+message CancelTuningRequest {
+  string tuning_task_id = 1 [(required) = true];
+}
+
+message CancelTuningResponse {
+  string tuning_task_id = 1;
+}
+
+message TuningResponse {
+  string tuning_task_id = 3;
+
+  TuningTask.Status status = 4;
+
+  string target_model_uri = 5;
+
+  reserved 1, 2;
+}
+
+message TuningMetadata {
+  string tuning_task_id = 1;
+  TuningTask.Status status = 2;
+  int64 total_steps = 3;
+  int64 current_step = 4;
+}
+
+message TuningRequest {
+  // Format like a `gpt://{folder_id}/yandex-gpt/latest`
+  string base_model_uri = 1 [(required) = true];
+
+  repeated WeightedDataset train_datasets = 2 [(size)=">0"];
+  repeated WeightedDataset validation_datasets = 3 [deprecated = true];
+  WeightedDataset validation_dataset = 4;
+  repeated WeightedDataset test_datasets = 5;
+
+  oneof tuning_params {
+    TextToTextCompletionTuningParams text_to_text_completion = 100;
+    TextClassificationMultilabelParams text_classification_multilabel = 101;
+    TextClassificationMulticlassParams text_classification_multiclass = 102;
+    // TextEmbeddingPairParams  is unimplemented
+    TextEmbeddingPairParams text_embedding_pair_params = 103;
+    // TextEmbeddingTripletParams  is unimplemented
+    TextEmbeddingTripletParams text_embedding_triplet_params = 104;
+  }
+
+  string name = 200;
+  string description = 201;
+  map<string, string> labels = 202;
+
+  message WeightedDataset {
+    string dataset_id = 1 [(required) = true];
+    double weight = 2;
+  }
+  reserved 6 to 99, 105 to 199;
+}
+
+message TextToTextCompletionTuningParams {
+  int64 seed = 1;
+  double lr = 2;
+  int64 n_samples = 3;
+  string additional_arguments = 7;
+
+  oneof tuning_type {
+    TuningTypeLora lora = 100;
+    TuningTypePromptTune prompt_tune = 101;
+  }
+
+  Scheduler scheduler = 200;
+  Optimizer optimizer = 201;
+
+  message Scheduler {
+    oneof type {
+      SchedulerLinear linear = 1;
+      SchedulerConstant constant = 2;
+      SchedulerCosine cosine = 3;
+    }
+    double warmup_ratio = 101;
+    reserved 4 to 100;
+  }
+
+  message Optimizer {
+    oneof type {
+      OptimizerAdamw adamw = 1;
+    }
+  }
+  reserved 4 to 6, 8 to 99, 102 to 199;
+}
+
+message TextClassificationMultilabelParams {
+  int64 seed = 1;
+  double lr = 2;
+  int64 n_samples = 3;
+  string additional_arguments = 7;
+
+  oneof tuning_type {
+    TuningTypeLora lora = 100;
+    TuningTypePromptTune prompt_tune = 101;
+  }
+
+  Scheduler scheduler = 200;
+  Optimizer optimizer = 201;
+
+  message Scheduler {
+    oneof type {
+      SchedulerLinear linear = 1;
+      SchedulerConstant constant = 2;
+      SchedulerCosine cosine = 3;
+    }
+    double warmup_ratio = 101;
+    reserved 4 to 100;
+  }
+
+  message Optimizer {
+    oneof type {
+      OptimizerAdamw adamw = 1;
+    }
+  }
+  reserved 4 to 6, 8 to 99, 102 to 199;
+}
+
+message TextClassificationMulticlassParams {
+  int64 seed = 1;
+  double lr = 2;
+  int64 n_samples = 3;
+  string additional_arguments = 7;
+
+  oneof tuning_type {
+    TuningTypeLora lora = 100;
+    TuningTypePromptTune prompt_tune = 101;
+  }
+
+  Scheduler scheduler = 200;
+  Optimizer optimizer = 201;
+
+  message Scheduler {
+    oneof type {
+      SchedulerLinear linear = 1;
+      SchedulerConstant constant = 2;
+      SchedulerCosine cosine = 3;
+    }
+    double warmup_ratio = 101;
+    reserved 4 to 100;
+  }
+
+  message Optimizer {
+    oneof type {
+      OptimizerAdamw adamw = 1;
+    }
+  }
+  reserved 4 to 6, 8 to 99, 102 to 199;
+}
+
+message TextEmbeddingPairParams {
+  int64 seed = 1;
+  double lr = 2;
+  int64 n_samples = 3;
+  string additional_arguments = 7;
+  repeated int64 embedding_dims = 8;
+
+  oneof tuning_type {
+    TuningTypeLora lora = 100;
+    TuningTypePromptTune prompt_tune = 101;
+  }
+
+  Scheduler scheduler = 200;
+  Optimizer optimizer = 201;
+
+  message Scheduler {
+    oneof type {
+      SchedulerLinear linear = 1;
+      SchedulerConstant constant = 2;
+      SchedulerCosine cosine = 3;
+    }
+    oneof optional_warmup_ratio {
+      double warmup_ratio = 101;
+    }
+    reserved 4 to 100;
+  }
+
+  message Optimizer {
+    oneof type {
+      OptimizerAdamw adamw = 1;
+    }
+  }
+  reserved 4 to 6, 9 to 99, 102 to 199;
+}
+
+message TextEmbeddingTripletParams {
+  int64 seed = 1;
+  double lr = 2;
+  int64 n_samples = 3;
+  string additional_arguments = 7;
+  repeated int64 embedding_dims = 8;
+
+  oneof tuning_type {
+    TuningTypeLora lora = 100;
+    TuningTypePromptTune prompt_tune = 101;
+  }
+
+  Scheduler scheduler = 200;
+  Optimizer optimizer = 201;
+
+  message Scheduler {
+    oneof type {
+      SchedulerLinear linear = 1;
+      SchedulerConstant constant = 2;
+      SchedulerCosine cosine = 3;
+    }
+    oneof optional_warmup_ratio {
+      double warmup_ratio = 101;
+    }
+    reserved 4 to 100;
+  }
+
+  message Optimizer {
+    oneof type {
+      OptimizerAdamw adamw = 1;
+    }
+  }
+  reserved 4 to 6, 9 to 99, 102 to 199;
+}
+
+message GetMetricsUrlRequest {
+  string task_id = 1 [(required) = true];
+}
+
+message GetMetricsUrlResponse {
+  string load_url = 1;
+}
+
+message GetOptionsRequest {
+  string task_id = 1 [(required) = true];
+}
+
+message GetOptionsResponse {
+  string task_id = 1;
+  string base_model_uri = 2;
+
+  repeated TuningRequest.WeightedDataset train_datasets = 3;
+  repeated TuningRequest.WeightedDataset validation_datasets = 4;
+
+  oneof tuning_params {
+    TextToTextCompletionTuningParams text_to_text_completion = 100;
+    TextClassificationMultilabelParams text_classification_multilabel = 101;
+    TextClassificationMulticlassParams text_classification_multiclass = 102;
+    TextEmbeddingPairParams text_embedding_pair_params = 103;
+    TextEmbeddingTripletParams text_embedding_triplet_params = 104;
+  }
+
+  reserved 5 to 99;
+}
+
+message ListErrorsRequest {
+  string tuning_task_id = 1;
+}
+
+message ListErrorsResponse {
+  repeated TuningError tuning_error = 1;
+}
+
+message CreateTuningDraftRequest {
+  string base_model_uri = 1 [(required) = true];
+
+  repeated TuningRequest.WeightedDataset train_datasets = 2 [(size)=">0"];
+  repeated TuningRequest.WeightedDataset validation_datasets = 3;
+
+  oneof tuning_params {
+    TextToTextCompletionTuningParams text_to_text_completion = 100;
+    TextClassificationMultilabelParams text_classification_multilabel = 101;
+    TextClassificationMulticlassParams text_classification_multiclass = 102;
+    TextEmbeddingPairParams text_embedding_pair_params = 103;
+    TextEmbeddingTripletParams text_embedding_triplet_params = 104;
+  }
+
+  string name = 200 [(pattern) = "^[A-Za-z0-9 _-]{3,100}$"];
+  string description = 201;
+  map<string, string> labels = 202;
+
+  reserved 4 to 99, 105 to 199;
+}
+
+message CreateTuningDraftResponse {
+  string tuning_task_id = 1;
+}
+
+message UpdateTuningDraftRequest {
+  string tuning_task_id = 1 [(required) = true];
+
+  string base_model_uri = 2;
+  repeated TuningRequest.WeightedDataset train_datasets = 3;
+  repeated TuningRequest.WeightedDataset validation_datasets = 4;
+
+  oneof tuning_params {
+    TextToTextCompletionTuningParams text_to_text_completion = 100;
+    TextClassificationMultilabelParams text_classification_multilabel = 101;
+    TextClassificationMulticlassParams text_classification_multiclass = 102;
+    TextEmbeddingPairParams text_embedding_pair_params = 103;
+    TextEmbeddingTripletParams text_embedding_triplet_params = 104;
+  }
+
+  string name = 200;
+  string description = 201;
+  map<string, string> labels = 202;
+
+  reserved 5 to 99, 105 to 199;
+}
+
+message UpdateTuningDraftResponse {
+  string tuning_task_id = 1;
+}
+
+message DeleteTuningDraftRequest {
+  string tuning_task_id = 1 [(required) = true];
+}
+
+message DeleteTuningDraftResponse {
+  string tuning_task_id = 1;
+}
+
+message TuneDraftRequest {
+  string tuning_task_id = 1 [(required) = true];
+}
+
+message ArchiveTuningRequest {
+  string tuning_task_id = 1 [(required) = true];
+}
+
+message ArchiveTuningMetadata {
+
+}
+
+message ArchiveTuningResponse {
+  string tuning_task_id = 1;
+}
+
+message EnableBillingRequest {
+  string tuning_task_id = 1 [(required) = true];
+}
+
+message EnableBillingResponse {
+  string tuning_task_id = 1;
+}
+
+message EnableBillingMetadata {
+  
+}

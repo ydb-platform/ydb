@@ -1,0 +1,120 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/iam/v1/refresh_token.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1;iam";
+option java_package = "yandex.cloud.api.iam.v1";
+
+// A set of methods for managing Refresh Tokens.
+service RefreshTokenService {
+
+  // List subjects Refresh Tokens.
+  rpc List (ListRefreshTokensRequest) returns (ListRefreshTokensResponse){
+    option (google.api.http) = { get: "/iam/v1/refreshTokens" };
+  };
+
+  // Revoke Refresh Tokens. Several Refresh Tokens can be revoked by one request.
+  rpc Revoke (RevokeRefreshTokenRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/iam/v1/refreshTokens:revoke"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RevokeRefreshTokenMetadata"
+      response: "RevokeRefreshTokenResponse"
+    };
+  }
+}
+
+message RevokeRefreshTokenMetadata {
+  string subject_id = 1;
+
+  // Id of revoked Refresh Tokens.
+  repeated string refresh_token_ids = 2;
+}
+
+message ListRefreshTokensRequest {
+  reserved 2, 3;
+
+  string subject_id = 1 [(length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListRefreshTokensResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 4 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token]
+  // to the [ListRefreshTokensResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 5 [(length) = "<=2000"];
+
+  // A filter expression that filters refresh tokens listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on [RefreshToken.client_instance_info], [RefreshToken.client_id] or [RefreshToken.protection_level] fields.
+  // 2. The operator. An `=` operator can be used for all fields. An 'IN' operator can be used for [RefreshToken.protection_level].
+  // 3. The value. The value must be in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-zA-Z][_-a-zA-Z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `client_instance_info="clientInstanceInfo" AND protection_level IN ("INSECURE_KEY_DPOP", "SECURE_KEY_DPOP")`.
+  //
+  string filter = 6 [(length) = "<=1000"];
+}
+
+message ListRefreshTokensResponse {
+  // List of Refresh Tokens
+  repeated RefreshToken refresh_tokens = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListRefreshTokensForSubjectRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListRefreshTokensForSubjectRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+// Revoke Refresh Token request.
+// If none of the parameters refresh_token_id, refresh_token, or revoke_filter are provided, all Refresh Tokens for the current subject will be revoked.
+message RevokeRefreshTokenRequest {
+  oneof filter {
+    option (exactly_one) = true;
+
+    // Identifier of the Refresh Token to be revoked.
+    string refresh_token_id = 1 [(length) = "<=50"];
+
+    // The Refresh Token to be revoked.
+    string refresh_token = 2 [(length) = "<=1000"];
+
+    // The filter for revoking Refresh Token
+    RevokeFilter revoke_filter = 3;
+  }
+}
+
+// The Filter object allows filtering Refresh Tokens that will be revoked.
+// It contains three optional fields.
+// When multiple fields are provided, they are combined using a logical AND operation.
+message RevokeFilter {
+  reserved 1;
+
+  // The OAuth client identifier for which the Refresh Token was issued.
+  string client_id = 2 [(length) = "<=50"];
+
+  // The subject identifier for whom the Refresh Token was issued.
+  // If not specified, it defaults to the subject that made the request.
+  string subject_id = 3 [(length) = "<=50"];
+
+  // Information about the app for which the Refresh Token was issued.
+  string client_instance_info = 4 [(length) = "<=1000"];
+}
+
+message RevokeRefreshTokenResponse {
+  // Id of revoked Refresh Tokens.
+  repeated string refresh_token_ids = 1;
+}

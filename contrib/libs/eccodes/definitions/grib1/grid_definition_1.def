@@ -1,0 +1,74 @@
+# (C) Copyright 2005- ECMWF.
+
+# GRID DEFINITION Mercator projection
+# grib 1 -> 2
+constant gridDefinitionTemplateNumber     = 20;
+
+signed[2] Ni : dump;
+alias numberOfPointsAlongAParallel=Ni;
+alias Nx=Ni;
+alias geography.Ni=Ni;
+alias numberOfPointsAlongXAxis=Ni;
+
+signed[2] Nj : dump;
+alias numberOfPointsAlongAMeridian=Nj;
+alias Ny=Nj;
+alias geography.Nj=Nj;
+alias numberOfPointsAlongYAxis=Nj;
+
+include "grib1/grid_first_last_resandcomp.def";
+
+signed[3] Latin : edition_specific,no_copy;
+meta geography.LaDInDegrees scale(Latin,oneConstant,grib1divider,truncateDegrees) : dump;
+
+pad padding_grid1_1(1);
+
+# for change_scanning_direction
+alias yFirst=latitudeOfFirstGridPointInDegrees;
+alias yLast=latitudeOfLastGridPointInDegrees;
+alias xFirst=longitudeOfFirstGridPointInDegrees;
+alias xLast=longitudeOfLastGridPointInDegrees;
+
+include "grib1/scanning_mode.def";
+
+signed[3] DiInMetres: dump;
+alias longitudinalDirectionGridLength=DiInMetres;
+alias Di=DiInMetres;
+alias geography.DiInMetres=DiInMetres;
+alias DxInMetres = DiInMetres;
+
+signed[3] DjInMetres: dump;
+alias latitudinalDirectionGridLength=DjInMetres;
+alias Dj=DjInMetres;
+alias geography.DjInMetres=DjInMetres;
+alias DyInMetres = DjInMetres;
+
+constant orientationOfTheGridInDegrees=0;
+
+pad padding_grid1_2(8);
+
+meta numberOfDataPoints number_of_points(Ni,Nj) : dump;
+alias numberOfPoints=numberOfDataPoints;
+meta numberOfValues number_of_values(values,bitsPerValue,numberOfDataPoints,bitmapPresent,bitmap,numberOfCodedValues) : dump;
+#alias ls.valuesCount=numberOfValues;
+
+iterator mercator(numberOfPoints,missingValue,values,
+          radius,Ni,Nj,
+          latitudeOfFirstGridPointInDegrees, longitudeOfFirstGridPointInDegrees,
+          LaDInDegrees,
+          latitudeOfLastGridPointInDegrees, longitudeOfLastGridPointInDegrees,
+          orientationOfTheGridInDegrees,
+          DiInMetres,DjInMetres,
+          iScansNegatively,
+          jScansPositively,
+          jPointsAreConsecutive,
+          alternativeRowScanning);
+
+nearest mercator(values,radius,Nx,Ny);
+
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);

@@ -1,0 +1,1141 @@
+--- contrib/python/prance/tests/specs/missing_reference.yaml	(index)
++++ contrib/python/prance/tests/specs/missing_reference.yaml	(working tree)
+@@ -67,7 +67,7 @@ paths:
+         "200":
+           description: Expected response to a valid request
+           schema:
+-            $ref: 'http://finkhaeuser.de/projects/prance/petstore.yaml#/definitions/Pet'
++            $ref: 'petstore.yaml#/definitions/Pet'
+         default:
+           description: unexpected error
+           schema:
+--- contrib/python/prance/tests/specs/recursive_files.yaml	(index)
++++ contrib/python/prance/tests/specs/recursive_files.yaml	(working tree)
+@@ -67,7 +67,7 @@ paths:
+         "200":
+           description: Expected response to a valid request
+           schema:
+-            $ref: 'http://finkhaeuser.de/projects/prance/petstore.yaml#/definitions/Pet'
++            $ref: 'petstore.yaml#/definitions/Pet'
+         default:
+           description: unexpected error
+           schema:
+--- contrib/python/prance/tests/specs/recursive_objs.yaml	(index)
++++ contrib/python/prance/tests/specs/recursive_objs.yaml	(working tree)
+@@ -67,7 +67,7 @@ paths:
+         "200":
+           description: Expected response to a valid request
+           schema:
+-            $ref: 'http://finkhaeuser.de/projects/prance/petstore.yaml#/definitions/Pet'
++            $ref: 'petstore.yaml#/definitions/Pet'
+         default:
+           description: unexpected error
+           schema:
+--- contrib/python/prance/tests/specs/with_externals.yaml	(index)
++++ contrib/python/prance/tests/specs/with_externals.yaml	(working tree)
+@@ -64,11 +64,11 @@ paths:
+         "200":
+           description: Expected response to a valid request
+           schema:
+-            $ref: 'http://finkhaeuser.de/projects/prance/petstore.yaml#/definitions/Pet'
++            $ref: 'petstore.yaml#/definitions/Pet'
+         "203":
+           description: Expected response to a valid request
+           schema:
+-            $ref: 'python://tests/specs/petstore.yaml#/definitions/Pet'
++            $ref: 'python://specs/petstore.yaml#/definitions/Pet'
+         default:
+           description: unexpected error
+           schema:
+--- contrib/python/prance/tests/test_backends.py	(index)
++++ contrib/python/prance/tests/test_backends.py	(working tree)
+@@ -5,6 +5,8 @@ __copyright__ = "Copyright (c) 2018 Jens Finkhaeuser"
+ __license__ = "MIT"
+ __all__ = ()
+ 
++import yatest.common as yc
++
+ import pytest
+ 
+ from prance import BaseParser
+@@ -16,25 +18,25 @@ from . import none_of
+ 
+ def test_bad_backend():
+     with pytest.raises(ValueError):
+-        BaseParser("tests/specs/petstore.yaml", backend="does_not_exist")
++        BaseParser(yc.test_source_path("specs/petstore.yaml"), backend="does_not_exist")
+ 
+ 
+ @pytest.mark.skipif(none_of("flex"), reason="Missing dependencies: flex")
+ def test_flex_issue_5_integer_keys():
+     # Must succeed with default (flex) parser; note the parser does not stringify the response code
+-    parser = BaseParser("tests/specs/issue_5.yaml", backend="flex")
++    parser = BaseParser(yc.test_source_path("specs/issue_5.yaml"), backend="flex")
+     assert 200 in parser.specification["paths"]["/test"]["post"]["responses"]
+ 
+ 
+ @pytest.mark.skipif(none_of("flex"), reason="Missing dependencies: flex")
+ def test_flex_validate_success():
+-    parser = BaseParser("tests/specs/petstore.yaml", backend="flex")
++    parser = BaseParser(yc.test_source_path("specs/petstore.yaml"), backend="flex")
+ 
+ 
+ @pytest.mark.skipif(none_of("flex"), reason="Missing dependencies: flex")
+ def test_flex_validate_failure():
+     with pytest.raises(ValidationError):
+-        parser = BaseParser("tests/specs/missing_reference.yaml", backend="flex")
++        parser = BaseParser(yc.test_source_path("specs/missing_reference.yaml"), backend="flex")
+ 
+ 
+ @pytest.mark.skipif(
+@@ -44,17 +46,17 @@ def test_flex_validate_failure():
+ def test_swagger_spec_validator_issue_5_integer_keys():
+     # Must fail in implicit strict mode.
+     with pytest.raises(ValidationError):
+-        BaseParser("tests/specs/issue_5.yaml", backend="swagger-spec-validator")
++        BaseParser(yc.test_source_path("specs/issue_5.yaml"), backend="swagger-spec-validator")
+ 
+     # Must fail in explicit strict mode.
+     with pytest.raises(ValidationError):
+         BaseParser(
+-            "tests/specs/issue_5.yaml", backend="swagger-spec-validator", strict=True
++            yc.test_source_path("specs/issue_5.yaml"), backend="swagger-spec-validator", strict=True
+         )
+ 
+     # Must succeed in non-strict/lenient mode
+     parser = BaseParser(
+-        "tests/specs/issue_5.yaml", backend="swagger-spec-validator", strict=False
++        yc.test_source_path("specs/issue_5.yaml"), backend="swagger-spec-validator", strict=False
+     )
+     assert "200" in parser.specification["paths"]["/test"]["post"]["responses"]
+ 
+@@ -64,7 +66,7 @@ def test_swagger_spec_validator_issue_5_integer_keys():
+     reason="Missing dependencies: swagger-spec-validator",
+ )
+ def test_swagger_spec_validator_validate_success():
+-    parser = BaseParser("tests/specs/petstore.yaml", backend="swagger-spec-validator")
++    parser = BaseParser(yc.test_source_path("specs/petstore.yaml"), backend="swagger-spec-validator")
+ 
+ 
+ @pytest.mark.skipif(
+@@ -74,7 +76,7 @@ def test_swagger_spec_validator_validate_success():
+ def test_swagger_spec_validator_validate_failure():
+     with pytest.raises(ValidationError):
+         parser = BaseParser(
+-            "tests/specs/missing_reference.yaml", backend="swagger-spec-validator"
++            yc.test_source_path("specs/missing_reference.yaml"), backend="swagger-spec-validator"
+         )
+ 
+ 
+@@ -85,17 +87,17 @@ def test_swagger_spec_validator_validate_failure():
+ def test_openapi_spec_validator_issue_5_integer_keys():
+     # Must fail in implicit strict mode.
+     with pytest.raises(ValidationError):
+-        BaseParser("tests/specs/issue_5.yaml", backend="openapi-spec-validator")
++        BaseParser(yc.test_source_path("specs/issue_5.yaml"), backend="openapi-spec-validator")
+ 
+     # Must fail in explicit strict mode.
+     with pytest.raises(ValidationError):
+         BaseParser(
+-            "tests/specs/issue_5.yaml", backend="openapi-spec-validator", strict=True
++            yc.test_source_path("specs/issue_5.yaml"), backend="openapi-spec-validator", strict=True
+         )
+ 
+     # Must succeed in non-strict/lenient mode
+     parser = BaseParser(
+-        "tests/specs/issue_5.yaml", backend="openapi-spec-validator", strict=False
++        yc.test_source_path("specs/issue_5.yaml"), backend="openapi-spec-validator", strict=False
+     )
+     assert "200" in parser.specification["paths"]["/test"]["post"]["responses"]
+ 
+@@ -106,7 +108,7 @@ def test_openapi_spec_validator_issue_5_integer_keys():
+ )
+ def test_openapi_spec_validator_issue_36_error_reporting():
+     with pytest.raises(ValidationError, match=r"Strict mode enabled"):
+-        BaseParser("tests/specs/issue_36.yaml")
++        BaseParser(yc.test_source_path("specs/issue_36.yaml"), backend = "openapi-spec-validator")
+ 
+ 
+ @pytest.mark.skipif(
+@@ -114,7 +116,7 @@ def test_openapi_spec_validator_issue_36_error_reporting():
+     reason="Missing dependencies: openapi-spec-validator",
+ )
+ def test_openapi_spec_validator_validate_success():
+-    parser = BaseParser("tests/specs/petstore.yaml", backend="openapi-spec-validator")
++    parser = BaseParser(yc.test_source_path("specs/petstore.yaml"), backend="openapi-spec-validator")
+ 
+ 
+ @pytest.mark.skipif(
+@@ -124,7 +126,7 @@ def test_openapi_spec_validator_validate_success():
+ def test_openapi_spec_validator_validate_failure():
+     with pytest.raises(ValidationError):
+         parser = BaseParser(
+-            "tests/specs/missing_reference.yaml", backend="openapi-spec-validator"
++            yc.test_source_path("specs/missing_reference.yaml"), backend="openapi-spec-validator"
+         )
+ 
+ 
+@@ -136,12 +138,12 @@ def test_openapi_spec_validator_issue_20_spec_version_handling():
+     # The spec is OpenAPI 3, but broken. Need to set 'strict' to False to stringify keys
+     with pytest.raises(ValidationError):
+         parser = BaseParser(
+-            "tests/specs/issue_20.yaml", backend="openapi-spec-validator", strict=False
++            yc.test_source_path("specs/issue_20.yaml"), backend="openapi-spec-validator", strict=False
+         )
+ 
+     # Lazy parsing should let us validate what's happening
+     parser = BaseParser(
+-        "tests/specs/issue_20.yaml",
++        yc.test_source_path("specs/issue_20.yaml"),
+         backend="openapi-spec-validator",
+         strict=False,
+         lazy=True,
+--- contrib/python/prance/tests/test_base_parser.py	(index)
++++ contrib/python/prance/tests/test_base_parser.py	(working tree)
+@@ -13,16 +13,18 @@ from prance.util.fs import FileNotFoundError
+ 
+ from . import none_of
+ 
++import yatest.common as yc
++
+ 
+ @pytest.fixture
+ def petstore_parser():
+-    return BaseParser("tests/specs/petstore.yaml")
++    return BaseParser(yc.test_source_path("specs/petstore.yaml"))
+ 
+ 
+ @pytest.fixture
+ def petstore_parser_from_string():
+     yaml = None
+-    with open("tests/specs/petstore.yaml", "rb") as f:
++    with open(yc.test_source_path("specs/petstore.yaml"), "rb") as f:
+         x = f.read()
+         yaml = x.decode("utf8")
+     return BaseParser(spec_string=yaml)
+@@ -32,7 +34,7 @@ def test_load_fail():
+     from prance.util.url import ResolutionError
+ 
+     with pytest.raises(ResolutionError):
+-        BaseParser("tests/specs/missing.yaml")
++        BaseParser(yc.test_source_path("specs/missing.yaml"))
+ 
+ 
+ def test_parse_fail():
+@@ -69,7 +71,7 @@ def test_load_and_parse_valid(petstore_parser):
+     reason="Backends missing.",
+ )
+ def test_load_and_parse_lazy():
+-    parser = BaseParser("tests/specs/petstore.yaml", lazy=True)
++    parser = BaseParser(yc.test_source_path("specs/petstore.yaml"), lazy=True)
+     assert parser.specification is None, "Should not have specs yet!"
+ 
+     parser.parse()
+--- contrib/python/prance/tests/test_resolving_parser.py	(index)
++++ contrib/python/prance/tests/test_resolving_parser.py	(working tree)
+@@ -5,6 +5,8 @@ __copyright__ = "Copyright (c) 2016-2021 Jens Finkhaeuser"
+ __license__ = "MIT"
+ __all__ = ()
+ 
++import yatest.common as yc
++
+ import pytest
+ from unittest.mock import patch
+ 
+@@ -22,20 +24,20 @@ def mock_get_petstore(*args, **kwargs):
+ 
+ @pytest.fixture
+ def petstore_parser():
+-    return ResolvingParser("tests/specs/petstore.yaml")
++    return ResolvingParser(yc.test_source_path("specs/petstore.yaml"))
+ 
+ 
+ @pytest.fixture
+ @patch("requests.get")
+ def with_externals_parser(mock_get):
+     mock_get.side_effect = mock_get_petstore
+-    return ResolvingParser("tests/specs/with_externals.yaml")
++    return ResolvingParser(yc.test_source_path("specs/with_externals.yaml"))
+ 
+ 
+ @pytest.fixture
+ def petstore_parser_from_string():
+     yaml = None
+-    with open("tests/specs/petstore.yaml", "rb") as f:
++    with open(yc.test_source_path("specs/petstore.yaml"), "rb") as f:
+         x = f.read()
+         yaml = x.decode("utf8")
+     return ResolvingParser(spec_string=yaml)
+@@ -43,7 +45,7 @@ def petstore_parser_from_string():
+ 
+ @pytest.fixture
+ def issue_1_parser():
+-    return ResolvingParser("tests/specs/issue_1.json")
++    return ResolvingParser(yc.test_source_path("specs/issue_1.json"))
+ 
+ 
+ @pytest.mark.skipif(
+@@ -120,7 +122,7 @@ def test_issue_1_relative_path_references(issue_1_parser):
+ def test_issue_39_sequence_indices():
+     # Must not fail to parse
+     parser = ResolvingParser(
+-        "tests/specs/issue_39.yaml", backend="openapi-spec-validator"
++        yc.test_source_path("specs/issue_39.yaml"), backend="openapi-spec-validator"
+     )
+ 
+     # The /useCase path should have two values in its response example.
+@@ -141,7 +143,7 @@ def test_issue_39_sequence_indices():
+ def test_issue_51_encoding_error():
+     # Parsing used to throw - but shouldn't after heuristic change.
+     parser = ResolvingParser(
+-        "tests/specs/issue_51/openapi-main.yaml",
++        yc.test_source_path("specs/issue_51/openapi-main.yaml"),
+         lazy=True,
+         backend="openapi-spec-validator",
+         strict=True,
+@@ -152,7 +154,7 @@ def test_issue_51_encoding_error():
+     # Parsing with setting an explicit and wrong file encoding should raise
+     # an error, effectively reverting to the old behaviour
+     parser = ResolvingParser(
+-        "tests/specs/issue_51/openapi-main.yaml",
++        yc.test_source_path("specs/issue_51/openapi-main.yaml"),
+         lazy=True,
+         backend="openapi-spec-validator",
+         strict=True,
+@@ -185,7 +187,7 @@ components:
+ 
+     from prance.util import resolver
+ 
+-    parser = ResolvingParser(spec_string=specs, resolve_types=resolver.RESOLVE_FILES)
++    parser = ResolvingParser(spec_string=specs, backend="openapi-spec-validator", resolve_types=resolver.RESOLVE_FILES)
+ 
+     from prance.util.path import path_get
+ 
+@@ -199,7 +201,7 @@ components:
+ def test_issue_83_skip_propagation():
+     # Throw with strict parsing
+     parser = ResolvingParser(
+-        "tests/specs/issue_83/bad_spec.yml",
++        yc.test_source_path("specs/issue_83/bad_spec.yml"),
+         lazy=True,
+         backend="openapi-spec-validator",
+         strict=True,
+@@ -210,7 +212,7 @@ def test_issue_83_skip_propagation():
+ 
+     # Do not throw with non-strict parsing
+     parser = ResolvingParser(
+-        "tests/specs/issue_83/bad_spec.yml",
++        yc.test_source_path("specs/issue_83/bad_spec.yml"),
+         lazy=True,
+         backend="openapi-spec-validator",
+         strict=False,
+@@ -237,6 +239,6 @@ components:
+ 
+     from prance.util import resolver
+ 
+-    parser = ResolvingParser(spec_string=specs, resolve_types=resolver.RESOLVE_FILES)
++    parser = ResolvingParser(spec_string=specs, backend="openapi-spec-validator", resolve_types=resolver.RESOLVE_FILES)
+     specs = parser.specification
+     assert specs["components"]["schemas"]["SampleEnum"]["enum"] == ["NO", "OFF"]
+--- contrib/python/prance/tests/test_util_url.py	(index)
++++ contrib/python/prance/tests/test_util_url.py	(working tree)
+@@ -13,6 +13,8 @@ from prance.util import url
+ 
+ from . import platform
+ 
++import yatest.common as yc
++
+ 
+ def test_absurl_http():
+     test = "http://foo.bar/asdf/#lala/quux"
+@@ -150,7 +152,7 @@ def test_split_url_reference():
+ def test_fetch_url_file():
+     from prance.util import fs
+ 
+-    content = url.fetch_url(url.absurl(fs.abspath("tests/specs/with_externals.yaml")))
++    content = url.fetch_url(url.absurl(fs.abspath(yc.test_source_path("specs/with_externals.yaml"))))
+     assert content["swagger"] == "2.0"
+ 
+ 
+@@ -160,12 +162,12 @@ def test_fetch_url_cached():
+     cache = {}
+ 
+     content1 = url.fetch_url(
+-        url.absurl(fs.abspath("tests/specs/with_externals.yaml")), cache
++        url.absurl(fs.abspath(yc.test_source_path("specs/with_externals.yaml"))), cache
+     )
+     assert content1["swagger"] == "2.0"
+ 
+     content2 = url.fetch_url(
+-        url.absurl(fs.abspath("tests/specs/with_externals.yaml")), cache
++        url.absurl(fs.abspath(yc.test_source_path("specs/with_externals.yaml"))), cache
+     )
+     assert content2["swagger"] == "2.0"
+ 
+@@ -180,10 +182,10 @@ def test_fetch_url_text_cached():
+     cache = {}
+ 
+     content1, _ = url.fetch_url_text(
+-        url.absurl(fs.abspath("tests/specs/with_externals.yaml")), cache
++        url.absurl(fs.abspath(yc.test_source_path("specs/with_externals.yaml"))), cache
+     )
+     content2, _ = url.fetch_url_text(
+-        url.absurl(fs.abspath("tests/specs/with_externals.yaml")), cache
++        url.absurl(fs.abspath(yc.test_source_path("specs/with_externals.yaml"))), cache
+     )
+ 
+     # Strings are immutable, therefore IDs should be identical
+@@ -191,13 +193,15 @@ def test_fetch_url_text_cached():
+ 
+ 
+ @pytest.mark.requires_network()
+-def test_fetch_url_http():
+-    exturl = "http://finkhaeuser.de/projects/prance/petstore.yaml" "#/definitions/Pet"
++def test_fetch_url_http(httpserver):
++    with open(yc.test_source_path("specs/petstore.yaml")) as f:
++        httpserver.serve_content(content=f.read(), code=200)
++    exturl = "{}/petstore.yaml#/definitions/Pet".format(httpserver.url)
+     content = url.fetch_url(url.absurl(exturl))
+     assert content["swagger"] == "2.0"
+ 
+ 
+ def test_fetch_url_python():
+-    exturl = "python://tests/specs/petstore.yaml"
++    exturl = "python://specs/petstore.yaml"
+     content = url.fetch_url(url.absurl(exturl))
+     assert content["swagger"] == "2.0"
+--- contrib/python/prance/tests/test_zzz_specs.py	(index)
++++ contrib/python/prance/tests/test_zzz_specs.py	(working tree)
+@@ -11,6 +11,8 @@ from prance import ResolvingParser
+ from prance import ValidationError
+ from prance.util.fs import FileNotFoundError
+ 
++import yatest.common as yc
++
+ 
+ def make_name(path, parser, backend, version, file_format, entry):
+     import os.path
+@@ -35,7 +37,7 @@ def make_name(path, parser, backend, version, file_format, entry):
+ 
+ import os, os.path
+ 
+-base = os.path.join("tests", "OpenAPI-Specification", "examples")
++base = yc.test_source_path(os.path.join("OpenAPI-Specification", "examples"))
+ 
+ 
+ def iter_entries(parser, backend, version, file_format, path):
+--- contrib/python/prance/tests/test_util_resolver.py	(index)
++++ contrib/python/prance/tests/test_util_resolver.py	(working tree)
+@@ -5,6 +5,7 @@ __copyright__ = "Copyright (c) 2016-2021 Jens Finkhaeuser"
+ __license__ = "MIT"
+ __all__ = ()
+ 
++import yatest.common as yc
+ 
+ import pytest
+ from unittest.mock import patch
+@@ -38,32 +39,32 @@ def recursion_limit_handler_none(limit, refstring, recursions):
+ 
+ @pytest.fixture
+ def externals_file():
+-    return get_specs("tests/specs/with_externals.yaml")
++    return get_specs(yc.test_source_path("specs/with_externals.yaml"))
+ 
+ 
+ @pytest.fixture
+ def recursive_objs_file():
+-    return get_specs("tests/specs/recursive_objs.yaml")
++    return get_specs(yc.test_source_path("specs/recursive_objs.yaml"))
+ 
+ 
+ @pytest.fixture
+ def recursive_files_file():
+-    return get_specs("tests/specs/recursive_files.yaml")
++    return get_specs(yc.test_source_path("specs/recursive_files.yaml"))
+ 
+ 
+ @pytest.fixture
+ def recursion_limit_file():
+-    return get_specs("tests/specs/recursion_limit.yaml")
++    return get_specs(yc.test_source_path("specs/recursion_limit.yaml"))
+ 
+ 
+ @pytest.fixture
+ def recursion_limit_files_file():
+-    return get_specs("tests/specs/recursion_limit_files.yaml")
++    return get_specs(yc.test_source_path("specs/recursion_limit_files.yaml"))
+ 
+ 
+ @pytest.fixture
+ def missing_file():
+-    return get_specs("tests/specs/missing_reference.yaml")
++    return get_specs(yc.test_source_path("specs/missing_reference.yaml"))
+ 
+ 
+ def test_resolver_noname(externals_file):
+@@ -81,7 +82,7 @@ def test_resolver_named(mock_get, externals_file):
+     from prance.util import fs
+ 
+     res = resolver.RefResolver(
+-        externals_file, fs.abspath("tests/specs/with_externals.yaml")
++        externals_file, fs.abspath(yc.test_source_path("specs/with_externals.yaml"))
+     )
+     res.resolve_references()
+ 
+@@ -93,7 +94,7 @@ def test_resolver_missing_reference(mock_get, missing_file):
+     import os.path
+ 
+     res = resolver.RefResolver(
+-        missing_file, fs.abspath("tests/specs/missing_reference.yaml")
++        missing_file, fs.abspath(yc.test_source_path("specs/missing_reference.yaml"))
+     )
+     with pytest.raises(ResolutionError) as exc:
+         res.resolve_references()
+@@ -109,7 +110,7 @@ def test_resolver_recursive_objects(mock_get, recursive_objs_file):
+     import os.path
+ 
+     res = resolver.RefResolver(
+-        recursive_objs_file, fs.abspath("tests/specs/recursive_objs.yaml")
++        recursive_objs_file, fs.abspath(yc.test_source_path("specs/recursive_objs.yaml"))
+     )
+     with pytest.raises(ResolutionError) as exc:
+         res.resolve_references()
+@@ -125,7 +126,7 @@ def test_resolver_recursive_files(mock_get, recursive_files_file):
+     import os.path
+ 
+     res = resolver.RefResolver(
+-        recursive_files_file, fs.abspath("tests/specs/recursive_files.yaml")
++        recursive_files_file, fs.abspath(yc.test_source_path("specs/recursive_files.yaml"))
+     )
+     res.resolve_references()
+ 
+@@ -135,7 +136,7 @@ def test_recursion_limit_do_not_recurse_raise(recursion_limit_file):
+     import os.path
+ 
+     res = resolver.RefResolver(
+-        recursion_limit_file, fs.abspath("tests/specs/recursion_limit.yaml")
++        recursion_limit_file, fs.abspath(yc.test_source_path("specs/recursion_limit.yaml"))
+     )
+     with pytest.raises(ResolutionError) as exc:
+         res.resolve_references()
+@@ -150,7 +151,7 @@ def test_recursion_limit_do_not_recurse_ignore(recursion_limit_file):
+ 
+     res = resolver.RefResolver(
+         recursion_limit_file,
+-        fs.abspath("tests/specs/recursion_limit.yaml"),
++        fs.abspath(yc.test_source_path("specs/recursion_limit.yaml")),
+         recursion_limit_handler=recursion_limit_handler_none,
+     )
+     res.resolve_references()
+@@ -183,7 +184,7 @@ def test_recursion_limit_set_limit_ignore(recursion_limit_file):
+ 
+     res = resolver.RefResolver(
+         recursion_limit_file,
+-        fs.abspath("tests/specs/recursion_limit.yaml"),
++        fs.abspath(yc.test_source_path("specs/recursion_limit.yaml")),
+         recursion_limit=2,
+         recursion_limit_handler=recursion_limit_handler_none,
+     )
+@@ -215,7 +216,7 @@ def test_recursion_limit_do_not_recurse_raise_files(recursion_limit_files_file):
+     import os.path
+ 
+     res = resolver.RefResolver(
+-        recursion_limit_files_file, fs.abspath("tests/specs/recursion_limit_files.yaml")
++        recursion_limit_files_file, fs.abspath(yc.test_source_path("specs/recursion_limit_files.yaml"))
+     )
+     with pytest.raises(ResolutionError) as exc:
+         res.resolve_references()
+@@ -230,7 +231,7 @@ def test_recursion_limit_do_not_recurse_ignore_files(recursion_limit_files_file)
+ 
+     res = resolver.RefResolver(
+         recursion_limit_files_file,
+-        fs.abspath("tests/specs/recursion_limit_files.yaml"),
++        fs.abspath(yc.test_source_path("specs/recursion_limit_files.yaml")),
+         recursion_limit_handler=recursion_limit_handler_none,
+     )
+     res.resolve_references()
+@@ -263,7 +264,7 @@ def test_recursion_limit_set_limit_ignore_files(recursion_limit_files_file):
+ 
+     res = resolver.RefResolver(
+         recursion_limit_files_file,
+-        fs.abspath("tests/specs/recursion_limit_files.yaml"),
++        fs.abspath(yc.test_source_path("specs/recursion_limit_files.yaml")),
+         recursion_limit=2,
+         recursion_limit_handler=recursion_limit_handler_none,
+     )
+@@ -305,7 +306,7 @@ def test_issue_22_empty_path(mock_get, externals_file):
+     from prance.util import fs
+ 
+     res = resolver.RefResolver(
+-        externals_file, fs.abspath("tests/specs/with_externals.yaml")
++        externals_file, fs.abspath(yc.test_source_path("specs/with_externals.yaml"))
+     )
+     res.resolve_references()
+ 
+@@ -327,8 +328,8 @@ def test_issue_22_empty_path(mock_get, externals_file):
+ 
+ 
+ def test_issue_38_tilde_one():
+-    specs = get_specs("tests/specs/issue_38_a.yaml")
+-    res = resolver.RefResolver(specs, fs.abspath("tests/specs/issue_38_a.yaml"))
++    specs = get_specs(yc.test_source_path("specs/issue_38_a.yaml"))
++    res = resolver.RefResolver(specs, fs.abspath(yc.test_source_path("specs/issue_38_a.yaml")))
+     res.resolve_references()
+ 
+     path = res.specs["paths"]["/api/v2/vms"]
+@@ -341,8 +342,8 @@ def test_issue_38_tilde_one():
+ def test_issue_23_partial_resolution_all(mock_get):
+     mock_get.side_effect = mock_get_petstore
+ 
+-    specs = get_specs("tests/specs/with_externals.yaml")
+-    res = resolver.RefResolver(specs, fs.abspath("tests/specs/with_externals.yaml"))
++    specs = get_specs(yc.test_source_path("specs/with_externals.yaml"))
++    res = resolver.RefResolver(specs, fs.abspath(yc.test_source_path("specs/with_externals.yaml")))
+     res.resolve_references()
+ 
+     # By default, all externals need to be resolved.
+@@ -381,10 +382,10 @@ def test_issue_23_partial_resolution_all(mock_get):
+ 
+ 
+ def test_issue_23_partial_resolution_internal():
+-    specs = get_specs("tests/specs/with_externals.yaml")
++    specs = get_specs(yc.test_source_path("specs/with_externals.yaml"))
+     res = resolver.RefResolver(
+         specs,
+-        fs.abspath("tests/specs/with_externals.yaml"),
++        fs.abspath(yc.test_source_path("specs/with_externals.yaml")),
+         resolve_types=resolver.RESOLVE_INTERNAL,
+     )
+     res.resolve_references()
+@@ -425,10 +426,10 @@ def test_issue_23_partial_resolution_internal():
+ 
+ 
+ def test_issue_23_partial_resolution_files():
+-    specs = get_specs("tests/specs/with_externals.yaml")
++    specs = get_specs(yc.test_source_path("specs/with_externals.yaml"))
+     res = resolver.RefResolver(
+         specs,
+-        fs.abspath("tests/specs/with_externals.yaml"),
++        fs.abspath(yc.test_source_path("specs/with_externals.yaml")),
+         resolve_types=resolver.RESOLVE_FILES,
+     )
+     res.resolve_references()
+@@ -455,7 +456,7 @@ def test_issue_23_partial_resolution_files():
+     val = path_get(
+         res.specs, ("paths", "/pets/{petId}", "get", "responses", "200", "schema")
+     )
+-    assert "$ref" in val
++    assert "$ref" not in val
+ 
+     val = path_get(
+         res.specs, ("paths", "/pets/{petId}", "get", "responses", "203", "schema")
+@@ -504,10 +505,10 @@ components:
+ def test_issue_23_partial_resolution_http(mock_get):
+     mock_get.side_effect = mock_get_petstore
+ 
+-    specs = get_specs("tests/specs/with_externals.yaml")
++    specs = get_specs(yc.test_source_path("specs/with_externals.yaml"))
+     res = resolver.RefResolver(
+         specs,
+-        fs.abspath("tests/specs/with_externals.yaml"),
++        fs.abspath(yc.test_source_path("specs/with_externals.yaml")),
+         resolve_types=resolver.RESOLVE_HTTP,
+     )
+     res.resolve_references()
+@@ -534,7 +535,7 @@ def test_issue_23_partial_resolution_http(mock_get):
+     val = path_get(
+         res.specs, ("paths", "/pets/{petId}", "get", "responses", "200", "schema")
+     )
+-    assert "$ref" not in val
++    assert "$ref" in val
+ 
+     val = path_get(
+         res.specs, ("paths", "/pets/{petId}", "get", "responses", "203", "schema")
+@@ -549,7 +550,7 @@ def test_issue_23_partial_resolution_http(mock_get):
+ 
+ def test_issue_23_partial_resolution_invalid_scheme():
+     specs = {"$ref": "foo://cannot-do-anything"}
+-    res = resolver.RefResolver(specs, fs.abspath("tests/specs/with_externals.yaml"))
++    res = resolver.RefResolver(specs, fs.abspath(yc.test_source_path("specs/with_externals.yaml")))
+ 
+     with pytest.raises(ValueError):
+         res.resolve_references()
+@@ -561,7 +562,7 @@ def test_issue_69_urlparse_error():
+     #     not exist. See test_issue_72_* for a test case that specifically
+     #     tries for a nonexistent file url.
+     specs = {"$ref": "file://a\u2100b/bad/netloc"}
+-    res = resolver.RefResolver(specs, fs.abspath("tests/specs/with_externals.yaml"))
++    res = resolver.RefResolver(specs, fs.abspath(yc.test_source_path("specs/with_externals.yaml")))
+ 
+     with pytest.raises(ResolutionError) as exinfo:
+         res.resolve_references()
+@@ -571,7 +572,7 @@ def test_issue_69_urlparse_error():
+ 
+ def test_issue_72_nonexistent_file_error():
+     specs = {"$ref": "file://does/not/exist"}
+-    res = resolver.RefResolver(specs, fs.abspath("tests/specs/with_externals.yaml"))
++    res = resolver.RefResolver(specs, fs.abspath(yc.test_source_path("specs/with_externals.yaml")))
+ 
+     with pytest.raises(ResolutionError) as exinfo:
+         res.resolve_references()
+@@ -579,10 +580,11 @@ def test_issue_72_nonexistent_file_error():
+     assert "not/exist" in str(exinfo.value)
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(none_of("openapi-spec-validator"), reason="Missing backends")
+ def test_issue_78_resolve_internal_bug():
+     specs = ""
+-    with open("tests/specs/issue_78/openapi.json") as fh:
++    with open(yc.test_source_path("specs/issue_78/openapi.json")) as fh:
+         specs = fh.read()
+ 
+     from prance.util import formats
+@@ -604,10 +606,11 @@ def test_issue_78_resolve_internal_bug():
+     assert "$ref" in val["application/json"]
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(none_of("openapi-spec-validator"), reason="Missing backends")
+ def test_issue_77_translate_external():
+     specs = ""
+-    with open("tests/specs/issue_78/openapi.json") as fh:
++    with open(yc.test_source_path("specs/issue_78/openapi.json")) as fh:
+         specs = fh.read()
+ 
+     from prance.util import formats
+@@ -635,10 +638,11 @@ def test_issue_77_translate_external():
+     assert val == "#/components/schemas/_schemas.json_Body"
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(none_of("openapi-spec-validator"), reason="Missing backends")
+ def test_issue_77_translate_external_refs_internal():
+     specs = ""
+-    with open("tests/specs/issue_78/openapi.json") as fh:
++    with open(yc.test_source_path("specs/issue_78/openapi.json")) as fh:
+         specs = fh.read()
+ 
+     from prance.util import formats
+@@ -676,10 +680,11 @@ def test_issue_77_translate_external_refs_internal():
+     assert val == "#/components/schemas/_schemas.json_Body"
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.skipif(none_of("openapi-spec-validator"), reason="Missing backends")
+ def test_issue_77_internal_refs_unresolved():
+     specs = ""
+-    with open("tests/specs/issue_78/openapi.json") as fh:
++    with open(yc.test_source_path("specs/issue_78/openapi.json")) as fh:
+         specs = fh.read()
+ 
+     from prance.util import formats
+@@ -708,7 +713,7 @@ def test_issue_77_internal_refs_unresolved():
+ @pytest.mark.xfail(reason="https://github.com/RonnyPfannschmidt/prance/issues/87")
+ def test_issue_205_swagger_resolution_failure():
+     specs = ""
+-    with open("tests/specs/kubernetes_api_docs.json") as fh:
++    with open(yc.test_source_path("specs/kubernetes_api_docs.json")) as fh:
+         specs = fh.read()
+ 
+     from prance.util import formats
+@@ -729,10 +734,10 @@ def test_issue_205_swagger_resolution_failure():
+ def test_resolve_package_ref(mock_get):
+     mock_get.side_effect = mock_get_petstore
+ 
+-    specs = get_specs("tests/specs/with_externals.yaml")
++    specs = get_specs(yc.test_source_path("specs/with_externals.yaml"))
+     res = resolver.RefResolver(
+         specs,
+-        fs.abspath("tests/specs/with_externals.yaml"),
++        fs.abspath(yc.test_source_path("specs/with_externals.yaml")),
+         resolve_types=resolver.RESOLVE_FILES,
+     )
+     res.resolve_references()
+--- contrib/python/prance/tests/test_cli.py	(index)
++++ contrib/python/prance/tests/test_cli.py	(working tree)
+@@ -9,6 +9,8 @@ import pytest
+ 
+ from . import none_of
+ 
++import yatest.common as yc
++
+ 
+ @pytest.fixture
+ def runner():
+@@ -22,16 +24,16 @@ def test_validate_defaults(runner):
+     from prance import cli
+ 
+     # Good example
+-    result = runner.invoke(cli.validate, ["tests/specs/petstore.yaml"])
++    result = runner.invoke(cli.validate, [yc.test_source_path("specs/petstore.yaml")])
+     assert result.exit_code == 0
+-    expected = """Processing "tests/specs/petstore.yaml"...
++    expected = """Processing "{}/specs/petstore.yaml"...
+  -> Resolving external references.
+ Validates OK as Swagger/OpenAPI 2.0!
+-"""
++""".format(yc.test_source_path())
+     assert result.output == expected
+ 
+     # Bad example
+-    result = runner.invoke(cli.validate, ["tests/specs/definitions.yaml"])
++    result = runner.invoke(cli.validate, [yc.test_source_path("specs/definitions.yaml")])
+     assert result.exit_code == 1
+     assert "ValidationError" in result.output
+ 
+@@ -41,16 +43,16 @@ def test_validate_multiple(runner):
+     from prance import cli
+ 
+     result = runner.invoke(
+-        cli.validate, ["tests/specs/petstore.yaml", "tests/specs/petstore.yaml"]
++        cli.validate, [yc.test_source_path("specs/petstore.yaml"), yc.test_source_path("specs/petstore.yaml")]
+     )
+     assert result.exit_code == 0
+-    expected = """Processing "tests/specs/petstore.yaml"...
++    expected = """Processing "{0}/specs/petstore.yaml"...
+  -> Resolving external references.
+ Validates OK as Swagger/OpenAPI 2.0!
+-Processing "tests/specs/petstore.yaml"...
++Processing "{0}/specs/petstore.yaml"...
+  -> Resolving external references.
+ Validates OK as Swagger/OpenAPI 2.0!
+-"""
++""".format(yc.test_source_path())
+     assert result.output == expected
+ 
+ 
+@@ -59,12 +61,12 @@ def test_validate_no_resolve(runner):
+     from prance import cli
+ 
+     # Good example
+-    result = runner.invoke(cli.validate, ["--no-resolve", "tests/specs/petstore.yaml"])
++    result = runner.invoke(cli.validate, ["--no-resolve", yc.test_source_path("specs/petstore.yaml")])
+     assert result.exit_code == 0
+-    expected = """Processing "tests/specs/petstore.yaml"...
++    expected = """Processing "{}/specs/petstore.yaml"...
+  -> Not resolving external references.
+ Validates OK as Swagger/OpenAPI 2.0!
+-"""
++""".format(yc.test_source_path())
+     assert result.output == expected
+ 
+ 
+@@ -74,7 +76,7 @@ def test_validate_output_too_many_inputs(runner):
+ 
+     result = runner.invoke(
+         cli.validate,
+-        ["-o", "foo", "tests/specs/petstore.yaml", "tests/specs/petstore.yaml"],
++        ["-o", "foo", yc.test_source_path("specs/petstore.yaml"), yc.test_source_path("specs/petstore.yaml")],
+     )
+     assert result.exit_code == 2
+     assert "If --output-file is given," in result.output
+@@ -93,7 +95,7 @@ def test_validate_output(runner):
+         with runner.isolated_filesystem():
+             result = runner.invoke(
+                 cli.validate,
+-                ["-o", outname, os.path.join(curdir, "tests/specs/petstore.yaml")],
++                ["-o", outname, os.path.join(curdir, yc.test_source_path("specs/petstore.yaml"))],
+             )
+             assert result.exit_code == 0
+ 
+@@ -120,16 +122,16 @@ def test_compile_defaults(runner):
+     from prance import cli
+ 
+     # Good example
+-    result = runner.invoke(cli.compile, ["tests/specs/petstore.yaml"])
++    result = runner.invoke(cli.compile, [yc.test_source_path("specs/petstore.yaml")])
+     assert result.exit_code == 0
+-    expected = """Processing "tests/specs/petstore.yaml"...
++    expected = """Processing "{}/specs/petstore.yaml"...
+  -> Resolving external references.
+ Validates OK as Swagger/OpenAPI 2.0!
+-"""
++""".format(yc.test_source_path())
+     assert result.output.startswith(expected)
+ 
+     # Bad example
+-    result = runner.invoke(cli.validate, ["tests/specs/definitions.yaml"])
++    result = runner.invoke(cli.validate, [yc.test_source_path("specs/definitions.yaml")])
+     assert result.exit_code == 1
+     assert "ValidationError" in result.output
+ 
+@@ -147,7 +149,7 @@ def test_compile_output(runner):
+         with runner.isolated_filesystem():
+             result = runner.invoke(
+                 cli.compile,
+-                [os.path.join(curdir, "tests/specs/petstore.yaml"), outname],
++                [os.path.join(curdir, yc.test_source_path("specs/petstore.yaml")), outname],
+             )
+             assert result.exit_code == 0
+ 
+@@ -169,23 +171,25 @@ def test_compile_output(runner):
+             assert result.exit_code == 0
+ 
+ 
++@pytest.mark.skip(reason="This test uses 3rd party resource 'mermade.org.uk'")
+ @pytest.mark.skipif(none_of("click"), reason="Click does not exist")
+ @pytest.mark.requires_network()
+ def test_convert_defaults(runner):
+     from prance import cli
+ 
+     # Good example
+-    result = runner.invoke(cli.convert, ["tests/specs/petstore.yaml"])
++    result = runner.invoke(cli.convert, [yc.test_source_path("specs/petstore.yaml")])
+     assert result.exit_code == 0
+     assert "openapi" in result.output
+     assert "3." in result.output
+ 
+     # Bad example
+-    result = runner.invoke(cli.validate, ["tests/specs/definitions.yaml"])
++    result = runner.invoke(cli.validate, [yc.test_source_path("specs/definitions.yaml")])
+     assert result.exit_code == 1
+     assert "ValidationError" in result.output
+ 
+ 
++@pytest.mark.skip(reason="This test uses 3rd party resource 'mermade.org.uk'")
+ @pytest.mark.skipif(none_of("click"), reason="Click does not exist")
+ @pytest.mark.requires_network()
+ def test_convert_output(runner):
+@@ -200,7 +204,7 @@ def test_convert_output(runner):
+         with runner.isolated_filesystem():
+             result = runner.invoke(
+                 cli.convert,
+-                [os.path.join(curdir, "tests/specs/petstore.yaml"), outname],
++                [os.path.join(curdir, yc.test_source_path("specs/petstore.yaml")), outname],
+             )
+             assert result.exit_code == 0
+ 
+--- contrib/python/prance/tests/test_convert.py	(index)
++++ contrib/python/prance/tests/test_convert.py	(working tree)
+@@ -11,21 +11,24 @@ from . import none_of
+ 
+ from prance import convert
+ 
++import yatest.common as yc
++
+ 
+ @pytest.fixture
+ def petstore_yaml():
+     from prance.util import fs
+ 
+-    return fs.read_file("tests/OpenAPI-Specification/examples/v2.0/yaml/petstore.yaml")
++    return fs.read_file(yc.test_source_path("OpenAPI-Specification/examples/v2.0/yaml/petstore.yaml"))
+ 
+ 
+ @pytest.fixture
+ def petstore_json():
+     from prance.util import fs
+ 
+-    return fs.read_file("tests/OpenAPI-Specification/examples/v2.0/json/petstore.json")
++    return fs.read_file(yc.test_source_path("OpenAPI-Specification/examples/v2.0/json/petstore.json"))
+ 
+ 
++@pytest.mark.skip(reason="This test uses 3rd party resource 'mermade.org.uk'")
+ @pytest.mark.requires_network()
+ def test_convert_petstore_yaml(petstore_yaml):
+     converted, content_type = convert.convert_str(petstore_yaml)
+@@ -43,6 +46,7 @@ def test_convert_petstore_yaml(petstore_yaml):
+     assert parsed["openapi"].startswith("3.")
+ 
+ 
++@pytest.mark.skip(reason="This test uses 3rd party resource 'mermade.org.uk'")
+ @pytest.mark.requires_network()
+ def test_convert_petstore_json(petstore_json):
+     converted, content_type = convert.convert_str(petstore_json)
+@@ -60,6 +64,7 @@ def test_convert_petstore_json(petstore_json):
+     assert parsed["openapi"].startswith("3.")
+ 
+ 
++@pytest.mark.skip(reason="This test uses 3rd party resource 'mermade.org.uk'")
+ @pytest.mark.requires_network()
+ def test_convert_petstore_yaml_explicit_name(petstore_yaml):
+     converted, content_type = convert.convert_str(petstore_yaml, filename="foo.yml")
+@@ -68,12 +73,13 @@ def test_convert_petstore_yaml_explicit_name(petstore_yaml):
+     assert "yaml" in content_type
+ 
+ 
++@pytest.mark.skip(reason="This test uses 3rd party resource 'mermade.org.uk'")
+ @pytest.mark.requires_network()
+ def test_convert_url():
+     from prance.util import url
+ 
+     converted, content_type = convert.convert_url(
+-        url.absurl("python://tests/specs/petstore.yaml")
++        url.absurl("python://specs/petstore.yaml")
+     )
+ 
+     # Check correct content type
+@@ -94,7 +100,7 @@ def test_convert_url():
+ def test_convert_spec():
+     from prance import BaseParser, ResolvingParser, ValidationError
+ 
+-    parser = BaseParser("tests/specs/petstore.yaml")
++    parser = BaseParser(yc.test_source_path("specs/petstore.yaml"))
+ 
+     # Conversion should fail with the default backend.
+     with pytest.raises(ValidationError):
+@@ -114,7 +120,7 @@ def test_convert_spec():
+ def test_convert_parser_lazy_swagger_backend():
+     from prance import BaseParser, ResolvingParser, ValidationError
+ 
+-    parser = BaseParser("tests/specs/petstore.yaml")
++    parser = BaseParser(yc.test_source_path("specs/petstore.yaml"))
+ 
+     # Conversion should fail with the default backend.
+     with pytest.raises(ValidationError):
+@@ -129,6 +135,7 @@ def test_convert_parser_lazy_swagger_backend():
+     assert isinstance(converted, ResolvingParser)
+ 
+ 
++@pytest.mark.skip(reason="This test uses 3rd party resource 'mermade.org.uk'")
+ @pytest.mark.skipif(
+     none_of("openapi-spec-validator"), reason="Missing openapi-spec-validator"
+ )
+@@ -136,7 +143,7 @@ def test_convert_parser_lazy_swagger_backend():
+ def test_convert_parser_validated():
+     from prance import BaseParser
+ 
+-    parser = BaseParser("tests/specs/petstore.yaml", backend="openapi-spec-validator")
++    parser = BaseParser(yc.test_source_path("specs/petstore.yaml"), backend="openapi-spec-validator")
+ 
+     # Conversion should work: it's the right backend, and it validates.
+     converted = convert.convert_spec(parser)
+--- contrib/python/prance/tests/test_util_fs.py	(index)
++++ contrib/python/prance/tests/test_util_fs.py	(working tree)
+@@ -15,6 +15,7 @@ from prance.util import fs
+ 
+ from . import sandbox, platform
+ 
++import yatest.common as yc
+ 
+ @pytest.fixture
+ def create_symlink():
+@@ -36,7 +36,7 @@ def create_symlink():
+     return testname
+ 
+ 
+-@pytest.mark.skipif(platform("win32"), reason="Skip on win32")
++@pytest.mark.skip("There is no symlinks in Arcadia")
+ def test_canonical(create_symlink):
+     res = fs.canonical_filename(create_symlink)
+     expected = yc.test_source_path("specs/with_externals.yaml")
+@@ -37,7 +39,7 @@ def create_symlink():
+ 
+ 
+ def test_to_posix_rel():
+-    test = "tests/specs/with_externals.yaml"
++    test = yc.test_source_path("specs/with_externals.yaml")
+     assert fs.to_posix(os.path.normpath(test)) == test
+ 
+ 
+@@ -61,7 +63,7 @@ def test_to_posix_abs_win32():
+ 
+ 
+ def test_from_posix_rel():
+-    test = "tests/specs/with_externals.yaml"
++    test = yc.test_source_path("specs/with_externals.yaml")
+     assert fs.from_posix(test) == os.path.normpath(test)
+ 
+ 
+@@ -80,7 +82,7 @@ def test_from_posix_abs_win32():
+ 
+ 
+ def test_abspath_basics():
+-    testname = os.path.normpath("tests/specs/with_externals.yaml")
++    testname = os.path.normpath(yc.test_source_path("specs/with_externals.yaml"))
+     res = fs.abspath(testname)
+     expected = fs.to_posix(os.path.join(os.getcwd(), testname))
+     assert res == expected
+@@ -88,27 +90,27 @@ def test_abspath_basics():
+ 
+ def test_abspath_relative():
+     testname = "error.json"
+-    relative = os.path.join(os.getcwd(), "tests/specs/with_externals.yaml")
++    relative = yc.test_source_path("specs/with_externals.yaml")
+     res = fs.abspath(testname, relative)
+-    expected = fs.to_posix(os.path.join(os.getcwd(), "tests", "specs", testname))
++    expected = fs.to_posix(os.path.join(yc.test_source_path(), "specs", testname))
+     assert res == expected
+ 
+ 
+ def test_abspath_relative_dir():
+     testname = "error.json"
+-    relative = os.path.join(os.getcwd(), "tests", "specs")
++    relative = os.path.join(yc.test_source_path(), "specs")
+     res = fs.abspath(testname, relative)
+-    expected = fs.to_posix(os.path.join(os.getcwd(), "tests", "specs", testname))
++    expected = fs.to_posix(os.path.join(yc.test_source_path(), "specs", testname))
+     assert res == expected
+ 
+ 
+ def test_detect_encoding():
+     # Quick detection should yield utf-8 for the petstore file.
+-    assert fs.detect_encoding("tests/specs/petstore.yaml") == "utf-8"
++    assert fs.detect_encoding(yc.test_source_path("specs/petstore.yaml")) == "utf-8"
+ 
+     # Without defaulting to utf-8, it should also work.
+     assert (
+-        fs.detect_encoding("tests/specs/petstore.yaml", default_to_utf8=False)
++        fs.detect_encoding(yc.test_source_path("specs/petstore.yaml"), default_to_utf8=False)
+         == "utf-8"
+     )
+ 
+@@ -116,13 +118,13 @@ def test_detect_encoding():
+     # too small.
+     assert (
+         fs.detect_encoding(
+-            "tests/specs/petstore.yaml", default_to_utf8=False, read_all=True
++            yc.test_source_path("specs/petstore.yaml"), default_to_utf8=False, read_all=True
+         )
+         == "utf-8"
+     )
+ 
+     # The UTF-8 file with BOM should be detected properly
+-    assert fs.detect_encoding("tests/specs/utf8bom.yaml") == "utf-8-sig"
++    assert fs.detect_encoding(yc.test_source_path("specs/utf8bom.yaml")) == "utf-8-sig"
+ 
+ 
+ def test_issue_51_detect_encoding():
+@@ -131,35 +133,35 @@ def test_issue_51_detect_encoding():
+ 
+     # Detection should be ok if the entire file is read
+     assert (
+-        fs.detect_encoding("tests/specs/issue_51/openapi-part.yaml", read_all=True)
++        fs.detect_encoding(yc.test_source_path("specs/issue_51/openapi-part.yaml"), read_all=True)
+         == "utf-8"
+     )
+ 
+     # After the heuristic change, it reads the whole file anyway.
+-    assert fs.detect_encoding("tests/specs/issue_51/openapi-part.yaml") == "utf-8"
++    assert fs.detect_encoding(yc.test_source_path("specs/issue_51/openapi-part.yaml")) == "utf-8"
+ 
+     # Specifically re-encoded as iso-8859-2 should fail - but not as
+     # a call to the detect_encoding() function. Instead, we can only return
+     # a badly detected encoding. Chardet sends iso-8859-1 here.
+     assert (
+-        fs.detect_encoding("tests/specs/issue_51/openapi-part-iso-8859-2.yaml")
++        fs.detect_encoding(yc.test_source_path("specs/issue_51/openapi-part-iso-8859-2.yaml"))
+         == "iso-8859-1"
+     )
+ 
+ 
+ def test_load_nobom():
+-    contents = fs.read_file("tests/specs/petstore.yaml")
++    contents = fs.read_file(yc.test_source_path("specs/petstore.yaml"))
+     assert contents.index("Swagger Petstore") >= 0, "File reading failed!"
+ 
+ 
+ def test_load_utf8bom():
+-    contents = fs.read_file("tests/specs/utf8bom.yaml")
++    contents = fs.read_file(yc.test_source_path("specs/utf8bom.yaml"))
+     assert contents.index("söme välüe") >= 0, "UTF-8 BOM handling failed!"
+ 
+ 
+ def test_load_utf8bom_override():
+     with pytest.raises(UnicodeDecodeError):
+-        fs.read_file("tests/specs/utf8bom.yaml", "ascii")
++        fs.read_file(yc.test_source_path("specs/utf8bom.yaml"), "ascii")
+ 
+ 
+ def test_write_file(tmpdir):

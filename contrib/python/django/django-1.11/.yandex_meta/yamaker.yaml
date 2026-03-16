@@ -1,0 +1,8 @@
+requirements:
+  - library/python/django
+  - library/python/resource
+mark_as_sources:
+  - django/contrib/admin/tests.py
+  - django/contrib/auth/tests/*
+  - django/core/management/commands/test.py
+  - django/test/*

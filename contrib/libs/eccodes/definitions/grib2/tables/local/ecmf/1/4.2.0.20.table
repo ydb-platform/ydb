@@ -1,0 +1,5 @@
+# Code table 4.2 - discipline=0 category=20 for ECMWF
+192 192 Source/gain (kg m-2 s-1)
+193 193 Negative Fixer (kg m-2 s-1)
+194 194 Aerosol sink/loss mass flux (kg m**-2 s**-1)
+195 195 Volume-mean total column mixing ratio (mol mol**-1)

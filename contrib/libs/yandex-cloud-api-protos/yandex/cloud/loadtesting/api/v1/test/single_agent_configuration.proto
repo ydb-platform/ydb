@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.test;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/test;test";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.test";
+
+import "yandex/cloud/loadtesting/api/v1/test/agent_selector.proto";
+import "yandex/cloud/loadtesting/api/v1/test/file_pointer.proto";
+
+// Configuration of a test.
+message SingleAgentConfiguration {
+  // ID of the config.
+  string config_id = 1;
+
+  // Agent selection criterion.
+  AgentSelector agent_selector = 2;
+
+  // Additional files to be used during test execution, represented as `rel_path:file` pairs.
+  //
+  // `rel_path` can be either a simple file name, a relative path, or absolute path. Files are
+  // downloaded by the agent to appropriate location.
+  //
+  // Use cases include:
+  // - [Test Data files](/docs/load-testing/concepts/payload).
+  // - Custom Pandora executable.
+  // - JMeter executable or ".jmx" scenario.
+  // - etc.
+  map<string, FilePointer> files = 3;
+}

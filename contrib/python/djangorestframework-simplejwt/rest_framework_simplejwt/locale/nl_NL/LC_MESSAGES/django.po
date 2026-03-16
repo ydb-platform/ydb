@@ -1,0 +1,161 @@
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <rene@roadbearstudios.com>, 2020.
+msgid ""
+msgstr ""
+"Project-Id-Version: djangorestframework_simplejwt\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-02-28 15:09-0300\n"
+"Last-Translator: rene <rene@roadbearstudios.com>\n"
+"Language: nl_NL\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: authentication.py:89
+msgid "Authorization header must contain two space-delimited values"
+msgstr ""
+"Authorisatie header moet twee waarden bevatten, gescheiden door een spatie"
+
+#: authentication.py:115
+msgid "Given token not valid for any token type"
+msgstr "Het token is voor geen enkel token-type geldig"
+
+#: authentication.py:128 authentication.py:166
+msgid "Token contained no recognizable user identification"
+msgstr "Token bevat geen herkenbare gebruikersidentificatie"
+
+#: authentication.py:135
+msgid "User not found"
+msgstr "Gebruiker niet gevonden"
+
+#: authentication.py:139
+msgid "User is inactive"
+msgstr "Gebruiker is inactief"
+
+#: authentication.py:146
+msgid "The user's password has been changed."
+msgstr ""
+
+#: backends.py:90
+msgid "Unrecognized algorithm type '{}'"
+msgstr "Niet herkend algoritme type '{}"
+
+#: backends.py:96
+msgid "You must have cryptography installed to use {}."
+msgstr ""
+
+#: backends.py:111
+msgid ""
+"Unrecognized type '{}', 'leeway' must be of type int, float or timedelta."
+msgstr ""
+
+#: backends.py:125 backends.py:177 tokens.py:69
+#, fuzzy
+#| msgid "Token is invalid or expired"
+msgid "Token is invalid"
+msgstr "Token is niet geldig of verlopen"
+
+#: backends.py:173
+msgid "Invalid algorithm specified"
+msgstr ""
+
+#: backends.py:175 tokens.py:67
+#, fuzzy
+#| msgid "Token is invalid or expired"
+msgid "Token is expired"
+msgstr "Token is niet geldig of verlopen"
+
+#: exceptions.py:55
+msgid "Token is invalid or expired"
+msgstr "Token is niet geldig of verlopen"
+
+#: serializers.py:35
+msgid "No active account found with the given credentials"
+msgstr "Geen actief account gevonden voor deze gegevens"
+
+#: serializers.py:108
+#, fuzzy
+#| msgid "No active account found with the given credentials"
+msgid "No active account found for the given token."
+msgstr "Geen actief account gevonden voor deze gegevens"
+
+#: serializers.py:178 tokens.py:280
+msgid "Token is blacklisted"
+msgstr "Token is ge-blacklist"
+
+#: settings.py:74
+msgid ""
+"The '{}' setting has been removed. Please refer to '{}' for available "
+"settings."
+msgstr ""
+"De '{}' instelling bestaat niet meer. Zie '{}' for beschikbareinstellingen."
+
+#: token_blacklist/admin.py:79
+msgid "jti"
+msgstr "jti"
+
+#: token_blacklist/admin.py:85
+msgid "user"
+msgstr "gebruiker"
+
+#: token_blacklist/admin.py:91
+msgid "created at"
+msgstr "aangemaakt op"
+
+#: token_blacklist/admin.py:97
+msgid "expires at"
+msgstr "verloopt op"
+
+#: token_blacklist/apps.py:7
+msgid "Token Blacklist"
+msgstr "Token Blacklist"
+
+#: token_blacklist/models.py:19
+msgid "Outstanding Token"
+msgstr ""
+
+#: token_blacklist/models.py:20
+msgid "Outstanding Tokens"
+msgstr ""
+
+#: token_blacklist/models.py:32
+#, python-format
+msgid "Token for %(user)s (%(jti)s)"
+msgstr ""
+
+#: token_blacklist/models.py:45
+msgid "Blacklisted Token"
+msgstr ""
+
+#: token_blacklist/models.py:46
+msgid "Blacklisted Tokens"
+msgstr ""
+
+#: token_blacklist/models.py:57
+#, python-format
+msgid "Blacklisted token for %(user)s"
+msgstr ""
+
+#: tokens.py:53
+msgid "Cannot create token with no type or lifetime"
+msgstr "Kan geen token maken zonder type of levensduur"
+
+#: tokens.py:127
+msgid "Token has no id"
+msgstr "Token heeft geen id"
+
+#: tokens.py:139
+msgid "Token has no type"
+msgstr "Token heeft geen type"
+
+#: tokens.py:142
+msgid "Token has wrong type"
+msgstr "Token heeft het verkeerde type"
+
+#: tokens.py:201
+msgid "Token has no '{}' claim"
+msgstr "Token heeft geen '{}' recht"
+
+#: tokens.py:206
+msgid "Token '{}' claim has expired"
+msgstr "Token '{}' recht is verlopen"

@@ -1,0 +1,20 @@
+--- contrib/python/regex/py2/ya.make	(index)
++++ contrib/python/regex/py2/ya.make	(working tree)
+@@ -21,11 +21,13 @@ PY_REGISTER(
+     regex._regex
+ )
+ 
++SRCDIR(contrib/python/regex/py2/regex_2)
++
+ PY_SRCS(
+-    TOP_LEVEL
+-    regex_2/__init__.py
+-    regex_2/_regex_core.py
+-    regex_2/regex.py
++    NAMESPACE regex
++    __init__.py
++    _regex_core.py
++    regex.py
+ )
+ 
+ RESOURCE_FILES(

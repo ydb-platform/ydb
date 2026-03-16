@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block container %}
+    {% if debug %}
+    <div class="col-12">
+        <p>It looks like you have found a bug! You can help to improve
+        Flower by opening an issue in <a href="https://github.com/mher/flower/issues">https://github.com/mher/flower/issues</a>
+        </p>
+        <pre>
+{{ bugreport }}
+
+{{ error_trace }}
+        </pre>
+    </div>
+    {% else %}
+    <div class="col-12">
+        Error {{ status_code }}
+    </div>
+    {% end %}
+{% end %}

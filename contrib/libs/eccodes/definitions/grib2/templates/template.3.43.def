@@ -1,0 +1,8 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.43, Stretched and rotated Gaussian latitude/longitude
+
+include "grib2/templates/template.3.shape_of_the_earth.def"
+include "grib2/templates/template.3.gaussian.def"
+include "grib2/templates/template.3.rotation.def"
+include "grib2/templates/template.3.stretching.def"

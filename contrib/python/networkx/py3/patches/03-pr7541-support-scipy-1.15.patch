@@ -1,0 +1,53 @@
+From 675c26c88c8671e388db11d141a5ab16d4211636 Mon Sep 17 00:00:00 2001
+From: Mridul Seth <git@mriduls.com>
+Date: Tue, 2 Jul 2024 22:47:54 +0200
+Subject: [PATCH 1/2] FIX: scipy 1d indexing tripped up numpy?
+
+---
+ networkx/algorithms/centrality/flow_matrix.py | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/networkx/algorithms/centrality/flow_matrix.py b/networkx/algorithms/centrality/flow_matrix.py
+index 3874f6b2ffe..61253a6b734 100644
+--- a/networkx/algorithms/centrality/flow_matrix.py
++++ b/networkx/algorithms/centrality/flow_matrix.py
+@@ -71,7 +71,11 @@ def width(self, L):
+         m = 0
+         for i, row in enumerate(L):
+             w = 0
+-            x, y = np.nonzero(row)
++            # scipy.sparse indexing for 1D has changed https://github.com/scipy/scipy/pull/20120
++            try:
++                x, y = np.nonzero(row)
++            except ValueError:
++                y = np.nonzero(row)[0]
+             if len(y) > 0:
+                 v = y - i
+                 w = v.max() - v.min() + 1
+
+From ff2d6e1dd6a92f9d313293064f371943c7397fbb Mon Sep 17 00:00:00 2001
+From: Mridul Seth <mail@mriduls.com>
+Date: Wed, 3 Jul 2024 18:32:03 +0200
+Subject: [PATCH 2/2] address @dschult review
+
+---
+ networkx/algorithms/centrality/flow_matrix.py | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/networkx/algorithms/centrality/flow_matrix.py b/networkx/algorithms/centrality/flow_matrix.py
+index 61253a6b734..e72b5e976c0 100644
+--- a/networkx/algorithms/centrality/flow_matrix.py
++++ b/networkx/algorithms/centrality/flow_matrix.py
+@@ -71,11 +71,7 @@ def width(self, L):
+         m = 0
+         for i, row in enumerate(L):
+             w = 0
+-            # scipy.sparse indexing for 1D has changed https://github.com/scipy/scipy/pull/20120
+-            try:
+-                x, y = np.nonzero(row)
+-            except ValueError:
+-                y = np.nonzero(row)[0]
++            y = np.nonzero(row)[-1]
+             if len(y) > 0:
+                 v = y - i
+                 w = v.max() - v.min() + 1

@@ -1,0 +1,5 @@
+exclude_from_macros:
+  - flask_swagger_ui/LICENSE
+  - flask_swagger_ui/README.md
+  - flask_swagger_ui/dist/LICENSE
+  - flask_swagger_ui/dist/VERSION

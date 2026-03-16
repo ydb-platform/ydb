@@ -1,0 +1,115 @@
+Metadata-Version: 2.1
+Name: pem
+Version: 23.1.0
+Summary: PEM file parsing in Python.
+Project-URL: Documentation, https://pem.readthedocs.io/
+Project-URL: Changelog, https://pem.readthedocs.io/en/stable/changelog.html
+Project-URL: Source Code, https://github.com/hynek/pem
+Project-URL: Funding, https://github.com/sponsors/hynek
+Project-URL: Tidelift, https://tidelift.com/?utm_source=lifter&utm_medium=referral&utm_campaign=hynek
+Author-email: Hynek Schlawack <hs@ox.cx>
+License-Expression: MIT
+License-File: LICENSE
+Keywords: cryptography,pem,pyopenssl,ssl,tls,twisted
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.8
+Provides-Extra: dev
+Requires-Dist: pem[tests,types]; extra == 'dev'
+Requires-Dist: twisted[tls]; extra == 'dev'
+Provides-Extra: docs
+Requires-Dist: furo; extra == 'docs'
+Requires-Dist: myst-parser; extra == 'docs'
+Requires-Dist: sphinx; extra == 'docs'
+Requires-Dist: sphinx-notfound-page; extra == 'docs'
+Requires-Dist: twisted[tls]; extra == 'docs'
+Provides-Extra: tests
+Requires-Dist: certifi; extra == 'tests'
+Requires-Dist: coverage[toml]>=5.0.2; extra == 'tests'
+Requires-Dist: pretend; extra == 'tests'
+Requires-Dist: pyopenssl; extra == 'tests'
+Requires-Dist: pytest; extra == 'tests'
+Provides-Extra: types
+Requires-Dist: mypy; extra == 'types'
+Requires-Dist: twisted; extra == 'types'
+Requires-Dist: types-pyopenssl; extra == 'types'
+Description-Content-Type: text/markdown
+
+# pem: PEM file parsing for Python
+
+
+*pem* is a Python module for parsing and splitting of [PEM files](https://en.wikipedia.org/wiki/X.509#Certificate_filename_extensions), i.e. Base64-encoded DER keys and certificates.
+
+It has no dependencies and does not attempt to interpret the certificate data in any way.
+
+It’s born from the need to load keys, certificates, trust chains, and Diffie–Hellman parameters from various certificate deployments:
+some servers (like [Apache](https://httpd.apache.org/)) expect them to be a separate file, others (like [nginx](https://nginx.org/)) expect them concatenated to the server certificate and finally some (like [HAProxy](https://www.haproxy.org/)) expect key, certificate, and chain to be in one file.
+With *pem*, your Python application can cope with all of those scenarios:
+
+```pycon
+>>> import pem
+>>> certs = pem.parse_file("chain.pem")
+>>> certs
+[<Certificate(PEM string with SHA-1 digest '...')>, <Certificate(PEM string with SHA-1 digest '...')>]
+>>> str(certs[0])
+'-----BEGIN CERTIFICATE-----\n...'
+```
+
+Additionally to the vanilla parsing code, *pem* also contains helpers for [Twisted](https://docs.twistedmatrix.com/en/stable/api/twisted.internet.ssl.Certificate.html#loadPEM) that save a lot of boilerplate code.
+
+
+## Project Information
+
+- **License**: [MIT](https://github.com/hynek/pem/blob/main/LICENSE)
+- [**PyPI**](https://pypi.org/project/pem/)
+- [**Source Code**](https://github.com/hynek/pem)
+- [**Documentation**](https://pem.readthedocs.io/)
+- [**Changelog**](https://pem.readthedocs.io/en/stable/changelog.html)
+
+
+### Credits
+
+*pem* is written and maintained by [Hynek Schlawack](https://hynek.me).
+
+The development is kindly supported by my employer [Variomedia AG](https://www.variomedia.de/) and all my amazing [GitHub Sponsors](https://github.com/sponsors/hynek).
+
+
+### *pem* for Enterprise
+
+Available as part of the Tidelift Subscription.
+
+The maintainers of *pem* and thousands of other packages are working with Tidelift to deliver commercial support and maintenance for the open source packages you use to build your applications.
+Save time, reduce risk, and improve code health, while paying the maintainers of the exact packages you use.
+[Learn more.](https://tidelift.com/?utm_source=lifter&utm_medium=referral&utm_campaign=hynek)
+
+
+## Release Information
+
+
+### Removed
+
+- Support for Python 2.7, 3.5, and 3.6 has been dropped.
+
+
+### Added
+
+- Support for RFC 4880 OpenPGP private & public keys: `pem.OpenPGPPublicKey` and `pem.OpenPGPPrivateKey`.
+  [#72](https://github.com/hynek/pem/issues/72)
+- Support for intra-payload headers like the ones used in OpenPGP keys using the `meta_headers` property.
+  [#75](https://github.com/hynek/pem/pull/75)
+- `pem.parse_file()` now accepts also [`pathlib.Path`](https://docs.python.org/3/library/pathlib.html#pathlib.Path) objects.
+- `pem.parse()` now also accepts `str`.
+- Added `text_payload`, `bytes_payload` and `decoded_payload` properties to all PEM objects that allow to directly access the payload without the envelope and possible headers.
+  [#74](https://github.com/hynek/pem/pull/74)
+
+
+---
+
+[→ Full Changelog](https://pem.readthedocs.io/en/stable/changelog.html)

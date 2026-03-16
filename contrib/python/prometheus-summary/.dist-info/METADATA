@@ -1,0 +1,48 @@
+Metadata-Version: 2.4
+Name: prometheus-summary
+Version: 0.1.6
+Summary: Prometheus summary with quantiles over configurable sliding time window
+Home-page: https://github.com/RefaceAI/prometheus-summary
+Author: RefaceAI
+Author-email: github-support@reface.ai
+License: Apache License 2.0
+Platform: Platform Independent
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Scientific/Engineering :: Mathematics
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: prometheus_client>=0.11.0
+Requires-Dist: quantile-estimator>=0.1.0
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: platform
+Dynamic: requires-dist
+Dynamic: summary
+
+# prometheus-summary
+Prometheus summary with quantiles over configurable sliding time window
+
+## Installation
+```
+pip install prometheus-summary==0.1.6
+```
+This package can be found on [PyPI](https://pypi.org/project/prometheus-summary/).
+
+## Documentation
+Documentation is available on https://prometheus-summary.readthedocs.io/en/latest/.

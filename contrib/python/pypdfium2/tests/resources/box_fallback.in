@@ -1,0 +1,46 @@
+{{header}}
+{{object 1 0}} <<
+  /Type /Catalog
+  /Pages 2 0 R
+>>
+endobj
+{{object 2 0}} <<
+  /Type /Pages
+  /Count 1
+  /Kids [
+    3 0 R
+  ]
+>>
+endobj
+% Page index 0 (fallback test)
+{{object 3 0}} <<
+  /Type /Page
+  /Parent 2 0 R
+  /Resources <<
+    /Font <</F1 15 0 R>>
+  >>
+  /Contents [21 0 R]
+>>
+endobj
+% Font resource
+{{object 15 0}} <<
+  /Type /Font
+  /Subtype /Type1
+  /BaseFont /Arial
+>>
+endobj
+% Content for page 0
+{{object 21 0}} <<
+  /Length 0
+>>
+stream
+BT
+/F1 20 Tf
+100 600 TD (Page1)Tj
+ET
+endstream
+endobj
+{{xref}}
+{{trailer}}
+{{startxref}}
+%%EOF

@@ -1,0 +1,25 @@
+openapi: "3.0.0"
+components:
+  schemas:
+    EmailMessage:
+      title: Email message
+      description: |
+        An email message. There must be at least one recipient in `to`, `cc`, or `bcc`.
+      type: object
+      required:
+        - allOf:
+            - message
+            - subject
+            - to
+      properties:
+        message:
+          type: string
+          description: The email message text.
+        subject:
+          type: string
+          description: The subject line of the email.
+        to:
+          type: array
+          description: A list of email addresses.
+          items:
+            type: string

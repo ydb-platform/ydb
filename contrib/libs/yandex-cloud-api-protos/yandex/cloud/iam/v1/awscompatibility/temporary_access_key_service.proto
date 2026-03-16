@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1.awscompatibility;
+
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1/awscompatibility;awscompatibility";
+option java_package = "yandex.cloud.api.iam.v1.awscompatibility";
+
+// A set of methods for managing temporary and ephemeral access keys.
+service TemporaryAccessKeyService {
+
+  // Creates an ephemeral access key for the specified subject.
+  rpc CreateEphemeral (CreateEphemeralAccessKeyRequest) returns (CreateEphemeralAccessKeyResponse) {
+    option (google.api.http) = {post: "/iam/aws-compatibility/v1/ephemeralAccessKeys" body: "*"};
+  }
+
+}
+
+message CreateEphemeralAccessKeyRequest {
+  // The subject identifier for whom the ephemeral access key will be created.
+  // If not specified, it defaults to the subject that made the request.
+  string subject_id = 1 [(length) = "<=50"];
+
+  // Use the session name to uniquely identify a session when the same SA is impersonated by different principals or for different reasons
+  // Pattern: [\w+=,.@-]*
+  string session_name = 2 [(required) = true, (length) = "1-64"];
+
+  // AWS-compatible policy in JSON format that you want to use as an inline session policy.
+  string policy = 3 [(length) = "<=2048"];
+
+  // Duration, which specifies the duration of the ephemeral access key,
+  // but duration won't be longer than the lifetime of the authentication token that made the request
+  google.protobuf.Duration duration = 4 [(value) = ">=15m"];
+}
+
+message CreateEphemeralAccessKeyResponse {
+  // ID of the access key.
+  // The key is AWS compatible.
+  string access_key_id = 1;
+
+  // Secret access key.
+  // The key is AWS compatible.
+  string secret = 2;
+
+  // Session token.
+  // The token is AWS compatible. Should be attached to any call made by provided credentials.
+  string session_token = 3;
+
+  // Expiration time.
+  // The date on which the current credentials expire.
+  google.protobuf.Timestamp expires_at = 4;
+}

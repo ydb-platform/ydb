@@ -1,0 +1,100 @@
+--- contrib/deprecated/python/alembic/py3/alembic/command.py	(index)
++++ contrib/deprecated/python/alembic/py3/alembic/command.py	(working tree)
+@@ -4,6 +4,16 @@ from . import autogenerate as autogen
+ from . import util
+ from .runtime.environment import EnvironmentContext
+ from .script import ScriptDirectory
++from .arcadia.script import ArcadiaScriptDirectory
++from . import settings
++
++
++def _get_script_directory(config):
++    # XXX: Arcadia patch
++
++    if settings.use_arcadia_modules or config.get_main_option('use_arcadia_modules'):
++        return ArcadiaScriptDirectory.from_config(config)
++    return ScriptDirectory.from_config(config)
+ 
+ 
+ def list_templates(config):
+@@ -154,7 +164,7 @@ def revision(
+ 
+     """
+ 
+-    script_directory = ScriptDirectory.from_config(config)
++    script_directory = _get_script_directory(config)
+ 
+     command_args = dict(
+         message=message,
+@@ -271,7 +281,7 @@ def upgrade(config, revision, sql=False, tag=None):
+ 
+     """
+ 
+-    script = ScriptDirectory.from_config(config)
++    script = _get_script_directory(config)
+ 
+     starting_rev = None
+     if ":" in revision:
+@@ -309,7 +319,7 @@ def downgrade(config, revision, sql=False, tag=None):
+ 
+     """
+ 
+-    script = ScriptDirectory.from_config(config)
++    script = _get_script_directory(config)
+     starting_rev = None
+     if ":" in revision:
+         if not sql:
+@@ -344,7 +354,7 @@ def show(config, rev):
+ 
+     """
+ 
+-    script = ScriptDirectory.from_config(config)
++    script = _get_script_directory(config)
+ 
+     if rev == "current":
+ 
+@@ -373,7 +383,7 @@ def history(config, rev_range=None, verbose=False, indicate_current=False):
+ 
+     """
+ 
+-    script = ScriptDirectory.from_config(config)
++    script = _get_script_directory(config)
+     if rev_range is not None:
+         if ":" not in rev_range:
+             raise util.CommandError(
+@@ -435,7 +445,7 @@ def heads(config, verbose=False, resolve_dependencies=False):
+ 
+     """
+ 
+-    script = ScriptDirectory.from_config(config)
++    script = _get_script_directory(config)
+     if resolve_dependencies:
+         heads = script.get_revisions("heads")
+     else:
+@@ -457,7 +467,7 @@ def branches(config, verbose=False):
+     :param verbose: output in verbose mode.
+ 
+     """
+-    script = ScriptDirectory.from_config(config)
++    script = _get_script_directory(config)
+     for sc in script.walk_revisions():
+         if sc.is_branch_point:
+             config.print_stdout(
+@@ -487,7 +497,7 @@ def current(config, verbose=False, head_only=False):
+ 
+     """
+ 
+-    script = ScriptDirectory.from_config(config)
++    script = _get_script_directory(config)
+ 
+     def display_version(rev, context):
+         if verbose:
+@@ -533,7 +543,7 @@ def stamp(config, revision, sql=False, tag=None, purge=False):
+ 
+     """
+ 
+-    script = ScriptDirectory.from_config(config)
++    script = _get_script_directory(config)
+ 
+     if sql:
+         destination_revs = []

@@ -1,7 +1,5 @@
 PY2TEST()
 
-SUBSCRIBER(g:python-contrib)
-
 PEERDIR(
     contrib/deprecated/python/ruamel.ordereddict
 )

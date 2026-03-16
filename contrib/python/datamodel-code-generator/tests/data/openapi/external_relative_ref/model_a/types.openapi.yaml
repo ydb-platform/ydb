@@ -1,0 +1,20 @@
+
+openapi: 3.0.3
+info:
+  title: Model A definitions
+  version: "1.0"
+paths: {}
+components:
+  schemas:
+    model_a.input:
+      type: object
+      properties:
+        name:
+          type: string
+    model_a.output:
+      type: object
+      properties:
+        output:
+          type: string
+        input:
+          $ref: "#/components/schemas/model_a.input"

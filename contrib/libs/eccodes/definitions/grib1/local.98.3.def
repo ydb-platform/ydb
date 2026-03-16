@@ -1,0 +1,18 @@
+# (C) Copyright 2005- ECMWF.
+# Satellite image data
+
+constant GRIBEXSection1Problem = 52 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+constant operStream = "oper";
+alias mars.stream = operStream;
+
+unsigned[1] band  : dump;
+alias mars.obstype = band;
+
+meta  marsIdent sprintf("%d",indicatorOfTypeOfLevel) : dump;
+alias mars.ident = marsIdent;
+
+unsigned[1] functionCode : dump;
+
+pad padding_loc3_1(1);

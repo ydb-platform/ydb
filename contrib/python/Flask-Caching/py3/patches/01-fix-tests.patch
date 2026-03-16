@@ -1,0 +1,30 @@
+--- contrib/python/Flask-Caching/py3/tests/conftest.py	(index)
++++ contrib/python/Flask-Caching/py3/tests/conftest.py	(working tree)
+@@ -3,6 +3,7 @@ import os
+ 
+ import flask
+ import pytest
++import yatest.common
+ 
+ import flask_caching as fsc
+ 
+@@ -19,7 +20,7 @@ except ImportError:
+ @pytest.fixture
+ def app(request):
+     app = flask.Flask(
+-        request.module.__name__, template_folder=os.path.dirname(__file__)
++        request.module.__name__, template_folder=yatest.common.source_path('contrib/python/Flask-Caching/py3/tests')
+     )
+     app.testing = True
+     app.config["CACHE_TYPE"] = "simple"
+--- contrib/python/Flask-Caching/py3/tests/test_basic_app.py	(index)
++++ contrib/python/Flask-Caching/py3/tests/test_basic_app.py	(working tree)
+@@ -121,7 +121,7 @@ def test_app_redis_cache_backend_url_explicit_db_arg(app, redis_server):
+ 
+ def test_app_custom_cache_backend(app):
+     cache = Cache()
+-    app.config["CACHE_TYPE"] = "test_basic_app.newsimple"
++    app.config["CACHE_TYPE"] = "__tests__.test_basic_app.newsimple"
+     cache.init_app(app)
+ 
+     with app.app_context():

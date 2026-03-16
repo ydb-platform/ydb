@@ -1,0 +1,99 @@
+1 mslp MSLP Pressure reduced to MSL Pa
+11 t T Temperature K
+20 vis VIS Visibility m
+33 u U u-component of wind m/s
+34 v V v-component of wind m/s
+52 r R Relative humidity %
+58 fzrapr FZRAPR Probability of frozen rain %
+60 tstm TSTM Probability thunderstorm %
+71 tcc TCC Total cloud cover fraction
+72 ccc CCC Convective cloud cover fraction
+73 lcc LCC Low cloud cover fraction
+74 mcc MCC Medium cloud cove fraction
+75 hcc HCC High cloud cover fraction
+77 cm CM cloud mask fraction
+110 epstm EPSTM EPS T mean K
+111 epststd EPSTSTD EPS T standard deviation K
+130 mxws10min MXWS10MIN Maximum wind (mean 10 min) M/S
+131 gust GUST Wind gust M/S
+135 cbase_sig CBASE_SIG Cloud base (significant) m
+136 ctop_sig CTOP_SIG Cloud top (significant) m
+140 pit PIT Precipitation intensity total kg/m2/s
+141 pis PIS Precipitation intensity snow kg/m2/s
+145 ptype PTYPE Precipitation type, conv 0, large scale 1, no prec -9 category
+146 pcat PCAT Category of precipitation, 0 no, 1 snow, 2 snow and rain, 3 rain, 4 drizzle, 5, freezing rain, 6 freezing drizzle category
+150 dswrf DSWRF Downward short-wave radiation flux W/m2
+151 uswrf USWRF Upward short-wave radiation flux W/m2
+152 nswrf NSWRF Net short wave radiation flux W/m2
+153 photar PHOTAR Photosynthetically active radiation W/m2
+154 nswrfcs NSWRFCS Net short-wave radiation flux, clear sky W/m2
+155 dwuvr DWUVR Downward UV radiation W/m2
+156 uviucs UVIUCS UV index (under clear sky) Numeric
+157 uvi UVI UV index Numeric
+158 dlwrf DLWRF Downward long-wave radiation flux W/m2
+159 ulwrf ULWRF Upward long-wave radiation flux W/m2
+160 nlwrf NLWRF Net long wave radiation flux W/m2
+161 nlwrfcs NLWRFCS Net long-wave radiation flux, clear sky W/m2
+162 cdca CDCA Cloud amount %
+163 cdct CDCT Cloud type Code
+164 tmaxt TMAXT Thunderstorm maximum tops m
+165 thunc THUNC Thunderstorm coverage Code
+166 cdcb CDCB Cloud base m
+167 cdct CDCT Cloud top m
+168 ceil CEIL Ceiling m
+169 cdlyr CDLYR Non-convective cloud cover %
+170 cwork CWORK Cloud work function J/kg
+171 cuefi CUEFI Convective cloud efficiency Proportion
+172 tcond TCOND Total condensate kg/kg
+173 tcolw TCOLW Total column-integrated cloud water kg/m2
+174 tcoli TCOLI Total column-integrated cloud ice kg/m2
+175 tcolc TCOLC Total column-integrated condensate kg/m2
+176 fice FICE Ice fraction of total condensate Proportion
+177 cc CC Cloud cover %
+178 cdcimr CDCIMR Cloud ice mixing ratio kg/kg
+179 suns SUNS Sunshine Numeric
+180 cbext CBEXT Horizontal extent of cumulunimbus (CB) %
+181 fracc FRACC Fraction of cloud cover Numeric
+182 sund SUND Sunshine duration s
+183 kx KX K index K
+184 kox KOX KO index K
+185 totalx TOTALX Total totals index K
+186 sx SX Sweat index Numeric
+187 hlcy HLCY Storm relative helicity J/kg
+188 ehlx EHLX Energy helicity index Numeric
+189 lftx LFTX Surface lifted index K
+190 4lftx 4LFTX Best (4-layer) lifted index K
+191 ri RI Richardson number Numeric
+192 aerot AEROT Aerosol type Code
+193 o3mx O3MX Ozone mixing ratio kg/kg
+194 tcioz TCIOZ Total column integrated ozone Dobson
+200 bswid BSWID Base spectrum width m/s
+201 bref BREF Base reflectivity dB
+202 brvel BRVEL Base radial velocity m/s
+203 veril VERIL Vertically integrated liquid kg/m
+204 lmaxbr LMAXBR Layer-maximum base reflectivity dB
+205 prrad PRRAD Precipitation (radar) kg/m
+206 eqrrra EQRRRA Equivalent radar reflectivity factor for rain mm6/m3
+207 eqrrsn EQRRSN Equivalent radar reflectivity factor for snow mm6/m3
+208 eqrfpc EQRFPC Equivalent radar reflectivity factor for paramterized convection mm6/m3
+209 ectop_rad ECTOP_RAD Echo top (radar) m
+210 refl_rad REFL_RAD Reflectivity (radar) dB
+211 corefl_rad COREFL_RAD Composite reflectivity (radar) dB
+215 icit ICIT Icing top m
+216 icib ICIB Icing base m
+217 ici ICI Icing Code
+218 turbt TURBT Turbulence top m
+219 turbb TURBB Turbulence base m
+220 turb TURB Turbulence Code
+221 pblr PBLR Planetary boundary-layer regime Code
+222 conti CONTI Contrail intensity Code
+223 contet CONTET Contrail engine type Code
+224 contt CONTT Contrail top m
+225 contb CONTB Contrail base m
+226 snfalb SNFALB Snow free albedo %
+227 ici_prop ICI_PROP Icing %
+228 icturb ICTURB In-cloud turbulence %
+229 cat CAT Clear air turbulence (CAT) %
+230 scld_prob SCLD_PROB Supercooled large droplet probability %
+235 text TEXT Arbitrary text string CCITTIA5
+236 secpref SECPREF Seconds prior to initial reference time (defined in section1) (meteorology) s

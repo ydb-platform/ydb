@@ -1,0 +1,268 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07c8fa7554d50e315318be35b61d4793
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [104:107]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a360fb03b9291d6c6e9f8d6d7cb7736
+BELONGS ya.make
+    License text:
+        // Copyright 2024 Brad Hards. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/properties.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 153b1c67d98d8dd69d7dcaaa31389bec
+BELONGS ya.make
+    License text:
+        This software is copyright (C) 1991-2013, Thomas G. Lane, Guido Vollbeding.
+        All Rights Reserved except as specified below.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [72:73]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 154bc7713c56aff860b4fcc4f274af18
+BELONGS ya.make
+    License text:
+        Copyright © 2018-2019, VideoLAN and dav1d authors
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [28:29]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1c4fa83777b9cb42ac046338cd18be27
+BELONGS ya.make
+    License text:
+        // Copyright 2020 Joe Drago. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/alpha.c [1:1]
+        src/io.c [1:1]
+        src/obu.c [34:34]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2262ded0743695851a47ffc3df0bc8c1
+BELONGS ya.make
+    License text:
+        // Copyright 2023 Google LLC
+        // SPDX-License-Identifier: BSD-2-Clause
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/colrconvert.c [1:2]
+        src/gainmap.c [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 39856e786dfee9e8a8f0de1d5de1dbe4
+BELONGS ya.make
+    License text:
+        Copyright 2020 Emmanuel Gil Peyrot. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [125:125]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 52cdbcc94bc25a587a9bc7716d1fcf9e
+BELONGS ya.make
+    License text:
+         *  Copyright 2015 The LibYuv Project Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        third_party/libyuv/source/scale_any.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 54b030263a1807615777921ccdf67253
+BELONGS ya.make
+    License text:
+        Copyright 2019 Joe Drago. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1:1]
+        README.md [210:210]
+        include/avif/avif.h [1:1]
+        include/avif/internal.h [1:1]
+        src/avif.c [1:1]
+        src/codec_aom.c [1:1]
+        src/colr.c [1:1]
+        src/mem.c [1:1]
+        src/rawdata.c [1:1]
+        src/read.c [1:1]
+        src/reformat.c [1:1]
+        src/reformat_libyuv.c [1:1]
+        src/stream.c [1:1]
+        src/utils.c [1:1]
+        src/write.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 701b6f8f7b2fc3b310f8a07313f0d72a
+BELONGS ya.make
+    License text:
+        Copyright 2011 The LibYuv Project Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [359:359]
+        third_party/libyuv/include/libyuv.h [2:2]
+        third_party/libyuv/include/libyuv/basic_types.h [2:2]
+        third_party/libyuv/include/libyuv/planar_functions.h [2:2]
+        third_party/libyuv/include/libyuv/row.h [2:2]
+        third_party/libyuv/include/libyuv/scale.h [2:2]
+        third_party/libyuv/source/planar_functions.c [2:2]
+        third_party/libyuv/source/row_common.c [2:2]
+        third_party/libyuv/source/scale.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 728f534f978dfcb21a82083cecc6b08c
+BELONGS ya.make
+    License text:
+         *  Copyright 2013 The LibYuv Project Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        third_party/libyuv/include/libyuv/scale_row.h [2:2]
+        third_party/libyuv/source/scale_common.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 88de0ce8d72950c47336cdbb64fddd2e
+BELONGS ya.make
+    License text:
+         * Copyright © 2018, VideoLAN and dav1d authors
+         * Copyright © 2018, Two Orioles, LLC
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/obu.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 89cec71bc9c315e071361d28519aaf6f
+BELONGS ya.make
+    License text:
+         *  Copyright 2012 The LibYuv Project Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        third_party/libyuv/include/libyuv/version.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9237f9a48f8f6e2446f5132c9e83d6ad
+BELONGS ya.make
+    License text:
+         * Copyright © 2018, VideoLAN and dav1d authors
+         * Copyright © 2018, Two Orioles, LLC
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/obu.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9855ff798e83714c245975bd9091c84b
+BELONGS ya.make
+    License text:
+            "The Graphics Interchange Format(c) is the Copyright property of
+            CompuServe Incorporated.  GIF(sm) is a Service Mark property of
+            CompuServe Incorporated."
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [117:119]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa60f9f901d8a70162904fc48f222c49
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [104:107]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0b34d4a8a2e828434b1c45d42861339
+BELONGS ya.make
+    License text:
+        // Copyright 2021 Joe Drago. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/diag.c [1:1]
+        src/scale.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e618dd164932f955bb8121f5f486e841
+BELONGS ya.make
+    License text:
+        // Copyright 2022 Google LLC
+        // SPDX-License-Identifier: BSD-2-Clause
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/exif.c [1:2]
+        src/reformat_libsharpyuv.c [1:2]

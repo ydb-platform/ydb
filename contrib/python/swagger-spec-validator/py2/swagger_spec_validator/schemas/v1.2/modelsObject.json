@@ -1,0 +1,51 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "definitions": {
+        "propertyObject": {
+            "allOf": [
+                {
+                    "not": {
+                        "$ref": "#"
+                    }
+                },
+                {
+                    "$ref": "dataTypeBase.json#"
+                }
+            ]
+        }
+    },
+    "dependencies": {
+        "subTypes": [
+            "discriminator"
+        ]
+    },
+    "properties": {
+        "description": {
+            "type": "string"
+        },
+        "discriminator": {
+            "type": "string"
+        },
+        "id": {
+            "type": "string"
+        },
+        "properties": {
+            "additionalProperties": {
+                "$ref": "#/definitions/propertyObject"
+            },
+            "type": "object"
+        },
+        "subTypes": {
+            "items": {
+                "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+        }
+    },
+    "required": [
+        "id",
+        "properties"
+    ],
+    "type": "object"
+}

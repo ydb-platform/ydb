@@ -1,0 +1,44 @@
+requirements:
+  - pythran
+mark_as_cython_c:
+  - skimage/_shared/*.pyx
+  - skimage/draw/*.pyx
+  - skimage/feature/_canny_cy.pyx
+  - skimage/feature/_hoghistogram.pyx
+  - skimage/feature/_sift.pyx
+  - skimage/feature/_texture.pyx
+  - skimage/feature/censure_cy.pyx
+  - skimage/feature/corner_cy.pyx
+  - skimage/feature/orb_cy.pyx
+  - skimage/filters/*.pyx
+  - skimage/future/*.pyx
+  - skimage/graph/*.pyx
+  - skimage/io/*.pyx
+  - skimage/measure/*.pyx
+  - skimage/morphology/_convex_hull.pyx
+  - skimage/morphology/_extrema_cy.pyx
+  - skimage/morphology/_greyreconstruct.pyx
+  - skimage/morphology/_skeletonize_cy.pyx
+  - skimage/morphology/_watershed.pyx
+  - skimage/morphology/cmorph.pyx
+  - skimage/restoration/*.pyx
+  - skimage/segmentation/*.pyx
+  - skimage/transform/_radon_transform.pyx
+  - skimage/transform/_seam_carving.pyx
+  - skimage/transform/_warps_cy.pyx
+  - skimage/transform/_hough_transform.pyx
+  - skimage/morphology/_flood_fill_cy.pyx
+  - skimage/morphology/_max_tree.pyx
+  - skimage/morphology/_misc_cy.pyx
+  - skimage/morphology/_grayreconstruct.pyx
+  - skimage/morphology/_skeletonize_various_cy.pyx
+cython_templates:
+  - skimage/*.pyx.in
+exclude_from_macros:
+  - skimage/meson.build
+  - skimage/*/meson.build
+  - skimage/feature/brief_pythran.py
+  - skimage/feature/_hessian_det_appx_pythran.py
+exclude:
+  - skimage/_build_utils/*
+  - doc/*

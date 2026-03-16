@@ -1,0 +1,16 @@
+--- contrib/python/plotly/py2/ya.make	(index)
++++ contrib/python/plotly/py2/ya.make	(working tree)
+@@ -13,6 +11,13 @@ PEERDIR(
+     contrib/python/six
+ )
+ 
++IF (NOT WINDOWS)
++   # some modules don't cannot be built on Windows 
++   PEERDIR(
++       contrib/python/ipywidgets
++   )
++ENDIF()
++
+ NO_LINT()
+ 
+ NO_CHECK_IMPORTS(

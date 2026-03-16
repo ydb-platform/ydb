@@ -1,0 +1,23 @@
+<gpx>
+    <author>Serial=1443</author>
+    <time>2007-03-02T10:34:03Z</time>
+    <trk>
+        <trkseg>
+            <trkpt lat="52.330848" lon="5.541371">
+                <ele>48.962041</ele>
+                <time>2009-03-02T14:05:52Z</time>
+                <speed>1.2</speed>
+            </trkpt>
+            <trkpt lat="52.330951" lon="5.541344">
+                <ele>58.166437</ele>
+                <time>2009-03-02T14:05:58Z</time>
+                <speed>2.2</speed>
+            </trkpt>
+            <trkpt lat="52.331014" lon="5.541333">
+                <ele>53.381747</ele>
+                <time>2009-03-02T14:06:05Z</time>
+                <speed>3.2</speed>
+            </trkpt>
+        </trkseg>
+    </trk>
+</gpx>

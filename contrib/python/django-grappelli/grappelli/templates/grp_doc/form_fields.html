@@ -1,0 +1,266 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Form Fields{% endblock %}
+
+{% block extrahead %}
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(django.jQuery);
+    </script>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Form Fields</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Form Fields</h1>
+    <div class="g-d-c">
+        <div class="g-d-24">
+            <div class="grp-doc-description">
+                <p>You may use all common type of form fields with Grappelli. But there are some classes and specific types of form fields which are explained below.</p>
+            </div>
+        </div>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Labels</h1>
+                    <p>To mark a label as required, simply add the class <span class="grp-doc-class">.required</span>.</p>
+                    <p><small>Note: Labels are outside Grappellis namespace because they are hardcoded with Django.</small></p>
+                </div>
+            </div>
+            <div class="xg-d-24 g-d-c-fluid">
+                <div class="grp-doc-code-source">
+                    <fieldset class="grp-module">
+                        <h2>Module</h2>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label>Label</label></div>
+                                <div class="c-2"><input type="text" class="vTextField" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label class="required">Label</label></div>
+                                <div class="c-2"><input type="text" class="vTextField" /></div>
+                            </div>
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<fieldset class="grp-module">
+    <h2>Module</h2>
+    <div class="grp-row">
+        <div class="l-2c-fluid l-d-4">
+            <div class="c-1"><label>Label</label></div>
+            <div class="c-2"><input type="text" class="vTextField" /></div>
+        </div>
+    </div>
+    <div class="grp-row">
+        <div class="l-2c-fluid l-d-4">
+            <div class="c-1"><label class="required">Label</label></div>
+            <div class="c-2"><input type="text" class="vTextField" /></div>
+        </div>
+    </div>
+</fieldset>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Form Field Widths</h1>
+                    <p>The following classes basically handle the widths of form fields in different contexts. They <strong>apply only to form fields</strong> which are <strong>not children of any grid-container</strong> (e.g. <span class="grp-doc-class">.g-d-c</span> or <span class="grp-doc-class">.g-d-24</span>). Form fields which are children of a grid-container always stretch to 100% width.</p>
+                    <p>For more detailed information about the grid, take a look at the <a href="{% url 'grp_doc_mueller_grid_system' %}">grid system we use</a>.</p>
+                </div>
+            </div>
+            <div class="xg-d-24 g-d-c-fluid">
+                <div class="grp-doc-code-source">
+                    <div class="grp-group grp-stacked grp-collapse grp-open">
+                        <h2 class="grp-collapse-handler">Text &amp; Numbers</h2>
+                        <fieldset class="grp-module">
+                            <h3>.vTextField</h3>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2"><input type="text" class="vTextField" /></div>
+                                </div>
+                            </div>
+                        </fieldset>
+                        <fieldset class="grp-module">
+                            <h3>.vLargeTextField</h3>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2"><input type="text" class="vLargeTextField" /></div>
+                                </div>
+                            </div>
+                        </fieldset>
+                        <fieldset class="grp-module">
+                            <h3>.vPositiveSmallIntegerField</h3>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2"><input type="text" class="vPositiveSmallIntegerField" /></div>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                    <div class="grp-group grp-stacked grp-collapse grp-open">
+                        <h2 class="grp-collapse-handler">Filebrowse, URL, XML</h2>
+                        <fieldset class="grp-module">
+                            <h3>.vFileBrowseField</h3>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2"><input type="text" class="vFileBrowseField" /></div>
+                                </div>
+                            </div>
+                        </fieldset>
+                        <fieldset class="grp-module">
+                            <h3>.vURLField</h3>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2"><input type="text" class="vURLField" /></div>
+                                </div>
+                            </div>
+                        </fieldset>
+                        <fieldset class="grp-module">
+                            <h3>.vXMLLargeTextField</h3>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2"><input type="text" class="vXMLLargeTextField" /></div>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                    <div class="grp-group grp-stacked grp-collapse grp-open">
+                        <h2 class="grp-collapse-handler">Date &amp; Time</h2>
+                        <fieldset class="grp-module">
+                            <h3>.vDateField</h3>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2"><input type="text" class="vDateField" /></div>
+                                </div>
+                            </div>
+                        </fieldset>
+                        <fieldset class="grp-module">
+                            <h3>.vTimeField</h3>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2"><input type="text" class="vTimeField" /></div>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                    <div class="grp-group grp-stacked grp-collapse grp-open">
+                        <h2 class="grp-collapse-handler">Many to Many &amp; Foreign Keys</h2>
+                        <fieldset class="grp-module">
+                            <h3>.vManyToManyRawIdAdminField</h3>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2"><input type="text" class="vManyToManyRawIdAdminField" /></div>
+                                </div>
+                            </div>
+                        </fieldset>
+                        <fieldset class="grp-module">
+                            <h3>.vForeignKeyRawIdAdminField</h3>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2"><input type="text" class="vForeignKeyRawIdAdminField" /></div>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Read-Only Fields</h1>
+                    <p>Read-only fields are represented with <span class="grp-doc-dom"><span>div.grp-readonly</span></span>.</p>
+                </div>
+            </div>
+            <div class="xg-d-24 g-d-c-fluid">
+                <div class="grp-doc-code-source">
+                    <fieldset class="grp-module">
+                        <h2>Module</h2>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label>Label</label></div>
+                                <div class="c-2">
+                                    <div class="grp-readonly">Read-only form field</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label class="required">Label</label></div>
+                                <div class="c-2"><input type="text" class="vTextField" /></div>
+                            </div>
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<fieldset class="grp-module">
+    <h2>Module</h2>
+    <div class="grp-row">
+        <div class="l-2c-fluid l-d-4">
+            <div class="c-1"><label class="required">Label</label></div>
+            <div class="c-2">
+                <div class="grp-readonly">Read-only form field</div>
+            </div>
+        </div>
+    </div>
+    <div class="grp-row">
+        <div class="l-2c-fluid l-d-4">
+            <div class="c-1"><label class="required">Label</label></div>
+            <div class="c-2"><input type="text" class="vTextField" /></div>
+        </div>
+    </div>
+</fieldset>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Errors in Forms</h1>
+                    <p>Please take a look at <a href="{% url 'grp_doc_errors' %}">errors in forms</a>.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+{% endblock %}
+

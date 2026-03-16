@@ -1,0 +1,2 @@
+alias mars.date  = referenceDate;
+alias mars.hdate = dataDate;

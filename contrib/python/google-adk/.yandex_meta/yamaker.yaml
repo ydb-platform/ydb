@@ -1,0 +1,5 @@
+requirements:
+  - pydantic: contrib/python/pydantic/pydantic-2
+exclude:
+  - google/**/*.orig
+  - google/**/.*

@@ -1,0 +1,40 @@
+Metadata-Version: 2.4
+Name: litestar-htmx
+Version: 0.5.0
+Summary: HTMX Integration for Litestar
+Author-email: Cody Fincher <cody@litestar.dev>
+Maintainer-email: Litestar Developers <hello@litestar.dev>, Cody Fincher <cody@litestar.dev>, Jacob Coffee <jacob@litestar.dev>, Janek Nouvertné <provinzkraut@litestar.dev>
+License: MIT
+License-File: LICENSE
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Internet
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: <4.0,>=3.9
+Description-Content-Type: text/markdown
+
+<!-- markdownlint-disable -->
+<p align="center">
+  <!-- github-banner-start -->
+  <img src="https://raw.githubusercontent.com/litestar-org/branding/main/assets/Branding%20-%20SVG%20-%20Transparent/Logo%20-%20Banner%20-%20Inline%20-%20Light.svg#gh-light-mode-only" alt="Litestar Logo - Light" width="100%" height="auto" />
+  <img src="https://raw.githubusercontent.com/litestar-org/branding/main/assets/Branding%20-%20SVG%20-%20Transparent/Logo%20-%20Banner%20-%20Inline%20-%20Dark.svg#gh-dark-mode-only" alt="Litestar Logo - Dark" width="100%" height="auto" />
+  <!-- github-banner-end -->
+
+</p>
+<div align="center">
+<!-- markdownlint-restore -->
+
+# The HTMX Plugin for Litestar
+
+See the [documentation](https://docs.litestar.dev/latest/usage/htmx.html) for usage details

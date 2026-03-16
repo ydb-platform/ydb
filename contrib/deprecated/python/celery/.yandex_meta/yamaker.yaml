@@ -1,0 +1,10 @@
+requirements:
+  - billiard: contrib/deprecated/python/billiard
+  - kombu: contrib/deprecated/python/kombu
+  - vine: contrib/deprecated/python/vine
+exclude_from_macros:
+  - celery/utils/dispatch/LICENSE.python
+  - celery/utils/dispatch/license.txt
+keep:
+  - celery/utils/dispatch/LICENSE.python
+  - celery/utils/dispatch/license.txt

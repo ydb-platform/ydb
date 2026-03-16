@@ -1,0 +1,34 @@
+# -*- text -*-
+#
+# Copyright (c) 2009-2010 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2010-2012 Los Alamos National Security, LLC.
+#                         All rights reserved.
+#
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI's common shmem support.
+#
+[mmap too small]
+Open MPI requested a shared memory segment that was too small to do
+anything useful.  This is likely an error in Open MPI itself.  If you
+see this error, you should see if there is an update available for
+Open MPI, and if not, contact the Open MPI developers.
+
+  Local host:        %s
+  Requested size:    %ul
+  Control seg size:  %ul
+  Data seg aligment: %ul
+#
+[unexpected message id]
+Open MPI received an unexpected message ID during common sm initialization.
+This is likely an error in Open MPI itself.  If you see this error, you should
+see if there is an update available for Open MPI that addresses this issue, and
+if not, contact the Open MPI developers.
+
+  Local Host:          %s
+  Expected Message ID: %s
+  Message ID Received: %s

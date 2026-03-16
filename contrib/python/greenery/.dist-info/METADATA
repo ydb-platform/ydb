@@ -1,0 +1,13 @@
+Metadata-Version: 2.1
+Name: greenery
+Version: 4.2.2
+Summary: Greenery allows manipulation of regular expressions
+Home-page: https://github.com/qntm/greenery
+Author: qntm
+Author-email: qntm <qntm@users.noreply.github.com>
+License: MIT License
+Keywords: re regex regexp regular expression deterministic finite state machine automaton fsm dfsm fsa dfsa greenery
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.8
+License-File: LICENSE.txt
+

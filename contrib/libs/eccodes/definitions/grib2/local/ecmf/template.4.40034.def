@@ -1,0 +1,6 @@
+# (C) Copyright 2005- ECMWF.
+
+#
+# This is deprecated and only included for backward compatibility, use template 4.34
+#
+include "grib2/templates/template.4.34.def"

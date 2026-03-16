@@ -1,0 +1,89 @@
+# GRID DEFINITION Space view, perspective or orthographic
+
+# grib 1 -> 2
+constant gridDefinitionTemplateNumber     = 90;
+
+unsigned[2] Nx : dump;
+alias numberOfPointsAlongXAxis = Nx;
+alias Ni = Nx;
+alias geography.Nx=Nx;
+
+unsigned[2] Ny : dump;
+alias numberOfPointsAlongYAxis = Ny;
+alias Nj = Ny;
+alias geography.Ny=Ny;
+
+signed[3] latitudeOfSubSatellitePoint ;
+meta geography.latitudeOfSubSatellitePointInDegrees  scale(latitudeOfSubSatellitePoint,oneConstant,grib1divider,truncateDegrees) : dump;
+alias Lap=latitudeOfSubSatellitePoint;
+
+signed[3] longitudeOfSubSatellitePoint ;
+meta geography.longitudeOfSubSatellitePointInDegrees  scale(longitudeOfSubSatellitePoint,oneConstant,grib1divider,truncateDegrees) : dump;
+alias Lop=longitudeOfSubSatellitePoint;
+
+include "grib1/resolution_flags.def";
+
+unsigned[3] dx : dump;
+alias geography.dx=dx;
+
+unsigned[3] dy : dump;
+alias geography.dy=dy;
+
+unsigned[2] XpInGridLengths : dump;
+alias geography.XpInGridLengths=XpInGridLengths;
+
+unsigned[2] YpInGridLengths : dump;
+alias geography.YpInGridLengths=YpInGridLengths;
+
+include "grib1/scanning_mode.def";
+
+unsigned[3] orientationOfTheGrid : edition_specific ;
+meta geography.orientationOfTheGridInDegrees  scale(orientationOfTheGrid,oneConstant,grib1divider,truncateDegrees) : dump;
+
+unsigned[3] Nr : edition_specific,can_be_missing,no_copy;
+alias altitudeOfTheCameraFromTheEarthsCentreMeasuredInUnitsOfTheEarthsRadius = Nr;
+meta geography.NrInRadiusOfEarth scale(Nr,oneConstant,oneMillionConstant,truncateDegrees) : dump;
+alias NrInRadiusOfEarthScaled=NrInRadiusOfEarth;
+
+unsigned[2] Xo : dump;
+alias xCoordinateOfOriginOfSectorImage=Xo;
+alias geography.Xo=Xo;
+
+unsigned[2] Yo : dump;
+alias yCoordinateOfOriginOfSectorImage=Yo;
+alias geography.Yo=Yo;
+
+#Ce Length is normally 32 + stretched and/or rotated
+#Ce parameters + vertical coordinate parameters + list of
+#Ce numbers of points.
+#Ce (Lambert conformal and Mercator are 42 octets in length,
+#Ce while Space view is 40 for ECMWF (44 in GRIB specification)
+if ( centre != 98 ) {
+  pad padding_grid90_1(6);
+}
+
+meta numberOfDataPoints number_of_points(Ni,Nj,PLPresent,pl) : dump;
+alias numberOfPoints=numberOfDataPoints;
+meta numberOfValues number_of_values(values,bitsPerValue,numberOfDataPoints,bitmapPresent,bitmap,numberOfCodedValues) : dump;
+#alias ls.valuesCount=numberOfValues;
+
+iterator space_view(numberOfPoints, missingValue, values, radius,
+          earthIsOblate,
+          earthMajorAxis, earthMinorAxis,
+          Nx, Ny,
+          latitudeOfSubSatellitePointInDegrees,
+          longitudeOfSubSatellitePointInDegrees,
+          dx, dy, XpInGridLengths, YpInGridLengths,
+          orientationOfTheGridInDegrees,
+          NrInRadiusOfEarthScaled, Xo, Yo,
+          iScansNegatively, jScansPositively,
+          jPointsAreConsecutive, alternativeRowScanning);
+
+nearest space_view(values,radius,Nx,Ny);
+
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);

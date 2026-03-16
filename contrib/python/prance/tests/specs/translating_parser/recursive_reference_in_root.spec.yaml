@@ -1,0 +1,21 @@
+---
+openapi: 3.0.3
+info:
+  title: Test specification for the translating parser
+  version: 0.0.0
+paths:
+  /hosts:
+    get:
+      responses:
+        default:
+          description: A local recursive reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecursiveObject'
+components:
+  schemas:
+    RecursiveObject:
+      type: object
+      additionalProperties:
+        $ref: "#/components/schemas/RecursiveObject"

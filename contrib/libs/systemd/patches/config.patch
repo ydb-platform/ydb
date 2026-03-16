@@ -1,0 +1,20 @@
+--- contrib/libs/systemd/config.h	(index)
++++ contrib/libs/systemd/config.h	(working tree)
+@@ -261,1 +261,1 @@
+-#define HAVE_EXPLICIT_BZERO 0
++#define HAVE_EXPLICIT_BZERO 1 
+@@ -311,1 +311,1 @@
+-#define HAVE_MEMFD_CREATE 0
++#define HAVE_MEMFD_CREATE 1
+@@ -341,1 +341,1 @@
+-#define HAVE_REALLOCARRAY 0
++#define HAVE_REALLOCARRAY 1
+@@ -364,1 +364,1 @@
+-#define HAVE_STRUCT_MOUNT_ATTR 0
++#define HAVE_STRUCT_MOUNT_ATTR 1
+@@ -369,1 +369,1 @@
+-#define HAVE_STRUCT_STATX 0
++#define HAVE_STRUCT_STATX 1
+@@ -627,1 +627,1 @@
+-#define WANT_LINUX_STAT_H 0
++#define WANT_LINUX_STAT_H 1

@@ -1,0 +1,106 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+#
+# Translators:
+# Jannis Leidel <jannis@leidel.info>, 2014
+msgid ""
+msgstr ""
+"Project-Id-Version: django-constance\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2017-06-13 19:40+0530\n"
+"PO-Revision-Date: 2014-11-27 18:17+0000\n"
+"Last-Translator: Jannis Leidel <jannis@leidel.info>\n"
+"Language-Team: German (http://www.transifex.com/projects/p/django-constance/"
+"language/de/)\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: admin.py:113
+#, fuzzy, python-format
+#| msgid ""
+#| "Constance doesn't support config values of the type %(config_type)s. "
+#| "Please fix the value of '%(name)s'."
+msgid ""
+"Default value type must be equal to declared config parameter type. Please "
+"fix the default value of '%(name)s'."
+msgstr ""
+"Konstanze unterstützt die Konfigurationswerte vom Typ %(config_type)s nicht. "
+"Bitte den Ausgangswert von '%(name)s' ändern."
+
+#: admin.py:123
+#, python-format
+msgid ""
+"Constance doesn't support config values of the type %(config_type)s. Please "
+"fix the value of '%(name)s'."
+msgstr ""
+"Konstanze unterstützt die Konfigurationswerte vom Typ %(config_type)s nicht. "
+"Bitte den Ausgangswert von '%(name)s' ändern."
+
+#: admin.py:147
+msgid ""
+"The settings have been modified by someone else. Please reload the form and "
+"resubmit your changes."
+msgstr ""
+"Die Konfiguration wurde seit Öffnen dieser Seite verändert. Bitte die Seite "
+"neuladen und die Änderungen erneut vornehmen."
+
+#: admin.py:160
+msgid ""
+"CONSTANCE_CONFIG_FIELDSETS does not contain fields that exist in "
+"CONSTANCE_CONFIG."
+msgstr ""
+
+#: admin.py:224
+msgid "Live settings updated successfully."
+msgstr "Die Livekonfiguration wurde erfolgreich aktualisiert."
+
+#: admin.py:285
+msgid "config"
+msgstr "Konfiguration"
+
+#: apps.py:8
+msgid "Constance"
+msgstr "Konstanze"
+
+#: backends/database/models.py:19
+msgid "constance"
+msgstr "Konstanze"
+
+#: backends/database/models.py:20
+msgid "constances"
+msgstr "Konstanzes"
+
+#: management/commands/constance.py:30
+msgid "Get/Set In-database config settings handled by Constance"
+msgstr ""
+
+#: templates/admin/constance/change_list.html:75
+msgid "Save"
+msgstr "Sichern"
+
+#: templates/admin/constance/change_list.html:84
+msgid "Home"
+msgstr "Start"
+
+#: templates/admin/constance/includes/results_list.html:5
+msgid "Name"
+msgstr "Name"
+
+#: templates/admin/constance/includes/results_list.html:6
+msgid "Default"
+msgstr "Voreinstellung"
+
+#: templates/admin/constance/includes/results_list.html:7
+msgid "Value"
+msgstr "Wert"
+
+#: templates/admin/constance/includes/results_list.html:8
+msgid "Is modified"
+msgstr "Ist modifiziert"
+
+#~ msgid "Constance config"
+#~ msgstr "Constance Konfiguration"

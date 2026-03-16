@@ -1,0 +1,4 @@
+# Local definition 24: Satellite Channel Data
+
+unsigned[2] channelNumber : dump, can_be_missing;
+alias mars.channel = channelNumber;

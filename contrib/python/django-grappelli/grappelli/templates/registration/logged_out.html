@@ -1,0 +1,21 @@
+{% extends "admin/base_site.html" %}
+{% load i18n grp_tags %}
+
+{% block bodyclass %}grp-login{% endblock %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+	<div class="g-d-c g-d-10 g-centered">
+        <div class="grp-module grp-module-login">
+            <h1>
+                <span class="grp-admin-title"><a href="{% url 'admin:index' %}">{% if grappelli_admin_title %}{{ grappelli_admin_title }}{% else %}{% get_admin_title %}{% endif %}</a></span>
+                <span class="grp-current-page">{{ title }}</span>
+            </h1>
+            <div class="grp-module">
+                <div class="grp-row">
+                    <p class="grp-description"><a href="{% url 'admin:index' %}"><strong>{% trans 'Log in again' %}</strong></a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,125 @@
+--- contrib/python/jupyter-client/py2/jupyter_client/tests/test_client.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/tests/test_client.py	(working tree)
+@@ -9,1 +9,1 @@ pjoin = os.path.join
+-from ..manager import start_new_kernel
++from jupyter_client.manager import start_new_kernel
+--- contrib/python/jupyter-client/py2/jupyter_client/tests/test_connect.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/tests/test_connect.py	(working tree)
+@@ -15,6 +15,13 @@ from jupyter_client import connect, KernelClient
+ from jupyter_client.session import Session
+ from jupyter_client.connect import secure_write
+ 
++import pytest
++
++@pytest.fixture
++def cwd_is_home(monkeypatch):
++    monkeypatch.setenv('HOME', os.getcwd())
++    return os.getcwd()
++
+ 
+ class DummyConsoleApp(JupyterApp, JupyterConsoleApp):
+     def initialize(self, argv=[]):
+@@ -47,1 +54,1 @@ def test_write_connection_file():
+-def test_load_connection_file_session():
++def test_load_connection_file_session(cwd_is_home):
+@@ -64,1 +71,1 @@ def test_load_connection_file_session():
+-def test_load_connection_file_session_with_kn():
++def test_load_connection_file_session_with_kn(cwd_is_home):
+@@ -81,1 +88,1 @@ def test_load_connection_file_session_with_kn():
+-def test_app_load_connection_file():
++def test_app_load_connection_file(cwd_is_home):
+--- contrib/python/jupyter-client/py2/jupyter_client/tests/test_kernelapp.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/tests/test_kernelapp.py	(working tree)
+@@ -7,14 +7,14 @@ import sys
+ from tempfile import mkdtemp
+ import time
+ 
++from .utils import _JUPYTER_KERNEL_BIN
++
+ PY3 = sys.version_info[0] >= 3
+ 
+ def _launch(extra_env):
+     env = os.environ.copy()
+     env.update(extra_env)
+-    return Popen([sys.executable, '-c',
+-                  'from jupyter_client.kernelapp import main; main()'],
+-                 env=env, stderr=(PIPE if PY3 else None))
++    return Popen([_JUPYTER_KERNEL_BIN()], env=env, stderr=(PIPE if PY3 else None))
+ 
+ WAIT_TIME = 10
+ POLL_FREQ = 10
+--- contrib/python/jupyter-client/py2/jupyter_client/tests/test_kernelmanager.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/tests/test_kernelmanager.py	(working tree)
+@@ -16,1 +16,1 @@ from unittest import TestCase
+-from ..manager import start_new_kernel
++from jupyter_client.manager import start_new_kernel
+--- contrib/python/jupyter-client/py2/jupyter_client/tests/test_kernelspec.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/tests/test_kernelspec.py	(working tree)
+@@ -25,1 +25,1 @@ else:
+-from .utils import test_env
++from .utils import test_env, _JUPYTER_KERNELSPEC_BIN
+@@ -142,1 +142,1 @@ class KernelSpecTests(unittest.TestCase):
+-            [sys.executable, '-m', 'jupyter_client.kernelspecapp', 'remove', 'sample', '-f'],
++            [_JUPYTER_KERNELSPEC_BIN(), 'remove', 'sample', '-f'],
+--- contrib/python/jupyter-client/py2/jupyter_client/tests/test_localinterfaces.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/tests/test_localinterfaces.py	(working tree)
+@@ -5,1 +5,1 @@
+-from .. import localinterfaces
++from jupyter_client import localinterfaces
+--- contrib/python/jupyter-client/py2/jupyter_client/tests/test_multikernelmanager.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/tests/test_multikernelmanager.py	(working tree)
+@@ -5,1 +5,1 @@ import time
+-from ..localinterfaces import localhost
++from jupyter_client.localinterfaces import localhost
+--- contrib/python/jupyter-client/py2/jupyter_client/tests/test_session.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/tests/test_session.py	(working tree)
+@@ -311,1 +311,1 @@ class TestSession(SessionTestCase):
+-            unpack=lambda buf: msgpack.unpackb(buf, encoding='utf8'),
++            unpack=msgpack.unpackb,
+--- contrib/python/jupyter-client/py2/jupyter_client/tests/utils.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/tests/utils.py	(working tree)
+@@ -13,13 +13,22 @@ import pytest
+ 
+ from ipython_genutils.tempdir import TemporaryDirectory
+ 
++JUPYTER_KERNEL_BIN_PATH = "contrib/python/jupyter-client/py2/bin/jupyter_kernel/jupyter-kernel"
++def _JUPYTER_KERNEL_BIN():
++    import yatest
++    return yatest.common.binary_path(JUPYTER_KERNEL_BIN_PATH)
++
++JUPYTER_KERNELSPEC_BIN_PATH = "contrib/python/jupyter-client/py2/bin/jupyter_kernelspec/jupyter-kernelspec"
++def _JUPYTER_KERNELSPEC_BIN():
++    import yatest
++    return yatest.common.binary_path(JUPYTER_KERNELSPEC_BIN_PATH)
+ 
+ skip_win32 = pytest.mark.skipif(sys.platform.startswith('win'), reason="Windows")
+ 
+ 
+ class test_env(object):
+     """Set Jupyter path variables to a temporary directory
+-    
++
+     Useful as a context manager or with explicit start/stop
+     """
+     def start(self):
+--- contrib/python/jupyter-client/py2/jupyter_client/kernelspecapp.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/kernelspecapp.py	(working tree)
+@@ -272,6 +272,7 @@ class KernelSpecApp(Application):
+         else:
+             return self.subapp.start()
+ 
++main = KernelSpecApp.launch_instance
+ 
+ if __name__ == '__main__':
+     KernelSpecApp.launch_instance()
+--- contrib/python/jupyter-client/py2/jupyter_client/launcher.py	(index)
++++ contrib/python/jupyter-client/py2/jupyter_client/launcher.py	(working tree)
+@@ -134,6 +134,8 @@ def launch_kernel(cmd, stdin=None, stdout=None, stderr=None, env=None,
+         if not independent:
+             env['JPY_PARENT_PID'] = str(os.getpid())
+ 
++    env['Y_PYTHON_ENTRY_POINT'] = ':main'
++
+     try:
+         proc = Popen(cmd, **kwargs)
+     except Exception as exc:

@@ -1,0 +1,55 @@
+--- contrib/libs/opencv/modules/objdetect/src/aruco/apriltag/apriltag_quad_thresh.cpp	(index)
++++ contrib/libs/opencv/modules/objdetect/src/aruco/apriltag/apriltag_quad_thresh.cpp	(working tree)
+@@ -21,4 +21,4 @@
+ #ifdef APRIL_DEBUG
+-    #include "opencv2/imgcodecs.hpp"
+-    #include <opencv2/imgproc.hpp>
++    #error #include "opencv2/imgcodecs.hpp"
++    #error #include <opencv2/imgproc.hpp>
+ #endif
+--- contrib/libs/opencv/modules/features2d/src/blobdetector.cpp	(index)
++++ contrib/libs/opencv/modules/features2d/src/blobdetector.cpp	(working tree)
+@@ -50,7 +50,7 @@
+ //#define DEBUG_BLOB_DETECTOR
+ 
+ #ifdef DEBUG_BLOB_DETECTOR
+-#include "opencv2/highgui.hpp"
++#error #include "opencv2/highgui.hpp"
+ #endif
+ 
+ namespace cv
+--- contrib/libs/opencv/modules/calib3d/src/calibinit.cpp	(index)
++++ contrib/libs/opencv/modules/calib3d/src/calibinit.cpp	(working tree)
+@@ -86,8 +86,8 @@
+ #include <opencv2/core/utils/logger.hpp>
+ 
+ #ifdef DEBUG_CHESSBOARD
+-#include "opencv2/highgui.hpp"
+-#include "opencv2/imgproc.hpp"
++#error #include "opencv2/highgui.hpp"
++#error #include "opencv2/imgproc.hpp"
+ #define DPRINTF(...)  CV_LOG_INFO(NULL, cv::format("calib3d: " __VA_ARGS__))
+ #else
+ #define DPRINTF(...)
+--- contrib/libs/opencv/modules/calib3d/src/chessboard.cpp	(index)
++++ contrib/libs/opencv/modules/calib3d/src/chessboard.cpp	(working tree)
+@@ -9,7 +9,7 @@
+ 
+ //#define CV_DETECTORS_CHESSBOARD_DEBUG
+ #ifdef CV_DETECTORS_CHESSBOARD_DEBUG
+-#include <opencv2/highgui.hpp>
++#error #include <opencv2/highgui.hpp>
+ static cv::Mat debug_image;
+ #endif
+ 
+--- contrib/libs/opencv/modules/calib3d/src/circlesgrid.cpp	(index)
++++ contrib/libs/opencv/modules/calib3d/src/circlesgrid.cpp	(working tree)
+@@ -51,7 +51,7 @@
+ #  include <iostream>
+ #  include "opencv2/opencv_modules.hpp"
+ #  ifdef HAVE_OPENCV_HIGHGUI
+-#    include "opencv2/highgui.hpp"
++#    error #include "opencv2/highgui.hpp"
+ #  else
+ #    undef DEBUG_CIRCLES
+ #  endif

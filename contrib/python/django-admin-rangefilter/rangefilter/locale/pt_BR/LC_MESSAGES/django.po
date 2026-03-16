@@ -1,0 +1,58 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+# Translators:
+# Dmitriy Sokolov <silentsokolov@gmail.com>, 2019
+# Rui Mineiro <mineiro.rui@gmail.com>, 2020
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2022-09-25 09:48+0300\n"
+"PO-Revision-Date: 2019-01-31 09:16+0000\n"
+"Last-Translator: Rui Mineiro <mineiro.rui@gmail.com>, 2020\n"
+"Language-Team: Portuguese (Brazil) (https://www.transifex.com/django-admin-"
+"rangefilter/teams/95736/pt_BR/)\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: apps.py:16
+msgid "Range Filter"
+msgstr "Range Filter"
+
+#: filters.py:210 filters.py:246
+msgid "From date"
+msgstr "Data inicial"
+
+#: filters.py:220 filters.py:256
+msgid "To date"
+msgstr "Data final"
+
+#: filters.py:351
+msgid "From"
+msgstr "Inicial"
+
+#: filters.py:361
+msgid "To"
+msgstr "Final"
+
+#: templates/rangefilter/date_filter.html:139
+#: templates/rangefilter/date_filter_1_8.html:90
+#: templates/rangefilter/date_filter_csp.html:138
+#: templates/rangefilter/numeric_filter.html:55
+msgid "Search"
+msgstr "Pesquisar"
+
+#: templates/rangefilter/date_filter.html:140
+#: templates/rangefilter/date_filter_1_8.html:91
+#: templates/rangefilter/date_filter_csp.html:139
+#: templates/rangefilter/numeric_filter.html:56
+msgid "Reset"
+msgstr "Limpar"

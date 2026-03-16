@@ -1,0 +1,7 @@
+requirements:
+  - contrib/libs/librdkafka
+mark_as_cython_c:
+  - aiokafka/record/_crecords/cutil.pyx
+  - aiokafka/record/_crecords/default_records.pyx
+  - aiokafka/record/_crecords/legacy_records.pyx
+  - aiokafka/record/_crecords/memory_records.pyx

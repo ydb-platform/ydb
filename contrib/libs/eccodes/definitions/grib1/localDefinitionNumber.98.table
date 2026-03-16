@@ -1,0 +1,44 @@
+1 1  MARS labelling or ensemble forecast data
+2 2  Cluster means and standard deviations
+3 3  Satellite image data
+4 4  Ocean model data
+5 5  Forecast probability data
+6 6  Surface temperature data
+7 7  Sensitivity data
+8 8  ECMWF reanalysis data
+9 9  Singular vectors and ensemble perturbations
+10 10  EPS tubes
+11 11  Supplementary data used by the analysis
+12 12  Seasonal forecast monthly mean data for lagged systems
+13 13  Wave 2D spectra direction and frequency
+14 14  Brightness temperature
+15 15  Seasonal forecast data
+16 16  Seasonal forecast monthly mean data
+17 17  Surface temperature or sea-ice data
+18 18  Multianalysis ensemble data
+19 19  Extreme forecast index data
+20 20  4D variational increments
+21 21  Sensitive area predictions
+22 22  Coupled atmospheric, wave and ocean models (with hindcast support)
+23 23  Coupled atmospheric, wave and ocean means (with hindcast support)
+24 24  Satellite image simulation
+25 25  4DVar model errors
+26 26  MARS labelling or ensemble forecast data (with hindcast support)
+27 27  Forecasting Systems with Variable Resolution (Obsolete)
+28 28  COSMO local area EPS
+29 29  COSMO clustering information
+30 30  Forecasting Systems with Variable Resolution
+31 31  EUROSIP products
+32 32  Cluster Scenarios
+35 35  Elaboration of ocean model products
+36 36  MARS labelling for long window 4Dvar system
+37 37  Brightness temperature for long window 4Dvar system
+38 38  4D variational increments for long window 4Dvar system
+39 39  4DVar model errors for long window 4Dvar system
+40 40  MARS labeling with domain and model (for LAM)
+49 49  4DVar model errors for ELDA
+50 50  Member State data
+190 190 Multiple ECMWF local definitions
+191 191  Free format data descriptor data
+192 192  Multiple ECMWF local definitions
+

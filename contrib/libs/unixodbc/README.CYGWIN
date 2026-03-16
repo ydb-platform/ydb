@@ -1,0 +1,25 @@
+To build unixODBC on cygwin, all you need to do is to rerun the autoconf
+tools to create versions that seem to play on windows, then build as normal.
+
+Of course to do this you need to have installed the Cygwin development 
+packages.
+
+So:
+
+	aclocal
+	automake --add-missing
+	automake
+	autoconf
+	libtoolize --copy --ltdl --force
+
+Then you can run configure as normal
+
+	./configure --enable-gui=no
+	make
+	make install
+
+At least that seems to work when I tried it... If you find problems 
+just let me know.
+
+--
+Nick Gorham (nick.gorham@easysoft.com)

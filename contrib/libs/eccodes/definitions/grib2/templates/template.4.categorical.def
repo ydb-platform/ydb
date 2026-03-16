@@ -1,0 +1,19 @@
+# (C) Copyright 2005- ECMWF.
+
+# Total number of forecast probabilities
+unsigned[1] numberOfCategories : dump;
+
+# Categories
+categories list(numberOfCategories) {
+  unsigned[1] codeFigure : dump;
+  codetable[1] categoryType ('4.91.table',masterDir,localDir): dump;
+  unsigned[1] scaleFactorOfLowerLimit : can_be_missing,dump ;
+  unsigned[4] scaledValueOfLowerLimit : can_be_missing,dump ;
+  unsigned[1] scaleFactorOfUpperLimit : can_be_missing,dump;
+  unsigned[4] scaledValueOfUpperLimit : can_be_missing,dump;
+
+  alias scaleFactorOfFirstLimit = scaleFactorOfLowerLimit;
+  alias scaledValueOfFirstLimit = scaledValueOfLowerLimit;
+  alias scaleFactorOfSecondLimit = scaleFactorOfUpperLimit;
+  alias scaledValueOfSecondLimit = scaledValueOfUpperLimit;
+}

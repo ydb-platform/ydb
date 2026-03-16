@@ -1,0 +1,19 @@
+Some notes on building UnixODBC on Microsoft Interix
+
+First use the modified configure and config.guess
+included in the Interix directory, copy them up into the main 
+directory.
+
+Then build with the following line
+
+CFLAGS="-D_ALL_SOURCE -I/usr/local/include" CPPFLAGS="-D_ALL_SOURCE 
+-I/usr/local/include" LDFLAGS="-L/usr/local/lib" ./configure
+
+After running configure, copy libtool from the Interix directory
+into the build directory
+
+Thanks to the MS group for supplying this info.
+
+Thats all for now.
+
+Nick.

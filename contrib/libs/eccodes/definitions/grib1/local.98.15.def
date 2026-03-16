@@ -1,0 +1,40 @@
+# (C) Copyright 2005- ECMWF.
+# Seasonal forecast data
+
+# used in local definition 13
+constant GRIBEXSection1Problem = 60 - section1Length ;
+
+transient localFlag=1 : hidden ;
+
+template mars_labeling "grib1/mars_labeling.def";
+#1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=15;
+if (stepType is "instant") {
+  alias productDefinitionTemplateNumber=one;
+} else {
+  alias productDefinitionTemplateNumber=eleven;
+}
+
+unsigned[2] perturbationNumber : dump ;
+alias number=perturbationNumber;
+
+unsigned[2] systemNumber : dump ;
+
+unsigned[2] methodNumber : dump ;
+
+unsigned[2] numberOfForecastsInEnsemble : dump ;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+# spareSetToZero
+pad padding_loc15_1(3);
+
+alias origin = centre;
+alias number = perturbationNumber;
+alias total=numberOfForecastsInEnsemble;
+alias system = systemNumber;
+alias method = methodNumber;
+
+alias local.perturbationNumber=perturbationNumber;
+alias local.systemNumber=systemNumber;
+alias local.methodNumber=methodNumber;

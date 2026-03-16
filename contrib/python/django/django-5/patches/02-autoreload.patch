@@ -1,0 +1,11 @@
+--- django-5/django/utils/autoreload.py
++++ django-5/django/utils/autoreload.py
+@@ -268,7 +268,7 @@ def trigger_reload(filename):
+
+
+ def restart_with_reloader():
+-    new_environ = {**os.environ, DJANGO_AUTORELOAD_ENV: "true"}
++    new_environ = {**os.environ, DJANGO_AUTORELOAD_ENV: "true", "Y_PYTHON_ENTRY_POINT": ":main"}
+     args = get_child_arguments()
+     while True:
+         p = subprocess.run(args, env=new_environ, close_fds=False)

@@ -1,0 +1,20 @@
+schemas:
+  Model:
+    type: object
+    required:
+      - id
+    properties:
+      id:
+        type: integer
+        format: int32
+  Error:
+    type: object
+    required:
+      - code
+      - message
+    properties:
+      code:
+        type: integer
+        format: int32
+      message:
+        type: string

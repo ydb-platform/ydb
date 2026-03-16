@@ -1,0 +1,4 @@
+copy:
+  - module.c
+  - isocalendar.[ch]
+  - timezone.[ch]

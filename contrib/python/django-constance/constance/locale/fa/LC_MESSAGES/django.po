@@ -1,0 +1,104 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2017-06-13 19:40+0530\n"
+"PO-Revision-Date: 2020-09-24 17:33+0330\n"
+"Language: fa\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Last-Translator: Mehdi Namaki <mavenium@gmail.com>\n"
+"Language-Team: \n"
+"X-Generator: Poedit 2.3\n"
+
+#: admin.py:113
+#, python-format
+msgid ""
+"Default value type must be equal to declared config parameter type. Please "
+"fix the default value of '%(name)s'."
+msgstr ""
+"نوع مقدار پیش فرض باید برابر با نوع پارامتر پیکربندی اعلام شده باشد. لطفاً "
+"مقدار پیش فرض '%(name)s' را اصلاح کنید."
+
+#: admin.py:123
+#, python-format
+msgid ""
+"Constance doesn't support config values of the type %(config_type)s. Please "
+"fix the value of '%(name)s'."
+msgstr ""
+"تنظیمات مقادیر پیکربندی از نوع %(config_type)s را پشتیبانی نمی کند. لطفاً "
+"مقدار '%(name)s' را اصلاح کنید."
+
+#: admin.py:147
+msgid ""
+"The settings have been modified by someone else. Please reload the form and "
+"resubmit your changes."
+msgstr ""
+"تنظیمات توسط شخص دیگری تغییر یافته است. لطفاً فرم را بارگیری کنید و تغییرات "
+"خود را دوباره ارسال کنید."
+
+#: admin.py:160
+msgid ""
+"CONSTANCE_CONFIG_FIELDSETS does not contain fields that exist in "
+"CONSTANCE_CONFIG."
+msgstr "CONSTANCE_CONFIG_FIELDSETS شامل فیلدهای CONSTANCE_CONFIG نیست."
+
+#: admin.py:224
+msgid "Live settings updated successfully."
+msgstr "تنظیمات زنده با موفقیت به روز شد."
+
+#: admin.py:285
+msgid "config"
+msgstr "پیکربندی"
+
+#: apps.py:8
+msgid "Constance"
+msgstr "تنظیمات"
+
+#: backends/database/models.py:19
+msgid "constance"
+msgstr "تنظیمات"
+
+#: backends/database/models.py:20
+msgid "constances"
+msgstr "تنظیمات"
+
+#: management/commands/constance.py:30
+msgid "Get/Set In-database config settings handled by Constance"
+msgstr ""
+"دریافت/تنظیم تنظیمات پیکربندی درون پایگاه داده که توسط تنظیمات بکار برده می "
+"شود"
+
+#: templates/admin/constance/change_list.html:75
+msgid "Save"
+msgstr "ذخیره"
+
+#: templates/admin/constance/change_list.html:84
+msgid "Home"
+msgstr "خانه"
+
+#: templates/admin/constance/includes/results_list.html:5
+msgid "Name"
+msgstr "نام"
+
+#: templates/admin/constance/includes/results_list.html:6
+msgid "Default"
+msgstr "پیش‌فرض"
+
+#: templates/admin/constance/includes/results_list.html:7
+msgid "Value"
+msgstr "مقدار"
+
+#: templates/admin/constance/includes/results_list.html:8
+msgid "Is modified"
+msgstr "تغییر یافته"
+
+#: templates/admin/constance/includes/results_list.html:44
+msgid "Reset to default"
+msgstr "بازنشانی به پیش‌فرض"

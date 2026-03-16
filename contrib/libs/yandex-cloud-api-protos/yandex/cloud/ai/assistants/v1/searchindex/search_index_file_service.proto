@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.assistants.v1.searchindex;
+
+import "yandex/cloud/ai/assistants/v1/searchindex/search_index_file.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/assistants/v1/searchindex;searchindex";
+option java_package = "yandex.cloud.api.ai.assistants.v1.searchindex";
+
+// SearchIndexFileService provides operations for managing files within search indexes.
+service SearchIndexFileService {
+  // Creates multiple files within a search index in [asynchronous mode](/docs/foundation-models/concepts/#working-mode).
+  rpc BatchCreate(BatchCreateSearchIndexFileRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "BatchCreateSearchIndexFileResponse"
+    };
+    option (google.api.http) = {post: "/assistants/v1/searchIndexFile:batchCreate", body: "*"};
+  }
+
+  // Retrieves details of a specific file that has been indexed within a search index.
+  rpc Get(GetSearchIndexFileRequest) returns (SearchIndexFile) {
+    option (google.api.http) = {get: "/assistants/v1/searchIndexFile/{search_index_id}/{file_id}"};
+  }
+
+  // List files that are indexed within a specific search index.
+  rpc List(ListSearchIndexFilesRequest) returns (ListSearchIndexFilesResponse) {
+    option (google.api.http) = {get: "/assistants/v1/searchIndexFile/{search_index_id}"};
+  }
+}
+
+// Request message for creating multiple files within a search index.
+message BatchCreateSearchIndexFileRequest {
+  repeated string file_ids = 1 [(size) = ">0"];
+
+  string search_index_id = 2 [(required) = true];
+}
+
+// Response message for the BatchCreate operation.
+message BatchCreateSearchIndexFileResponse {
+  repeated SearchIndexFile files = 1;
+}
+
+// Request message for retrieving a file from a search index.
+message GetSearchIndexFileRequest {
+  // ID of the file to retrieve.
+  string file_id = 1 [(required) = true];
+
+  // ID of the search index that contains the file.
+  string search_index_id = 2 [(required) = true];
+}
+
+// Request message for listing files in a specific search index.
+message ListSearchIndexFilesRequest {
+  // ID of the search index whose files will be listed.
+  string search_index_id = 1 [(required) = true];
+
+  // Maximum number of files to return per page.
+  int64 page_size = 2;
+
+  // Token to retrieve the next page of results.
+  string page_token = 3;
+}
+
+// Response message for the list operation.
+message ListSearchIndexFilesResponse {
+  // List of files in the specified search index.
+  repeated SearchIndexFile files = 1;
+
+  // Token to retrieve the next page of results.
+  string next_page_token = 2;
+}

@@ -1,0 +1,134 @@
+# Arabic translation for django-simple-history
+# Copyright (C) 2022
+# This file is distributed under the same license as the django-simple-history package.
+# Ibrahim Hamed K Aldhaheri <Ibrahim-Aldhaheri@github.com>, 2022.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-simple-history\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2022-11-08 11:30+0300\n"
+"PO-Revision-Date: 2022-11-08 13:54+0300\n"
+"Last-Translator: Ibrahim Hamed K Aldhaheri <Ibrahim-Aldhaheri@github.com>\n"
+"Language-Team: Arabic <django-commons@github.com>\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 "
+"&& n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
+"X-Generator: Poedit 2.4.2\n"
+
+#: simple_history/admin.py:102
+#, python-format
+msgid "View history: %s"
+msgstr "عرض سجل تغيرات: %s"
+
+#: simple_history/admin.py:104
+#, python-format
+msgid "Change history: %s"
+msgstr "تعديل سجل تغيرات: %s"
+
+#: simple_history/admin.py:110
+#, python-format
+msgid "The %(name)s \"%(obj)s\" was changed successfully."
+msgstr "تم تعديل %(name)s \"%(obj)s\" بنجاح."
+
+#: simple_history/admin.py:116
+msgid "You may edit it again below"
+msgstr "يمكنك تعديله مجددا ادناه"
+
+#: simple_history/admin.py:216
+#, python-format
+msgid "View %s"
+msgstr "عرض %s"
+
+#: simple_history/admin.py:218
+#, python-format
+msgid "Revert %s"
+msgstr "استرجاع %s"
+
+#: simple_history/models.py:552
+msgid "Created"
+msgstr "تم انشاءه"
+
+#: simple_history/models.py:552
+msgid "Changed"
+msgstr "تغيير"
+
+#: simple_history/models.py:552
+msgid "Deleted"
+msgstr "تمت إزالته"
+
+#: simple_history/templates/simple_history/object_history.html:11
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr "إختر تاريخ من القائمة ادناه."
+
+#: simple_history/templates/simple_history/object_history.html:16
+msgid "This object doesn't have a change history."
+msgstr "هذا العنصر لا يملك سجل تغييرات."
+
+#: simple_history/templates/simple_history/object_history_form.html:7
+msgid "Home"
+msgstr "الرئيسية"
+
+#: simple_history/templates/simple_history/object_history_form.html:11
+msgid "History"
+msgstr "سجل التغيرات"
+
+#: simple_history/templates/simple_history/object_history_form.html:12
+#, python-format
+msgid "View %(verbose_name)s"
+msgstr "عرض %(verbose_name)s"
+
+#: simple_history/templates/simple_history/object_history_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "استرجاع %(verbose_name)s"
+
+#: simple_history/templates/simple_history/object_history_form.html:25
+msgid ""
+"Press the 'Revert' button below to revert to this version of the object."
+msgstr "اضغط على زر 'استرجاع' ادناه للاسترجاع لهذه النسخة من العنصر."
+
+#: simple_history/templates/simple_history/object_history_form.html:25
+msgid "Press the 'Change History' button below to edit the history."
+msgstr "اضغط على زر 'تعديل سجل التغيرات' ادناه لتعديل التاريخ."
+
+#: simple_history/templates/simple_history/object_history_list.html:9
+msgid "Object"
+msgstr "عنصر"
+
+#: simple_history/templates/simple_history/object_history_list.html:13
+msgid "Date/time"
+msgstr "التاريخ/الوقت"
+
+#: simple_history/templates/simple_history/object_history_list.html:14
+msgid "Comment"
+msgstr "تعليق"
+
+#: simple_history/templates/simple_history/object_history_list.html:15
+msgid "Changed by"
+msgstr "تغير من قبل"
+
+#: simple_history/templates/simple_history/object_history_list.html:16
+msgid "Change reason"
+msgstr "سبب التغير"
+
+#: simple_history/templates/simple_history/object_history_list.html:42
+msgid "None"
+msgstr "فارغ"
+
+#: simple_history/templates/simple_history/submit_line.html:4
+msgid "Revert"
+msgstr "استرجاع"
+
+#: simple_history/templates/simple_history/submit_line.html:6
+msgid "Change History"
+msgstr "تعديل سجل التغيرات"
+
+#: simple_history/templates/simple_history/submit_line.html:7
+msgid "Close"
+msgstr "إغلاق"

@@ -1,0 +1,12 @@
+--- contrib/python/bleach/py3/tests/test_clean.py	(index)
++++ contrib/python/bleach/py3/tests/test_clean.py	(working tree)
+@@ -1112,7 +1112,8 @@ def get_ids_and_tests():
+     :returns: list of ``(id, filedata)`` tuples
+ 
+     """
+-    datadir = os.path.join(os.path.dirname(__file__), "data")
++    import yatest.common
++    datadir = yatest.common.test_source_path("data")
+     tests = [
+         os.path.join(datadir, fn) for fn in os.listdir(datadir) if fn.endswith(".test")
+     ]

@@ -1,0 +1,9 @@
+# Code table 4.6 - Type of ensemble forecast
+0 0 Unperturbed high-resolution control forecast
+1 1 Unperturbed low-resolution control forecast
+2 2 Negatively perturbed forecast
+3 3 Positively perturbed forecast
+4 4 Multi-model forecast
+# 5-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

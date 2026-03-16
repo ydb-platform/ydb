@@ -1,0 +1,19 @@
+from __future__ import annotations
+
+from rapidfuzz._feature_detector import supports, AVX2
+
+import pytest
+
+SIMD_MODULES = [
+    'rapidfuzz.distance.metrics_cpp',
+    'rapidfuzz.fuzz_cpp',
+]
+
+@pytest.mark.parametrize('module', SIMD_MODULES)
+def test_without_simd(module):
+    __import__(module)
+
+@pytest.mark.parametrize('module', SIMD_MODULES)
+@pytest.mark.skipif(not supports(AVX2), reason="AVX2 is not supported")
+def test_avx2(module):
+    __import__(module+'_avx2')

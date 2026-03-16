@@ -1,0 +1,162 @@
+Metadata-Version: 2.1
+Name: dotmap
+Version: 1.3.30
+Summary: ordered, dynamically-expandable dot-access dictionary
+Home-page: https://github.com/drgrib/dotmap
+Author: Chris Redford
+Author-email: credford@gmail.com
+License: MIT
+Download-URL: https://github.com/drgrib/dotmap/tarball/1.0
+Keywords: dict,dot,map,order,ordered,ordereddict,access,dynamic
+Platform: UNKNOWN
+Description-Content-Type: text/markdown
+
+# DotMap
+
+[![Build Status](https://travis-ci.com/drgrib/dotmap.svg?branch=master)](https://travis-ci.com/drgrib/dotmap)
+
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/donate?business=N2GLXLS5KBFBY&item_name=Chris+Redford&currency_code=USD)
+
+# Install
+
+```
+pip3 install dotmap
+```
+
+## Upgrade
+
+Get updates for current installation
+
+```
+pip3 install --upgrade dotmap
+```
+
+# Features
+
+`DotMap` is a dot-access `dict` subclass that
+
+-   has dynamic hierarchy creation (autovivification)
+-   can be initialized with keys
+-   easily initializes from `dict`
+-   easily converts to `dict`
+-   is ordered by insertion
+
+The key feature is exactly what you want: dot-access
+
+```python
+from dotmap import DotMap
+m = DotMap()
+m.name = 'Joe'
+print('Hello ' + m.name)
+# Hello Joe
+```
+
+However, `DotMap` is a `dict` and you can treat it like a `dict` as needed
+
+```python
+print(m['name'])
+# Joe
+m.name += ' Smith'
+m['name'] += ' Jr'
+print(m.name)
+# Joe Smith Jr
+```
+
+It also has fast, automatic hierarchy (which can be deactivated by initializing with `DotMap(_dynamic=False)`)
+
+```python
+m = DotMap()
+m.people.steve.age = 31
+```
+
+And key initialization
+
+```python
+m = DotMap(a=1, b=2)
+```
+
+You can initialize it from `dict` and convert it to `dict`
+
+```python
+d = {'a':1, 'b':2}
+
+m = DotMap(d)
+print(m)
+# DotMap(a=1, b=2)
+
+print(m.toDict())
+# {'a': 1, 'b': 2}
+```
+
+And it has iteration that is ordered by insertion
+
+```python
+m = DotMap()
+
+m.people.john.age = 32
+m.people.john.job = 'programmer'
+m.people.mary.age = 24
+m.people.mary.job = 'designer'
+m.people.dave.age = 55
+m.people.dave.job = 'manager'
+
+for k, v in m.people.items():
+	print(k, v)
+print
+
+# john DotMap(age=32, job='programmer')
+# mary DotMap(age=24, job='designer')
+# dave DotMap(age=55, job='manager')
+```
+
+It also has automatic counter initialization
+
+```python
+m = DotMap()
+for i in range(7):
+	m.counter += 1
+print(m.counter)
+# 7
+```
+
+And automatic addition initializations of any other type
+
+```python
+m = DotMap()
+m.quote += 'lions'
+m.quote += ' and tigers'
+m.quote += ' and bears'
+m.quote += ', oh my'
+print(m.quote)
+# lions and tigers and bears, oh my
+```
+
+There is also built-in `pprint` as `dict` or `json` for debugging a large `DotMap`
+
+```python
+m.pprint()
+# {'people': {'dave': {'age': 55, 'job': 'manager'},
+#             'john': {'age': 32, 'job': 'programmer'},
+#             'mary': {'age': 24, 'job': 'designer'}}}
+m.pprint(pformat='json')
+# {
+#     "people": {
+#         "dave": {
+#	      "age": 55,
+#	      "job": "manager"
+# 	  },
+# 	  "john": {
+#	      "age": 32,
+#	      "job": "programmer"
+# 	  },
+# 	  "mary": {
+#	      "age": 24,
+#	      "job": "designer"
+# 	  }
+#     }
+# }
+```
+
+And many other features involving dots and dictionaries that will be immediately intuitive when used.
+
+

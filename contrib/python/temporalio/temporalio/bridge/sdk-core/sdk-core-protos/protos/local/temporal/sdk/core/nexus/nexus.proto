@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package coresdk.nexus;
+option ruby_package = "Temporalio::Internal::Bridge::Api::Nexus";
+
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/api/nexus/v1/message.proto";
+import "temporal/api/workflowservice/v1/request_response.proto";
+import "temporal/sdk/core/common/common.proto";
+
+// Used by core to resolve nexus operations.
+message NexusOperationResult {
+    oneof status {
+        temporal.api.common.v1.Payload completed = 1;
+        temporal.api.failure.v1.Failure failed = 2;
+        temporal.api.failure.v1.Failure cancelled = 3;
+        temporal.api.failure.v1.Failure timed_out = 4;
+    }
+}
+
+// A response to a Nexus task
+message NexusTaskCompletion {
+    // The unique identifier for this task provided in the poll response
+    bytes task_token = 1;
+    oneof status {
+        // The handler completed (successfully or not). Note that the response kind must match the
+        // request kind (start or cancel).
+        temporal.api.nexus.v1.Response completed = 2;
+        // The handler could not complete the request for some reason.
+        temporal.api.nexus.v1.HandlerError error = 3;
+        // The lang SDK acknowledges that it is responding to a `CancelNexusTask` and thus the
+        // response is irrelevant. This is not the only way to respond to a cancel, the other
+        // variants can still be used, but this variant should be used when the handler was aborted
+        // by cancellation.
+        bool ack_cancel = 4;
+    }
+}
+
+message NexusTask {
+    oneof variant {
+        // A nexus task from server
+        temporal.api.workflowservice.v1.PollNexusTaskQueueResponse task = 1;
+        // A request by Core to notify an in-progress operation handler that it should cancel. This
+        // is distinct from a `CancelOperationRequest` from the server, which results from the user
+        // requesting the cancellation of an operation. Handling this variant should result in
+        // something like cancelling a cancellation token given to the user's operation handler.
+        //
+        // These do not count as a separate task for the purposes of completing all issued tasks,
+        // but rather count as a sort of modification to the already-issued task which is being
+        // cancelled.
+        //
+        // EX: Core knows the nexus operation has timed out, and it does not make sense for the
+        // user's operation handler to continue doing work.
+        CancelNexusTask cancel_task = 2;
+    }
+}
+
+message CancelNexusTask {
+    // The task token from the PollNexusTaskQueueResponse
+    bytes task_token = 1;
+    // Why Core is asking for this operation to be cancelled
+    NexusTaskCancelReason reason = 2;
+}
+
+enum NexusTaskCancelReason {
+    // The nexus task is known to have timed out
+    TIMED_OUT = 0;
+    // The worker is shutting down
+    WORKER_SHUTDOWN = 1;
+}
+
+// Controls at which point to report back to lang when a nexus operation is cancelled
+enum NexusOperationCancellationType {
+    // Wait for operation cancellation completion. Default.
+    WAIT_CANCELLATION_COMPLETED = 0;
+    // Do not request cancellation of the nexus operation if already scheduled
+    ABANDON = 1;
+
+    // Initiate a cancellation request for the Nexus operation and immediately report cancellation
+    // to the caller. Note that it doesn't guarantee that cancellation is delivered to the operation if calling workflow exits before the delivery is done.
+    // If you want to ensure that cancellation is delivered to the operation, use WAIT_CANCELLATION_REQUESTED.
+    TRY_CANCEL = 2;
+    // Request cancellation of the operation and wait for confirmation that the request was received.
+    WAIT_CANCELLATION_REQUESTED = 3;
+}

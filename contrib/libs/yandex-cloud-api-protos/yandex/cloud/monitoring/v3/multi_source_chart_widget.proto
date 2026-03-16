@@ -1,0 +1,567 @@
+syntax = "proto3";
+
+package yandex.cloud.monitoring.v3;
+
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/monitoring/v3/downsampling.proto";
+import "yandex/cloud/monitoring/v3/sort_order.proto";
+import "yandex/cloud/monitoring/v3/unit_format.proto";
+import "yandex/cloud/monitoring/v3/thresholds.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/monitoring/v3;monitoring";
+option java_package = "yandex.cloud.api.monitoring.v3";
+
+// Multi-source chart widget.
+message MultiSourceChartWidget {
+    // Target settings.
+    message Target {
+        message MonitoringTarget {
+            // Required. Data source ID.
+            string data_source_id = 1;
+
+            // Required. Query.
+            string query = 2;
+
+            // Text mode.
+            bool text_mode = 3;
+
+            // Checks that target is visible or invisible.
+            bool hidden = 4;
+
+            // Name of the query.
+            string name = 5;
+        }
+
+        message PrometheusTarget {
+            // Required. Data source ID.
+            string data_source_id = 1;
+
+            // Required. Workspace ID.
+            string workspace_id = 2;
+
+            // Required. Query.
+            string query = 3;
+
+            // Text mode.
+            bool text_mode = 4;
+
+            // Checks that target is visible or invisible.
+            bool hidden = 5;
+
+            // Name of the query.
+            string name = 6;
+
+            // Minimal step as raw string.
+            string step = 7;
+        }
+
+        oneof target {
+            // Monitoring target.
+            MonitoringTarget monitoring_target = 1;
+
+            // Prometheus target.
+            PrometheusTarget prometheus_target = 2;
+        }
+    }
+
+    // Data source settings.
+    message DataSource {
+        message MonitoringDataSource {
+            // Required. Data source ID.
+            string id = 1;
+
+            // Required. Downsampling settings.
+            Downsampling downsampling = 2;
+        }
+
+        message PrometheusDataSource {
+            // Required. Data source ID.
+            string id = 1;
+
+            // Required. Grid step in milliseconds.
+            int64 step = 2;
+        }
+
+        oneof data_source {
+            // Monitoring data source.
+            MonitoringDataSource monitoring_data_source = 1;
+
+            // Prometheus data source.
+            PrometheusDataSource prometheus_data_source = 2;
+        }
+    }
+
+    // Visualization settings.
+    message VisualizationSettings {
+        // Chart visualization type.
+        enum VisualizationType {
+            // Not specified (line by default).
+            VISUALIZATION_TYPE_UNSPECIFIED = 0;
+
+            // Line chart.
+            VISUALIZATION_TYPE_LINE = 1;
+
+            // Stack chart.
+            VISUALIZATION_TYPE_STACK = 2;
+
+            // Points as columns chart.
+            VISUALIZATION_TYPE_COLUMN = 3;
+
+            // Points.
+            VISUALIZATION_TYPE_POINTS = 4;
+
+            // Pie aggregation chart.
+            VISUALIZATION_TYPE_PIE = 5;
+
+            // Bars aggregation chart.
+            VISUALIZATION_TYPE_BARS = 6;
+
+            // Distribution aggregation chart.
+            VISUALIZATION_TYPE_DISTRIBUTION = 7;
+
+            // Heatmap aggregation chart.
+            VISUALIZATION_TYPE_HEATMAP = 8;
+        }
+
+        enum Interpolate {
+            // Not specified (linear by default).
+            INTERPOLATE_UNSPECIFIED = 0;
+
+            // Linear.
+            INTERPOLATE_LINEAR = 1;
+
+            // Left.
+            INTERPOLATE_LEFT = 2;
+
+            // Right.
+            INTERPOLATE_RIGHT = 3;
+        }
+
+        message ColorSchemeSettings {
+            message AutomaticColorScheme {
+            }
+
+            message StandardColorScheme {
+            }
+
+            message GradientColorScheme {
+                // Gradient green value.
+                string green_value = 2;
+
+                // Gradient yellow value.
+                string yellow_value = 3;
+
+                // Gradient red value.
+                string red_value = 4;
+
+                // Gradient violet_value.
+                string violet_value = 5;
+            }
+
+            message HashColorScheme {
+            }
+
+            message ConstantColorScheme {
+                // Color.
+                string color = 1;
+            }
+
+            message ThresholdsColorScheme {
+                enum Aggregation {
+                    // Not specified.
+                    AGGREGATION_UNSPECIFIED = 0;
+                    // Aggregate by last value.
+                    AGGREGATION_LAST = 1;
+                    // Aggregate by min value.
+                    AGGREGATION_MIN = 2;
+                    // Aggregate by max value.
+                    AGGREGATION_MAX = 3;
+                    // Aggregate by avg value.
+                    AGGREGATION_AVG = 4;
+                    // Aggregate by sum.
+                    AGGREGATION_SUM = 5;
+                }
+
+                // Aggregation
+                Aggregation aggregation = 1;
+            }
+
+            oneof scheme {
+                // Automatic color scheme.
+                AutomaticColorScheme automatic = 1;
+
+                // Standard color scheme.
+                StandardColorScheme standard = 2;
+
+                // Gradient color scheme.
+                GradientColorScheme gradient = 3;
+
+                // Hash color scheme. Based on line name or value.
+                HashColorScheme hash = 4;
+
+                // Threshold settings color scheme.
+                ThresholdsColorScheme thresholds = 5;
+
+                // Constant color scheme settings.
+                ConstantColorScheme constant = 6;
+            }
+        }
+
+        message HeatmapSettings {
+            // Heatmap green value.
+            string green_value = 2;
+
+            // Heatmap yellow value.
+            string yellow_value = 3;
+
+            // Heatmap red value.
+            string red_value = 4;
+
+            // Heatmap violet_value.
+            string violet_value = 5;
+        }
+
+        // Y axis type.
+        // N.B. _TYPE prefix is necessary to expect name clash with Interpolate LINEAR value.
+        enum YaxisType {
+            // Not specified (linear by default).
+            YAXIS_TYPE_UNSPECIFIED = 0;
+
+            // Linear.
+            YAXIS_TYPE_LINEAR = 1;
+
+            // Logarithmic.
+            YAXIS_TYPE_LOGARITHMIC = 2;
+        }
+
+        // Y axis settings.
+        message Yaxis {
+            // Type.
+            YaxisType type = 1;
+
+            // Title or empty.
+            string title = 2;
+
+            // Min value in extended number format or empty.
+            string min = 3;
+
+            // Max value in extended number format or empty.
+            string max = 4;
+
+            // Unit format.
+            UnitFormat unit_format = 5;
+
+            // Tick value precision (null as default, 0-7 in other cases).
+            google.protobuf.Int64Value precision = 6;
+        }
+
+        message YaxisSettings {
+            // Left Y axis settings.
+            Yaxis left = 1;
+            // Right Y axis settings.
+            Yaxis right = 2;
+        }
+
+        enum SeriesAggregation {
+            // Not specified (avg by default).
+            SERIES_AGGREGATION_UNSPECIFIED = 0;
+
+            // Average.
+            SERIES_AGGREGATION_AVG = 1;
+
+            // Minimum.
+            SERIES_AGGREGATION_MIN = 2;
+
+            // Maximum.
+            SERIES_AGGREGATION_MAX = 3;
+
+            // Last non-NaN value.
+            SERIES_AGGREGATION_LAST = 4;
+
+            // Sum.
+            SERIES_AGGREGATION_SUM = 5;
+        }
+
+        message TilesSettings {
+            enum SortField {
+                // Not specified.
+                SORT_FIELD_UNSPECIFIED = 0;
+                // Sort by values.
+                VALUE = 1;
+                // Sort by title.
+                TITLE = 2;
+            }
+
+            // Sorting order.
+            SortOrder sort_order = 1;
+
+            // Field to sort by.
+            SortField sort_field = 2;
+
+            // Show stat title.
+            bool show_title = 3;
+
+            // Show stat value.
+            bool show_value = 4;
+
+            // Show sparkline
+            bool show_sparkline = 5;
+        }
+
+        // Visualization type.
+        VisualizationType type = 1;
+
+        // Normalize.
+        bool normalize = 2;
+
+        // Interpolate.
+        Interpolate interpolate = 3;
+
+        // Aggregation.
+        SeriesAggregation aggregation = 4;
+
+        // Color scheme settings.
+        ColorSchemeSettings color_scheme_settings = 5;
+
+        // Heatmap settings.
+        HeatmapSettings heatmap_settings = 6;
+
+        // Y axis settings.
+        YaxisSettings yaxis_settings = 7;
+
+        // Inside chart title.
+        string title = 8;
+
+        // Show chart labels.
+        bool show_labels = 9;
+
+        // Settings for stat widget.
+        TilesSettings tiles_settings = 10;
+    }
+
+    // Series override settings.
+    message SeriesOverrides {
+        enum YaxisPosition {
+            // Not specified (left by default).
+            YAXIS_POSITION_UNSPECIFIED = 0;
+
+            // Left.
+            YAXIS_POSITION_LEFT = 1;
+
+            // Right.
+            YAXIS_POSITION_RIGHT = 2;
+        }
+
+        enum SeriesVisualizationType {
+            // Not specified (line by default).
+            SERIES_VISUALIZATION_TYPE_UNSPECIFIED = 0;
+
+            // Line chart.
+            SERIES_VISUALIZATION_TYPE_LINE = 1;
+
+            // Stack chart.
+            SERIES_VISUALIZATION_TYPE_STACK = 2;
+
+            // Points as columns chart.
+            SERIES_VISUALIZATION_TYPE_COLUMN = 3;
+
+            // Points.
+            SERIES_VISUALIZATION_TYPE_POINTS = 4;
+        }
+
+        message SeriesOverrideSettings {
+            // Series name or empty.
+            string name = 1;
+
+            // Series color or empty.
+            string color = 2;
+
+            // Type.
+            SeriesVisualizationType type = 3;
+
+            // Stack name or empty.
+            string stack_name = 4;
+
+            // Stack grow down.
+            bool grow_down = 5;
+
+            // Yaxis position.
+            YaxisPosition yaxis_position = 6;
+
+            // Line Border Width
+            int64 line_width = 7;
+
+            enum LineStyle {
+                // Not specified.
+                LINE_STYLE_UNSPECIFIED = 0;
+                // Solid line.
+                LINE_STYLE_SOLID = 1;
+                // Dashed line.
+                LINE_STYLE_DASH = 2;
+                // Dotted line.
+                LINE_STYLE_DOTS = 3;
+            }
+
+            // Linet style settings.
+            LineStyle line_style = 8;
+
+            enum LineHidingType {
+                option deprecated = true;
+                // Not specified.
+                LINE_HIDING_TYPE_UNSPECIFIED = 0;
+                // Hide in legend.
+                LINE_HIDING_TYPE_HIDE_LEGEND = 1;
+                // Hide in tooltip.
+                LINE_HIDING_TYPE_HIDE_TOOLTIP = 2;
+                // Hide both in legend and tooltip.
+                LINE_HIDING_TYPE_HIDE_EVERYWHERE = 3;
+            }
+
+            reserved 9;
+
+            // Line hiding settings.
+            LineHidingType line_hiding_type = 10 [deprecated=true];
+
+            // Hide line in legend.
+            bool line_hiding_in_legend = 11;
+
+            // Hide line in tooltip.
+            bool line_hiding_in_tooltip = 12;
+
+            // Hide line in chart.
+            bool line_hiding_in_chart = 13;
+        }
+
+        // Required. Series selection type.
+        oneof type {
+            // Series name.
+            string name = 1;
+
+            // Target index.
+            string target_index = 2;
+        }
+
+        // Required. Override settings.
+        SeriesOverrideSettings settings = 3;
+
+        // Override name.
+        string override_name = 4;
+
+        // Matcher rule to find a line.
+        OverrideMatcher matcher = 5;
+    }
+
+    message OverrideMatcher {
+        oneof type {
+            // Matcher by query parameters.
+            QueryMatcher query = 1;
+
+            // Matcher by line.
+            LineMatcher line = 2;
+
+            // Matcher by regex.
+            RegExpMatcher regexp = 3;
+
+            // Matcher by metric values.
+            ValueMatcher values = 4;
+        }
+    }
+
+    message QueryMatcher {
+        // Query names.
+        repeated string names = 1;
+    }
+
+    message LineMatcher {
+        // Line id's.
+        repeated string line_ids = 1;
+    }
+
+    message RegExpMatcher {
+        // Regex to find a line.
+        string reg_exp = 1;
+    }
+
+    enum ValuesType {
+        // Not specified.
+        VALUES_TYPE_UNSPECIFIED = 0;
+        // All values quals to 0.
+        VALUES_TYPE_ALL_ZEROS = 1;
+        // All values are `null`.
+        VALUES_TYPE_ALL_NULL = 2;
+    }
+
+    message ValueMatcher {
+        // Value type.
+        ValuesType value_type = 1;
+    }
+
+    // Name hiding settings.
+    message NameHidingSettings {
+        // True if we want to show concrete series names only, false if we want to hide concrete series names.
+        bool positive = 1;
+
+        // Series names to show or hide.
+        repeated string names = 2;
+    }
+
+    enum FreezeDuration {
+        // Not specified.
+        FREEZE_DURATION_UNSPECIFIED = 0;
+
+        // Last hour.
+        FREEZE_DURATION_HOUR = 1;
+
+        // Last day = last 24 hours.
+        FREEZE_DURATION_DAY = 2;
+
+        // Last 7 days.
+        FREEZE_DURATION_WEEK = 3;
+
+        // Last 31 days.
+        FREEZE_DURATION_MONTH = 4;
+    }
+
+    message RepeatSettings {
+        // Parameters to repeat by.
+        repeated string repeat_by = 1;
+        // Max number of chart in one row.
+        int64 max_charts_in_row = 2;
+    }
+
+    // Required. Chart ID.
+    string id = 1;
+
+    // Targets.
+    repeated Target targets = 2;
+
+    // Data sources.
+    repeated DataSource data_sources = 3;
+
+    // Visualization settings.
+    VisualizationSettings visualization_settings = 4;
+
+    // Override settings.
+    repeated SeriesOverrides series_overrides = 5;
+
+    // Name hiding settings.
+    NameHidingSettings name_hiding_settings = 6;
+
+    // Chart description in dashboard (not enabled in UI).
+    string description = 7;
+
+    // Chart widget title.
+    string title = 8;
+
+    // Enable legend under chart.
+    bool display_legend = 9;
+
+    // Fixed time interval for chart.
+    FreezeDuration freeze = 10;
+
+    // Setting for repeat panel / repeat row
+    RepeatSettings repeat = 11;
+
+    // Threshold settings
+    Thresholds thresholds = 12;
+}

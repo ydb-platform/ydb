@@ -1,0 +1,109 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2014-2018 Intel, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for Open RTE's orted.
+#
+[orted:usage]
+Usage: %s [OPTION]...
+Start an Open RTE Daemon
+
+%s
+[orted:environ]
+Open RTE Daemon was unable to set
+ %s = %s
+in the environment. Returned value %d instead of ORTE_SUCCESS.
+[orted:init-failure]
+Open RTE was unable to initialize properly.  The error occured while
+attempting to %s.  Returned value %d instead of ORTE_SUCCESS.
+
+#
+[orted:cannot-bind]
+A request was made to bind the Open RTE daemons to
+a core that does not exist on this node:
+
+  node:  %s
+  cores: %s
+
+The MCA param directing this behavior is orte_daemon_cores.
+Please correct the request and try again.
+#
+[cwd]
+A dynamic operation (%s) was requested that requires us to obtain
+the current working directory. Unfortunately, an error was returned
+when we attempted to obtain it:
+
+  error: %d
+
+We are unable to complete the requested operation.
+#
+[bad-key]
+A dynamic operation (%s) was requested that included an unrecognized
+info key:
+
+  group: %s
+  key:   %s
+
+The operation will continue, but may not behave completely as expected.
+#
+[timedout]
+A request has timed out and will therefore fail:
+
+  Operation:  %s
+
+Your job may terminate as a result of this problem. You may want to
+adjust the MCA parameter pmix_server_max_wait and try again. If this
+occurred during a connect/accept operation, you can adjust that time
+using the pmix_base_exchange_timeout parameter.
+#
+[noroom]
+A request for an asynchronous runtime operation cannot be fulfilled
+because of a lack of room in the tracking array:
+
+  Operation:  %s
+  Number of rooms:  %d
+
+This is usually caused by a large job that encounters significant
+delays across the cluster when starting the application processes.
+Your job may terminate as a result of this problem. You may want to
+adjust the MCA parameter pmix_server_max_reqs and try again.
+#
+[noserver]
+A publish/lookup server was provided, but we were unable to connect
+to it - please check the connection info and ensure the server
+is alive:
+
+  Connection:  %s
+#
+[mpir-debugger-detected]
+Open MPI has detected that you have attached a debugger to this MPI
+job, and that debugger is using the legacy "MPIR" method of
+attachment.
+
+Please note that Open MPI has deprecated the "MPIR" debugger
+attachment method in favor of the new "PMIx" debugger attchment
+mechanisms.
+
+*** This means that future versions of Open MPI may not support the
+*** "MPIR" debugger attachment method at all.  Specifically: the
+*** debugger you just attached may not work with future versions of
+*** Open MPI.
+
+You may wish to contact your debugger vendor to inquire about support
+for PMIx-based debugger attachment mechanisms. Meantime, you can
+disable this warning by setting the OMPI_MPIR_DO_NOT_WARN envar to 1.

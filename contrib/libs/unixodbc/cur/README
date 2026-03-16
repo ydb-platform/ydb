@@ -1,0 +1,7 @@
+A ODBC cursor lib provides cursor functionality 
+( client-side data caching and navigation ) in 
+a generic manner so that drivers of any type 
+can rely on it.
+
+
+  

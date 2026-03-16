@@ -1,0 +1,5 @@
+[console_scripts]
+generate-alertgroup = grafanalib._gen:generate_alertgroup_script
+generate-alertgroups = grafanalib._gen:generate_alertgroups_script
+generate-dashboard = grafanalib._gen:generate_dashboard_script
+generate-dashboards = grafanalib._gen:generate_dashboards_script

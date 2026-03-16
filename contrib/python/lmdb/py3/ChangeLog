@@ -1,0 +1,533 @@
+2025-10-14 1.7.5
+* CI-only: Fix generation of 3.14 binaries.
+
+2025-10-14 1.7.4 -- yanked
+* CI-only: Generate Python 3.14 binaries.
+
+2025-07-15 1.7.3
+* Fix CFFI build on some platforms by ensuring paths are absolute.
+
+* Correct CI badge URL in README.
+
+2025-07-10 1.7.2
+* CI-only fix
+
+2025-07-09 1.7.1
+* CI-only fix
+
+2025-07-09 1.7.0
+* Rewrite CI to use cibuildwheel.
+
+* Update bundled LMDB to 0.9.33, plus a patch to fix ITS#10346.
+
+* Prevent some accidental use of LMDB objects by child processes.
+Contributed by Callum Walker.
+
+2025-01-05 1.6.2
+* CI-only fix.
+
+2025-01-05 1.6.1
+* CI-only fix.
+
+2025-01-05 1.6.0
+* Support for Python 3.13.  Contributed by Miro Hrončok and Adam Williamson.
+
+* CI:  Publish 3.13 binaries and Linux aarch64 wheels for multiple versions.
+
+2024-07-01 1.5.1
+* CI-only fix.
+
+2024-06-30 1.5.0
+* Add Python 3.12 binaries.
+
+* Update bundled LMDB to 0.9.31.
+
+* Remove Python 2.7 support.
+
+2022-04-04 v1.4.1
+* Update CI to build manylinux binaries.
+
+2022-12-06 v1.4.0
+* Add Python 3.11 support.
+
+2021-12-30 v1.3.0
+* Add aarch64 architecture builds.  Contributed by odidev.
+
+* Add Python 3.10 support.
+
+* Fix crash relating to caching of transactions.  The 'max_spare_txns'
+  parameter to Environment/open is currently ignored in cpython.
+
+2021-04-19 v1.2.1
+* Resolve CI bug where non-Linux wheels were not being published to PyPI.
+
+2021-04-15 v1.2.0
+* Update bundled LMDB to 0.9.29.
+
+* Add non-bundled testing to CI.
+
+* Remove wheel generation for 2.7 because the manylinux images no longer
+  support it.
+
+* Allow passing None as a value to transaction.del in CFFI implementation
+  for parity with cpython implementation.
+
+* Fix Cursor.put behavior on a dupsort DB with append=True.
+
+* Add warning to docs about use of Environment.set_mapsize.  This is currently
+an unresolved issue with upstream LMDB.
+
+* CFFI implementation:  fix a seg fault when open_db returns map full.
+
+* CFFI implementation:  fix a bug in open_db in a read-only environment.
+
+
+2021-02-05 v1.1.1
+* Dowgrade underlying LMDB to 0.9.26.  0.9.27 has a minor defect that will
+  need to get resolved.
+
+
+2021-02-04 v1.1.0
+* Migrate CI pipeline from Travis and AppVeyor to Github Actions.  Now
+  includes comprehensive testing across 4 dimensions (OS, Python version,
+  cpython/CFFI, pure/with mods).  Also includes publishing to PyPI.
+
+* Prevent invalid flag combinations when creating a database.
+
+* Add a Cursor.getmulti method with optional buffer support.  Contributed by
+  Will Thompson <willsthompson@gmail.com>.
+
+* Upgrade underlying LMDB to 0.9.27.
+
+
+2020-08-28 v1.0.0
+* Start of new semantic versioning scheme.  This would be a minor version
+  bump from the 0.99 release if it were semantically versioned.
+
+* Allow environment copy to take a passed-in transaction.  This is the
+  first released feature that requires a (very small) patch to the
+  underlying C library.  By default, the patch will be applied unless
+  this module is built with LMDB_PURE environment variable set.
+
+
+2020-08-13 v0.99
+* Fix lmdb.tool encoding issues.
+
+* Fix -l lmdb invocation issue.
+
+* Minor documentation improvements.
+
+* Update LMDB to version 0.9.24.
+
+* Update for Python 3.9 (current release candidate) support.
+
+* Resolve a bug when using cursor.putmulti and append=True on dupsort DBs.
+
+* Allow _Database.flags method to take no arguments since the one argument
+  wasn't being used.
+
+
+2019-11-06 v0.98
+* Fix that a duplicate argument to a lmdb method would cause an assert.
+
+* Solaris needs ```#include "python.h"``` as soon as possible.  Fix
+  contributed by Jesús Cea.
+
+* Fix crash under debug cpython when mdb_cursor_open failed
+
+
+2019-08-11 v0.97
+
+* Fix a missed GIL unlock sequence.  Reported by ajschorr.
+
+* Fix argv check in JEP (cpython under Java) environment.  Contributed by
+  de-code.
+
+
+2019-07-14 v0.96
+
+* First release under new maintainer, Nic Watson.
+
+* Doc updates.
+
+* More removal of code for now-unsupported Python versions.
+
+* Only preload the value with the GIL unlocked when the value is actually
+  requested. This significantly improves read performance to retrieve keys
+  with large values when the value isn't retrieved. Reported by Dan Patton.
+
+
+2019-06-08 v0.95
+
+* The minimum supported version of Python is now 2.7.
+
+* The library is no longer tested on Python 3.2.
+
+* The address-book.py example was updated for Python 3. Contributed by Jamie
+  Bliss.
+
+* Development-related files were removed from the distribution tarball.
+
+* Handling of the Environment(create=True) flag was improved. Fix contributed
+  by Nir Soffer.
+
+* Database names may be reused after they are dropped on CFFI, without
+  reopening the environment. Fix contributed by Gareth Bult.
+
+
+2018-04-09 v0.94
+
+* CPython argument parsing now matches the behaviour of CFFI, and most sane
+  Python APIs: a bool parameter is considered to be true if it is any truthy
+  value, not just if it is exactly True. Reported by Nic Watson.
+
+* Removed Python 2.6 support due to urllib3 warnings and pytest dropping it.
+
+* Updared LMDB to version 0.9.22.
+
+* Fixed several 2.7/3 bugs in command line tool.
+
+
+2017-07-16 v0.93
+
+* py-lmdb is now built with AppVeyor CI, providing early feedback on Windows
+  build health. Egg and wheel artifacts are being generated, removing the need
+  for a dedicated Windows build machine, however there is no mechanism to
+  paublish these to PyPI yet.
+
+* The "warm" tool command did not function on Python 3.x. Reported by Github
+  user dev351.
+
+* Tests now pass on non-4kb page-sized machines, such as ppc64le. Reported by
+  Jonathan J. Helmus.
+
+* Windows 3.6 eggs and wheels are now available on PyPI, and tests are run
+  against 3.6. Reported by Ofek Lev.
+
+* Python 3.2 is no longer supported, due to yet more pointless breakage
+  introduced in pip/pkg_resources.
+
+* py-lmdb currently does not support LMDB >=0.9.19 due to interface changes in
+  LMDB. Support will appear in a future release.
+
+
+2016-10-17 v0.92
+
+* Changes to support __all__ caused the CPython module to fail to import at
+  runtime on Python 3. This was hidden during testing as the CFFI module was
+  successfully imported.
+
+
+2016-10-17 v0.91
+
+* The docstring for NotFoundError was clarified to indicate that it is
+  not raised in normal circumstances.
+
+* CFFI open_db() would always attempt to use a write transaction, even if the
+  environment was opened with readonly=True. Now both CPython and CFFI will
+  use a read-only transaction in this case. Reported by Github user
+  handloomweaver.
+
+* The source distribution previously did not include a LICENSE file, and may
+  have included random cached junk from the source tree during build. Reported
+  by Thomas Petazzoni.
+
+* Transaction.id() was broken on Python 2.5.
+
+* Repair Travis CI build again.
+
+* CFFI Cursor did not correctly return empty strings for key()/value()/item()
+  when iternext()/iterprev() had reached the start/end of the database.
+  Detected by tests contributed by Ong Teck Wu.
+
+* The package can now be imported from within a CPython subinterpreter. Fix
+  contributed by Vitaly Repin.
+
+* lmdb.tool --delete would not delete keys in some circumstances. Fix
+  contributed by Vitaly Repin.
+
+* Calls to Cursor.set_range_dup() could lead to memory corruption due to
+  Cursor's idea of the key and value failing to be updated correctly. Reported
+  by Michael Lazarev.
+
+* The lmdb.tool copy command now supports a --compact flag. Contributed by
+  Achal Dave.
+
+* The lmdb.tool edit command selects the correct database when --delete is
+  specified. Contributed by ispequalnp.
+
+* lmdb.tool correctly supports the -r flag to select a read-only environment.
+  Contributed by ispequalnp.
+
+* The lmdb.tool --txn_size parameter was removed, as it was never implemented,
+  and its original function is no longer necessary with modern LMDB. Reported
+  by Achal Dave.
+
+* The documentation template was updated to fix broken links. Contributed by
+  Adam Chainz.
+
+* The Travis CI build configuration was heavily refactored by Alexander Zhukov.
+  Automated tests are running under Travis CI once more.
+
+* The CPython extension module did not define __all__. It is now defined
+  contain the same names as on CFFI.
+
+* Both implementations were updated to remove lmdb.open() from __all__,
+  ensuring "from lmdb import *" does not shadow the builtin open(). The
+  function can still be invoked using its fully qualified name, and the alias
+  "Environment" may be used when "from lmdb import *" is used. Reported by
+  Alexander Zhukov.
+
+* The CPython extension exported BadRSlotError, instead of BadRslotError. The
+  exception's name was corrected to match CFFI.
+
+* Environment.open_db() now supports integerdup=True, dupfixed=True, and
+  integerkey=True flags. Based on a patch by Jonathan Heyman.
+
+
+2016-07-11 v0.90
+
+* This release was deleted from PyPI due to an erroneous pull request
+  upgrading the bundled LMDB to mdb.master.
+
+
+2016-02-12 v0.89
+
+* LMDB 0.9.18 is bundled.
+
+* CPython Iterator.next() was incorrectly defined as pointing at the
+  implementation for Cursor.next(), triggering a crash if the method was ever
+  invoked manually. Reported by Kimikazu Kato.
+
+
+2016-01-24 v0.88
+
+* LMDB 0.9.17 is bundled.
+
+* Transaction.id() is exposed.
+
+* Binary wheels are built for Python 3.5 Windows 32/64-bit.
+
+
+2015-08-11 v0.87
+
+* Environment.set_mapsize() was added to allow runtime adjustment of the
+  environment map size.
+
+* Remove non-determinism from setup.py, to support Debian's reproducible
+  builds project. Patch by Chris Lamb.
+
+* Documentation correctness and typo fixes. Patch by Gustav Larsson.
+
+* examples/keystore: beginnings of example that integrates py-lmdb with an
+  asynchronous IO loop.
+
+
+2015-06-07 v0.86
+
+* LMDB_FORCE_SYSTEM builds were broken by the GIL/page fault change. This
+  release fixes the problem.
+
+* Various cosmetic fixes to documentation.
+
+
+2015-06-06 v0.85
+
+* New exception class: lmdb.BadDbiError.
+
+* Environment.copy() and Environment.copyfd() now support compact=True, to
+  trigger database compaction while copying.
+
+* Various small documentation updates.
+
+* CPython set_range_dup() and set_key_dup() both invoked MDB_GET_BOTH, however
+  set_range_dup() should have instead invoked MDB_GET_BOTH_RANGE. Fix by
+  Matthew Battifarano.
+
+* lmdb.tool module was broken on Win32, since Win32 lacks signal.SIGWINCH. Fix
+  suggested by David Khess.
+
+* LMDB 0.9.14 is bundled along with extra fixes from mdb.RE/0.9 (release
+  engineering) branch.
+
+* CPython previously lacked a Cursor.close() method. Problem was noticed by
+  Jos Vos.
+
+* Several memory leaks affecting the CFFI implementation when running on
+  CPython were fixed, apparent only when repeatedly opening and discarding a
+  large number of environments. Noticed by Jos Vos.
+
+* The CPython extension previously did not support weakrefs on Environment
+  objects, and the implementation for Transaction objects was flawed. The
+  extension now correctly invalidates weakrefs during deallocation.
+
+* Both variants now try to avoid taking page faults with the GIL held,
+  accomplished by touching one byte of every page in a value during reads.
+  This does not guarantee faults will never occur with the GIL held, but it
+  drastically reduces the possibility. The binding should now be suitable for
+  use in multi-threaded applications with databases containing >2KB values
+  where the entire database does not fit in RAM.
+
+
+2014-09-22 v0.84
+
+* LMDB 0.9.14 is bundled.
+
+* CFFI Cursor.putmulti() could crash when append=False and a key already
+  existed.
+
+
+2014-06-24 v0.83
+
+* LMDB 0.9.13 is bundled along with extra fixes from upstream Git.
+
+* Environment.__enter__() and __exit__() are implemented, allowing
+  Environments to behave like context managers.
+
+* Cursor.close(), __enter__() and __exit__() are implemented, allowing Cursors
+  to be explicitly closed. In CFFI this mechanism *must* be used when many
+  cursors are used within a single transaction, otherwise a resource leak will
+  occur.
+
+* Dependency tracking in CFFI is now much faster, especially on PyPy, however
+  at a cost: Cursor use must always be wrapped in a context manager, or
+  .close() must be manually invoked for discarded Cursors when the parent
+  transaction is long lived.
+
+* Fixed crash in CFFI Cursor.putmulti().
+
+
+2014-05-26 v0.82
+
+* Both variants now implement max_spare_txns, reducing the cost of creating a
+  read-only transaction 4x for an uncontended database and by up to 20x for
+  very read-busy environments. By default only 1 read-only transaction is
+  cached, adjust max_spare_txns= parameter if your script operates multiple
+  simultaneous read transactions.
+
+* Patch from Vladimir Vladimirov implementing MDB_NOLOCK.
+
+* The max_spare_iters and max_spare_cursors parameters were removed, neither
+  ever had any effect.
+
+* Cursor.putmulti() implemented based on a patch from Luke Kenneth Casson
+  Leighton. This function moves the loop required to batch populate a
+  database out of Python and into C.
+
+* The bundled LMDB 0.9.11 has been updated with several fixes from upstream
+  Git.
+
+* The cost of using keyword arguments in the CPython extension was
+  significantly reduced.
+
+
+2014-04-26 v0.81
+
+* On Python 2.x the extension module would silently interpret Unicode
+  instances as buffer objects, causing UCS-2/UCS-4 string data to end up in
+  the database. This was never intentional and now raises TypeError. Any
+  Unicode data passed to py-lmdb must explicitly be encoded with .encode()
+  first.
+
+* open_db()'s name argument was renamed to key, and its semantics now match
+  get() and put(): in other words the key must be a bytestring, and passing
+  Unicode will raise TypeError.
+
+* The extension module now builds under Python 3.4 on Windows.
+
+
+2014-04-21 v0.80
+
+* Both variants now build successfully as 32 bit / 64bit binaries on
+  Windows under Visual Studio 9.0, the compiler for Python 2.7. This enables
+  py-lmdb to be installed via pip on Windows without requiring a compiler to
+  be available. In future, .egg/.whl releases will be pre-built for all recent
+  Python versions on Windows.
+
+  Known bugs: Environment.copy() and Environment.copyfd() currently produce a
+  database that cannot be reopened.
+
+* The lmdb.enable_drop_gil() function was removed. Its purpose was
+  experimental at best, confusing at worst.
+
+
+2014-03-17 v0.79
+
+* CPython Cursor.delete() lacked dupdata argument, fixed.
+
+* Fixed minor bug where CFFI _get_cursor() did not note its idea of
+  the current key and value were up to date.
+
+* Cursor.replace() and Cursor.pop() updated for MDB_DUPSORT databases. For
+  pop(), the first data item is popped and returned. For replace(), the first
+  data item is returned, and all duplicates for the key are replaced.
+
+* Implement remaining Cursor methods necessary for working with MDB_DUPSORT
+  databases: next_dup(), next_nodup(), prev_dup(), prev_nodup(), first_dup(),
+  last_dup(), set_key_dup(), set_range_dup(), iternext_dup(),
+  iternext_nodup(), iterprev_dup(), iterprev_nodup().
+
+* The default for Transaction.put(dupdata=...) and Cursor.put(dupdata=...) has
+  changed from False to True. The previous default did not reflect LMDB's
+  normal mode of operation.
+
+* LMDB 0.9.11 is bundled along with extra fixes from upstream Git.
+
+
+2014-01-18 v0.78
+
+* Patch from bra-fsn to fix LMDB_LIBDIR.
+
+* Various inaccurate documentation improvements.
+
+* Initial work towards Windows/Microsoft Visual C++ 9.0 build.
+
+* LMDB 0.9.11 is now bundled.
+
+* To work around install failures minimum CFFI version is now >=0.8.0.
+
+* ticket #38: remove all buffer object hacks. This results in ~50% slowdown
+  for cursor enumeration, but results in far simpler object lifetimes. A
+  future version may introduce a better mechanism for achieving the same
+  performance without loss of sanity.
+
+
+2013-11-30 v0.77
+
+* Added Environment.max_key_size(), Environment.max_readers().
+
+* CFFI now raises the correct Error subclass associated with an MDB_* return
+  code.
+
+* Numerous CFFI vs. CPython behavioural inconsistencies have been fixed.
+
+* An endless variety of Unicode related 2.x/3.x/CPython/CFFI fixes were made.
+
+* LMDB 0.9.10 is now bundled, along with some extra fixes from Git.
+
+* Added Environment(meminit=...) option.
+
+
+2013-10-28 v0.76
+
+* Added support for Environment(..., readahead=False).
+
+* LMDB 0.9.9 is now bundled.
+
+* Many Python 2.5 and 3.x fixes were made. Future changes are automatically
+  tested via Travis CI <https://travis-ci.org/dw/py-lmdb>.
+
+* When multiple cursors exist, and one cursor performs a mutation,
+  remaining cursors may have returned corrupt results via key(), value(),
+  or item(). Mutations are now explicitly tracked and cause the cursor's
+  data to be refreshed in this case.
+
+* setup.py was adjusted to ensure the distutils default of '-DNDEBUG' is never
+  defined while building LMDB. This caused many important checks in the engine
+  to be disabled.
+
+* The old 'transactionless' API was removed. A future version may support the
+  same API, but the implementation will be different.
+
+* Transaction.pop() and Cursor.pop() helpers added, to complement
+  Transaction.replace() and Cursor.replace().

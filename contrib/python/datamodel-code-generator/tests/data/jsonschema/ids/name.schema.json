@@ -1,0 +1,7 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "name.schema.json",
+    "title": "name",
+    "description": "A descriptive (full) name of the entity. For example, a dataset called 'Snow depth in the Northern Hemisphere' or a person called 'Sarah L. Jones' or a place called 'The Empire States Building'. Use unique names for distinct entities whenever possible.",
+    "type": "string"
+}

@@ -1,0 +1,4001 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     LGPL-2.1-only        0004506102baf012c6b89f261322a52f
+BELONGS ya.make
+    License text:
+        the GNU Lesser General Public License, Version 2.1 (the
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [6012:6012]
+
+KEEP     BSD-2-Clause         0106ce540f76d237e4ff948352bab864
+BELONGS ya.make
+    License text:
+        \#define PLUGIN_LICENSE_BSD 2
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        include/mysql/plugin.h [121:121]
+
+KEEP     Zlib                 0450c86a61ad478bf7910d8fe3614dcf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE [1184:1198]
+
+KEEP     BSD-2-Clause         0526f961ce36f75d19f15cb9f4d6450f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [2487:2516]
+
+KEEP     Protobuf-License     05abe01669ba10239f2a7fa82689ba77
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-protobuf
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://protobuf.googlecode.com/svn/trunk/COPYING.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/protobuf.LICENSE
+    Files with this license:
+        LICENSE [1494:1527]
+
+KEEP     Unicode-TOU          076f831c6f8a02cd8589f74d664f0665
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Unicode-TOU
+        Score           : 13.13
+        Match type      : TEXT
+        Links           : http://www.unicode.org/copyright.html, https://spdx.org/licenses/Unicode-TOU
+    Files with this license:
+        LICENSE [2015:2035]
+
+KEEP     OpenSSL              0b42b096e96b92cf457e32ebc3714adc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        LICENSE [5105:5300]
+
+KEEP     Unicode-TOU          0cd63602eecc4018783fd9d1dba469ed
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Unicode-TOU
+        Score           : 27.65
+        Match type      : TEXT
+        Links           : http://www.unicode.org/copyright.html, https://spdx.org/licenses/Unicode-TOU
+    Files with this license:
+        LICENSE [2085:2110]
+
+KEEP     NAIST-2003           0dd07d926e02aafd795917a6de834518
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NAIST-2003
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/NAIST-2003
+    Files with this license:
+        LICENSE [1831:1897]
+
+KEEP     GPL-1.0-or-later     0e7d24ef49fd011b9616d1ed5ac4ad7b
+BELONGS ya.make
+    License text:
+        the GPL even though the GPL is referenced as an option below.)
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 85.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [4730:4730]
+
+KEEP     BSD-2-Clause AND GPL-2.0-only 0e8ecfb9325faed3325eaaf1f77c59d1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 54.23
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [5309:5338]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 54.23
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [5309:5338]
+
+KEEP     Public-Domain        0fef103352877bd651a9376cd85816f5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [1990:2004]
+
+KEEP     MIT                  14395d49cccf7dd9c262788c7c3eb609
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [2582:2599]
+        LICENSE [2608:2625]
+        LICENSE [2642:2659]
+        LICENSE [4637:4654]
+
+KEEP     GPL-2.0-only         1486194f66e0825864b7af6c0eccae91
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 123, LICENSE at line 64
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [64:419]
+
+KEEP     GPL-1.0-or-later AND GPL-2.0-only 14e2482901a7da86a24cc4aa36269032
+BELONGS ya.make
+    License text:
+           use only the General Public License version 2 (GPLv2) at this time for
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [45:45]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [45:45]
+
+KEEP     BSD-3-Clause         1553d290bcb4c28b3981474bbdb72e28
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [5396:5417]
+
+KEEP     BSD-3-Clause         158744e86111418657a46df0caaa8ab2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [5051:5078]
+
+KEEP     GPL-1.0-or-later     159942ac7705b792d02393318522ef94
+BELONGS ya.make
+    License text:
+            as well as the documentation are distributed under the terms of
+            the GNU General Public License (GPL); see the file COPYING for the
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [3726:3727]
+
+KEEP     Public-Domain        15eb064126a71559b3e28d1bcd449de8
+BELONGS ya.make
+    License text:
+           This file is public domain and comes with NO WARRANTY of any kind
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 72.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        include/mysql_version.h [3:3]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 17f069c9d96170cb57aa124b6ccdf858
+BELONGS ya.make
+    # PGL intro
+    License text:
+           This component is licensed under GNU Lesser General Public License
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [2701:2701]
+        LICENSE [3715:3715]
+        LICENSE [4983:4983]
+
+SKIP     LicenseRef-scancode-generic-exception 187b2f2dc4e8ac7c1635f56f3c5ddf9a
+BELONGS strings/ya.make
+    # code comment
+    License text:
+                without checking if it is a wildcard (% or _). However, as a
+                special exception, a lone escape character at the end of a string is
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-exception
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-exception.LICENSE
+    Files with this license:
+        strings/ctype-uca.cc [2243:2244]
+
+KEEP     Public-Domain        1b296524d2b0eb3c81e0de0ce3b51509
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        strings/README [78:81]
+
+KEEP     ICU                  1cd379860735a8ecf79e421fc8d10412
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        LICENSE [2180:2204]
+        LICENSE [5721:5745]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 1d5722ad27b90f6d1d0be68827d20f5b
+BELONGS ya.make
+    License text:
+        Other dependencies and licenses:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [5387:5387]
+
+KEEP     BSD-3-Clause         1db1a5ae0380c669b7e1a8795a8767d4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1454:1483]
+
+KEEP     Public-Domain        1dfd6d70057c03aa7c209ab81a9d20a7
+BELONGS ya.make
+    License text:
+             This program may be freely distributed under the same terms and
+             conditions as Fred Fish's Dbug package.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        LICENSE [1336:1337]
+
+KEEP     BSD-2-Clause         1e0d40626f6eb82d13afb2cb1675bfb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [970:996]
+
+KEEP     Public-Domain        1e79c2b29deba77e89e3aa96898fd87c
+BELONGS dbug/ya.make
+    License text:
+         *                    Copyright Abandoned, 1987, Fred Fish                    *
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        dbug/dbug.cc [5:5]
+
+KEEP     Public-Domain        204f514fdfc96e699989ad363bfd9fbf
+BELONGS dbug/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        dbug/dbug.cc [8:25]
+
+KEEP     Mit-Old-Style        20afbd85e472dd89c6b9656907abbfb7
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mit-old-style
+        Score           : 67.50
+        Match type      : NOTICE
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-old-style.LICENSE
+    Files with this license:
+        strings/ctype-tis620.cc [40:46]
+
+KEEP     CC-BY-4.0            21fcf94a5cab98a2fb0fc73aef2ecde3
+BELONGS ya.make
+    License text:
+            from sql_table.cc by copy_data_between_tables().
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        sql/handler.h [6082:6082]
+
+KEEP     Public-Domain        23bd8f9337bd3b7986a7e47004f470ab
+BELONGS ya.make
+    License text:
+        Copyright Abandoned 1998 Irena Pancirov - Irnet Snc
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [4973:4973]
+
+KEEP     NAIST-2003           2424a1fc169740d8fa11e54ba47b829a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NAIST-2003
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/NAIST-2003
+    Files with this license:
+        LICENSE [2399:2465]
+
+KEEP     GPL-1.0-or-later     2432e06f9e7268bcfcd992e1650debb9
+BELONGS ya.make
+    License text:
+           used, or where a choice of which version of the GPL is applied is
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [48:48]
+
+KEEP     Stlport-4.5          244149b992d2f8ec85dbf0e3d57ae3b5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-stlport-4.5
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/stlport-4.5.LICENSE
+    Files with this license:
+        LICENSE [2678:2686]
+
+KEEP     GPL-2.0-only WITH Universal-FOSS-exception-1.0 24b0714937526f6cf2103beace2c11f7
+BELONGS mysys/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        mysys/mf_pack.cc [3:26]
+        mysys/my_lib.cc [3:26]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        mysys/mf_pack.cc [3:26]
+        mysys/my_lib.cc [3:26]
+    Scancode info:
+        Original SPDX id: Universal-FOSS-exception-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://oss.oracle.com/licenses/universal-foss-exception/, https://spdx.org/licenses/Universal-FOSS-exception-1.0
+    Files with this license:
+        mysys/mf_pack.cc [3:26]
+        mysys/my_lib.cc [3:26]
+
+KEEP     GPL-2.0-only WITH Universal-FOSS-exception-1.0 25fbe5554213ec2c31779c000e23cbde
+BELONGS dbug/ya.make mysys/ya.make strings/ya.make vio/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        dbug/trace.cc [3:26]
+        include/errmsg.h [6:29]
+        include/field_types.h [3:26]
+        include/my_list.h [3:26]
+        include/mysql.h [3:26]
+        include/mysql/client_plugin.h [4:27]
+        include/mysql/plugin_auth_common.h [4:27]
+        include/mysql_com.h [3:26]
+        libmysql/errmsg.cc [3:26]
+        libmysql/libmysql.cc [3:26]
+        libmysql/mysql_trace.cc [3:26]
+        mysys/array.cc [3:26]
+        mysys/base64.cc [3:26]
+        mysys/charset-def.cc [3:26]
+        mysys/charset.cc [3:26]
+        mysys/checksum.cc [3:26]
+        mysys/crypt_genhash_impl.cc [3:26]
+        mysys/errors.cc [3:26]
+        mysys/lf_alloc-pin.cc [4:27]
+        mysys/lf_dynarray.cc [3:26]
+        mysys/lf_hash.cc [3:26]
+        mysys/list.cc [3:26]
+        mysys/mf_arr_appstr.cc [3:26]
+        mysys/mf_cache.cc [3:26]
+        mysys/mf_dirname.cc [3:26]
+        mysys/mf_fn_ext.cc [3:26]
+        mysys/mf_format.cc [3:26]
+        mysys/mf_iocache.cc [3:26]
+        mysys/mf_iocache2.cc [3:26]
+        mysys/mf_keycache.cc [3:26]
+        mysys/mf_keycaches.cc [3:26]
+        mysys/mf_loadpath.cc [3:26]
+        mysys/mf_path.cc [3:26]
+        mysys/mf_same.cc [3:26]
+        mysys/mf_tempdir.cc [3:26]
+        mysys/mf_tempfile.cc [3:26]
+        mysys/mf_unixpath.cc [3:26]
+        mysys/mf_wcomp.cc [3:26]
+        mysys/mulalloc.cc [3:26]
+        mysys/my_access.cc [3:26]
+        mysys/my_alloc.cc [2:25]
+        mysys/my_bit.cc [3:26]
+        mysys/my_bitmap.cc [4:27]
+        mysys/my_chmod.cc [3:26]
+        mysys/my_chsize.cc [3:26]
+        mysys/my_compare.cc [3:26]
+        mysys/my_compress.cc [3:26]
+        mysys/my_copy.cc [3:26]
+        mysys/my_create.cc [3:26]
+        mysys/my_default.cc [3:26]
+        mysys/my_delete.cc [3:26]
+        mysys/my_div.cc [3:26]
+        mysys/my_error.cc [3:26]
+        mysys/my_fallocator.cc [3:26]
+        mysys/my_file.cc [3:26]
+        mysys/my_fopen.cc [3:26]
+        mysys/my_fstream.cc [3:26]
+        mysys/my_gethwaddr.cc [3:26]
+        mysys/my_getopt.cc [3:26]
+        mysys/my_getpwnam.cc [3:26]
+        mysys/my_getwd.cc [3:26]
+        mysys/my_init.cc [3:26]
+        mysys/my_largepage.cc [3:26]
+        mysys/my_malloc.cc [3:26]
+        mysys/my_md5.cc [3:26]
+        mysys/my_mess.cc [3:26]
+        mysys/my_mkdir.cc [3:26]
+        mysys/my_mmap.cc [3:26]
+        mysys/my_murmur3.cc [3:26]
+        mysys/my_once.cc [3:26]
+        mysys/my_open.cc [3:26]
+        mysys/my_pread.cc [3:26]
+        mysys/my_read.cc [3:26]
+        mysys/my_rename.cc [3:26]
+        mysys/my_rnd.cc [4:27]
+        mysys/my_seek.cc [3:26]
+        mysys/my_sha1.cc [3:26]
+        mysys/my_sha2.cc [3:26]
+        mysys/my_static.cc [3:26]
+        mysys/my_string.cc [3:26]
+        mysys/my_symlink.cc [3:26]
+        mysys/my_symlink2.cc [3:26]
+        mysys/my_sync.cc [3:26]
+        mysys/my_systime.cc [3:26]
+        mysys/my_thr_init.cc [3:26]
+        mysys/my_thread.cc [3:26]
+        mysys/my_write.cc [3:26]
+        mysys/pack.cc [3:26]
+        mysys/posix_timers.cc [3:26]
+        mysys/print_version.cc [3:26]
+        mysys/ptr_cmp.cc [3:26]
+        mysys/sql_chars.cc [4:27]
+        mysys/stacktrace.cc [3:26]
+        mysys/thr_cond.cc [3:26]
+        mysys/thr_lock.cc [3:26]
+        mysys/thr_mutex.cc [3:26]
+        mysys/thr_rwlock.cc [3:26]
+        mysys/tree.cc [3:26]
+        mysys/typelib.cc [3:26]
+        sql-common/client.cc [3:26]
+        sql-common/client_authentication.cc [3:26]
+        sql-common/client_plugin.cc [3:26]
+        sql-common/get_password.cc [3:26]
+        sql-common/net_serv.cc [3:26]
+        sql/auth/password.cc [4:27]
+        strings/ctype-big5.cc [3:26]
+        strings/ctype-cp932.cc [3:26]
+        strings/ctype-czech.cc [3:26]
+        strings/ctype-euc_kr.cc [3:26]
+        strings/ctype-extra.cc [11:34]
+        strings/ctype-gb2312.cc [3:26]
+        strings/ctype-gbk.cc [3:26]
+        strings/ctype-latin1.cc [3:26]
+        strings/ctype-mb.cc [3:26]
+        strings/ctype-simple.cc [3:26]
+        strings/ctype-sjis.cc [3:26]
+        strings/ctype-tis620.cc [3:26]
+        strings/ctype-win1250ch.cc [3:26]
+        strings/ctype.cc [3:26]
+        strings/decimal.cc [3:26]
+        strings/int2str.cc [3:26]
+        strings/longlong2str.cc [3:26]
+        strings/my_strchr.cc [3:26]
+        strings/my_strtoll10.cc [3:26]
+        strings/str2int.cc [3:26]
+        strings/str_alloc.cc [3:26]
+        strings/strcont.cc [3:26]
+        strings/strmake.cc [3:26]
+        strings/xml.cc [3:26]
+        vio/vio.cc [3:26]
+        vio/viosocket.cc [4:27]
+        vio/viossl.cc [3:26]
+        vio/viosslfactories.cc [3:26]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        dbug/trace.cc [3:26]
+        include/errmsg.h [6:29]
+        include/field_types.h [3:26]
+        include/my_list.h [3:26]
+        include/mysql.h [3:26]
+        include/mysql/client_plugin.h [4:27]
+        include/mysql/plugin_auth_common.h [4:27]
+        include/mysql_com.h [3:26]
+        libmysql/errmsg.cc [3:26]
+        libmysql/libmysql.cc [3:26]
+        libmysql/mysql_trace.cc [3:26]
+        mysys/array.cc [3:26]
+        mysys/base64.cc [3:26]
+        mysys/charset-def.cc [3:26]
+        mysys/charset.cc [3:26]
+        mysys/checksum.cc [3:26]
+        mysys/crypt_genhash_impl.cc [3:26]
+        mysys/errors.cc [3:26]
+        mysys/lf_alloc-pin.cc [4:27]
+        mysys/lf_dynarray.cc [3:26]
+        mysys/lf_hash.cc [3:26]
+        mysys/list.cc [3:26]
+        mysys/mf_arr_appstr.cc [3:26]
+        mysys/mf_cache.cc [3:26]
+        mysys/mf_dirname.cc [3:26]
+        mysys/mf_fn_ext.cc [3:26]
+        mysys/mf_format.cc [3:26]
+        mysys/mf_iocache.cc [3:26]
+        mysys/mf_iocache2.cc [3:26]
+        mysys/mf_keycache.cc [3:26]
+        mysys/mf_keycaches.cc [3:26]
+        mysys/mf_loadpath.cc [3:26]
+        mysys/mf_path.cc [3:26]
+        mysys/mf_same.cc [3:26]
+        mysys/mf_tempdir.cc [3:26]
+        mysys/mf_tempfile.cc [3:26]
+        mysys/mf_unixpath.cc [3:26]
+        mysys/mf_wcomp.cc [3:26]
+        mysys/mulalloc.cc [3:26]
+        mysys/my_access.cc [3:26]
+        mysys/my_alloc.cc [2:25]
+        mysys/my_bit.cc [3:26]
+        mysys/my_bitmap.cc [4:27]
+        mysys/my_chmod.cc [3:26]
+        mysys/my_chsize.cc [3:26]
+        mysys/my_compare.cc [3:26]
+        mysys/my_compress.cc [3:26]
+        mysys/my_copy.cc [3:26]
+        mysys/my_create.cc [3:26]
+        mysys/my_default.cc [3:26]
+        mysys/my_delete.cc [3:26]
+        mysys/my_div.cc [3:26]
+        mysys/my_error.cc [3:26]
+        mysys/my_fallocator.cc [3:26]
+        mysys/my_file.cc [3:26]
+        mysys/my_fopen.cc [3:26]
+        mysys/my_fstream.cc [3:26]
+        mysys/my_gethwaddr.cc [3:26]
+        mysys/my_getopt.cc [3:26]
+        mysys/my_getpwnam.cc [3:26]
+        mysys/my_getwd.cc [3:26]
+        mysys/my_init.cc [3:26]
+        mysys/my_largepage.cc [3:26]
+        mysys/my_malloc.cc [3:26]
+        mysys/my_md5.cc [3:26]
+        mysys/my_mess.cc [3:26]
+        mysys/my_mkdir.cc [3:26]
+        mysys/my_mmap.cc [3:26]
+        mysys/my_murmur3.cc [3:26]
+        mysys/my_once.cc [3:26]
+        mysys/my_open.cc [3:26]
+        mysys/my_pread.cc [3:26]
+        mysys/my_read.cc [3:26]
+        mysys/my_rename.cc [3:26]
+        mysys/my_rnd.cc [4:27]
+        mysys/my_seek.cc [3:26]
+        mysys/my_sha1.cc [3:26]
+        mysys/my_sha2.cc [3:26]
+        mysys/my_static.cc [3:26]
+        mysys/my_string.cc [3:26]
+        mysys/my_symlink.cc [3:26]
+        mysys/my_symlink2.cc [3:26]
+        mysys/my_sync.cc [3:26]
+        mysys/my_systime.cc [3:26]
+        mysys/my_thr_init.cc [3:26]
+        mysys/my_thread.cc [3:26]
+        mysys/my_write.cc [3:26]
+        mysys/pack.cc [3:26]
+        mysys/posix_timers.cc [3:26]
+        mysys/print_version.cc [3:26]
+        mysys/ptr_cmp.cc [3:26]
+        mysys/sql_chars.cc [4:27]
+        mysys/stacktrace.cc [3:26]
+        mysys/thr_cond.cc [3:26]
+        mysys/thr_lock.cc [3:26]
+        mysys/thr_mutex.cc [3:26]
+        mysys/thr_rwlock.cc [3:26]
+        mysys/tree.cc [3:26]
+        mysys/typelib.cc [3:26]
+        sql-common/client.cc [3:26]
+        sql-common/client_authentication.cc [3:26]
+        sql-common/client_plugin.cc [3:26]
+        sql-common/get_password.cc [3:26]
+        sql-common/net_serv.cc [3:26]
+        sql/auth/password.cc [4:27]
+        strings/ctype-big5.cc [3:26]
+        strings/ctype-cp932.cc [3:26]
+        strings/ctype-czech.cc [3:26]
+        strings/ctype-euc_kr.cc [3:26]
+        strings/ctype-extra.cc [11:34]
+        strings/ctype-gb2312.cc [3:26]
+        strings/ctype-gbk.cc [3:26]
+        strings/ctype-latin1.cc [3:26]
+        strings/ctype-mb.cc [3:26]
+        strings/ctype-simple.cc [3:26]
+        strings/ctype-sjis.cc [3:26]
+        strings/ctype-tis620.cc [3:26]
+        strings/ctype-win1250ch.cc [3:26]
+        strings/ctype.cc [3:26]
+        strings/decimal.cc [3:26]
+        strings/int2str.cc [3:26]
+        strings/longlong2str.cc [3:26]
+        strings/my_strchr.cc [3:26]
+        strings/my_strtoll10.cc [3:26]
+        strings/str2int.cc [3:26]
+        strings/str_alloc.cc [3:26]
+        strings/strcont.cc [3:26]
+        strings/strmake.cc [3:26]
+        strings/xml.cc [3:26]
+        vio/vio.cc [3:26]
+        vio/viosocket.cc [4:27]
+        vio/viossl.cc [3:26]
+        vio/viosslfactories.cc [3:26]
+    Scancode info:
+        Original SPDX id: Universal-FOSS-exception-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://oss.oracle.com/licenses/universal-foss-exception/, https://spdx.org/licenses/Universal-FOSS-exception-1.0
+    Files with this license:
+        dbug/trace.cc [3:26]
+        include/errmsg.h [6:29]
+        include/field_types.h [3:26]
+        include/my_list.h [3:26]
+        include/mysql.h [3:26]
+        include/mysql/client_plugin.h [4:27]
+        include/mysql/plugin_auth_common.h [4:27]
+        include/mysql_com.h [3:26]
+        libmysql/errmsg.cc [3:26]
+        libmysql/libmysql.cc [3:26]
+        libmysql/mysql_trace.cc [3:26]
+        mysys/array.cc [3:26]
+        mysys/base64.cc [3:26]
+        mysys/charset-def.cc [3:26]
+        mysys/charset.cc [3:26]
+        mysys/checksum.cc [3:26]
+        mysys/crypt_genhash_impl.cc [3:26]
+        mysys/errors.cc [3:26]
+        mysys/lf_alloc-pin.cc [4:27]
+        mysys/lf_dynarray.cc [3:26]
+        mysys/lf_hash.cc [3:26]
+        mysys/list.cc [3:26]
+        mysys/mf_arr_appstr.cc [3:26]
+        mysys/mf_cache.cc [3:26]
+        mysys/mf_dirname.cc [3:26]
+        mysys/mf_fn_ext.cc [3:26]
+        mysys/mf_format.cc [3:26]
+        mysys/mf_iocache.cc [3:26]
+        mysys/mf_iocache2.cc [3:26]
+        mysys/mf_keycache.cc [3:26]
+        mysys/mf_keycaches.cc [3:26]
+        mysys/mf_loadpath.cc [3:26]
+        mysys/mf_path.cc [3:26]
+        mysys/mf_same.cc [3:26]
+        mysys/mf_tempdir.cc [3:26]
+        mysys/mf_tempfile.cc [3:26]
+        mysys/mf_unixpath.cc [3:26]
+        mysys/mf_wcomp.cc [3:26]
+        mysys/mulalloc.cc [3:26]
+        mysys/my_access.cc [3:26]
+        mysys/my_alloc.cc [2:25]
+        mysys/my_bit.cc [3:26]
+        mysys/my_bitmap.cc [4:27]
+        mysys/my_chmod.cc [3:26]
+        mysys/my_chsize.cc [3:26]
+        mysys/my_compare.cc [3:26]
+        mysys/my_compress.cc [3:26]
+        mysys/my_copy.cc [3:26]
+        mysys/my_create.cc [3:26]
+        mysys/my_default.cc [3:26]
+        mysys/my_delete.cc [3:26]
+        mysys/my_div.cc [3:26]
+        mysys/my_error.cc [3:26]
+        mysys/my_fallocator.cc [3:26]
+        mysys/my_file.cc [3:26]
+        mysys/my_fopen.cc [3:26]
+        mysys/my_fstream.cc [3:26]
+        mysys/my_gethwaddr.cc [3:26]
+        mysys/my_getopt.cc [3:26]
+        mysys/my_getpwnam.cc [3:26]
+        mysys/my_getwd.cc [3:26]
+        mysys/my_init.cc [3:26]
+        mysys/my_largepage.cc [3:26]
+        mysys/my_malloc.cc [3:26]
+        mysys/my_md5.cc [3:26]
+        mysys/my_mess.cc [3:26]
+        mysys/my_mkdir.cc [3:26]
+        mysys/my_mmap.cc [3:26]
+        mysys/my_murmur3.cc [3:26]
+        mysys/my_once.cc [3:26]
+        mysys/my_open.cc [3:26]
+        mysys/my_pread.cc [3:26]
+        mysys/my_read.cc [3:26]
+        mysys/my_rename.cc [3:26]
+        mysys/my_rnd.cc [4:27]
+        mysys/my_seek.cc [3:26]
+        mysys/my_sha1.cc [3:26]
+        mysys/my_sha2.cc [3:26]
+        mysys/my_static.cc [3:26]
+        mysys/my_string.cc [3:26]
+        mysys/my_symlink.cc [3:26]
+        mysys/my_symlink2.cc [3:26]
+        mysys/my_sync.cc [3:26]
+        mysys/my_systime.cc [3:26]
+        mysys/my_thr_init.cc [3:26]
+        mysys/my_thread.cc [3:26]
+        mysys/my_write.cc [3:26]
+        mysys/pack.cc [3:26]
+        mysys/posix_timers.cc [3:26]
+        mysys/print_version.cc [3:26]
+        mysys/ptr_cmp.cc [3:26]
+        mysys/sql_chars.cc [4:27]
+        mysys/stacktrace.cc [3:26]
+        mysys/thr_cond.cc [3:26]
+        mysys/thr_lock.cc [3:26]
+        mysys/thr_mutex.cc [3:26]
+        mysys/thr_rwlock.cc [3:26]
+        mysys/tree.cc [3:26]
+        mysys/typelib.cc [3:26]
+        sql-common/client.cc [3:26]
+        sql-common/client_authentication.cc [3:26]
+        sql-common/client_plugin.cc [3:26]
+        sql-common/get_password.cc [3:26]
+        sql-common/net_serv.cc [3:26]
+        sql/auth/password.cc [4:27]
+        strings/ctype-big5.cc [3:26]
+        strings/ctype-cp932.cc [3:26]
+        strings/ctype-czech.cc [3:26]
+        strings/ctype-euc_kr.cc [3:26]
+        strings/ctype-extra.cc [11:34]
+        strings/ctype-gb2312.cc [3:26]
+        strings/ctype-gbk.cc [3:26]
+        strings/ctype-latin1.cc [3:26]
+        strings/ctype-mb.cc [3:26]
+        strings/ctype-simple.cc [3:26]
+        strings/ctype-sjis.cc [3:26]
+        strings/ctype-tis620.cc [3:26]
+        strings/ctype-win1250ch.cc [3:26]
+        strings/ctype.cc [3:26]
+        strings/decimal.cc [3:26]
+        strings/int2str.cc [3:26]
+        strings/longlong2str.cc [3:26]
+        strings/my_strchr.cc [3:26]
+        strings/my_strtoll10.cc [3:26]
+        strings/str2int.cc [3:26]
+        strings/str_alloc.cc [3:26]
+        strings/strcont.cc [3:26]
+        strings/strmake.cc [3:26]
+        strings/xml.cc [3:26]
+        vio/vio.cc [3:26]
+        vio/viosocket.cc [4:27]
+        vio/viossl.cc [3:26]
+        vio/viosslfactories.cc [3:26]
+
+KEEP     LGPL-2.1-only        2677a3a0c49adda1400fd8429aa112f6
+BELONGS ya.make
+    License text:
+           This component is licensed under GNU Lesser General Public License
+           Version 2.1, February 1999.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [2701:2702]
+        LICENSE [3715:3716]
+        LICENSE [4983:4984]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 276559c54f76c63da17dec92dfc15f17
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        libmysql/libmysql.ver [3:21]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        libmysql/libmysql.ver [3:21]
+
+KEEP     Cmu-Computing-Services 277370ff301ff904f19810a9335a6619
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-cmu-computing-services
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://cyrusimap.org/mediawiki/index.php/Downloads#Licensing, http://www.cmu.edu/computing/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/cmu-computing-services.LICENSE
+    Files with this license:
+        LICENSE [837:871]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 27d484fecd9f547fb4a260aa9922daeb
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 2113
+    License text:
+        UNICODE, INC. LICENSE AGREEMENT - DATA FILES AND SOFTWARE
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [2113:2113]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE [5344:5366]
+
+KEEP     GPL-2.0-only WITH Universal-FOSS-exception-1.0 2d1c68ea3db4b685e53a2a8e404d7db8
+BELONGS mysys/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/my_command.h [3:26]
+        include/mysql/udf_registration_types.h [3:26]
+        mysys/my_aes_wolfssl.cc [3:26]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/my_command.h [3:26]
+        include/mysql/udf_registration_types.h [3:26]
+        mysys/my_aes_wolfssl.cc [3:26]
+    Scancode info:
+        Original SPDX id: Universal-FOSS-exception-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://oss.oracle.com/licenses/universal-foss-exception/, https://spdx.org/licenses/Universal-FOSS-exception-1.0
+    Files with this license:
+        include/my_command.h [3:26]
+        include/mysql/udf_registration_types.h [3:26]
+        mysys/my_aes_wolfssl.cc [3:26]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 2e542c2300a86a9af93c698ca4e132bf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/my_hostname.h [4:22]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/my_hostname.h [4:22]
+
+KEEP     LGPL-2.0-only        3005f5dcce7d17c0e8a2ffa6face2f06
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 6540
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.0.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-only
+    Files with this license:
+        LICENSE [6540:6984]
+
+KEEP     Spencer-94           30eace72605d5577b021570d9aed7b2b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Spencer-94
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://search.cpan.org/~knok/File-MMagic-1.12/MMagic.pm, https://github.com/garyhouston/regex/blob/master/COPYRIGHT, https://spdx.org/licenses/Spencer-94
+    Files with this license:
+        LICENSE [5481:5499]
+
+KEEP     LGPL-2.1-only        31610bd3cfa92ea4290aa21d341533f6
+BELONGS ya.make
+    License text:
+        The following applies to all products licensed under the
+        GNU Lesser General Public License, Version 2.1: You may
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [6009:6010]
+
+KEEP     BSD-3-Clause AND GPL-1.0-or-later 32b677cdb57b5d5ea6baf110939a24be
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [4732:4763]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [4732:4763]
+
+SKIP     BSD-3-Clause-Clear   341f1e006fbae98e0ff47689db2e40aa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause-Clear
+        Score           : 25.00
+        Match type      : TEXT
+        Links           : http://labs.metacarta.com/license-explanation.html, http://labs.metacarta.com/license-explanation.html#license, https://spdx.org/licenses/BSD-3-Clause-Clear
+    Files with this license:
+        LICENSE [656:662]
+
+KEEP     Mit-Old-Style        3423a2532a6b4d2d7fd87cd5332a07f0
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mit-old-style
+        Score           : 74.48
+        Match type      : NOTICE
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-old-style.LICENSE
+    Files with this license:
+        strings/t_ctype.h [27:32]
+
+KEEP     BSD-2-Clause AND GPL-2.0-only 3458e65ba324a8d26a27af385ae2f73f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 54.23
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [4821:4855]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 54.23
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [4821:4855]
+
+KEEP     GPL-2.0-only         363eeca9d73116db05de6ce76fbebc07
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 3758, LICENSE at line 3816
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 99.97
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [3758:4107]
+
+KEEP     MIT                  36565ba12654baa7586a38991e331be6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5458:5474]
+
+KEEP     OLDAP-2.8            371f69b77a6a9be02e538b632e3c28c8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        LICENSE [4991:5034]
+
+KEEP     BSD-3-Clause         37d0d84929f53e404334acb07d17f61f
+BELONGS ya.make
+    License text:
+        Oracle elects to take this code under the BSD-style license
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [5837:5837]
+
+KEEP     BSD-3-Clause         388eadf5899fb0cc836cc4d024a8361a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [2746:2766]
+
+KEEP     MIT                  399584035c417b91040964779555dfac
+BELONGS ya.make
+    License text:
+        MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [6986:6986]
+
+KEEP     GPL-2.0-only WITH Universal-FOSS-exception-1.0 39c30213ee8e471bd220dd8cdf44ae37
+BELONGS mysys/ya.make strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        mysys/my_syslog.cc [4:27]
+        strings/ctype-gb18030.cc [3:26]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        mysys/my_syslog.cc [4:27]
+        strings/ctype-gb18030.cc [3:26]
+    Scancode info:
+        Original SPDX id: Universal-FOSS-exception-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://oss.oracle.com/licenses/universal-foss-exception/, https://spdx.org/licenses/Universal-FOSS-exception-1.0
+    Files with this license:
+        mysys/my_syslog.cc [4:27]
+        strings/ctype-gb18030.cc [3:26]
+
+KEEP     MIT                  3c8ada3c51cee95da47e87a2b7cc4add
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5604:5621]
+
+KEEP     MIT                  3d5e8744b36e0dc6cea92077473821db
+BELONGS ya.make
+    License text:
+        note that the RapidJSON binary is licensed under the MIT License.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5375:5375]
+
+KEEP     Public-Domain        3fd2f27b84ef648a841da852398d0db1
+BELONGS mysys/ya.make
+    License text:
+         * "Released into the Public Domain by Ulrich Drepper <drepper@redhat.com>."
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        mysys/crypt_genhash_impl.cc [206:206]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 42e2d90761e2d87793baf3995b3014d3
+BELONGS ya.make
+    License text:
+        purpose. It is provided "as is" without express or implied warranty.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        LICENSE [3680:3680]
+
+KEEP     Unicode              440b1c6c54c1e61faabe0c2797068c30
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE [5680:5706]
+
+KEEP     BSD-3-Clause         45176243f4e9c296fba4a3e3131677ce
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 88.61
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [807:828]
+
+SKIP     LicenseRef-scancode-proprietary-license 4531ba7d8c6743288bdc4d03fd64fbd4
+BELONGS ya.make
+    # code comment
+    License text:
+          we're talking to non-commercial server from commercial client.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        sql-common/client.cc [1756:1756]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 4788da7c0d65cf73af63c648b19baf16
+BELONGS ya.make
+    License text:
+            as well as the documentation are distributed under the terms of
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [3726:3726]
+
+KEEP     BSD-3-Clause         47abe46a7919e9bf6aec9a2be94116e8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1236:1241]
+
+KEEP     GPL-2.0-only         47e77f3e67a67f457ab5c37399ff20db
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 50.46
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [6014:6020]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 4840dfca3211a3c414c9fd475859d43c
+BELONGS strings/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/mysql/psi/mysql_socket.h [3:21]
+        strings/CHARSET_INFO.txt [3:21]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/mysql/psi/mysql_socket.h [3:21]
+        strings/CHARSET_INFO.txt [3:21]
+
+KEEP     Unicode              492784bef6fc7c1454494eaff68ad658
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE [2140:2169]
+
+KEEP     MIT                  498f327de2223bab9e75e50d8c8f2ce9
+BELONGS ya.make
+    License text:
+        A copy of the MIT License is included in this file.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5385:5385]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 498ff0e95b54aef856cecd408dfa9046
+BELONGS ya.make
+    License text:
+        ssh is licensed
+        under the LGPLv2.1 license, separate from MySQL. If you do not wish to install t
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [3691:3692]
+
+SKIP     LicenseRef-scancode-unknown-license-reference AND LicenseRef-scancode-free-unknown 4a771710123393b161c2926cb1aa805e
+BELONGS ya.make
+    License text:
+           licensed under an open source license that gives you the right to
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [7009:7009]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        LICENSE [7009:7009]
+
+KEEP     GPL-1.0-or-later     4acd5b67c20a3f1fb853e3c0211f13e8
+BELONGS ya.make
+    License text:
+            "GPL",
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        sql-common/client.cc [3783:3783]
+        sql-common/client.cc [3798:3798]
+        sql-common/client.cc [3814:3814]
+        sql-common/client.cc [3829:3829]
+
+KEEP     PSF-3.7.2            4b7abd6dae8e303fe62c11d04283b0ee
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 508, LICENSE at line 510
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-psf-3.7.2
+        Score           : 89.77
+        Match type      : TEXT
+        Links           : https://docs.python.org/3/license.html#psf-license-agreement-for-python-release, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/psf-3.7.2.LICENSE
+    Files with this license:
+        LICENSE [508:551]
+
+KEEP     GPL-2.0-only         4e4a8d5b596a4739aaeb8be0ecabb954
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [51:62]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 4f271a756d7f9dc87894d89dcb5c14be
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/mysql/service_command.h [5:23]
+        include/mysql/service_my_plugin_log.h [3:21]
+        include/mysql/service_parser.h [5:23]
+        include/mysql/service_rules_table.h [6:24]
+        include/mysql/service_srv_session.h [3:21]
+        include/mysql/service_srv_session_info.h [5:23]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/mysql/service_command.h [5:23]
+        include/mysql/service_my_plugin_log.h [3:21]
+        include/mysql/service_parser.h [5:23]
+        include/mysql/service_rules_table.h [6:24]
+        include/mysql/service_srv_session.h [3:21]
+        include/mysql/service_srv_session_info.h [5:23]
+
+KEEP     BSD-2-Clause         4f4f2d9fb27d7fb12449f16905cf644b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [603:625]
+
+KEEP     GPL-2.0-only         4f72496980de0e205c88b4197e9b8721
+BELONGS ya.make
+    License text:
+        Election of GPLv2
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [41:41]
+
+KEEP     BSD-2-Clause         53dc86b5441f355d0fd207be70b701b0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [4772:4794]
+
+KEEP     GPL-2.0-only AND LGPL-2.0-or-later 54ccba4200c1febd189619f9c466b3d3
+BELONGS ya.make
+    License text:
+        GNU Lesser General Public License Version 2, June 1991
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 88.89
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [6538:6538]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        LICENSE [6538:6538]
+
+KEEP     LGPL-2.1-only        5546162e55643886dc3475caa19d86c7
+BELONGS ya.make
+    License text:
+        http://www.gnu.org/licenses/lgpl-2.1.html. A copy of the
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [6014:6014]
+
+KEEP     MIT                  55cf29c3bb98c583fad00d6336a8db46
+BELONGS ya.make
+    License text:
+        projects may require compliance with the MIT License, as well as the other
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5380:5380]
+
+KEEP     BSD-3-Clause         57234d304418304f7d719606ab12e0f7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [5841:5872]
+
+KEEP     GPL-1.0-or-later AND LGPL-2.0-or-later 5c1ec45a32c2894d6e69688b7f382d3c
+BELONGS ya.make
+    License text:
+           than GPL or LGPL is available it will apply instead, Oracle elects to
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [44:44]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        LICENSE [44:44]
+
+KEEP     LicenseRef-scancode-other-permissive 5c741cbf07b07869ad48c56e2ebc008f
+BELONGS ya.make
+    License text:
+          Smaphan Raruenrom and Pruet Boonma makes no representations about
+        the suitability of this software for any purpose. It is provided
+        "as is" without express or implied warranty.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        LICENSE [5526:5528]
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [671:687]
+        LICENSE [901:917]
+        LICENSE [2554:2570]
+        LICENSE [5628:5644]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 5ec53cdbb2cb2cdabd2b95233a9d2ac7
+BELONGS ya.make
+    License text:
+           Use of any of this software is governed by the terms of the license
+           below:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [695:696]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 5f367b2f04471484d328f4d172f241b1
+BELONGS mysys/ya.make
+    License text:
+            We are not responsible for any damage that may be caused by
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 15.62
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        mysys/lf_alloc-pin.cc [413:413]
+
+KEEP     ISC                  5f55fd6c92b9b82e56681bd0a1746dde
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 99.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE [1037:1051]
+
+KEEP     GPL-1.0-or-later     5ff854c47f856cf26a4c80870c64c276
+BELONGS ya.make
+    License text:
+            the GNU General Public License (GPL); see the file COPYING for the
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [3727:3727]
+
+KEEP     X11-Lucent           60ecd364cb4b085c7ab412ca966b2196
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-x11-lucent
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/x11-lucent.LICENSE
+    Files with this license:
+        strings/dtoa.cc [38:47]
+
+SKIP     Artistic-1.0-Perl    612e04fc0ff65775e573aeed7ebafa9d
+BELONGS ya.make
+    # As per 
+	# https://github.com/mysql/mysql-server/commit/2ba9c85eb3b74333e9702b6fd021fddf5b42aad2
+	# This license only applies to memcached.pm which we do not use
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Artistic-1.0-Perl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://dev.perl.org/licenses/artistic.html, https://spdx.org/licenses/Artistic-1.0-Perl
+    Files with this license:
+        LICENSE [5878:6005]
+
+KEEP     MIT                  62574968655dfadc849b1ab4123aba22
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [731:747]
+
+KEEP     MIT                  632ad4fb769d5cd328329d2c9933eb11
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5537:5554]
+
+KEEP     ISC                  6351e788a19dc7f74fceaa08e0941365
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE [2798:2808]
+
+KEEP     Python-2.0           63833ba321a351f6bded8d9eef0f8421
+BELONGS ya.make
+    License text:
+        For details about the Python License, please see doc/Python-License.txt.
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        LICENSE [491:491]
+
+SKIP     Artistic-1.0-Perl AND GPL-1.0-or-later 64885821465682486438332cad763d51
+BELONGS ya.make
+    # As per 
+	# https://github.com/mysql/mysql-server/commit/2ba9c85eb3b74333e9702b6fd021fddf5b42aad2
+	# This license only applies to memcached.pm which we do not use
+    License text:
+        Artistic License (Perl) 1.0
+    Scancode info:
+        Original SPDX id: Artistic-2.0
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : http://www.perlfoundation.org/, https://spdx.org/licenses/Artistic-2.0, https://www.perlfoundation.org/artistic_license_2_0
+    Files with this license:
+        LICENSE [5876:5876]
+    Scancode info:
+        Original SPDX id: Artistic-1.0-Perl
+        Score           : 90.00
+        Match type      : TAG
+        Links           : http://dev.perl.org/licenses/artistic.html, https://spdx.org/licenses/Artistic-1.0-Perl
+    Files with this license:
+        LICENSE [5876:5876]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 90.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [5876:5876]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 652bfa9c61475bd1d2c166c5d26c223b
+BELONGS ya.make
+    License text:
+        guarantee (number 1832064) and is subject to the terms of use here:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 60.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [1123:1123]
+
+KEEP     Universal-FOSS-exception-1.0 66dd6d5ec5b9ccdcff0e07b2acd82b8b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Universal-FOSS-exception-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://oss.oracle.com/licenses/universal-foss-exception/, https://spdx.org/licenses/Universal-FOSS-exception-1.0
+    Files with this license:
+        LICENSE [421:470]
+
+KEEP     LicenseRef-scancode-other-permissive 69056019a7e11459c6ebbd30becd17b0
+BELONGS ya.make
+    License text:
+        Permission to use, copy, modify, and distribute this software
+        for any purpose and without fee is hereby granted. The author
+        disclaims all warranties with regard to this software.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        LICENSE [4696:4698]
+
+KEEP     BSD-3-Clause         693fe430305a6331e132ffeb8295ae20
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [5573:5597]
+
+KEEP     BSD-3-Clause         6a621b075d4581c62088e596d62f8720
+BELONGS ya.make
+    License text:
+         \#  * Libtabe (Chinese)
+         \#    - https://sourceforge.net/project/?group_id=1519
+        \#   - Its license terms and conditions are shown below.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [2310:2312]
+
+KEEP     BSD-3-Clause         6aa235708ac9f5dd8e5c6ac415fc5837
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [566:590]
+
+KEEP     Public-Domain        6b9e5f5d8e51877e5a4bbd9d4e738fc6
+BELONGS ya.make
+    License text:
+        /* Copyright Abandoned 1996,1999 TCX DataKonsult AB & Monty Program KB
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        include/mysql_version.h [1:1]
+
+KEEP     BSD-3-Clause         6bd5a75cb8241ce926a3f9286d220cee
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 30.47
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1273:1280]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 6bde49e73bed09d8b543823a8f86bbec
+BELONGS mysys/ya.make strings/ya.make vio/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/base64.h [3:21]
+        include/crypt_genhash_impl.h [3:21]
+        include/decimal.h [3:21]
+        include/ft_global.h [6:24]
+        include/keycache.h [3:21]
+        include/lex_string.h [4:22]
+        include/lf.h [3:21]
+        include/little_endian.h [5:23]
+        include/m_ctype.h [3:21]
+        include/m_string.h [4:22]
+        include/map_helpers.h [3:21]
+        include/memory_debugging.h [3:21]
+        include/mf_wcomp.h [3:21]
+        include/mutex_lock.h [3:21]
+        include/my_alloc.h [3:21]
+        include/my_atomic.h [6:24]
+        include/my_base.h [3:21]
+        include/my_basename.h [3:21]
+        include/my_bit.h [4:22]
+        include/my_bitmap.h [4:22]
+        include/my_byteorder.h [6:24]
+        include/my_compare.h [3:21]
+        include/my_compiler.h [6:24]
+        include/my_dbug.h [3:21]
+        include/my_default.h [3:21]
+        include/my_dir.h [3:21]
+        include/my_double2ulonglong.h [4:22]
+        include/my_getopt.h [4:22]
+        include/my_getpwnam.h [4:22]
+        include/my_inttypes.h [4:22]
+        include/my_io.h [4:22]
+        include/my_loglevel.h [4:22]
+        include/my_macros.h [4:22]
+        include/my_md5.h [6:24]
+        include/my_murmur3.h [6:24]
+        include/my_pointer_arithmetic.h [6:24]
+        include/my_psi_config.h [4:22]
+        include/my_rnd.h [7:25]
+        include/my_sharedlib.h [4:22]
+        include/my_shm_defaults.h [4:22]
+        include/my_stacktrace.h [3:21]
+        include/my_sys.h [3:21]
+        include/my_systime.h [4:22]
+        include/my_thread.h [3:21]
+        include/my_thread_local.h [3:21]
+        include/my_timer.h [3:21]
+        include/my_tree.h [3:21]
+        include/my_uctype.h [6:24]
+        include/myisampack.h [6:24]
+        include/mysql/client_authentication.h [3:21]
+        include/mysql/com_data.h [3:21]
+        include/mysql/components/services/log_builtins.h [3:21]
+        include/mysql/components/services/log_shared.h [3:21]
+        include/mysql/components/services/system_variable_source_type.h [4:22]
+        include/mysql/components/services/thr_cond_bits.h [3:21]
+        include/mysql/components/services/thr_mutex_bits.h [3:21]
+        include/mysql/components/services/thr_rwlock_bits.h [3:21]
+        include/mysql/mysql_lex_string.h [3:21]
+        include/mysql/plugin.h [3:21]
+        include/mysql/plugin_trace.h [3:21]
+        include/mysql/service_mysql_alloc.h [3:21]
+        include/mysql/service_mysql_keyring.h [3:21]
+        include/mysql/service_mysql_password_policy.h [3:21]
+        include/mysql/service_mysql_string.h [3:21]
+        include/mysql/service_rpl_transaction_ctx.h [3:21]
+        include/mysql/service_rpl_transaction_write_set.h [3:21]
+        include/mysql/service_security_context.h [3:21]
+        include/mysql/service_thd_alloc.h [4:22]
+        include/mysql/service_thd_wait.h [3:21]
+        include/mysql/services.h [4:22]
+        include/mysql/status_var.h [3:21]
+        include/mysql_async.h [3:21]
+        include/mysqld_error.h [3:21]
+        include/mysys_err.h [3:21]
+        include/prealloced_array.h [3:21]
+        include/print_version.h [3:21]
+        include/sql_chars.h [4:22]
+        include/sql_common.h [6:24]
+        include/sql_string.h [6:24]
+        include/template_utils.h [3:21]
+        include/thr_cond.h [6:24]
+        include/thr_lock.h [3:21]
+        include/thr_mutex.h [6:24]
+        include/thr_rwlock.h [6:24]
+        include/typelib.h [3:21]
+        include/violite.h [3:21]
+        libbinlogevents/include/binlog_event.h [3:21]
+        libbinlogevents/include/byteorder.h [3:21]
+        libbinlogevents/include/control_events.h [3:21]
+        libbinlogevents/include/debug_vars.h [3:21]
+        libbinlogevents/include/event_reader.h [3:21]
+        libbinlogevents/include/load_data_events.h [3:21]
+        libbinlogevents/include/rows_event.h [3:21]
+        libbinlogevents/include/statement_events.h [3:21]
+        libbinlogevents/include/table_id.h [3:21]
+        libbinlogevents/include/uuid.h [3:21]
+        libbinlogevents/include/wrapper_functions.h [3:21]
+        libmysql/client_settings.h [3:21]
+        libmysql/init_commands_array.h [3:21]
+        libmysql/mysql_trace.h [3:21]
+        mysys/kqueue_timers.cc [3:21]
+        mysys/my_conio.cc [3:21]
+        mysys/my_handler_errors.h [6:24]
+        mysys/my_static.h [6:24]
+        mysys/my_windac.cc [3:21]
+        mysys/my_winerr.cc [3:21]
+        mysys/my_winfile.cc [3:21]
+        mysys/mysys_priv.h [3:21]
+        mysys/win_timers.cc [3:21]
+        sql-common/client_async_authentication.h [3:21]
+        sql/auth/sha2_password_common.cc [4:22]
+        sql/auth/sha2_password_common.h [4:22]
+        sql/dd/object_id.h [3:21]
+        sql/dd/string_type.h [3:21]
+        sql/dd/types/object_table.h [3:21]
+        sql/discrete_interval.h [6:24]
+        sql/key.h [3:21]
+        sql/key_spec.h [3:21]
+        sql/lock.h [3:21]
+        sql/log_event.h [3:21]
+        sql/malloc_allocator.h [3:21]
+        sql/mdl.h [5:23]
+        sql/mem_root_array.h [3:21]
+        sql/memroot_allocator.h [3:21]
+        sql/partition_element.h [6:24]
+        sql/partition_info.h [6:24]
+        sql/psi_memory_key.h [3:21]
+        sql/query_options.h [3:21]
+        sql/rpl_constants.h [3:21]
+        sql/rpl_gtid.h [3:21]
+        sql/rpl_reporting.h [3:21]
+        sql/rpl_tblmap.h [3:21]
+        sql/rpl_utility.h [3:21]
+        sql/select_lex_visitor.h [5:23]
+        sql/sql_bitmap.h [3:21]
+        sql/sql_cmd.h [3:21]
+        sql/sql_const.h [3:21]
+        sql/sql_data_change.h [5:23]
+        sql/sql_list.h [5:23]
+        sql/sql_plist.h [5:23]
+        sql/sql_plugin.h [3:21]
+        sql/sql_plugin_ref.h [3:21]
+        sql/stateless_allocator.h [3:21]
+        sql/stream_cipher.h [3:21]
+        sql/thr_malloc.h [3:21]
+        strings/str_uca_type.h [3:21]
+        strings/t_ctype.h [4:22]
+        strings/uca9-dump.cc [3:21]
+        strings/uca900_data.h [3:21]
+        strings/uca900_ja_data.h [3:21]
+        strings/uca900_zh_data.h [3:21]
+        strings/uca_data.h [3:21]
+        vio/vio_priv.h [3:21]
+        vio/viopipe.cc [3:21]
+        vio/vioshm.cc [3:21]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/base64.h [3:21]
+        include/crypt_genhash_impl.h [3:21]
+        include/decimal.h [3:21]
+        include/ft_global.h [6:24]
+        include/keycache.h [3:21]
+        include/lex_string.h [4:22]
+        include/lf.h [3:21]
+        include/little_endian.h [5:23]
+        include/m_ctype.h [3:21]
+        include/m_string.h [4:22]
+        include/map_helpers.h [3:21]
+        include/memory_debugging.h [3:21]
+        include/mf_wcomp.h [3:21]
+        include/mutex_lock.h [3:21]
+        include/my_alloc.h [3:21]
+        include/my_atomic.h [6:24]
+        include/my_base.h [3:21]
+        include/my_basename.h [3:21]
+        include/my_bit.h [4:22]
+        include/my_bitmap.h [4:22]
+        include/my_byteorder.h [6:24]
+        include/my_compare.h [3:21]
+        include/my_compiler.h [6:24]
+        include/my_dbug.h [3:21]
+        include/my_default.h [3:21]
+        include/my_dir.h [3:21]
+        include/my_double2ulonglong.h [4:22]
+        include/my_getopt.h [4:22]
+        include/my_getpwnam.h [4:22]
+        include/my_inttypes.h [4:22]
+        include/my_io.h [4:22]
+        include/my_loglevel.h [4:22]
+        include/my_macros.h [4:22]
+        include/my_md5.h [6:24]
+        include/my_murmur3.h [6:24]
+        include/my_pointer_arithmetic.h [6:24]
+        include/my_psi_config.h [4:22]
+        include/my_rnd.h [7:25]
+        include/my_sharedlib.h [4:22]
+        include/my_shm_defaults.h [4:22]
+        include/my_stacktrace.h [3:21]
+        include/my_sys.h [3:21]
+        include/my_systime.h [4:22]
+        include/my_thread.h [3:21]
+        include/my_thread_local.h [3:21]
+        include/my_timer.h [3:21]
+        include/my_tree.h [3:21]
+        include/my_uctype.h [6:24]
+        include/myisampack.h [6:24]
+        include/mysql/client_authentication.h [3:21]
+        include/mysql/com_data.h [3:21]
+        include/mysql/components/services/log_builtins.h [3:21]
+        include/mysql/components/services/log_shared.h [3:21]
+        include/mysql/components/services/system_variable_source_type.h [4:22]
+        include/mysql/components/services/thr_cond_bits.h [3:21]
+        include/mysql/components/services/thr_mutex_bits.h [3:21]
+        include/mysql/components/services/thr_rwlock_bits.h [3:21]
+        include/mysql/mysql_lex_string.h [3:21]
+        include/mysql/plugin.h [3:21]
+        include/mysql/plugin_trace.h [3:21]
+        include/mysql/service_mysql_alloc.h [3:21]
+        include/mysql/service_mysql_keyring.h [3:21]
+        include/mysql/service_mysql_password_policy.h [3:21]
+        include/mysql/service_mysql_string.h [3:21]
+        include/mysql/service_rpl_transaction_ctx.h [3:21]
+        include/mysql/service_rpl_transaction_write_set.h [3:21]
+        include/mysql/service_security_context.h [3:21]
+        include/mysql/service_thd_alloc.h [4:22]
+        include/mysql/service_thd_wait.h [3:21]
+        include/mysql/services.h [4:22]
+        include/mysql/status_var.h [3:21]
+        include/mysql_async.h [3:21]
+        include/mysqld_error.h [3:21]
+        include/mysys_err.h [3:21]
+        include/prealloced_array.h [3:21]
+        include/print_version.h [3:21]
+        include/sql_chars.h [4:22]
+        include/sql_common.h [6:24]
+        include/sql_string.h [6:24]
+        include/template_utils.h [3:21]
+        include/thr_cond.h [6:24]
+        include/thr_lock.h [3:21]
+        include/thr_mutex.h [6:24]
+        include/thr_rwlock.h [6:24]
+        include/typelib.h [3:21]
+        include/violite.h [3:21]
+        libbinlogevents/include/binlog_event.h [3:21]
+        libbinlogevents/include/byteorder.h [3:21]
+        libbinlogevents/include/control_events.h [3:21]
+        libbinlogevents/include/debug_vars.h [3:21]
+        libbinlogevents/include/event_reader.h [3:21]
+        libbinlogevents/include/load_data_events.h [3:21]
+        libbinlogevents/include/rows_event.h [3:21]
+        libbinlogevents/include/statement_events.h [3:21]
+        libbinlogevents/include/table_id.h [3:21]
+        libbinlogevents/include/uuid.h [3:21]
+        libbinlogevents/include/wrapper_functions.h [3:21]
+        libmysql/client_settings.h [3:21]
+        libmysql/init_commands_array.h [3:21]
+        libmysql/mysql_trace.h [3:21]
+        mysys/kqueue_timers.cc [3:21]
+        mysys/my_conio.cc [3:21]
+        mysys/my_handler_errors.h [6:24]
+        mysys/my_static.h [6:24]
+        mysys/my_windac.cc [3:21]
+        mysys/my_winerr.cc [3:21]
+        mysys/my_winfile.cc [3:21]
+        mysys/mysys_priv.h [3:21]
+        mysys/win_timers.cc [3:21]
+        sql-common/client_async_authentication.h [3:21]
+        sql/auth/sha2_password_common.cc [4:22]
+        sql/auth/sha2_password_common.h [4:22]
+        sql/dd/object_id.h [3:21]
+        sql/dd/string_type.h [3:21]
+        sql/dd/types/object_table.h [3:21]
+        sql/discrete_interval.h [6:24]
+        sql/key.h [3:21]
+        sql/key_spec.h [3:21]
+        sql/lock.h [3:21]
+        sql/log_event.h [3:21]
+        sql/malloc_allocator.h [3:21]
+        sql/mdl.h [5:23]
+        sql/mem_root_array.h [3:21]
+        sql/memroot_allocator.h [3:21]
+        sql/partition_element.h [6:24]
+        sql/partition_info.h [6:24]
+        sql/psi_memory_key.h [3:21]
+        sql/query_options.h [3:21]
+        sql/rpl_constants.h [3:21]
+        sql/rpl_gtid.h [3:21]
+        sql/rpl_reporting.h [3:21]
+        sql/rpl_tblmap.h [3:21]
+        sql/rpl_utility.h [3:21]
+        sql/select_lex_visitor.h [5:23]
+        sql/sql_bitmap.h [3:21]
+        sql/sql_cmd.h [3:21]
+        sql/sql_const.h [3:21]
+        sql/sql_data_change.h [5:23]
+        sql/sql_list.h [5:23]
+        sql/sql_plist.h [5:23]
+        sql/sql_plugin.h [3:21]
+        sql/sql_plugin_ref.h [3:21]
+        sql/stateless_allocator.h [3:21]
+        sql/stream_cipher.h [3:21]
+        sql/thr_malloc.h [3:21]
+        strings/str_uca_type.h [3:21]
+        strings/t_ctype.h [4:22]
+        strings/uca9-dump.cc [3:21]
+        strings/uca900_data.h [3:21]
+        strings/uca900_ja_data.h [3:21]
+        strings/uca900_zh_data.h [3:21]
+        strings/uca_data.h [3:21]
+        vio/vio_priv.h [3:21]
+        vio/viopipe.cc [3:21]
+        vio/vioshm.cc [3:21]
+
+KEEP     BSD-3-Clause         6ca6dcceb4759e539d0f65768bcf5069
+BELONGS ya.make
+    License text:
+        Open Source Software Licensed Under the BSD License:
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [5389:5389]
+
+SKIP     LicenseRef-scancode-unknown-license-reference AND LicenseRef-scancode-free-unknown 6ce176440e47356a0f0dc85367b8c7c1
+BELONGS ya.make
+    License text:
+        Assert is distributed under a permissive open source license.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [557:557]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        LICENSE [557:557]
+
+KEEP     LGPL-2.1-only        6f4e287637a1fb9555d67f341f3dd4bf
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 4113, LICENSE at line 4228
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [4113:4628]
+
+KEEP     BSD-3-Clause         70e8fcf8540172b4f696c2ae6b7f5e0b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1709:1734]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 7236854380c64e5bb4f608a27b12ace9
+BELONGS mysys/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/my_rdtsc.h [3:21]
+        include/mysql/components/services/my_io_bits.h [3:21]
+        include/mysql/components/services/my_thread_bits.h [3:21]
+        include/mysql/components/services/mysql_cond_bits.h [3:21]
+        include/mysql/components/services/mysql_mutex_bits.h [3:21]
+        include/mysql/components/services/mysql_rwlock_bits.h [3:21]
+        include/mysql/components/services/psi_cond_bits.h [3:21]
+        include/mysql/components/services/psi_error_bits.h [3:21]
+        include/mysql/components/services/psi_file_bits.h [3:21]
+        include/mysql/components/services/psi_idle_bits.h [3:21]
+        include/mysql/components/services/psi_mdl_bits.h [3:21]
+        include/mysql/components/services/psi_memory_bits.h [3:21]
+        include/mysql/components/services/psi_mutex_bits.h [3:21]
+        include/mysql/components/services/psi_rwlock_bits.h [3:21]
+        include/mysql/components/services/psi_socket_bits.h [3:21]
+        include/mysql/components/services/psi_stage_bits.h [3:21]
+        include/mysql/components/services/psi_statement_bits.h [3:21]
+        include/mysql/components/services/psi_system_bits.h [3:21]
+        include/mysql/components/services/psi_table_bits.h [3:21]
+        include/mysql/components/services/psi_thread_bits.h [3:21]
+        include/mysql/components/services/psi_transaction_bits.h [3:21]
+        include/mysql/psi/mysql_cond.h [3:21]
+        include/mysql/psi/mysql_file.h [3:21]
+        include/mysql/psi/mysql_memory.h [3:21]
+        include/mysql/psi/mysql_mutex.h [3:21]
+        include/mysql/psi/mysql_rwlock.h [3:21]
+        include/mysql/psi/mysql_stage.h [3:21]
+        include/mysql/psi/mysql_statement.h [3:21]
+        include/mysql/psi/mysql_table.h [3:21]
+        include/mysql/psi/mysql_thread.h [3:21]
+        include/mysql/psi/psi_base.h [3:21]
+        include/mysql/psi/psi_cond.h [3:21]
+        include/mysql/psi/psi_data_lock.h [3:21]
+        include/mysql/psi/psi_error.h [3:21]
+        include/mysql/psi/psi_file.h [3:21]
+        include/mysql/psi/psi_idle.h [3:21]
+        include/mysql/psi/psi_mdl.h [3:21]
+        include/mysql/psi/psi_memory.h [3:21]
+        include/mysql/psi/psi_mutex.h [3:21]
+        include/mysql/psi/psi_rwlock.h [3:21]
+        include/mysql/psi/psi_socket.h [3:21]
+        include/mysql/psi/psi_stage.h [3:21]
+        include/mysql/psi/psi_statement.h [3:21]
+        include/mysql/psi/psi_system.h [3:21]
+        include/mysql/psi/psi_table.h [3:21]
+        include/mysql/psi/psi_thread.h [3:21]
+        include/mysql/psi/psi_transaction.h [3:21]
+        include/pfs_file_provider.h [3:21]
+        include/pfs_socket_provider.h [3:21]
+        include/pfs_stage_provider.h [3:21]
+        include/pfs_statement_provider.h [3:21]
+        mysys/my_default_priv.h [3:21]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/my_rdtsc.h [3:21]
+        include/mysql/components/services/my_io_bits.h [3:21]
+        include/mysql/components/services/my_thread_bits.h [3:21]
+        include/mysql/components/services/mysql_cond_bits.h [3:21]
+        include/mysql/components/services/mysql_mutex_bits.h [3:21]
+        include/mysql/components/services/mysql_rwlock_bits.h [3:21]
+        include/mysql/components/services/psi_cond_bits.h [3:21]
+        include/mysql/components/services/psi_error_bits.h [3:21]
+        include/mysql/components/services/psi_file_bits.h [3:21]
+        include/mysql/components/services/psi_idle_bits.h [3:21]
+        include/mysql/components/services/psi_mdl_bits.h [3:21]
+        include/mysql/components/services/psi_memory_bits.h [3:21]
+        include/mysql/components/services/psi_mutex_bits.h [3:21]
+        include/mysql/components/services/psi_rwlock_bits.h [3:21]
+        include/mysql/components/services/psi_socket_bits.h [3:21]
+        include/mysql/components/services/psi_stage_bits.h [3:21]
+        include/mysql/components/services/psi_statement_bits.h [3:21]
+        include/mysql/components/services/psi_system_bits.h [3:21]
+        include/mysql/components/services/psi_table_bits.h [3:21]
+        include/mysql/components/services/psi_thread_bits.h [3:21]
+        include/mysql/components/services/psi_transaction_bits.h [3:21]
+        include/mysql/psi/mysql_cond.h [3:21]
+        include/mysql/psi/mysql_file.h [3:21]
+        include/mysql/psi/mysql_memory.h [3:21]
+        include/mysql/psi/mysql_mutex.h [3:21]
+        include/mysql/psi/mysql_rwlock.h [3:21]
+        include/mysql/psi/mysql_stage.h [3:21]
+        include/mysql/psi/mysql_statement.h [3:21]
+        include/mysql/psi/mysql_table.h [3:21]
+        include/mysql/psi/mysql_thread.h [3:21]
+        include/mysql/psi/psi_base.h [3:21]
+        include/mysql/psi/psi_cond.h [3:21]
+        include/mysql/psi/psi_data_lock.h [3:21]
+        include/mysql/psi/psi_error.h [3:21]
+        include/mysql/psi/psi_file.h [3:21]
+        include/mysql/psi/psi_idle.h [3:21]
+        include/mysql/psi/psi_mdl.h [3:21]
+        include/mysql/psi/psi_memory.h [3:21]
+        include/mysql/psi/psi_mutex.h [3:21]
+        include/mysql/psi/psi_rwlock.h [3:21]
+        include/mysql/psi/psi_socket.h [3:21]
+        include/mysql/psi/psi_stage.h [3:21]
+        include/mysql/psi/psi_statement.h [3:21]
+        include/mysql/psi/psi_system.h [3:21]
+        include/mysql/psi/psi_table.h [3:21]
+        include/mysql/psi/psi_thread.h [3:21]
+        include/mysql/psi/psi_transaction.h [3:21]
+        include/pfs_file_provider.h [3:21]
+        include/pfs_socket_provider.h [3:21]
+        include/pfs_stage_provider.h [3:21]
+        include/pfs_statement_provider.h [3:21]
+        mysys/my_default_priv.h [3:21]
+
+KEEP     BSD-4-Clause         750536877f4e6b73b6bef54c782625c6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-4-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, http://www.xfree86.org/3.3.6/COPYRIGHT2.html#6, https://spdx.org/licenses/BSD-4-Clause
+    Files with this license:
+        LICENSE [1088:1116]
+
+KEEP     BSD-2-Clause AND GPL-2.0-only 7612687ba48384a3c9e0a647a03b787e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 17.20
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [4686:4691]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 17.20
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [4686:4691]
+
+KEEP     LGPL-2.1-only        78f6b0e6a2e992c7f5b31fb1604bd4ab
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 6022, LICENSE at line 6136
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [6022:6536]
+
+KEEP     BSD-2-Clause AND GPL-2.0-only 79cac9bcb5281ece537d39fb3a06786b
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 5829
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [5826:5834]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [5826:5834]
+
+SKIP     LicenseRef-scancode-unknown-license-reference AND Python-2.0 7ba19b94eaf00ed5d6388c98ec97689d
+BELONGS ya.make
+    License text:
+        licensed under the Python license. Same license applies to all files in the
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [488:488]
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        LICENSE [488:488]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 7bfe39fd807fbea532918aa2fb417054
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/my_xml.h [3:21]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/my_xml.h [3:21]
+
+KEEP     BSD-3-Clause         7d06a43b6e52b86b42463f4b0edf59f4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [2358:2384]
+
+KEEP     JSON                 7d6c19f1042c5382233fbed05c1bac92
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: JSON
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.json.org/license.html, https://spdx.org/licenses/JSON
+    Files with this license:
+        LICENSE [5431:5452]
+
+KEEP     GPL-2.0-only         7d78582f0fd0bd0e2f947c7b195f1fb0
+BELONGS ya.make
+    License text:
+           with the language indicating that GPLv2 or any later version may be
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [47:47]
+
+KEEP     MIT                  7ed180337028e21f2f6dad22d31d7a2a
+BELONGS ya.make
+    License text:
+        please note that RapidJSON source code is licensed under the MIT License,
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5377:5377]
+
+KEEP     MIT                  7f7223e035c922ebf3bbd60445dd2644
+BELONGS ya.make
+    License text:
+        Terms of the MIT License:
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5455:5455]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 7f970022de773c093a0d3ea007e0be06
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/mysql/components/services/mysql_socket_bits.h [6:24]
+        sql/handler.h [7:25]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/mysql/components/services/mysql_socket_bits.h [6:24]
+        sql/handler.h [7:25]
+
+KEEP     Unicode              805a97045e0a3f9c7e1693919f2b8700
+BELONGS ya.make
+FILE_INCLUDE INSTALL found in files: LICENSE at line 5674
+FILE_INCLUDE LICENSE found in files: LICENSE at line 5651
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 90.67
+        Match type      : NOTICE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE [5651:5677]
+
+KEEP     BSD-3-Clause         80f81853ba81cc5894e80ad0d5315156
+BELONGS ya.make
+    License text:
+        Portions of Libevent are based on works by others, also made available by
+        them under the three-clause BSD license above. The copyright notices are
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [2769:2770]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 8113f29f2b389716048eff366c7a0f71
+BELONGS mysys/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/my_sqlcommand.h [3:21]
+        include/mysql/components/component_implementation.h [3:21]
+        include/mysql/components/my_service.h [3:21]
+        include/mysql/components/service.h [3:21]
+        include/mysql/components/service_implementation.h [3:21]
+        include/mysql/components/services/dynamic_loader.h [3:21]
+        include/mysql/components/services/registry.h [3:21]
+        include/mysql/service_plugin_registry.h [3:21]
+        include/wolfssl_fix_namespace_pollution.h [3:21]
+        include/wolfssl_fix_namespace_pollution_pre.h [3:21]
+        mysys/my_aes_impl.h [3:21]
+        mysys/my_aes_openssl.cc [3:21]
+        sql/auth/i_sha2_password_common.h [4:22]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/my_sqlcommand.h [3:21]
+        include/mysql/components/component_implementation.h [3:21]
+        include/mysql/components/my_service.h [3:21]
+        include/mysql/components/service.h [3:21]
+        include/mysql/components/service_implementation.h [3:21]
+        include/mysql/components/services/dynamic_loader.h [3:21]
+        include/mysql/components/services/registry.h [3:21]
+        include/mysql/service_plugin_registry.h [3:21]
+        include/wolfssl_fix_namespace_pollution.h [3:21]
+        include/wolfssl_fix_namespace_pollution_pre.h [3:21]
+        mysys/my_aes_impl.h [3:21]
+        mysys/my_aes_openssl.cc [3:21]
+        sql/auth/i_sha2_password_common.h [4:22]
+
+KEEP     BSD-2-Clause         82f6bc1fedb6d8a9a0798b166b244e6f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [1208:1225]
+
+KEEP     BSD-3-Clause         8324f1990c82a65667a0b4767115a5fa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [2325:2350]
+
+KEEP     BSD-2-Clause         8357a666374648880ccb2f85661526a2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [1159:1177]
+
+KEEP     Public-Domain        85b86811fc493fcb68e408cbf09e007b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [2527:2541]
+
+KEEP     GPL-1.0-or-later AND GPL-1.0-or-later 864817261fb0b7828de3de182cbbcbf5
+BELONGS ya.make
+    License text:
+        Oracle's libssh implementation does not use any of the GPL licensed files that a
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [3731:3731]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [3731:3731]
+
+KEEP     BSD-3-Clause         88ef8222b0a688894b48f42c05e0503f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1757:1782]
+
+KEEP     LGPL-2.1-only        8aeb7beac48aed67e3dbefbcc23c9318
+BELONGS ya.make
+    License text:
+        code is licensed under the LGPLv2.1 license.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [4981:4981]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [4981:4981]
+
+KEEP     GPL-2.0-only WITH Universal-FOSS-exception-1.0 8b018f4bd635569d9f945d9c392ad141
+BELONGS mysys/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        mysys/my_rdtsc.cc [3:26]
+        mysys/psi_noop.cc [3:26]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        mysys/my_rdtsc.cc [3:26]
+        mysys/psi_noop.cc [3:26]
+    Scancode info:
+        Original SPDX id: Universal-FOSS-exception-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://oss.oracle.com/licenses/universal-foss-exception/, https://spdx.org/licenses/Universal-FOSS-exception-1.0
+    Files with this license:
+        mysys/my_rdtsc.cc [3:26]
+        mysys/psi_noop.cc [3:26]
+
+KEEP     GPL-1.0-or-later     8c048d412dec96c1a7aff66e697337cb
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: include/mysql_version.h at line 29
+    License text:
+        \#define LICENSE                     GPL
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        include/mysql_version.h [29:29]
+
+KEEP     Unicode              8c6e5668f8316b1f072a61cab34c8c36
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE [2230:2264]
+
+KEEP     Public-Domain        8ce15af4ec130717b904ce3093aa0ba2
+BELONGS ya.make
+    License text:
+        This file is public domain and comes with NO WARRANTY of any kind
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 72.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        LICENSE [4974:4974]
+
+KEEP     MIT                  911aa2f9ba431a15593e46e034e17124
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [6988:7004]
+
+KEEP     GPL-2.0-only         917eaa21d95d54abd17f3062d790aceb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/mysql/components/services/page_track_service.h [3:14]
+
+KEEP     Public-Domain        927cc7839a12a460557fccf7aa030cbf
+BELONGS ya.make
+    License text:
+                           Copyright Abandoned, 1987, Fred Fish
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [1291:1291]
+
+KEEP     Apache-2.0           92fbcc9b57dd8fe9098519b7c1264ea9
+BELONGS ya.make
+    License text:
+        due to license compatibility issues between Apache License 2.0 and GNU GPL
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [500:500]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 93ebe2009a9a65bd26da7243553cdc96
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/my_aes.h [6:24]
+        include/my_config-linux.h [3:21]
+        include/my_time.h [3:21]
+        include/my_user.h [3:21]
+        include/sha2.h [3:21]
+        libbinlogevents/include/binlog_config-linux.h [4:22]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/my_aes.h [6:24]
+        include/my_config-linux.h [3:21]
+        include/my_time.h [3:21]
+        include/my_user.h [3:21]
+        include/sha2.h [3:21]
+        libbinlogevents/include/binlog_config-linux.h [4:22]
+
+KEEP     Public-Domain        943a6dff71e5d40423e00caa67b41a01
+BELONGS strings/ya.make
+    License text:
+        the sources are not in the public domain, so that if there is a string
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        strings/README [8:8]
+
+KEEP     Apache-2.0           94b5e93a7eb0465b1abe8cb3e93c74b3
+BELONGS ya.make
+    License text:
+        Before (and including) argparse 1.1, the argparse package was licensed under
+        Apache License v2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [496:497]
+
+KEEP     OpenSSL              97cc5727c64e13c4a865e3bf40768549
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        LICENSE [5091:5094]
+
+KEEP     ICU                  98811e05c84f8fbcdfe1e50edea7f80e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        LICENSE [1669:1695]
+
+KEEP     GPL-1.0-or-later     99fc67e7a3cdf4a36b800cc541e35f1f
+BELONGS ya.make
+    License text:
+           any software where a choice of GPL license versions is made available
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [46:46]
+
+KEEP     OpenSSL              9a2b7b1e03101b3c392d9d675d6aaf63
+BELONGS ya.make
+    License text:
+           OpenSSL is licensed under a double license, of the OpenSSL License and
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [5084:5084]
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        LICENSE [5084:5084]
+
+KEEP     BSD-2-Clause         9a56972b59e50f1954e2154f13bedba0
+BELONGS ya.make
+    License text:
+         \#  License:
+        http://lao-dictionary.googlecode.com/git/Lao-Dictionary-LICENSE.txt
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [2476:2477]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 9d6c30f54fb7b1302ac1650fd220bd54
+BELONGS strings/ya.make
+    License text:
+          This file incorporates work covered by the following copyright and
+          permission notice:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        strings/dtoa.cc [31:32]
+
+KEEP     Public-Domain        9da5c76b79c1509553463d0bfd7493eb
+BELONGS ya.make
+    License text:
+            (Orignal code public domain)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        include/my_bit.h [90:90]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 9f6be0558f85a1890741762903c6845c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/mysql/service_locking.h [4:22]
+        include/mysql/service_thread_scheduler.h [4:22]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/mysql/service_locking.h [4:22]
+        include/mysql/service_thread_scheduler.h [4:22]
+
+KEEP     Mit-Old-Style        9fb9425a5fea97450e505e7d4872cc71
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mit-old-style
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-old-style.LICENSE
+    Files with this license:
+        LICENSE [3618:3625]
+
+KEEP     BSL-1.0              a1f54c80f5b9080066b1be248d03b3f5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE [3644:3668]
+
+KEEP     GPL-1.0-only         a3fd9c73a5c7e26bb9b01c2a0f6d7437
+BELONGS ya.make
+    License text:
+        \#define PLUGIN_LICENSE_GPL 1
+    Scancode info:
+        Original SPDX id: GPL-1.0-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/gpl-1.0.html, http://www.gnu.org/licenses/gpl-1.0.txt, https://spdx.org/licenses/GPL-1.0-only
+    Files with this license:
+        include/mysql/plugin.h [120:120]
+
+KEEP     Public-Domain        ab6755c284f161f49a7eea9b62b79e52
+BELONGS ya.make
+    License text:
+        ICU uses the public domain data and code derived from Time Zone Database for
+        its time zone support. The ownership of the TZ database is explained in BCP
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [2523:2524]
+
+KEEP     Public-Domain        ae5f902b1ce6e8bd916c0846f5cf887e
+BELONGS strings/ya.make
+    License text:
+            These files are in the public domain.  This includes getopt.c, which
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        strings/README [75:75]
+
+KEEP     NAIST-2003           af407f0b4be68a16537a82230c0d801e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NAIST-2003
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/NAIST-2003
+    Files with this license:
+        LICENSE [4863:4926]
+
+KEEP     BSD-3-Clause         b1eacd5dd153c4439d052d1a62b9b029
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [2715:2737]
+
+KEEP     LGPL-2.1-or-later    b2134231232dee6951ab6a78082d81de
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        LICENSE [3740:3743]
+
+KEEP     GPL-1.0-or-later     b4da67bba193caf9205af04d21271cf5
+BELONGS ya.make
+    License text:
+        component under the terms below and elects not to do so under
+        the GPL even though the GPL is referenced as an option below.)
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [4729:4730]
+
+KEEP     BSD-2-Clause         b59bb587e60ce8c36bd96fa0f7bcc894
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [1060:1082]
+
+KEEP     Unicode              b5ba22bbcf58de2982076bb66b66765e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE [1623:1652]
+
+KEEP     BSD-3-Clause         b62091127484cefc430592dd1a27ed9b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [932:960]
+
+KEEP     LGPL-2.1-or-later    b748c14a7e536b6ddcd23479e2766782
+BELONGS ya.make
+    License text:
+            The library is distributed under the terms of the GNU Lesser
+            General Public License (LGPL); see the file COPYING.LIB for the
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 33.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        LICENSE [3723:3724]
+
+KEEP     CC-BY-4.0            b7ddfdbcff7507340be7475f44fca251
+BELONGS ya.make
+    License text:
+            Called from lock.cc by lock_external() and unlock_external(). Also called
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        sql/handler.h [6081:6081]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 b8624a8c7d2883fc4d5ad723cd1250e6
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 96.41
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        strings/mb_wc.h [6:25]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 96.41
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        strings/mb_wc.h [6:25]
+
+KEEP     Mit-Old-Style        bc8c83951f00f36ab4d5e8973b0ab11e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mit-old-style
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-old-style.LICENSE
+    Files with this license:
+        LICENSE [3604:3611]
+
+KEEP     BSD-3-Clause         bcf090b4097ef42de6d1ebf2cf99f410
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [2268:2273]
+
+KEEP     OpenSSL              bd9682c6069cb12673d7baffe0788622
+BELONGS ya.make
+    License text:
+          OpenSSL License
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        LICENSE [5097:5097]
+
+KEEP     GPL-3.0-only         bdbc37dfe34c8770095400b4fc1ddc6a
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 2816
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        LICENSE [2816:3522]
+
+KEEP     BSD-3-Clause         be1f519c38c949bd84352bcbb4c3c4c5
+BELONGS ya.make
+    License text:
+        This software licensed under BSD license, the text of which follows:
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [805:805]
+
+KEEP     BSD-2-Clause         bed621c2a6cb6f8621f69d7ad3215ec2
+BELONGS ya.make
+    License text:
+        Better Enums is distributed under the terms of the 2-clause BSD license.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [598:598]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [598:598]
+
+KEEP     bzip2-1.0.6          bf6e051cdbbfde5c4f19c4e0b3f7f774
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: bzip2-1.0.6
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/asimonov-im/bzip2/blob/master/LICENSE, https://spdx.org/licenses/bzip2-1.0.6
+    Files with this license:
+        LICENSE [764:793]
+
+KEEP     ICU                  bfbc8467df123eea4060b9d5c8659810
+BELONGS ya.make
+    License text:
+        1. ICU License - ICU 1.8.1 to ICU 57.1
+        COPYRIGHT AND PERMISSION NOTICE
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        LICENSE [1662:1664]
+
+KEEP     ICU                  c0324305dc1afcf28beb8d984b3ece0d
+BELONGS ya.make
+    License text:
+        ICU-LICENSE
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        LICENSE [5710:5710]
+
+KEEP     Public-Domain        c04604b3f9988f3b295e2268ff504234
+BELONGS ya.make
+    License text:
+        100% Public Domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [5563:5563]
+
+KEEP     Public-Domain        c170d4343e65cd7f211c6a725ac07761
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        LICENSE [1295:1329]
+
+KEEP     ISC                  c17826195ae7a32a1d777262c034dea8
+BELONGS ya.make
+    License text:
+        The arc4module is available under the following, sometimes called the
+        "OpenBSD" license:
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE [2792:2793]
+
+KEEP     LGPL-2.1-only        c22d4eff85a2648e9512a27aeaf42cfb
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 3702
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [3702:3713]
+
+KEEP     LicenseRef-scancode-other-permissive c2b5bea15f9e1d1a725b75937d8d1687
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 61.29
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        LICENSE [1133:1150]
+
+KEEP     OpenSSL              c386da50144d8f360a23d5c5ebab2bd2
+BELONGS ya.make
+    License text:
+        OpenSSL License
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        LICENSE [5080:5080]
+
+KEEP     LGPL                 c3e6637b79736dba4939fa050ae07822
+BELONGS ya.make
+    License text:
+            The library is distributed under the terms of the GNU Lesser
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [3723:3723]
+
+KEEP     BSD-3-Clause         c4704128901c586b940ffa542ad600eb
+BELONGS ya.make
+    License text:
+        The test program (test directory) for Assert is under BSD license:
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [561:561]
+
+KEEP     GPL-2.0-only WITH Universal-FOSS-exception-1.0 c4bbb280feea3705832802bd171451ea
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 97.17
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        strings/ctype-bin.cc [4:28]
+        strings/ctype-eucjpms.cc [4:28]
+        strings/ctype-uca.cc [3:27]
+        strings/ctype-ucs2.cc [3:27]
+        strings/ctype-ujis.cc [4:28]
+        strings/ctype-utf8.cc [3:27]
+        strings/dtoa.cc [3:27]
+        strings/strxmov.cc [3:27]
+        strings/strxnmov.cc [3:27]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 97.17
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        strings/ctype-bin.cc [4:28]
+        strings/ctype-eucjpms.cc [4:28]
+        strings/ctype-uca.cc [3:27]
+        strings/ctype-ucs2.cc [3:27]
+        strings/ctype-ujis.cc [4:28]
+        strings/ctype-utf8.cc [3:27]
+        strings/dtoa.cc [3:27]
+        strings/strxmov.cc [3:27]
+        strings/strxnmov.cc [3:27]
+    Scancode info:
+        Original SPDX id: Universal-FOSS-exception-1.0
+        Score           : 97.17
+        Match type      : NOTICE
+        Links           : https://oss.oracle.com/licenses/universal-foss-exception/, https://spdx.org/licenses/Universal-FOSS-exception-1.0
+    Files with this license:
+        strings/ctype-bin.cc [4:28]
+        strings/ctype-eucjpms.cc [4:28]
+        strings/ctype-uca.cc [3:27]
+        strings/ctype-ucs2.cc [3:27]
+        strings/ctype-ujis.cc [4:28]
+        strings/ctype-utf8.cc [3:27]
+        strings/dtoa.cc [3:27]
+        strings/strxmov.cc [3:27]
+        strings/strxnmov.cc [3:27]
+
+KEEP     BSL-1.0              c77798c460593d8d4fc1c43a77f7004a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE [697:722]
+
+KEEP     BSD-3-Clause         ca59f3dd077fb0dbe2e8a563da897b82
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1699:1704]
+
+KEEP     GCC-exception-3.1    ca9ea82b48c3e68c8b2fffdf273cbd29
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GCC-exception-3.1
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gcc-exception-3.1.html, https://spdx.org/licenses/GCC-exception-3.1
+    Files with this license:
+        LICENSE [3526:3597]
+
+KEEP     BSD-3-Clause         cb3b9ad2895c5b2030d3d01ef98804ed
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1348:1376]
+
+KEEP     ICU                  ccebd56fc327f7b30e497b54c508e285
+BELONGS ya.make
+    License text:
+        ICU License - ICU 1.8.1 and later
+        COPYRIGHT AND PERMISSION NOTICE
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        LICENSE [5712:5714]
+
+KEEP     BSD-3-Clause         cd9ba8f87f95513c320e888e57210d81
+BELONGS ya.make
+    License text:
+        \#  * Libtabe (Chinese)
+        \#    - https://sourceforge.net/project/?group_id=1519
+        \#    - Its license terms and conditions are shown below.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1742:1744]
+
+KEEP     JSON                 ce8f2ef92da7033a35651f574f691599
+BELONGS ya.make
+    License text:
+        Open Source Software Licensed Under the JSON License:
+    Scancode info:
+        Original SPDX id: JSON
+        Score           : 99.00
+        Match type      : TEXT
+        Links           : http://www.json.org/license.html, https://spdx.org/licenses/JSON
+    Files with this license:
+        LICENSE [5419:5419]
+
+KEEP     MIT                  cfdb698105f8d9bd72bdc4366a7984be
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 754
+    License text:
+           Distributed under MIT license.
+           See file LICENSE for detail or copy at https://opensource.org/licenses/MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [753:754]
+
+KEEP     CC-BY-4.0            d008608c87e223d797db9ce7ffeda66f
+BELONGS ya.make
+    License text:
+            Called from lock.cc by get_lock_data().
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        sql/handler.h [5410:5410]
+
+KEEP     Public-Domain        d312ce8e607f14a7096d85a49ee93853
+BELONGS mysys/ya.make
+    License text:
+          hash function with good statistical properties, which is based on public
+          domain code by Austin Appleby.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        mysys/my_murmur3.cc [31:32]
+
+KEEP     GPL-2.0-only WITH Universal-FOSS-exception-1.0 d4bd2b83f4d4f90741c3bd690ed5abe2
+BELONGS mysys/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/mysql_time.h [3:26]
+        mysys/my_aes.cc [3:26]
+        mysys/my_time.cc [3:26]
+        mysys/my_user.cc [3:26]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/mysql_time.h [3:26]
+        mysys/my_aes.cc [3:26]
+        mysys/my_time.cc [3:26]
+        mysys/my_user.cc [3:26]
+    Scancode info:
+        Original SPDX id: Universal-FOSS-exception-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://oss.oracle.com/licenses/universal-foss-exception/, https://spdx.org/licenses/Universal-FOSS-exception-1.0
+    Files with this license:
+        include/mysql_time.h [3:26]
+        mysys/my_aes.cc [3:26]
+        mysys/my_time.cc [3:26]
+        mysys/my_user.cc [3:26]
+
+KEEP     Beerware             d5afe3c1cd3ff891b226146df9a1658f
+BELONGS mysys/ya.make
+FILE_INCLUDE LICENSE found in files: mysys/crypt_genhash_impl.cc at line 188
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Beerware
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://people.freebsd.org/~phk/, https://spdx.org/licenses/Beerware
+    Files with this license:
+        mysys/crypt_genhash_impl.cc [188:191]
+
+KEEP     GPL-2.0-only         d8bd318232aea71dd6d37e9e66de9eb0
+BELONGS ya.make
+    License text:
+        due to license compatibility issues between Apache License 2.0 and GNU GPL
+        v2.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [500:501]
+
+KEEP     X11-Lucent           d8ff63def379739e18fa51fb425d901a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-x11-lucent
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/x11-lucent.LICENSE
+    Files with this license:
+        LICENSE [882:892]
+
+KEEP     LGPL-2.1-only        daaea2aec35ed5a5550eb4bad691ab5c
+BELONGS ya.make
+    License text:
+        All of the files used by Oracle are licensed under the LGPLv2.1
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [3738:3738]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [3738:3738]
+
+KEEP     BSD-3-Clause         dcb29f087ec2e3e7084e54f87a6466e8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [2278:2301]
+
+KEEP     BSD-2-Clause         dddfe7ae08ae5e2b4cd6351536f2d750
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [5755:5775]
+
+KEEP     Protobuf-License     e09361a5a78339cc0f20c5a725516712
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-protobuf
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://protobuf.googlecode.com/svn/trunk/COPYING.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/protobuf.LICENSE
+    Files with this license:
+        LICENSE [1544:1576]
+
+KEEP     BSD-3-Clause         e0ab170616c733c4998b968d668553e8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause-Clear
+        Score           : 88.56
+        Match type      : TEXT
+        Links           : http://labs.metacarta.com/license-explanation.html, http://labs.metacarta.com/license-explanation.html#license, https://spdx.org/licenses/BSD-3-Clause-Clear
+    Files with this license:
+        LICENSE [1955:1980]
+
+KEEP     Unicode              e1c7e89c6aaf895795ae9f4ba184fc8b
+BELONGS ya.make
+    License text:
+        Content of http://www.unicode.org/copyright.html, retrieved 15:00GMT 12th Januar
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 33.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE [2009:2009]
+
+KEEP     BSD-2-Clause         e2ebee5a8733df8e0fa21853d9cfd815
+BELONGS ya.make
+    License text:
+        \# License: http://lao-dictionary.googlecode.com/git/Lao-Dictionary-LICENSE.txt
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [1908:1908]
+
+KEEP     BSD-3-Clause         e5818282efcbba3c488969168a7f6cb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1790:1816]
+
+KEEP     BSD-2-Clause AND GPL-2.0-only e67ef9b5ca33c19de4c173b97ad7e577
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 54.23
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [4934:4965]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 54.23
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [4934:4965]
+
+KEEP     LGPL-2.1-only        e6e4939f7e9f98960cf35ef306e88c7f
+BELONGS ya.make
+    License text:
+        GNU Lesser General Public License Version 2.1, February 1999
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [6007:6007]
+
+KEEP     GPL-1.0-or-later     e70c5f1cad6125ad1002ed924283a606
+BELONGS ya.make
+    License text:
+        affected by the GPL.
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 85.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        LICENSE [3753:3753]
+
+SKIP     LicenseRef-scancode-unknown-license-reference e7952eccaeb848b7ce314afaf908a5ac
+BELONGS ya.make
+    License text:
+           library; it is licensed under the following license, separately from
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 38.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [2697:2697]
+
+KEEP     BSD-2-Clause         e9974cced0e4e9cf72053e906c300d99
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [1917:1940]
+
+KEEP     BSD-3-Clause         e9b56782e52aea9f35827b78e1c84256
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1385:1407]
+
+KEEP     Public-Domain        eae4662a5e0614a51639c1ae9d2b490a
+BELONGS ya.make
+    License text:
+         The algorithm is due to Ron Rivest.  This code was
+         written by Colin Plumb in 1993, no copyright is claimed.
+         This code is in the public domain; do with it what you wish.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [4802:4804]
+
+KEEP     Unicode              ed2754c1aa4a0e322f173a9759a321d6
+BELONGS ya.make
+FILE_INCLUDE INSTALL found in files: LICENSE at line 2225
+FILE_INCLUDE LICENSE found in files: LICENSE at line 2211
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE [2211:2228]
+
+KEEP     BSL-1.0              eeda69591b5957fb1dbf0286c30acb85
+BELONGS ya.make
+    License text:
+        Distributed under the Boost Software License, Version 1.0.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE [3642:3642]
+
+KEEP     Zlib                 efe9a13a51a13d737ed98356444bcf60
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE [5797:5809]
+
+KEEP     NAIST-2003           f5bb6486b127439f59ff918b6dfc2d86
+BELONGS ya.make
+    License text:
+         \#  * IPADIC (Japanese)
+         \#    - http://chasen.aist-nara.ac.jp/chasen/distribution.html
+         \#    - Its license terms and conditions are shown below.
+    Scancode info:
+        Original SPDX id: NAIST-2003
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://spdx.org/licenses/NAIST-2003
+    Files with this license:
+        LICENSE [2314:2316]
+
+KEEP     GPL-2.0-only WITH Mysql-Linking-Exception-2018 f5df20b22adf5023ba6d119f73d2b1fc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/sha1.h [6:24]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        include/sha1.h [6:24]
+
+KEEP     Public-Domain        f69449bbfc5a435b9c6dc27a6ee7248c
+BELONGS ya.make
+    License text:
+        These files are in the public domain.  This includes getopt.c, which
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [5508:5508]
+
+KEEP     Unicode-TOU          f78bb72a82950c6c00d63a0b26dd03cd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Unicode-TOU
+        Score           : 37.68
+        Match type      : TEXT
+        Links           : http://www.unicode.org/copyright.html, https://spdx.org/licenses/Unicode-TOU
+    Files with this license:
+        LICENSE [2043:2080]
+
+KEEP     Unicode-Mappings     f86e25cc5b91d6b6b61d8dda1f95a9f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode-mappings
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode-mappings.LICENSE
+    Files with this license:
+        LICENSE [4703:4719]
+
+KEEP     Public-Domain        f946df27c6bfa724100cd8211f10ce38
+BELONGS ya.make
+    License text:
+        it.  This software is hereby explicitly placed in the public domain.
+        It may be used for any purpose on any machine by anyone." I would
+        greatly prefer it if *my* material received no military use.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [5512:5514]
+
+KEEP     BSD-3-Clause         fa054132e96f523501b9f24349647438
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 88.61
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1417:1444]
+        LICENSE [1588:1615]
+
+KEEP     LGPL-2.1-only        fa364aaf56821447d71ad20aa37b234c
+BELONGS ya.make
+    License text:
+        under the LGPLv2.1 license, separate from MySQL. If you do not wish to install t
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE [3692:3692]
+
+KEEP     NAIST-2003           fad2344bcea668c0cd5321f2bd15abaf
+BELONGS ya.make
+    License text:
+        \#  * IPADIC (Japanese)
+        \#    - http://chasen.aist-nara.ac.jp/chasen/distribution.html
+        \#    - Its license terms and conditions are shown below.
+    Scancode info:
+        Original SPDX id: NAIST-2003
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://spdx.org/licenses/NAIST-2003
+    Files with this license:
+        LICENSE [1746:1748]
+
+KEEP     BSD-2-Clause         fb6527f48a03e16c8ade15d6f562f231
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [1006:1032]
+
+KEEP     GPL-2.0-only WITH Universal-FOSS-exception-1.0 fc15b6a705785e210c8331295754b9c4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [17:36]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mysql-linking-exception-2018
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mysql-linking-exception-2018.LICENSE, https://raw.githubusercontent.com/mysql/mysql-server/8.0/include/mysql.h
+    Files with this license:
+        LICENSE [17:36]
+    Scancode info:
+        Original SPDX id: Universal-FOSS-exception-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://oss.oracle.com/licenses/universal-foss-exception/, https://spdx.org/licenses/Universal-FOSS-exception-1.0
+    Files with this license:
+        LICENSE [17:36]
+
+KEEP     GPL-3.0-only         fe4a5647d469617891b971665a7ad8fe
+BELONGS ya.make
+    License text:
+            b. in the case of code licensed under the GPL v3 for as long as Oracle
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        LICENSE [7047:7047]
+
+KEEP     X11-Hanson           fee24880a028f5d50965c0ed93a7a806
+BELONGS strings/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-x11-hanson
+        Score           : 87.62
+        Match type      : TEXT
+        Links           : http://www.research.microsoft.com/~drh/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/x11-hanson.LICENSE
+    Files with this license:
+        strings/dtoa.cc [536:549]
+
+KEEP     Public-Domain        ff6c06cb358132c9afc9e21926f6fddd
+BELONGS ya.make
+    License text:
+         ICU uses the public domain data and code derived from Time Zone
+        Database for its time zone support. The ownership of the TZ database
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [1985:1986]

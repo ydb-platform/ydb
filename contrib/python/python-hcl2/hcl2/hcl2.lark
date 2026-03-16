@@ -1,0 +1,108 @@
+start : body
+body : (new_line_or_comment? (attribute | block))* new_line_or_comment?
+attribute : identifier EQ expression
+block : identifier (identifier | string)* new_line_or_comment? "{" body "}"
+new_line_or_comment: ( NL_OR_COMMENT )+
+NL_OR_COMMENT: /\n[ \t]*/ | /#.*\n/ | /\/\/.*\n/ | /\/\*(.|\n)*?(\*\/)/
+
+identifier : NAME | IN | FOR | IF | FOR_EACH
+NAME : /[a-zA-Z_][a-zA-Z0-9_-]*/
+IF : "if"
+IN : "in"
+FOR : "for"
+FOR_EACH : "for_each"
+
+?expression : expr_term | operation | conditional
+
+conditional : expression "?" new_line_or_comment? expression new_line_or_comment? ":" new_line_or_comment? expression
+
+?operation : unary_op | binary_op
+!unary_op : ("-" | "!") expr_term
+binary_op : expression binary_term new_line_or_comment?
+!binary_operator : BINARY_OP
+binary_term : binary_operator new_line_or_comment? expression
+BINARY_OP :  DOUBLE_EQ | NEQ | LT | GT | LEQ | GEQ | MINUS | ASTERISK | SLASH | PERCENT | DOUBLE_AMP | DOUBLE_PIPE | PLUS
+DOUBLE_EQ : "=="
+NEQ : "!="
+LT : "<"
+GT : ">"
+LEQ : "<="
+GEQ : ">="
+MINUS : "-"
+ASTERISK : "*"
+SLASH : "/"
+PERCENT : "%"
+DOUBLE_AMP : "&&"
+DOUBLE_PIPE : "||"
+PLUS : "+"
+LPAR : "("
+RPAR : ")"
+COMMA : ","
+DOT : "."
+COLON : ":"
+
+expr_term : LPAR new_line_or_comment? expression new_line_or_comment? RPAR
+            | float_lit
+            | int_lit
+            | string
+            | tuple
+            | object
+            | function_call
+            | index_expr_term
+            | get_attr_expr_term
+            | identifier
+            | provider_function_call
+            | heredoc_template
+            | heredoc_template_trim
+            | attr_splat_expr_term
+            | full_splat_expr_term
+            | for_tuple_expr
+            | for_object_expr
+
+string: "\"" string_part* "\""
+string_part: STRING_CHARS
+           | ESCAPED_INTERPOLATION
+           | interpolation
+interpolation: "${" expression "}"
+ESCAPED_INTERPOLATION.2: /\$\$\{[^}]*\}/
+STRING_CHARS.1: /(?:(?!\$\$\{)(?!\$\{)[^"\\]|\\.|(?:\$(?!\$?\{)))+/
+
+int_lit : NEGATIVE_DECIMAL? DECIMAL+ | NEGATIVE_DECIMAL+
+!float_lit: (NEGATIVE_DECIMAL? DECIMAL+ | NEGATIVE_DECIMAL+) "." DECIMAL+ (EXP_MARK)?
+            |  (NEGATIVE_DECIMAL? DECIMAL+ | NEGATIVE_DECIMAL+) ("." DECIMAL+)? (EXP_MARK)
+NEGATIVE_DECIMAL : "-" DECIMAL
+DECIMAL : "0".."9"
+EXP_MARK : ("e" | "E") ("+" | "-")? DECIMAL+
+EQ : /[ \t]*=(?!=|>)/
+
+tuple : "[" (new_line_or_comment* expression new_line_or_comment* ",")* (new_line_or_comment* expression)? new_line_or_comment* "]"
+object : "{" new_line_or_comment? (new_line_or_comment* (object_elem | (object_elem COMMA)) new_line_or_comment*)* "}"
+object_elem : object_elem_key ( EQ | COLON ) expression
+object_elem_key : float_lit | int_lit | identifier | string | object_elem_key_dot_accessor | object_elem_key_expression
+object_elem_key_expression : LPAR expression RPAR
+object_elem_key_dot_accessor : identifier (DOT identifier)+
+
+heredoc_template : /<<(?P<heredoc>[a-zA-Z][a-zA-Z0-9._-]+)\n?(?:.|\n)*?\n\s*(?P=heredoc)\n/
+heredoc_template_trim : /<<-(?P<heredoc_trim>[a-zA-Z][a-zA-Z0-9._-]+)\n?(?:.|\n)*?\n\s*(?P=heredoc_trim)\n/
+
+function_call : identifier "(" new_line_or_comment? arguments? new_line_or_comment? ")"
+arguments : (expression (new_line_or_comment* "," new_line_or_comment*  expression)* ("," | "...")? new_line_or_comment*)
+colons: "::"
+provider_function_call: identifier colons identifier colons  identifier  "(" new_line_or_comment? arguments? new_line_or_comment? ")"
+
+index_expr_term : expr_term index
+get_attr_expr_term : expr_term get_attr
+attr_splat_expr_term : expr_term attr_splat
+full_splat_expr_term : expr_term full_splat
+index : "[" new_line_or_comment? expression new_line_or_comment? "]" | "." DECIMAL+
+get_attr : "." identifier
+attr_splat : ".*" get_attr*
+full_splat : "[*]" (get_attr | index)*
+
+FOR_OBJECT_ARROW : "=>"
+!for_tuple_expr : "[" new_line_or_comment? for_intro new_line_or_comment? expression new_line_or_comment? for_cond? new_line_or_comment? "]"
+!for_object_expr : "{" new_line_or_comment? for_intro new_line_or_comment? expression FOR_OBJECT_ARROW new_line_or_comment? expression new_line_or_comment? "..."? new_line_or_comment? for_cond? new_line_or_comment? "}"
+!for_intro : "for" new_line_or_comment? identifier ("," identifier new_line_or_comment?)? new_line_or_comment? "in" new_line_or_comment? expression new_line_or_comment? ":" new_line_or_comment?
+!for_cond : "if" new_line_or_comment? expression
+
+%ignore /[ \t]+/

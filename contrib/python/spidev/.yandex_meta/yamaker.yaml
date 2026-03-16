@@ -1,0 +1,2 @@
+copy:
+  - spidev_module.c

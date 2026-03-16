@@ -1,0 +1,61 @@
+Metadata-Version: 2.0
+Name: envoy
+Version: 0.0.3
+Summary: Simple API for running external processes.
+Home-page: https://github.com/kennethreitz/envoy
+Author: Kenneth Reitz
+Author-email: me@kennethreitz.com
+License: MIT
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.5
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.0
+Classifier: Programming Language :: Python :: 3.1
+
+Envoy: Python Subprocesses for Humans.
+======================================
+
+**Note:** Work in progress.
+
+This is a convenience wrapper around the `subprocess` module.
+
+You don't need this.
+
+.. image:: https://github.com/kennethreitz/envoy/raw/master/ext/in_action.png
+
+But you want it.
+
+
+Usage
+-----
+
+Run a command, get the response::
+
+    >>> r = envoy.run('git config', data='data to pipe in', timeout=2)
+
+    >>> r.status_code
+    129
+    >>> r.std_out
+    'usage: git config [options]'
+    >>> r.std_err
+    ''
+
+Pipe stuff around too::
+
+    >>> r = envoy.run('uptime | pbcopy')
+
+    >>> r.command
+    'pbcopy'
+    >>> r.status_code
+    0
+
+    >>> r.history
+    [<Response 'uptime'>]
+
+

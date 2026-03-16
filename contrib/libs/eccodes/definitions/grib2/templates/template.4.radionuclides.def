@@ -1,0 +1,23 @@
+# (C) Copyright 2005- ECMWF
+
+codetable[2] transportModelUsed ('4.333.table',masterDir,localDir) = 255 : dump;
+
+codetable[2] requestedByEntity 'common/c-11.table' : dump,string_type;
+
+codetable[2] scenarioOrigin ('4.335.table',masterDir,localDir) = 255 : dump;
+
+codetable[2] NWPused ('4.336.table',masterDir,localDir) = 255 : dump;
+
+unsigned[2] releaseStartYear : dump;
+unsigned[1] releaseStartMonth : dump;
+unsigned[1] releaseStartDay : dump;
+unsigned[1] releaseStartHour : dump;
+unsigned[1] releaseStartMinute : dump;
+unsigned[1] releaseStartSecond : dump;
+
+unsigned[2] wallClockInitialTimeOfExecutionYear : dump;
+unsigned[1] wallClockInitialTimeOfExecutionMonth : dump;
+unsigned[1] wallClockInitialTimeOfExecutionDay : dump;
+unsigned[1] wallClockInitialTimeOfExecutionHour : dump;
+unsigned[1] wallClockInitialTimeOfExecutionMinute : dump;
+unsigned[1] wallClockInitialTimeOfExecutionSecond : dump;

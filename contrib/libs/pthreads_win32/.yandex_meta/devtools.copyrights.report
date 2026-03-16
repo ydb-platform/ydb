@@ -1,0 +1,457 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 53686238ab28003389469925713b8dec
+BELONGS ya.make
+    License text:
+         *      Copyright(C) 1998 John E. Bossom
+         *      Copyright(C) 1999,2005 Pthreads-win32 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [59:63]
+        attr.c [14:15]
+        autostatic.c [10:11]
+        barrier.c [10:11]
+        cancel.c [10:11]
+        cleanup.c [12:13]
+        condvar.c [11:12]
+        context.h [10:11]
+        create.c [11:12]
+        dll.c [10:11]
+        errno.c [11:12]
+        exit.c [11:12]
+        fork.c [10:11]
+        global.c [11:12]
+        implement.h [11:12]
+        misc.c [10:11]
+        mutex.c [10:11]
+        nonportable.c [10:11]
+        private.c [11:12]
+        pthread.c [12:13]
+        pthread.h [6:7]
+        pthread_attr_destroy.c [10:11]
+        pthread_attr_getdetachstate.c [10:11]
+        pthread_attr_getinheritsched.c [10:11]
+        pthread_attr_getschedparam.c [10:11]
+        pthread_attr_getschedpolicy.c [10:11]
+        pthread_attr_getscope.c [10:11]
+        pthread_attr_getstackaddr.c [10:11]
+        pthread_attr_getstacksize.c [10:11]
+        pthread_attr_init.c [10:11]
+        pthread_attr_setdetachstate.c [10:11]
+        pthread_attr_setinheritsched.c [10:11]
+        pthread_attr_setschedparam.c [10:11]
+        pthread_attr_setschedpolicy.c [10:11]
+        pthread_attr_setscope.c [10:11]
+        pthread_attr_setstackaddr.c [10:11]
+        pthread_attr_setstacksize.c [10:11]
+        pthread_barrier_destroy.c [10:11]
+        pthread_barrier_init.c [10:11]
+        pthread_barrier_wait.c [10:11]
+        pthread_barrierattr_destroy.c [10:11]
+        pthread_barrierattr_getpshared.c [10:11]
+        pthread_barrierattr_init.c [10:11]
+        pthread_barrierattr_setpshared.c [10:11]
+        pthread_cancel.c [10:11]
+        pthread_cond_destroy.c [11:12]
+        pthread_cond_init.c [11:12]
+        pthread_cond_signal.c [11:12]
+        pthread_cond_wait.c [11:12]
+        pthread_condattr_destroy.c [11:12]
+        pthread_condattr_getpshared.c [11:12]
+        pthread_condattr_init.c [11:12]
+        pthread_condattr_setpshared.c [11:12]
+        pthread_delay_np.c [10:11]
+        pthread_detach.c [11:12]
+        pthread_equal.c [10:11]
+        pthread_exit.c [11:12]
+        pthread_getconcurrency.c [10:11]
+        pthread_getschedparam.c [10:11]
+        pthread_getspecific.c [10:11]
+        pthread_getunique_np.c [10:11]
+        pthread_getw32threadhandle_np.c [10:11]
+        pthread_join.c [11:12]
+        pthread_key_create.c [10:11]
+        pthread_key_delete.c [10:11]
+        pthread_kill.c [10:11]
+        pthread_mutex_consistent.c [10:11]
+        pthread_mutex_destroy.c [10:11]
+        pthread_mutex_init.c [10:11]
+        pthread_mutex_lock.c [10:11]
+        pthread_mutex_timedlock.c [10:11]
+        pthread_mutex_trylock.c [10:11]
+        pthread_mutex_unlock.c [10:11]
+        pthread_mutexattr_destroy.c [10:11]
+        pthread_mutexattr_getkind_np.c [10:11]
+        pthread_mutexattr_getpshared.c [10:11]
+        pthread_mutexattr_getrobust.c [10:11]
+        pthread_mutexattr_gettype.c [10:11]
+        pthread_mutexattr_init.c [10:11]
+        pthread_mutexattr_setkind_np.c [10:11]
+        pthread_mutexattr_setpshared.c [10:11]
+        pthread_mutexattr_setrobust.c [10:11]
+        pthread_mutexattr_settype.c [10:11]
+        pthread_num_processors_np.c [10:11]
+        pthread_once.c [10:11]
+        pthread_rwlock_destroy.c [10:11]
+        pthread_rwlock_init.c [10:11]
+        pthread_rwlock_rdlock.c [10:11]
+        pthread_rwlock_timedrdlock.c [10:11]
+        pthread_rwlock_timedwrlock.c [10:11]
+        pthread_rwlock_tryrdlock.c [10:11]
+        pthread_rwlock_trywrlock.c [10:11]
+        pthread_rwlock_unlock.c [10:11]
+        pthread_rwlock_wrlock.c [10:11]
+        pthread_rwlockattr_destroy.c [10:11]
+        pthread_rwlockattr_getpshared.c [10:11]
+        pthread_rwlockattr_init.c [10:11]
+        pthread_rwlockattr_setpshared.c [10:11]
+        pthread_self.c [10:11]
+        pthread_setcancelstate.c [10:11]
+        pthread_setcanceltype.c [10:11]
+        pthread_setconcurrency.c [10:11]
+        pthread_setschedparam.c [10:11]
+        pthread_setspecific.c [10:11]
+        pthread_spin_destroy.c [10:11]
+        pthread_spin_init.c [10:11]
+        pthread_spin_lock.c [10:11]
+        pthread_spin_trylock.c [10:11]
+        pthread_spin_unlock.c [10:11]
+        pthread_testcancel.c [10:11]
+        pthread_timechange_handler_np.c [10:11]
+        pthread_win32_attach_detach_np.c [10:11]
+        ptw32_MCS_lock.c [10:11]
+        ptw32_callUserDestroyRoutines.c [11:12]
+        ptw32_calloc.c [10:11]
+        ptw32_cond_check_need_init.c [11:12]
+        ptw32_getprocessors.c [11:12]
+        ptw32_is_attr.c [10:11]
+        ptw32_mutex_check_need_init.c [10:11]
+        ptw32_new.c [10:11]
+        ptw32_processInitialize.c [11:12]
+        ptw32_processTerminate.c [11:12]
+        ptw32_relmillisecs.c [10:11]
+        ptw32_reuse.c [10:11]
+        ptw32_rwlock_cancelwrwait.c [10:11]
+        ptw32_rwlock_check_need_init.c [10:11]
+        ptw32_semwait.c [10:11]
+        ptw32_spinlock_check_need_init.c [10:11]
+        ptw32_threadDestroy.c [11:12]
+        ptw32_threadStart.c [11:12]
+        ptw32_throw.c [11:12]
+        ptw32_timespec.c [11:12]
+        ptw32_tkAssocCreate.c [11:12]
+        ptw32_tkAssocDestroy.c [11:12]
+        rwlock.c [10:11]
+        sched.c [10:11]
+        sched.h [13:14]
+        sched_get_priority_max.c [10:11]
+        sched_get_priority_min.c [10:11]
+        sched_getscheduler.c [10:11]
+        sched_setscheduler.c [10:11]
+        sched_yield.c [10:11]
+        sem_close.c [17:18]
+        sem_destroy.c [17:18]
+        sem_getvalue.c [17:18]
+        sem_init.c [15:16]
+        sem_open.c [17:18]
+        sem_post.c [17:18]
+        sem_post_multiple.c [17:18]
+        sem_timedwait.c [17:18]
+        sem_trywait.c [17:18]
+        sem_unlink.c [17:18]
+        sem_wait.c [17:18]
+        semaphore.c [21:22]
+        semaphore.h [13:14]
+        signal.c [10:11]
+        spin.c [10:11]
+        sync.c [11:12]
+        tsd.c [10:11]
+        version.rc [6:7]
+        w32_CancelableWait.c [10:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 76ee80166e0a733bda47367074051331
+BELONGS ya.make
+FILE_INCLUDE COPYING.LIB found in files: COPYING at line 88
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [85:88]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8773bafe6f0f890ba7ae9d0c997436e8
+BELONGS ya.make
+    License text:
+         *      Copyright(C) 1998 John E. Bossom
+         *      Copyright(C) 1999,2005 Pthreads-win32 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        attr.c [14:15]
+        autostatic.c [10:11]
+        barrier.c [10:11]
+        cancel.c [10:11]
+        cleanup.c [12:13]
+        condvar.c [11:12]
+        context.h [10:11]
+        create.c [11:12]
+        dll.c [10:11]
+        errno.c [11:12]
+        exit.c [11:12]
+        fork.c [10:11]
+        global.c [11:12]
+        implement.h [11:12]
+        misc.c [10:11]
+        mutex.c [10:11]
+        nonportable.c [10:11]
+        private.c [11:12]
+        pthread.c [12:13]
+        pthread.h [6:7]
+        pthread_attr_destroy.c [10:11]
+        pthread_attr_getdetachstate.c [10:11]
+        pthread_attr_getinheritsched.c [10:11]
+        pthread_attr_getschedparam.c [10:11]
+        pthread_attr_getschedpolicy.c [10:11]
+        pthread_attr_getscope.c [10:11]
+        pthread_attr_getstackaddr.c [10:11]
+        pthread_attr_getstacksize.c [10:11]
+        pthread_attr_init.c [10:11]
+        pthread_attr_setdetachstate.c [10:11]
+        pthread_attr_setinheritsched.c [10:11]
+        pthread_attr_setschedparam.c [10:11]
+        pthread_attr_setschedpolicy.c [10:11]
+        pthread_attr_setscope.c [10:11]
+        pthread_attr_setstackaddr.c [10:11]
+        pthread_attr_setstacksize.c [10:11]
+        pthread_barrier_destroy.c [10:11]
+        pthread_barrier_init.c [10:11]
+        pthread_barrier_wait.c [10:11]
+        pthread_barrierattr_destroy.c [10:11]
+        pthread_barrierattr_getpshared.c [10:11]
+        pthread_barrierattr_init.c [10:11]
+        pthread_barrierattr_setpshared.c [10:11]
+        pthread_cancel.c [10:11]
+        pthread_cond_destroy.c [11:12]
+        pthread_cond_init.c [11:12]
+        pthread_cond_signal.c [11:12]
+        pthread_cond_wait.c [11:12]
+        pthread_condattr_destroy.c [11:12]
+        pthread_condattr_getpshared.c [11:12]
+        pthread_condattr_init.c [11:12]
+        pthread_condattr_setpshared.c [11:12]
+        pthread_delay_np.c [10:11]
+        pthread_detach.c [11:12]
+        pthread_equal.c [10:11]
+        pthread_exit.c [11:12]
+        pthread_getconcurrency.c [10:11]
+        pthread_getschedparam.c [10:11]
+        pthread_getspecific.c [10:11]
+        pthread_getunique_np.c [10:11]
+        pthread_getw32threadhandle_np.c [10:11]
+        pthread_join.c [11:12]
+        pthread_key_create.c [10:11]
+        pthread_key_delete.c [10:11]
+        pthread_kill.c [10:11]
+        pthread_mutex_consistent.c [10:11]
+        pthread_mutex_destroy.c [10:11]
+        pthread_mutex_init.c [10:11]
+        pthread_mutex_lock.c [10:11]
+        pthread_mutex_timedlock.c [10:11]
+        pthread_mutex_trylock.c [10:11]
+        pthread_mutex_unlock.c [10:11]
+        pthread_mutexattr_destroy.c [10:11]
+        pthread_mutexattr_getkind_np.c [10:11]
+        pthread_mutexattr_getpshared.c [10:11]
+        pthread_mutexattr_getrobust.c [10:11]
+        pthread_mutexattr_gettype.c [10:11]
+        pthread_mutexattr_init.c [10:11]
+        pthread_mutexattr_setkind_np.c [10:11]
+        pthread_mutexattr_setpshared.c [10:11]
+        pthread_mutexattr_setrobust.c [10:11]
+        pthread_mutexattr_settype.c [10:11]
+        pthread_num_processors_np.c [10:11]
+        pthread_once.c [10:11]
+        pthread_rwlock_destroy.c [10:11]
+        pthread_rwlock_init.c [10:11]
+        pthread_rwlock_rdlock.c [10:11]
+        pthread_rwlock_timedrdlock.c [10:11]
+        pthread_rwlock_timedwrlock.c [10:11]
+        pthread_rwlock_tryrdlock.c [10:11]
+        pthread_rwlock_trywrlock.c [10:11]
+        pthread_rwlock_unlock.c [10:11]
+        pthread_rwlock_wrlock.c [10:11]
+        pthread_rwlockattr_destroy.c [10:11]
+        pthread_rwlockattr_getpshared.c [10:11]
+        pthread_rwlockattr_init.c [10:11]
+        pthread_rwlockattr_setpshared.c [10:11]
+        pthread_self.c [10:11]
+        pthread_setcancelstate.c [10:11]
+        pthread_setcanceltype.c [10:11]
+        pthread_setconcurrency.c [10:11]
+        pthread_setschedparam.c [10:11]
+        pthread_setspecific.c [10:11]
+        pthread_spin_destroy.c [10:11]
+        pthread_spin_init.c [10:11]
+        pthread_spin_lock.c [10:11]
+        pthread_spin_trylock.c [10:11]
+        pthread_spin_unlock.c [10:11]
+        pthread_testcancel.c [10:11]
+        pthread_timechange_handler_np.c [10:11]
+        pthread_win32_attach_detach_np.c [10:11]
+        ptw32_MCS_lock.c [10:11]
+        ptw32_callUserDestroyRoutines.c [11:12]
+        ptw32_calloc.c [10:11]
+        ptw32_cond_check_need_init.c [11:12]
+        ptw32_getprocessors.c [11:12]
+        ptw32_is_attr.c [10:11]
+        ptw32_mutex_check_need_init.c [10:11]
+        ptw32_new.c [10:11]
+        ptw32_processInitialize.c [11:12]
+        ptw32_processTerminate.c [11:12]
+        ptw32_relmillisecs.c [10:11]
+        ptw32_reuse.c [10:11]
+        ptw32_rwlock_cancelwrwait.c [10:11]
+        ptw32_rwlock_check_need_init.c [10:11]
+        ptw32_semwait.c [10:11]
+        ptw32_spinlock_check_need_init.c [10:11]
+        ptw32_threadDestroy.c [11:12]
+        ptw32_threadStart.c [11:12]
+        ptw32_throw.c [11:12]
+        ptw32_timespec.c [11:12]
+        ptw32_tkAssocCreate.c [11:12]
+        ptw32_tkAssocDestroy.c [11:12]
+        rwlock.c [10:11]
+        sched.c [10:11]
+        sched.h [13:14]
+        sched_get_priority_max.c [10:11]
+        sched_get_priority_min.c [10:11]
+        sched_getscheduler.c [10:11]
+        sched_setscheduler.c [10:11]
+        sched_yield.c [10:11]
+        sem_close.c [17:18]
+        sem_destroy.c [17:18]
+        sem_getvalue.c [17:18]
+        sem_init.c [15:16]
+        sem_open.c [17:18]
+        sem_post.c [17:18]
+        sem_post_multiple.c [17:18]
+        sem_timedwait.c [17:18]
+        sem_trywait.c [17:18]
+        sem_unlink.c [17:18]
+        sem_wait.c [17:18]
+        semaphore.c [21:22]
+        semaphore.h [13:14]
+        signal.c [10:11]
+        spin.c [10:11]
+        sync.c [11:12]
+        tsd.c [10:11]
+        version.rc [6:7]
+        w32_CancelableWait.c [10:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.LIB [428:433]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c456e565a55bc771b0bb281e3210bfde
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        version.rc [364:369]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd040343120e4b834af7dc5fba7bdcf8
+BELONGS ya.make
+    License text:
+            This file is covered under the following Copyright:
+        	Copyright (C) 2001,2006 Ross P. Johnson
+        	All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [7:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
+BELONGS ya.make
+    License text:
+         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+             59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.LIB [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d3f0ab7051b7e31458fd3ae5c2084a98
+BELONGS ya.make
+    License text:
+            Copyrights:
+        	Pthreads-win32 - POSIX Threads Library for Win32
+        	Copyright(C) 1998 John E. Bossom
+        	Copyright(C) 1999,2006 Pthreads-win32 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [59:63]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e25d727e93a661383d70ce81109f3901
+BELONGS ya.make
+    License text:
+                    VALUE "LegalCopyright", "Copyright (C) Project contributors 2012\0"
+                    VALUE "Comments", "http://sourceware.org/pthreads-win32/\0"
+                END
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        version.rc [123:125]

@@ -1,0 +1,89 @@
+--- contrib/python/DAWG-Python/py3/dawg_python/dawgs.py	(index)
++++ contrib/python/DAWG-Python/py3/dawg_python/dawgs.py	(working tree)
+@@ -1,9 +1,12 @@
+ # -*- coding: utf-8 -*-
+ from __future__ import absolute_import, unicode_literals
+ 
++import io
+ import struct
+ from binascii import a2b_base64
+ 
++from library.python.resource import resfs_read
++
+ from . import wrapper
+ from .compat import int_from_byte
+ 
+@@ -161,9 +164,16 @@ class CompletionDAWG(DAWG):
+         self.dct = wrapper.Dictionary()
+         self.guide = wrapper.Guide()
+ 
+-        with open(path, 'rb') as f:
+-            self.dct.read(f)
+-            self.guide.read(f)
++        data = resfs_read(path)
++        if data:
++            f = io.BytesIO(data)
++        else:
++            f = open(path, 'rb')
++
++        self.dct.read(f)
++        self.guide.read(f)
++
++        f.close()
+ 
+         return self
+ 
+--- contrib/python/DAWG-Python/py3/dawg_python/wrapper.py	(index)
++++ contrib/python/DAWG-Python/py3/dawg_python/wrapper.py	(working tree)
+@@ -1,7 +1,11 @@
+ # -*- coding: utf-8 -*-
+ from __future__ import absolute_import, unicode_literals
++import io
+ import struct
+ import array
++import sys
++
++from library.python.resource import resfs_read
+ 
+ from . import units
+ from .compat import int_from_byte
+@@ -30,7 +34,10 @@ class Dictionary(object):
+     def read(self, fp):
+         "Reads a dictionary from an input stream."
+         base_size = struct.unpack(str("=I"), fp.read(4))[0]
+-        self._units.fromfile(fp, base_size)
++        if sys.version_info > (3, 8):
++            self._units.frombytes(fp.read(base_size * 4))
++        else:
++            self._units.fromstring(fp.read(base_size * 4))
+ 
+     def contains(self, key):
+         "Exact matching."
+@@ -70,8 +77,13 @@ class Dictionary(object):
+     @classmethod
+     def load(cls, path):
+         dawg = cls()
+-        with open(path, 'rb') as f:
+-            dawg.read(f)
++        data = resfs_read(path)
++        if data:
++            f = io.BytesIO(data)
++        else:
++            f = open(path, 'rb')
++        dawg.read(f)
++        f.close()
+         return dawg
+ 
+ 
+@@ -90,7 +102,10 @@ class Guide(object):
+ 
+     def read(self, fp):
+         base_size = struct.unpack(str("=I"), fp.read(4))[0]
+-        self._units.fromfile(fp, base_size*2)
++        if sys.version_info > (3, 8):
++            self._units.frombytes(fp.read(base_size * 4 * 2))
++        else:
++            self._units.fromstring(fp.read(base_size * 4 * 2))
+ 
+     def size(self):
+         return len(self._units)

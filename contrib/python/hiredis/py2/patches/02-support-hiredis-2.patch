@@ -1,0 +1,13 @@
+--- contrib/python/hiredis/py2/src/reader.c	(index)
++++ contrib/python/hiredis/py2/src/reader.c	(working tree)
+@@ -172 +172 @@ static void Reader_dealloc(hiredis_ReaderObject *self) {
+-    redisReplyReaderFree(self->reader);
++    redisReaderFree(self->reader);
+@@ -296 +296 @@ static PyObject *Reader_feed(hiredis_ReaderObject *self, PyObject *args) {
+-    redisReplyReaderFeed(self->reader, (char *)buf.buf + off, len);
++    redisReaderFeed(self->reader, (char *)buf.buf + off, len);
+@@ -315,2 +315,2 @@ static PyObject *Reader_gets(hiredis_ReaderObject *self, PyObject *args) {
+-    if (redisReplyReaderGetReply(self->reader, (void**)&obj) == REDIS_ERR) {
+-        errstr = redisReplyReaderGetError(self->reader);
++    if (redisReaderGetReply(self->reader, (void**)&obj) == REDIS_ERR) {
++        errstr = redisReaderGetError(self->reader);

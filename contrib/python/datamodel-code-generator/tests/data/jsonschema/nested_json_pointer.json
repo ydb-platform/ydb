@@ -1,0 +1,142 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Person",
+    "type": "object",
+    "properties": {
+        "name": {
+            "title": "name",
+            "type": "string"
+        },
+        "pet": {
+            "title": "pet",
+            "type": "object",
+            "oneOf": [
+                {
+                    "$ref": "#/definitions/Pets/Cat"
+                },
+                {
+                    "$ref": "#/definitions/Pets/Dog"
+                }
+            ]
+        }
+    },
+    "definitions": {
+        "CatBreed":{
+            "C1":
+            {
+                "title":"C1",
+                "type": "object",
+                "properties":
+                {
+                    "hunts": {
+                        "type": "boolean"
+                    },
+                    "age": {
+                        "type": "string"
+                    }
+                }
+            },
+            "C2":
+            {
+                "title":"C2",
+                "type": "object",
+                "properties":
+                {
+                    "hunts": {
+                        "type": "boolean"
+                    },
+                    "age": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "DogBreed":{
+            "D1":
+            {
+                "title":"D1",
+                "type": "object",
+                "properties":
+                {
+                    "bark": {
+                        "type": "boolean"
+                    },
+                    "age": {
+                        "type": "string"
+                    }
+                }
+            },
+            "D2":
+            {
+                "title":"D2",
+                "type": "object",
+                "properties":
+                {
+                    "hunts": {
+                        "type": "boolean"
+                    },
+                    "age": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "Pets": {
+            "Cat": {
+                "title": "Cat",
+                "type": "object",
+                "required": [
+                    "pet_type",
+                    "age"
+                ],
+                "properties": {
+                    "pet_type": {
+                        "enum": [
+                            "Cat"
+                        ]
+                    },
+                    "breed": {
+                        "title": "breed",
+                        "type": "object",
+                        "oneOf": [
+                            {
+                                "$ref": "#/definitions/CatBreed/C1"
+                            },
+                            {
+                                "$ref": "#/definitions/CatBreed/C2"
+                            }
+                        ]
+                    }
+                }
+            },
+            "Dog": {
+                "title": "Dog",
+                "type": "object",
+                "required": [
+                    "pet_type",
+                    "breed"
+                ],
+                "properties": {
+                    "pet_type": {
+                        "enum": [
+                            "Dog"
+                        ]
+                    },
+                    "breed": {
+                        "title": "breed",
+                        "type": "string",
+                        "oneOf": [
+                            {
+                                "$ref": "#/definitions/DogBreed/D1"
+                            },
+                            {
+                                "$ref": "#/definitions/DogBreed/D2"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    },
+    "additionalProperties": false
+}

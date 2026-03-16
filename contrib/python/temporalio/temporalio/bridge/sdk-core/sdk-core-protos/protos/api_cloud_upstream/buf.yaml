@@ -1,0 +1,12 @@
+version: v1
+name: buf.build/temporalio/cloud-api
+deps:
+  - buf.build/googleapis/googleapis
+  - buf.build/temporalio/api:v1.43.0
+
+breaking:
+  use:
+    - FILE
+lint:
+  use:
+    - DEFAULT

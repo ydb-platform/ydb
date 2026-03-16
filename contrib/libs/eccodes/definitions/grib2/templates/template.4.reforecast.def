@@ -1,0 +1,18 @@
+# (C) Copyright 2005- ECMWF.
+# The Model Version Date
+# This is the date when the reforecast is produced with a particular version of the model
+
+unsigned[2] YearOfModelVersion   = 0: edition_specific;
+unsigned[1] MonthOfModelVersion  = 0: edition_specific;
+unsigned[1] DayOfModelVersion    = 0: edition_specific;
+unsigned[1] HourOfModelVersion   = 0: edition_specific;
+unsigned[1] MinuteOfModelVersion = 0: edition_specific;
+unsigned[1] SecondOfModelVersion = 0: edition_specific;
+
+meta modelVersionDate  g2date(YearOfModelVersion,MonthOfModelVersion,DayOfModelVersion) : dump;
+meta modelVersionTime  time(HourOfModelVersion, MinuteOfModelVersion, SecondOfModelVersion) : dump;
+
+alias referenceDate = modelVersionDate ;
+
+remove isHindcast;
+constant isHindcast = 1;

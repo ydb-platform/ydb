@@ -1,0 +1,41 @@
+{% extends "admin/index.html" %}
+{% load i18n grp_tags %}
+
+{% block javascripts %}
+    {{ block.super }}
+{% endblock %}
+
+{% if not is_popup %}
+    {% block breadcrumbs %}
+        <ul class="grp-horizontal-list">
+            <li><a href="{% url 'admin:index' %}">{% trans "Home" %}</a></li>
+            {% for app in app_list %}
+                {% blocktrans with app.name as name %}<li>{{ name }}</li>{% endblocktrans %}
+            {% endfor %}
+        </ul>
+    {% endblock %}
+{% endif %}
+
+{% block content %}
+   <div class="g-d-c">
+        <div class="g-d-12" id="apps_init">
+            {% for app in app_list %}
+                <div class="grp-module" id="app_{{ app.name|lower }}">
+                    <h2>{% trans app.name %}</h2>
+                    {% for model in app.models %}
+                        <div class="grp-row">
+                            {% if model.admin_url %}<a href="{{ model.admin_url }}"><strong>{{ model.name }}</strong></a>{% else %}<span><strong>{{ model.name }}</strong></span>{% endif %}
+                            {% if model.perms.add %}
+                                <ul class="grp-actions">
+                                    {% if model.perms.add %}<li class="grp-icon grp-add-link"><a href="{{ model.add_url }}" title="{% trans 'Add' %}">&nbsp;</a></li>{% endif %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% empty %}
+                <p>{% trans "You don´t have permission to edit anything." %}</p>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}

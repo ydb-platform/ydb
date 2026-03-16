@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<gpx version="1.0" creator="Ultra GPS Logger" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.topografix.com/GPX/1/0" xsi:schemaLocation="http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd">
+<trk>
+<name><![CDATA[2014-05-06_132925]]></name>
+<trkseg>
+<trkpt lat="51.519402" lon="-0.134462"><ele>81.000000</ele><time>2014-05-06T12:29:33Z</time></trkpt><!-- acc:30.0 spd:0.0 bea:0.0 prv:gps [GPS] cmp:0.0 alt:81.0::81.0 cbt:false -->
+</trkseg>
+</trk>
+</gpx>

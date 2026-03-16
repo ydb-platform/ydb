@@ -1,0 +1,14 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+sharedlibdir=${libdir}
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: blosc
+Description: A blocking, shuffling and lossless compression library
+URL: https://blosc.org/
+Version: @BLOSC_VERSION_STRING@
+
+Requires:
+Libs: -L${libdir} -L${sharedlibdir} -lblosc
+Cflags: -I${includedir}

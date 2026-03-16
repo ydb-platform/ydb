@@ -1,0 +1,46 @@
+# (C) Copyright 2005- ECMWF.
+
+position offsetSection1;
+section_length[3] section1Length ;
+
+unsigned[1]  masterTableNumber : dump ;
+
+codetable[2] bufrHeaderCentre   'common/c-11.table' : dump;
+unsigned[2]  bufrHeaderSubCentre : dump;
+alias ls.centre=bufrHeaderCentre;
+
+unsigned[1]  updateSequenceNumber : dump;
+
+flags[1] section1Flags 'bufr/section1_flags.table' = 128 : hidden ; # = section 2 present
+
+unsigned[1] dataCategory : dump;
+unsigned[1] internationalDataSubCategory = 255 : dump;
+unsigned[1] dataSubCategory : dump;
+unsigned[1] masterTablesVersionNumber : dump;
+unsigned[1] localTablesVersionNumber : dump;
+
+unsigned[2] typicalYear : dump;
+transient typicalYear2 = typicalYear : hidden, no_copy;
+if (typicalYear<100) {
+  # ECC-556: invalid year corrected. Assume 21st century!
+  transient typicalYear2 = (2000 + typicalYear) : hidden, no_copy;
+}
+
+transient typicalYearOfCentury = typicalYear2 % 100;
+transient typicalCentury =  ( typicalYear2 - typicalYearOfCentury ) / 100 + 1 ;
+
+unsigned[1] typicalMonth : dump;
+unsigned[1] typicalDay : dump;
+unsigned[1] typicalHour : dump;
+unsigned[1] typicalMinute : dump;
+unsigned[1] typicalSecond : dump;
+
+meta ls.typicalDate sprintf("%.4d%.2d%.2d",typicalYear2,typicalMonth,typicalDay) : dump,no_copy;
+meta ls.typicalTime sprintf("%.2d%.2d%.2d",typicalHour,typicalMinute,typicalSecond) :dump,no_copy;
+
+meta typicalDateTime julian_date(typicalYear2,typicalMonth,typicalDay,typicalHour,typicalMinute,typicalSecond) ;
+
+alias ls.masterTablesVersionNumber=masterTablesVersionNumber;
+alias ls.localTablesVersionNumber=localTablesVersionNumber;
+
+section_padding section1Padding;

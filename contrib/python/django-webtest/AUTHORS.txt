@@ -1,0 +1,26 @@
+Authors
+=======
+
+* Mikhail Korobov <kmike84@gmail.com>
+* Gregor Müllegger <gregor@muellegger.de>
+* Gael Pasgrimaud
+* Anonymous contributor
+* Ilya Shalyapin
+* Joe Crobak
+* Ruslan Popov
+* bigkevmcd
+* Jeroen Vloothuis
+* Tai Lee
+* David Winterbottom
+* Marco Braak
+* Bruno Renié
+* Gautier Hayoun
+* Carl Meyer
+* Iurii Kriachko
+* Will Bradley
+* Julien Aubert
+* Darian Moody <https://github.com/djm>
+* Max Kharandziuk <https://github.com/kharandziuk>
+* Helen Sherwood-Taylor <https://github.com/helenst>
+* Éric Araujo <https://github.com/merwok>
+* Wayne Lambert <https://github.com/WayneLambert>

@@ -1,0 +1,11 @@
+Fix error C2512: 'Malloc_allocator<U>::Malloc_allocator': no appropriate default constructor available.
+
+--- a/sql/malloc_allocator.h
++++ b/sql/malloc_allocator.h
+@@ -79,2 +79,6 @@
+ 
++#ifdef _MSC_VER
++  Malloc_allocator() : m_key(PSI_NOT_INSTRUMENTED) {}
++#endif
++
+   explicit Malloc_allocator(PSI_memory_key key) : m_key(key) {}

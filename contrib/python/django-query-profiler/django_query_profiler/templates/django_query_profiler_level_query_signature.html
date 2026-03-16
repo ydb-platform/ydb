@@ -1,0 +1,194 @@
+{# This template is used to display detailed view data, when the QueryProfilerType is QUERY_SIGNATURE #}
+
+
+<!DOCTYPE html>
+<html lang="en">
+    {% load number_formatter %}
+
+    <head>
+        <title>Query Profiled Data</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap.min.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/js/bootstrap.min.js"></script>
+
+        <link rel="stylesheet"
+              href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.15.6/styles/default.min.css">
+        <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.15.6/highlight.min.js"></script>
+        <!-- D3 flamegraph -->
+        <script type="text/javascript" src="https://d3js.org/d3.v4.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3-tip/0.9.1/d3-tip.min.js"></script>
+        <script type="text/javascript" src="https://cdn.jsdelivr.net/gh/spiermar/d3-flame-graph@2.0.3/dist/d3-flamegraph.min.js"></script>
+        <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/spiermar/d3-flame-graph@2.0.3/dist/d3-flamegraph.css">
+
+        <script>var flamegraphStack = {{flamegraphStack|safe}};</script>
+        <script>hljs.initHighlightingOnLoad();</script>
+
+        <style>
+            .stackTrace {
+                margin-left: 10px;
+                border: 1px solid black;
+                border-top: 0;
+                margin-top: 0;
+            }
+        </style>
+    </head>
+    <body>
+
+        <div class="container-fluid">
+            <h2>Summary of the API</h2>
+
+            <table class="table table-striped table-dark table-bordered">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Queries</th>
+                        <th>Database time spent</th>
+                        <th>Database rows fetched</th>
+                        <th>Potential N+1 count</th>
+                        <th>Exact query duplicates</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <th>Total</th>
+                        <th>{{ summary.total_query_count|commafy }}</th>
+                        <th>{{ summary.total_query_execution_time_in_micros|commafy }} μs</th>
+                        <th>{{ summary.total_db_row_count|commafy }}</th>
+                        <th>{{ summary.potential_n_plus1_query_count|commafy }}</th>
+                        <th>{{ summary.exact_query_duplicates|commafy }}</th>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+
+        <div class="container-fluid">
+            <h2>Api Details by query signature</h2>
+
+						<!-- flamegraph -->
+						<div id="chart" style="margin: 10px 20px;"></div>
+						<script type="text/javascript">
+						var flamegraph = d3.flamegraph()
+							.width($('#chart').innerWidth())
+							.cellHeight(18)
+							.transitionDuration(750)
+							.transitionEase(d3.easeCubic)
+							.differential(false)
+							.selfValue(false);
+
+						d3.select("#chart")
+							.datum(flamegraphStack)
+							.call(flamegraph);
+						</script>
+
+            <div class="panel-group">
+                <div class="panel panel-default">
+
+                    <div class="panel-heading container-fluid bg-3">
+                        <h3 class="panel-title">
+                            <div class="col-sm-4">
+                                <strong><em>Query origin</em></strong>
+                            </div>
+                            <div class="col-sm-2">
+                                <strong><em>Number of queries</em></strong>
+                            </div>
+                            <div class="col-sm-2">
+                                <strong><em>Query time</em></strong>
+                            </div>
+                            <div class="col-sm-2">
+                                <strong><em>Database rows</em></strong>
+                            </div>
+                            <div class="col-sm-2">
+                                <strong><em>Is N+1?</em></strong>
+                            </div>
+                        </h3>
+                    </div>
+
+
+                    {%  for query_signature, query_signature_statistics in query_signature_to_statistics.items %}
+                        <div class="panel-heading container-fluid bg-3">
+                            <h4 class="panel-title">
+
+                                <!--Place of origin -->
+                                <div class="col-sm-4" data-toggle="tooltip" title="TABLE_NAMES">
+                                    <a data-toggle="collapse" href="#{{ forloop.counter0 }}">
+                                        <span style="border-bottom: 1px solid;">
+                                            {{ query_signature.app_stack_trace.0 }}
+                                        </span>
+                                    </a>
+                                </div>
+
+                                <!-- Sql frequency -->
+                                <div class="col-sm-2">
+                                    <span class="badge">
+                                        {{ query_signature_statistics.frequency|commafy }}
+                                    </span>
+                                </div>
+
+                                <!-- Sql TIME -->
+                                <div class="col-sm-2">
+                                    <span class="badge">
+                                        {{ query_signature_statistics.query_execution_time_in_micros|commafy }} ms
+                                    </span>
+                                </div>
+
+                                <!-- Db rows fetched -->
+                                <div class="col-sm-2">
+                                    <span class="badge">
+                                        {{ query_signature_statistics.db_row_count|commafy }}
+                                    </span>
+                                </div>
+
+
+                                <!-- N+1 calls -->
+                                <div class="col-sm-2">
+                                    {% if query_signature_statistics.frequency > 1 %}
+                                        <span class="label label-default">N+1</span>
+                                    {% else %}
+                                        <span></span>
+                                    {% endif %}
+                                </div>
+                            </h4>
+                        </div>
+
+                        <!-- Query and StackTrace expandable part -->
+                        <div id="{{ forloop.counter0 }}" class="panel-collapse collapse">
+                            <pre><code class="sql" style="font-family:monospace;">{{ query_signature.query_without_params }}</code></pre>
+
+                            <div class="row">
+                                <div class="col-sm-6">
+                                    <h5> Stack Trace <span class="glyphicon glyphicon-arrow-down"></span></h5>
+                                    <ul class="list-group stackTrace">
+                                        {% for stack_trace in query_signature.app_stack_trace %}
+                                        <li class="list-group-item list-group-item-action list-group-item-info">
+                                            <span>
+                                                {{ stack_trace }}
+                                            </span>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+
+                                <div class="col-sm-6">
+                                  <b>Recommendation?&nbsp;</b>
+                                  <div style="padding-top: 30px; font-size: 12px">
+                                    {% if query_signature.analysis.visible_in_ui %}
+                                      <span>
+                                          {{ query_signature.analysis.name }}
+                                      </span>
+                                    {% else %}
+                                      <span>None</span>
+                                    {% endif %}
+                                  </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+    </body>
+</html>

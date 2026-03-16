@@ -1,0 +1,38 @@
+Metadata-Version: 2.1
+Name: python-snappy
+Version: 0.6.1
+Summary: Python library for the snappy compression library from Google
+Home-page: http://github.com/andrix/python-snappy
+Author: Andres Moreira
+Author-email: andres@andresmoreira.com
+License: BSD
+Keywords: snappy,compression,google
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Topic :: Internet
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: System :: Archiving :: Compression
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+License-File: LICENSE
+License-File: AUTHORS
+Requires-Dist: cffi (>=1.15.0)
+
+
+Python bindings for the snappy compression library from Google.
+
+More details about Snappy library: http://google.github.io/snappy
+
+

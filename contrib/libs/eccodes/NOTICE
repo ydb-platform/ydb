@@ -1,0 +1,25 @@
+ECMWF ecCodes
+(C) Copyright 2005- ECMWF.
+
+This product includes software developed at ECMWF (http://www.ecmwf.int).
+
+Parts of the definitions provided by WMO (https://public.wmo.int/en)
+
+Microsoft Visual Studio support provided with the help of
+Finnish Meteorological Institute (FMI).
+
+Adaptive Entropy Coding (CCSDS) provided by
+The Max-Planck-Institute for Meteorology and Deutsches Klimarechenzentrum GmbH.
+
+IBM POWER optimisations were developed at
+The Max-Planck-Institute for Meteorology.
+
+Decoding double array optimisations provided by
+Norwegian Meteorological Institute.
+
+OpenMP API Support provided by Eric Millin.
+
+Fortran source code for grib_typeSizes.f90 from Robert Pincus
+Cooperative Institue for Meteorological Satellite Studies
+University of Wisconsin
+

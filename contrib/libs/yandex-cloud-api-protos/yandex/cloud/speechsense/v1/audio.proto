@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1;
+
+option java_package = "yandex.cloud.api.speechsense.v1";
+option java_outer_classname = "AudioProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1;speechsense";
+
+
+// RAW Audio format spec (no container to infer type). Used in AudioFormat options.
+message RawAudio {
+  enum AudioEncoding {
+    AUDIO_ENCODING_UNSPECIFIED = 0;
+    // Audio bit depth 16-bit signed little-endian (Linear PCM).
+    AUDIO_ENCODING_LINEAR16_PCM = 1;
+  }
+
+  //  Type of audio encoding
+  AudioEncoding audio_encoding = 1;
+  //  PCM sample rate
+  int64 sample_rate_hertz = 2;
+  //  PCM channel count.
+  int64 audio_channel_count = 3;
+}
+
+// Audio with fixed type in container. Used in AudioFormat options.
+message ContainerAudio {
+  enum ContainerAudioType {
+    CONTAINER_AUDIO_TYPE_UNSPECIFIED = 0;
+
+    // Audio bit depth 16-bit signed little-endian (Linear PCM).
+    CONTAINER_AUDIO_TYPE_WAV = 1;
+
+    // Data is encoded using the OPUS audio codec and compressed using the OGG container format.
+    CONTAINER_AUDIO_TYPE_OGG_OPUS = 2;
+
+    // Data is encoded using MPEG-1/2 Layer III and compressed using the MP3 container format.
+    CONTAINER_AUDIO_TYPE_MP3 = 3;
+  }
+  //  Type of audio container.
+  ContainerAudioType container_audio_type = 1;
+}
+
+// Audio format options.
+message AudioMetadata {
+  oneof AudioFormat {
+
+    // Audio without container.
+    RawAudio raw_audio = 1;
+
+    // Audio is wrapped in container.
+    ContainerAudio container_audio = 2;
+  }
+}
+
+// Data chunk with audio.
+message AudioChunk {
+
+  // Bytes with audio data.
+  bytes data = 1;
+}
+
+
+// Streaming audio request
+// First message should be audio metadata.
+// The next messages are audio data chunks.
+message AudioStreamingRequest {
+  oneof AudioEvent {
+
+    // Session options. Should be the first message from user.
+    AudioMetadata audio_metadata = 1;
+
+    // Chunk with audio data.
+    AudioChunk chunk = 2;
+  }
+}
+
+// request for sending small audios (< 128 mb) in one go
+message AudioRequest {
+  // audio metadata
+  AudioMetadata audio_metadata = 1;
+
+  // Bytes with audio data.
+  AudioChunk audio_data = 2;
+}

@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package yandex.cloud.quotamanager.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/quotamanager/v1/resource.proto";
+import "yandex/cloud/validation.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/quotamanager/v1;quotamanager";
+option java_package = "yandex.cloud.api.quotamanager.v1";
+
+// A set of methods for managing quota limits.
+service QuotaLimitService {
+  // Returns the specified quota limit.
+  rpc Get (GetQuotaLimitRequest) returns (QuotaLimit) {
+    option (google.api.http) = {get: "/quota-manager/v1/quotaLimits/{quota_id}"};
+  }
+
+  // Retrieves the list of quota limits for a given service.
+  rpc List (ListQuotaLimitsRequest) returns (ListQuotaLimitsResponse) {
+    option (google.api.http) = {get: "/quota-manager/v1/quotaLimits"};
+  }
+
+  // Retrieves the list of services available for quota management.
+  rpc ListServices (ListServicesRequest) returns (ListServicesResponse) {
+    option (google.api.http) = {get: "/quota-manager/v1/quotaLimits/services"};
+  }
+
+}
+
+message GetQuotaLimitRequest {
+  // The resource for which the quota limit is being requested.
+  Resource resource = 1 [(required) = true];
+  // The id of the quota to retrieve.
+  string quota_id = 2 [(required) = true, (length) = "<=64"];
+}
+
+message ListQuotaLimitsRequest {
+  // The resource for which quota limits are being listed.
+  Resource resource = 1 [(required) = true];
+  // The service for which quota limits are being requested.
+  string service = 2 [(required) = true];
+  // The maximum number of quota limits to return per response.
+  int64 page_size = 3 [(value) = "0-1000"];
+  // Token to retrieve the next page of results. Omitted on the first request.
+  string page_token = 4 [(length) = "<=2000"];
+}
+
+message ListQuotaLimitsResponse {
+  // The associated resource for these quota limits.
+  Resource resource = 1;
+  // List of quota limits for the specified resource and service.
+  repeated QuotaLimit quota_limits = 2;
+  // Token to retrieve the next page of results.
+  string next_page_token = 3;
+}
+
+message ListServicesRequest {
+  // The type of resources for which services are being requested.
+  string resource_type = 1 [(required) = true];
+  // The maximum number of services to return per response.
+  int64 page_size = 2 [(value) = "0-1000"];
+  // Token to retrieve the next page of results. Omitted on the first request.
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+message ListServicesResponse {
+  // List of services available for quota management.
+  repeated Service services = 1;
+  // Token to retrieve the next page of results.
+  string next_page_token = 2;
+}
+
+message QuotaLimit {
+  // The unique id of the quota.
+  string quota_id = 1;
+  // The limit value set for this quota.
+  google.protobuf.DoubleValue limit = 2;
+  // The current usage level of this quota.
+  google.protobuf.DoubleValue usage = 3;
+}
+
+message Service {
+  // The unique id of the service.
+  string id = 1;
+  // The name of the service.
+  string name = 2;
+}

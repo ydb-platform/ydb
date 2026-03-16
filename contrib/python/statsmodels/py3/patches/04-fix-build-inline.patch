@@ -1,0 +1,11 @@
+--- contrib/python/statsmodels/py3/statsmodels/src/_complex_shim.h	(index)
++++ contrib/python/statsmodels/py3/statsmodels/src/_complex_shim.h	(working tree)
+@@ -14 +14 @@ typedef double complex double_complex;
+-inline double sm_cabs(double_complex z){
++static inline double sm_cabs(double_complex z){
+@@ -18 +18 @@ inline double sm_cabs(double_complex z){
+-inline double_complex sm_clog(double_complex z){
++static inline double_complex sm_clog(double_complex z){
+@@ -22 +22 @@ inline double_complex sm_clog(double_complex z){
+-inline double_complex sm_cexp(double_complex z){
++static inline double_complex sm_cexp(double_complex z){

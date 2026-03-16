@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/schema#",
+  "type": "object",
+  "title": "ModelD",
+  "properties": {
+    "firstName": {
+      "type": "string"
+    },
+    "modelA": {
+      "$ref": "file_a.json#"
+    }
+  }
+}

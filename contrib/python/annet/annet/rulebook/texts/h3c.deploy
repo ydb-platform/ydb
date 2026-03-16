@@ -1,0 +1,196 @@
+# Рулбук деплоя на устройства
+#
+# Операторы:
+#   *  Один аргумент
+#   ~  Несколько аргументов (минимум один)
+#
+# Параметры:
+#   %timeout=...  Таймаут выполнения команды (в секундах, по умолчанию 30)
+#
+# Ответы на вопросы
+#
+# <команда>
+#   dialog: <вопрос> ::: <ответ> <параметры>
+#
+# Если <вопрос> заключён в слеши (//), то воспринимается как регулярка, иначе - точное совпадение.
+# Параметы:
+#   %send_nl=...  Посылать ли перевод строки после ответа (bool, по умолчанию true)
+# -----
+
+undo bgp
+    dialog: Warning: The BGP process will be deleted. Continue? [Y/N]: ::: Y
+undo peer *
+    dialog: Warning: All the configurations related to the BGP peer will be deleted. Continue? [Y/N]: ::: Y
+    dialog: Warning: This operation will reset the peer session. Continue? [Y/N]: ::: Y
+peer * enable
+    dialog: Warning: This operation will reset the peer session. Continue? [Y/N]: ::: Y
+peer * timer
+    dialog: Warning: Changing the parameter in this command resets the peer session. Continue? [Y/N]: ::: Y
+undo route-distinguisher *
+    dialog: Warning: RTs of VPN instance and IPv6 related configurations under BGP will be deleted. Continue? [Y/N]: ::: Y
+    dialog: Warning: All the VPN targets in the VPN instance IPv6 address family will be deleted. Continue? [Y/N]: ::: Y
+    dialog: Warning: All VPN targets of this EVPN instance and all EVPN address family-related configurations under BGP will be deleted. Continue? [Y/N]: ::: Y
+
+save
+    dialog: /Warning: The current configuration will be written to the device. Continue\? \[Y/N\]:?/ ::: Y
+    dialog: Warning: The current configuration will be written to the device. Are you sure to continue? [Y/N]: ::: Y
+    dialog: Are you sure to continue?[Y/N] ::: Y
+    dialog: Are you sure to continue? [Y/N] ::: Y
+    dialog: Please input the file name(*.cfg, *.zip, *.dat): ::: vrpcfg.zip
+undo rsa peer-public-key
+    dialog: /Do you want to remove the public key named .*\? \[Y/N\]:/ ::: Y
+undo stelnet server enable
+    dialog: Warning: The operation will stop the STelnet server. Do you want to continue? [Y/N]: ::: Y
+undo telnet * server enable
+    dialog: Warning: The operation will stop the .*Telnet server. Continue? [Y/N]: ::: Y
+undo stelnet * server enable
+    dialog: Warning: The operation will stop the STelnet server. Do you want to continue? [Y/N]: ::: Y
+telnet ipv6 server-source all-interface
+    dialog: Warning: Telnet server source configuration will take effect in the next login. Do you want to continue? [Y/N]: ::: Y
+telnet server-source all-interface
+    dialog: Warning: Telnet server source configuration will take effect in the next login. Do you want to continue? [Y/N]: ::: Y
+    dialog: Warning: Telnet server source configuration will take effect in the next login. Continue? [Y/N]: ::: Y
+telnet ipv6 server-source all-interface
+    dialog: Warning: The IPv6 Telnet server source configuration will take effect in the next login. Continue? [Y/N]: ::: Y
+undo telnet server-source ~
+    dialog: Warning: The operation will delete the Telnet server source configuration and may cause the service to be unavailable. Do you want to continue? [Y/N]: ::: Y
+    dialog: Warning: The operation will delete the Telnet server source configuration and may cause the service to be unavailable. Continue? [Y/N]: ::: Y
+undo telnet ipv6 server-source ~
+    dialog: Warning: The operation will delete the Telnet server source configuration and may cause the service to be unavailable. Do you want to continue? [Y/N]: ::: Y
+    dialog: Warning: The operation will delete the Telnet server source configuration and may cause the service to be unavailable. Continue? [Y/N]: ::: Y
+telnet ipv6 server disable
+    dialog: Warning: The operation will stop the IPv6 Telnet server. Do you want to continue? [Y/N]: ::: Y
+    dialog: Warning: The operation will stop the IPv6 Telnet server. Continue? [Y/N]: ::: Y
+telnet server disable
+    dialog: Warning: The operation will stop the Telnet server. Do you want to continue? [Y/N]: ::: Y
+    dialog: Warning: The operation will stop the Telnet server. Continue? [Y/N]: ::: Y
+ssh ipv6 server-source all-interface
+    dialog: Warning: SSH server source configuration will take effect in the next login. Do you want to continue? [Y/N]: ::: Y
+    dialog: Warning: SSH server source configuration will take effect in the next login. Continue? [Y/N]: ::: Y
+ssh server-source all-interface
+    dialog: Warning: SSH server source configuration will take effect in the next login. Do you want to continue? [Y/N]: ::: Y
+    dialog: Warning: SSH server source configuration will take effect in the next login. Continue? [Y/N]: ::: Y
+undo ssh server-source ~
+    dialog: Warning: The operation will delete the SSH server source configuration and may cause the service to be unavailable. Do you want to continue? [Y/N]: ::: Y
+undo protocol inbound ssh port *
+    dialog: Warning: The operation will stop the ssh port 830 service. Do you want to continue? [Y/N]: ::: Y
+undo sftp server enable
+    dialog: Warning: The operation will stop the SFTP server. Do you want to continue? [Y/N]: ::: Y
+(ftp|FTP) *
+    dialog: Warning: FTP server source configuration will take effect in the next login. Do you want to continue? [Y/N]: ::: Y
+undo (ftp|FTP) server enable
+    dialog: Warning: The operation will stop the FTP server. Do you want to continue? [Y/N]: ::: Y
+undo (ftp|FTP) ipv6 server enable
+    dialog: Warning: The operation will stop the FTP server. Do you want to continue? [Y/N]: ::: Y
+undo (ftp|FTP) (server source|server-source)
+    dialog: Warning: The operation will delete the FTP server source configuration and may cause the service to be unavailable. Do you want to continue? [Y/N]: ::: Y
+    dialog: Warning: To make the server source configuration take effect, the FTP server will be restarted. Continue? [Y/N]: ::: Y
+undo (ftp|FTP) ipv6 (server source|server-source)
+    dialog: Warning: The operation will delete the FTP server source configuration and may cause the service to be unavailable. Do you want to continue? [Y/N]: ::: Y
+    dialog: Warning: To make the server source configuration take effect, the FTP server will be restarted. Continue? [Y/N]: ::: Y
+undo http server enable
+    dialog: Warning: The operation will stop HTTP service. Continue? [Y/N]: ::: Y
+undo sftp * server enable
+    dialog: Warning: The operation will stop the SFTP server. Do you want to continue? [Y/N]: ::: Y
+undo scp server enable
+    dialog: Warning: The operation will stop the SCP server. Continue? [Y/N]: ::: Y
+undo scp * server enable
+    dialog: Warning: The operation will stop the SCP server. Continue? [Y/N]: ::: Y
+undo dhcp enable
+    dialog: Warning: All DHCP functions will be disabled. Continue? [Y/N] ::: Y
+undo dhcpv6 enable
+    dialog: Warning: All DHCPv6 functions will be disabled. Continue? [Y/N]: ::: Y
+system tcam acl
+    dialog: Warning: Enabling the TCAM ACL will cause ACL resources to be replanned. Incorrectly using these commands will cause some services to be unavailable. Therefore, use these commands with the guidance of Huawei engineers. Continue? [Y/N] ::: Y
+local-user * privilege level
+    dialog: Warning: This operation may affect online users, are you sure to change the user privilege level ?[Y/N] ::: Y
+    dialog: Warning: This operation may affect online users and will change the user privilege level, Continue? [Y/N]: ::: Y
+local-user * password
+    dialog: Warning: The user using this account will be logged out, and needs to log in again. Do you want to continue? [Y/N] ::: Y
+
+stp *
+    dialog: Warning: The global STP state will be changed. Continue? [Y/N] ::: Y
+
+ntp server disable
+    dialog: /.*Continue\?/ ::: Y
+ntp * server disable
+    dialog: /.*Continue\?/ ::: Y
+
+ntp-service server disable
+    dialog: /.*Continue\?/ ::: Y
+ntp-service * server disable
+    dialog: /.*Continue\?/ ::: Y
+
+undo telnet server-source all-interface
+    dialog: /.*continue\?/ ::: Y
+undo telnet ipv6 server-source all-interface
+    dialog: /.*continue\?/ ::: Y
+telnet server disable
+    dialog: /.*continue\?/ ::: Y
+telnet ipv6 server disable
+    dialog: /.*continue\?/ ::: Y
+
+undo vlan
+    dialog: Warning: The configurations of the VLAN will be deleted. Continue? [Y/N]: ::: Y
+
+port link-type *
+    dialog: Warning: This command will delete VLANs on this port. Continue?[Y/N]: ::: Y
+
+port mode 200GE  ~
+    dialog: /Warning: This operation will delete current ports.*/ ::: Y
+
+port mode *
+    dialog: /Warning: The interfaces.* will be converted to .* mode/ ::: Y
+undo port mode *
+    dialog: /Warning: The interfaces.* will be converted to .* mode/ ::: Y
+
+mpls lsr-id *
+    dialog: Warning: All MPLS services will be deleted and services related to LSR-ID will fail. Continue? [Y/N]: ::: Y
+
+undo router-id
+    dialog: Warning: Changing the parameter in this command resets the peer session. Continue? [Y/N]: ::: Y
+
+router-id
+    dialog: Warning: Changing the parameter in this command resets the peer session. Continue? [Y/N]: ::: Y
+
+undo bfd
+    dialog: Warning: The BFD process will be deleted. Continue? [Y/N]: ::: Y
+
+undo dcn
+    dialog: Warning: This operation will disable DCN function. Continue? [Y/N]: ::: Y
+
+undo ospf *
+    dialog: Warning: The OSPF process will be deleted. Continue? [Y/N]: ::: Y
+
+undo mpls ldp transport-address
+    dialog: Warning: All the related sessions will be deleted if the operation is performed! Continue? [Y/N]: ::: Y
+
+ldp-sync enable
+    dialog: Warning: This will cause all the interfaces enabled the ISIS process to enter ldp-sync state. Continue? [Y/N]: ::: Y
+    dialog: Warning: This will cause all the interfaces enabled the OSPF process to enter ldp-sync state. Continue? [Y/N]: ::: Y
+
+association-type enable
+    dialog: Warning: The PCE sessions will be restarted. Continue? [Y/N]: ::: Y
+
+info-center max-logfile-number *
+    dialog: Warning: The operation will probably delete the redundant logs. Continue? [Y/N]: ::: Y
+
+rsa peer-public-key * 
+    dialog: Do you really want to replace it? [Y/N]: ::: Y
+
+ip binding vpn-instance
+    dialog: Warning: This operation will modify the router ID to 0.0.0.0, which may affect the establishment of BGP peer relationships. Continue? [Y/N]: ::: Y
+
+force transceiver *
+    dialog: /.*Continue\?/ ::: Y
+
+undo force transceiver *
+    dialog: /.*Continue\?/ ::: Y
+
+undo local-aaa-user change-password verify
+    dialog: Warning: This command will disable the function of verifying the old password when administrators changes their own passwords. Continue?[Y/N] ::: Y
+
+undo local-user ~
+    dialog: Warning: This operation may affect online users, are you sure to change the user privilege level ?[Y/N] ::: Y
+
+# vim: set syntax=annrulebook:

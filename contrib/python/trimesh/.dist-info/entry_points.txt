@@ -1,0 +1,2 @@
+[console_scripts]
+trimesh = trimesh:__main__.main

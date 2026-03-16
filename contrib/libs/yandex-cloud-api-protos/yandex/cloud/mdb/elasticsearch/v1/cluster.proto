@@ -1,0 +1,268 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.elasticsearch.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/mdb/elasticsearch/v1/config/elasticsearch.proto";
+import "yandex/cloud/mdb/elasticsearch/v1/maintenance.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/elasticsearch/v1;elasticsearch";
+option java_package = "yandex.cloud.api.mdb.elasticsearch.v1";
+
+// An Elasticsearch cluster resource.
+// For more information, see the [Concepts](/docs/managed-elasticsearch/concepts) section of the documentation.
+message Cluster {
+  enum Environment {
+    ENVIRONMENT_UNSPECIFIED = 0;
+
+    // Stable environment with a conservative update policy when only hotfixes are applied during regular maintenance.
+    PRODUCTION = 1;
+
+    // Environment with a more aggressive update policy when new versions are rolled out irrespective of backward compatibility.
+    PRESTABLE = 2;
+  }
+
+  enum Health {
+
+    // State of the cluster is unknown ([Host.health] of all hosts in the cluster is `UNKNOWN`).
+    HEALTH_UNKNOWN = 0;
+
+    // Cluster is alive and well ([Host.health] of all hosts in the cluster is `ALIVE`).
+    ALIVE = 1;
+
+    // Cluster is inoperable ([Host.health] of all hosts in the cluster is `DEAD`).
+    DEAD = 2;
+
+    // Cluster is in degraded state ([Host.health] of at least one of the hosts in the cluster is not `ALIVE`).
+    DEGRADED = 3;
+  }
+
+  enum Status {
+
+    // Cluster state is unknown.
+    STATUS_UNKNOWN = 0;
+
+    // Cluster is being created.
+    CREATING = 1;
+
+    // Cluster is running normally.
+    RUNNING = 2;
+
+    // Cluster encountered a problem and cannot operate.
+    ERROR = 3;
+
+    // Cluster is being updated.
+    UPDATING = 4;
+
+    // Cluster is stopping.
+    STOPPING = 5;
+
+    // Cluster stopped.
+    STOPPED = 6;
+
+    // Cluster is starting.
+    STARTING = 7;
+  }
+
+  // ID of the Elasticsearch cluster.
+  // This ID is assigned at creation time.
+  string id = 1;
+
+  // ID of the folder that the Elasticsearch cluster belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the Elasticsearch cluster.
+  // The name must be unique within the folder. 1-63 characters long.
+  string name = 4;
+
+  // Description of the Elasticsearch cluster. 0-256 characters long.
+  string description = 5;
+
+  // Custom labels for the Elasticsearch cluster as `key:value` pairs.
+  // A maximum of 64 labels per resource is allowed.
+  map<string, string> labels = 6;
+
+  // Deployment environment of the Elasticsearch cluster.
+  Environment environment = 7;
+
+  // Description of monitoring systems relevant to the Elasticsearch cluster.
+  repeated Monitoring monitoring = 8;
+
+  // Configuration of the Elasticsearch cluster.
+  ClusterConfig config = 9;
+
+  // ID of the network that the cluster belongs to.
+  string network_id = 10;
+
+  // Aggregated cluster health.
+  Health health = 11;
+
+  // Current state of the cluster.
+  Status status = 12;
+
+  // User security groups
+  repeated string security_group_ids = 13;
+
+  // ID of the service account used for access to Object Storage.
+  string service_account_id = 14;
+
+  // Deletion Protection inhibits deletion of the cluster
+  bool deletion_protection = 15;
+
+  // Window of maintenance operations.
+  MaintenanceWindow maintenance_window = 16;
+
+  // Maintenance operation planned at nearest maintenance_window.
+  MaintenanceOperation planned_operation = 17;
+}
+
+// Metadata of monitoring system.
+message Monitoring {
+  // Name of the monitoring system.
+  string name = 1;
+
+  // Description of the monitoring system.
+  string description = 2;
+
+  // Link to the monitoring system charts for the Elasticsearch cluster.
+  string link = 3;
+}
+
+message ClusterConfig {
+  // Elasticsearch version.
+  string version = 1;
+
+  // Configuration and resource allocation for Elasticsearch nodes.
+  Elasticsearch elasticsearch = 2;
+
+  // ElasticSearch edition.
+  string edition = 3;
+}
+
+message Elasticsearch {
+  message DataNode {
+    oneof config {
+      // Elasticsearch 7.x data node configuration.
+      config.ElasticsearchConfigSet7 elasticsearch_config_set_7 = 1 [json_name="elasticsearchConfigSet_7"];
+    }
+
+    // Resources allocated to Elasticsearch data nodes.
+    Resources resources = 2;
+  }
+
+  message MasterNode {
+    // Resources allocated to Elasticsearch master nodes.
+    Resources resources = 1;
+  }
+
+  // Configuration and resource allocation for Elasticsearch data nodes.
+  DataNode data_node = 1;
+
+  // Configuration and resource allocation for Elasticsearch master nodes.
+  MasterNode master_node = 2;
+
+  // Cluster wide plugins
+  repeated string plugins = 3;
+}
+
+// Computational resources.
+message Resources {
+  // ID of the preset for computational resources available to a host (CPU, memory etc.).
+  // All available presets are listed in the [documentation](/docs/managed-elasticsearch/concepts/instance-types).
+  string resource_preset_id = 1;
+
+  // Volume of the storage available to a host, in bytes.
+  int64 disk_size = 2;
+
+  // Type of the storage environment for the host.
+  // All available types are listed in the [documentation](/docs/managed-elasticsearch/concepts/storage).
+  string disk_type_id = 3;
+}
+
+// Cluster host metadata.
+message Host {
+  enum Type {
+    // Host type is unspecified. Default value.
+    TYPE_UNSPECIFIED = 0;
+
+    // The host is an Elasticsearch data node.
+    DATA_NODE = 1;
+
+    // The host is an Elasticsearch master node.
+    MASTER_NODE = 2;
+  }
+
+  enum Health {
+
+    // Health of the host is unknown.
+    UNKNOWN = 0;
+
+    // The host is performing all its functions normally.
+    ALIVE = 1;
+
+    // The host is inoperable and cannot perform any of its essential functions.
+    DEAD = 2;
+
+    // The host is degraded and can perform only some of its essential functions.
+    DEGRADED = 3;
+  }
+
+  // Name of the host.
+  string name = 1;
+
+  // ID of the Elasticsearch cluster.
+  string cluster_id = 2;
+
+  // ID of the availability zone where the host resides.
+  string zone_id = 3;
+
+  // Host type.
+  Type type = 4;
+
+  Resources resources = 5;
+
+  // Aggregated host health data. If the field has default value, it is not returned in the response.
+  Health health = 6;
+
+  // Services provided by the host.
+  repeated Service services = 7;
+
+  // ID of the subnet the host resides in.
+  string subnet_id = 8;
+
+  // The flag that defines whether a public IP address is assigned to the host.
+  //
+  // If the value is `true`, then this host is available on the Internet via it's public IP address.
+  bool assign_public_ip = 9;
+}
+
+// Cluster service metadata.
+message Service {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+
+    // The Elasticsearch service.
+    ELASTICSEARCH = 1;
+  }
+
+  enum Health {
+
+    // Health of the service is unknown.
+    UNKNOWN = 0;
+
+    // The service is working normally.
+    ALIVE = 1;
+
+    // The service is dead or unresponsive.
+    DEAD = 2;
+  }
+
+  // Type of the service provided by the host.
+  Type type = 1;
+
+  // Service health data. If the field has default value, it is not returned in the response.
+  Health health = 2;
+}

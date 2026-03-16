@@ -1,0 +1,21 @@
+# (C) Copyright 2005- ECMWF.
+# COSMO local area EPS
+
+# information about probabilities (they have already probabilities)
+# information about clustering    (they save it as ASCII, at the moment...)
+constant GRIBEXSection1Problem = 79 - section1Length;
+
+template mars_labeling "grib1/mars_labeling.def";
+constant wrongPadding=1 : hidden;
+
+unsigned[1] perturbationNumber  : dump;
+alias number = perturbationNumber;
+unsigned[1] numberOfForecastsInEnsemble  : dump;
+alias totalNumber=numberOfForecastsInEnsemble;
+unsigned[4] baseDateEPS : dump;
+unsigned[2] baseTimeEPS  : dump;
+unsigned[1] numberOfRepresentativeMember : dump;
+unsigned[1] numberOfMembersInCluster  : dump;
+unsigned[1] totalInitialConditions  : dump;
+
+pad padding_loc28_1(19);

@@ -1,0 +1,214 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.kafka.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/kafka/v1/connector.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/kafka/v1;kafka";
+option java_package = "yandex.cloud.api.mdb.kafka.v1";
+
+// A set of methods for managing Apache Kafka® connectors.
+service ConnectorService {
+  // Returns information about an Apache Kafka® connector.
+  rpc Get (GetConnectorRequest) returns (Connector) {
+    option (google.api.http) = { get: "/managed-kafka/v1/clusters/{cluster_id}/connectors/{connector_name}" };
+  }
+
+  // Retrieves the list of Apache Kafka® connectors in a cluster.
+  rpc List (ListConnectorsRequest) returns (ListConnectorsResponse) {
+    option (google.api.http) = { get: "/managed-kafka/v1/clusters/{cluster_id}/connectors" };
+  }
+
+  // Creates a new Apache Kafka® connector in a cluster.
+  rpc Create (CreateConnectorRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-kafka/v1/clusters/{cluster_id}/connectors" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateConnectorMetadata"
+      response: "Connector"
+    };
+  }
+
+  // Updates an Apache Kafka® connector.
+  rpc Update (UpdateConnectorRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/managed-kafka/v1/clusters/{cluster_id}/connectors/{connector_name}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateConnectorMetadata"
+      response: "Connector"
+    };
+  }
+
+  // Deletes an Apache Kafka® connector.
+  rpc Delete (DeleteConnectorRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/managed-kafka/v1/clusters/{cluster_id}/connectors/{connector_name}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteConnectorMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Resumes an Apache Kafka® connector.
+  rpc Resume (ResumeConnectorRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-kafka/v1/clusters/{cluster_id}/connectors/resume/{connector_name}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "ResumeConnectorMetadata"
+      response: "Connector"
+    };
+  }
+
+  // Pauses an Apache Kafka® connector.
+  rpc Pause (PauseConnectorRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-kafka/v1/clusters/{cluster_id}/connectors/pause/{connector_name}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "PauseConnectorMetadata"
+      response: "Connector"
+    };
+  }
+}
+
+message GetConnectorRequest {
+  // ID of the Apache Kafka® cluster the connector belongs to.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the Apache Kafka® connector to return information about.
+  //
+  // To get this name, make a [ConnectorService.List] request.
+  string connector_name = 2 [(required) = true, (length) = "<=256", (pattern) = "[-_.a-zA-Z0-9]*"];
+}
+
+message ListConnectorsRequest {
+  // ID of the Apache Kafka® cluster to list connectors in.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return.
+  //
+  // If the number of available results is larger than [page_size], the API returns a [ListConnectorsResponse.next_page_token] that can be used to get the next page of results in the subsequent [ConnectorService.List] requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token that can be used to iterate through multiple pages of results.
+  //
+  // To get the next page of results, set [page_token] to the [ListConnectorsResponse.next_page_token] returned by the previous [ConnectorService.List] request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListConnectorsResponse {
+  // List of Apache Kafka® Connectors.
+  repeated Connector connectors = 1;
+
+  // The token that can be used to get the next page of results.
+  //
+  // If the number of results is larger than [ListConnectorsRequest.page_size], use the [next_page_token] as the value for the [ListConnectorsRequest.page_token] in the subsequent [ConnectorService.List] request to iterate through multiple pages of results.
+  string next_page_token = 2;
+}
+
+message CreateConnectorRequest {
+  // ID of the Apache Kafka® cluster to create the connector in.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Configuration of the connector to create.
+  ConnectorSpec connector_spec = 2 [(required) = true];
+}
+
+message CreateConnectorMetadata {
+  // ID of the Apache Kafka® cluster the connector is being created in.
+  string cluster_id = 1;
+
+  // Name of the Apache Kafka® connector that is being created.
+  string connector_name = 2 [(required) = true, (length) = "<=256", (pattern) = "[-_.a-zA-Z0-9]*"];
+}
+
+message UpdateConnectorRequest {
+  // ID of the Apache Kafka® cluster to update the connector in.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the connector to update.
+  //
+  // To get this name, make a [ConnectorService.List] request.
+  string connector_name = 2 [(required) = true, (length) = "<=256", (pattern) = "[-_.a-zA-Z0-9]*"];
+
+  // Field mask that specifies which settings of the connector should be updated.
+  google.protobuf.FieldMask update_mask = 3;
+
+  // Configuration of the connector to update.
+  UpdateConnectorSpec connector_spec = 4 [(required) = true];
+}
+
+message UpdateConnectorMetadata {
+  // ID of the Apache Kafka® cluster the connector is being updated in.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the Apache Kafka® connector that is being updated.
+  string connector_name = 2 [(required) = true, (length) = "<=256", (pattern) = "[-_.a-zA-Z0-9]*"];
+}
+
+message DeleteConnectorRequest {
+  // ID of the Apache Kafka® cluster to delete the connector from.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the connector to delete.
+  //
+  // To get this name, make a [ConnectorService.List] request.
+  string connector_name = 2 [(required) = true, (length) = "<=256", (pattern) = "[-_.a-zA-Z0-9]*"];
+}
+
+message DeleteConnectorMetadata {
+  // ID of the Apache Kafka® cluster the connector is being deleted from.
+  string cluster_id = 1;
+
+  // Name of the Apache Kafka® connector that is being deleted.
+  string connector_name = 2;
+}
+
+message ResumeConnectorRequest {
+  // ID of the Apache Kafka® cluster to resume the connector in.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the Apache Kafka® connector to resume.
+  //
+  // To get this name, make a [ConnectorService.List] request.
+  string connector_name = 2 [(required) = true, (length) = "<=256", (pattern) = "[-_.a-zA-Z0-9]*"];
+}
+
+message ResumeConnectorMetadata {
+  // ID of the Apache Kafka® cluster the connector is being resumed in.
+  string cluster_id = 1;
+
+  // Name of the Apache Kafka® connector that is beign resumed.
+  string connector_name = 2 [(required) = true, (length) = "<=256", (pattern) = "[-_.a-zA-Z0-9]*"];
+}
+
+message PauseConnectorRequest {
+  // ID of the Apache Kafka® cluster to pause the connector in.
+  //
+  // To get this ID, make a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the Apache Kafka® connector to pause.
+  //
+  // To get this name, make a [ConnectorService.List] request.
+  string connector_name = 2 [(required) = true, (length) = "<=256", (pattern) = "[-_.a-zA-Z0-9]*"];
+}
+
+message PauseConnectorMetadata {
+  // ID of the Apache Kafka® cluster the connector is being paused in.
+  string cluster_id = 1;
+
+  // Name of the Apache Kafka® connector that is being paused.
+  string connector_name = 2 [(required) = true, (length) = "<=256", (pattern) = "[-_.a-zA-Z0-9]*"];
+}

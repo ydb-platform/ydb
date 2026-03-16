@@ -1,0 +1,10 @@
+.table thead th {
+    text-transform: none;
+}
+
+.required-label::before {
+    content: "*";
+    color: red;
+    margin-right: 5px;
+}
+

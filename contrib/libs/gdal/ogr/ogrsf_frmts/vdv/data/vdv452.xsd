@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<!--
+/******************************************************************************
+ * Project:  GDAL
+ * Purpose:  Schema of vdv-452.xml
+ * Author:   Even Rouault, <even.rouault at spatialys.com>
+ *
+ **********************************************************************
+ * Copyright (c) 2015, Even Rouault
+ *
+ * SPDX-License-Identifier: MIT
+ ****************************************************************************/
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+    <xs:element name="Layers">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="Layer" type="LayerType" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:complexType name="LayerType">
+        <xs:sequence>
+            <xs:element name="Field" type="FieldType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="name_en" type="xs:string"/>
+        <xs:attribute name="name_de" type="xs:string"/>
+        <xs:attribute name="num" type="xs:integer"  use="optional"/>
+    </xs:complexType>
+    <xs:complexType name="FieldType">
+        <xs:attribute name="name_en" type="xs:string"/>
+        <xs:attribute name="name_de" type="xs:string"/>
+        <xs:attribute name="type">
+          <xs:simpleType>
+                <xs:restriction base="xs:string">
+                    <xs:enumeration value="num"/>
+                    <xs:enumeration value="char"/>
+                    <xs:enumeration value="boolean"/>
+                </xs:restriction>
+            </xs:simpleType>
+        </xs:attribute>
+        <xs:attribute name="width" type="xs:nonNegativeInteger"/>
+        <xs:attribute name="cond" type="xs:string" use="optional"/>
+    </xs:complexType>
+</xs:schema>

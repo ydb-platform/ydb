@@ -1,0 +1,24 @@
+# (C) Copyright 2005- ECMWF.
+# MARS labeling with domain and model (for LAM)
+
+constant GRIBEXSection1Problem = 56 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber : dump;
+alias number = perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble : dump;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+#1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=1;
+
+codetable[2] marsModel "mars/model.[centre:l].table" = "cosmo": dump;
+alias mars.model = marsModel;
+
+codetable[2] marsDomain "mars/domain.[centre:l].table" = "s": dump;
+alias mars.domain = marsDomain;
+
+pad padding_local40_1(1);

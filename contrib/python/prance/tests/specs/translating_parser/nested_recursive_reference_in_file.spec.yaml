@@ -1,0 +1,33 @@
+---
+openapi: 3.0.3
+info:
+  title: Test specification for the translating parser
+  version: 0.0.0
+paths:
+  /hosts:
+    get:
+      responses:
+        default:
+          description: >-
+            A local reference to a real-world like object with a recursive local reference deep in a structure in a
+            referenced file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+components:
+  schemas:
+    Response:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResultsItem"
+    ResultsItem:
+      type: object
+      properties:
+        contents:
+          $ref: "#/components/schemas/ReferenceObject"
+    ReferenceObject:
+      $ref: "nested_recursive_reference_in_file_schemas.spec.yaml#/$defs/ComplexObject"

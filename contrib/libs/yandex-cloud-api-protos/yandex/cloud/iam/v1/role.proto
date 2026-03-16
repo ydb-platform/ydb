@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1;iam";
+option java_package = "yandex.cloud.api.iam.v1";
+
+// A Role resource. For more information, see [Roles](/docs/iam/concepts/access-control/roles).
+message Role {
+  // ID of the role.
+  string id = 1;
+
+  // Description of the role. 0-256 characters long.
+  string description = 2;
+}

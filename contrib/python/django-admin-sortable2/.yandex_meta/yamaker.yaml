@@ -1,0 +1,3 @@
+exclude:
+  - adminsortable2/**/*.orig
+  - parler_example/*

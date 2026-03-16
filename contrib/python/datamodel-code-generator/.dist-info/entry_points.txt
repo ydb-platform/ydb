@@ -1,0 +1,2 @@
+[console_scripts]
+datamodel-codegen = datamodel_code_generator.__main__:main

@@ -1,0 +1,305 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.dataset.v1;
+
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/ai/dataset/v1/dataset.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/dataset/v1;fomo";
+option java_package = "yandex.cloud.api.ai.dataset.v1";
+
+
+// A set of methods for managing datasets.
+service DatasetService {
+  // Returns dataset information by dataset id.
+  rpc Describe (DescribeDatasetRequest) returns (DescribeDatasetResponse);
+
+  // Starts dataset validation process.
+  rpc Validate (ValidateDatasetRequest) returns (yandex.cloud.operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "ValidateDatasetMetadata"
+      response: "ValidateDatasetResponse"
+    };
+  }
+
+  // Creates dataset.
+  rpc Create (CreateDatasetRequest) returns (CreateDatasetResponse);
+  // Updates dataset.
+  rpc Update (UpdateDatasetRequest) returns (UpdateDatasetResponse);
+  // Deletes dataset.
+  rpc Delete (DeleteDatasetRequest) returns (DeleteDatasetResponse);
+
+  // Lists datasets in specified folder.
+  rpc List(ListDatasetsRequest) returns (ListDatasetsResponse);
+
+  // Deprecated. Use ListUploadSchemas.
+  rpc ListUploadFormats (ListUploadFormatsRequest) returns (ListUploadFormatsResponse) {
+    option deprecated = true;
+  };
+  // Lists supported dataset upload formats types and schemas for the specified dataset task type.
+  rpc ListUploadSchemas (ListUploadSchemasRequest) returns (ListUploadSchemasResponse);
+
+  // Returns an S3 presigned URL for dataset upload.
+  // This method only applicable if the dataset size does not exceed 5GB.
+  rpc GetUploadDraftUrl (GetUploadDraftUrlRequest) returns (GetUploadDraftUrlResponse);
+
+  // Get urls to download dataset
+  rpc GetDownloadUrls (GetDownloadUrlsRequest) returns (GetDownloadUrlsResponse);
+
+  // Returns a list of S3 presigned URLs for multipart upload of dataset.
+  rpc StartMultipartUploadDraft (StartMultipartUploadDraftRequest) returns (StartMultipartUploadDraftResponse);
+  // Finishes multipart upload of the dataset.
+  rpc FinishMultipartUploadDraft (FinishMultipartUploadDraftRequest) returns (FinishMultipartUploadDraftResponse);
+  // Returns a list of dataset types
+  rpc ListTypes (ListTypesRequest) returns (ListTypesResponse);
+
+  // Returns a preview of dataset types
+  rpc GetPreview(GetDatasetPreviewRequest) returns (GetDatasetPreviewResponse);
+
+  rpc ListOperationsIds(ListOperationsIdsRequest) returns (ListOperationsIdsResponse);
+}
+
+message DescribeDatasetRequest {
+  // ID of the dataset to describe.
+  string dataset_id = 1 [(required) = true];
+}
+
+message DescribeDatasetResponse {
+  // Information about the dataset.
+  DatasetInfo dataset = 1;
+}
+
+message ValidateDatasetRequest {
+  // ID of the dataset to validate.
+  string dataset_id = 1 [(required) = true];
+}
+
+message ValidateDatasetMetadata {
+  // ID of the dataset.
+  string dataset_id = 1;
+  // Count of valid rows among currently processed rows in the dataset.
+  int64 valid_rows = 2;
+  // Count of currently processed rows in the dataset.
+  int64 processed_rows = 3;
+  // Total count of rows in the dataset
+  int64 total_rows = 4;
+}
+
+message ValidateDatasetResponse {
+  // ID of the dataset.
+  string dataset_id = 1;
+  // Validity marker.
+  bool is_valid = 2;
+  // A list of the dataset validation errors.
+  repeated ValidationError errors = 3;
+}
+
+message DeleteDatasetRequest {
+  // ID of the dataset to delete.
+  string dataset_id = 1 [(required) = true];
+}
+
+message DeleteDatasetResponse {
+}
+
+message CreateDatasetRequest {
+  // Name of the dataset.
+  string name = 1 [(required) = true, (length) = "<=63"];
+  // Folder ID of the dataset.
+  string folder_id = 2 [(required) = true, (length) = "<=50"];
+  // Description of the dataset. Optional.
+  string description = 3;
+
+  // Metadata of the dataset. Optional.
+  string metadata = 4;
+  // Task type of the dataset.
+  string task_type = 5 [(required) = true, (length) = "<=50"];
+
+  // Labels of the dataset. Optional.
+  map<string, string> labels = 6;
+
+  // Upload format of the dataset.
+  // The list of supported upload formats can be retrieved via ListUploadFormats method.
+  string upload_format = 7 [(required) = true, (length) = "<=50"];
+
+  // Allow to use the dataset to improve the models quality. Default false.
+  bool allow_data_log = 8;
+}
+
+message CreateDatasetResponse {
+  // ID of the created dataset.
+  string dataset_id = 1;
+  // Information about the dataset.
+  DatasetInfo dataset = 2;
+}
+
+message UpdateDatasetRequest {
+  // ID of the dataset to update.
+  string dataset_id = 1 [(required) = true];
+  // gRPC field mask.
+  google.protobuf.FieldMask update_mask = 2;
+  // Name of the dataset.
+  string name = 3;
+  // Description of the dataset.
+  string description = 4;
+  // Labels of the dataset.
+  map<string, string> labels = 5;
+}
+
+message UpdateDatasetResponse {
+  // Information about updated dataset.
+  DatasetInfo dataset = 1;
+}
+
+message GetUploadDraftUrlRequest {
+  // ID of the dataset to upload.
+  string dataset_id = 1 [(required) = true];
+  // Size in bytes of the dataset to upload.
+  int64 size_bytes = 2 [(value)=">0"];
+}
+
+message GetUploadDraftUrlResponse {
+  // ID of the dataset.
+  string dataset_id = 1;
+  // S3 presigned URL for upload.
+  string upload_url = 2;
+}
+
+message StartMultipartUploadDraftRequest {
+  // ID of the dataset to multipart upload.
+  string dataset_id = 1 [(required) = true];
+  // Size in bytes of the dataset to upload.
+  int64 size_bytes = 2 [(value)=">0"];
+  // Number of parts in multipart upload. Optional.
+  // Dataset's part size should be between 5MB and 5GB.
+  // If not specified will be configured automatically.
+  int64 parts = 3;
+}
+
+message StartMultipartUploadDraftResponse {
+  // ID of the dataset.
+  string dataset_id = 1;
+  // List of S3 presigned URLs for multipart upload.
+  repeated string multipart_upload_urls = 2;
+}
+
+message UploadedPartInfo {
+  // Sequence number of the uploaded part.
+  int64 part_num = 1 [(value)="1-10000"];
+  // Etag of the uploaded part.
+  string etag = 2 [(required) = true];
+}
+
+message FinishMultipartUploadDraftRequest {
+  // ID of the dataset.
+  string dataset_id = 1 [(required) = true];
+  // Information about uploaded parts from S3 API.
+  repeated UploadedPartInfo uploaded_parts = 2;
+}
+
+message FinishMultipartUploadDraftResponse {
+  // ID of the dataset.
+  string dataset_id = 1;
+}
+
+message ListDatasetsRequest {
+  // Folder ID of the datasets to list.
+  string folder_id = 1 [(required) = true];
+
+  // Statuses of the datasets to list. Optional.
+  repeated DatasetInfo.Status status = 2;
+  // Name substring of the datasets to list. Optional.
+  string dataset_name_pattern = 3;
+  // Task types of the datasets to list. Optional.
+  repeated string task_type_filter = 4;
+
+ // The maximum number of results per page to return. If the number of available
+ // results is larger than [page_size],
+ // the service returns a [ListDatasetsResponse.next_page_token]
+ // that can be used to get the next page of results in subsequent list requests. Default value: 100.
+  int64 page_size = 5;
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListDatasetsResponse.next_page_token] returned by a previous list request.
+  string page_token = 6;
+
+  //Dataset Id of the datasets to list. Optional.
+  repeated string dataset_ids = 7;
+}
+
+message ListDatasetsResponse {
+  // Information about listed datasets.
+  repeated DatasetInfo datasets = 1;
+
+  // [next_page_token] token allows you to get the next page of results for list requests.
+  // If the number of results is larger than [ListDatasetsRequest.page_size], use
+  // the [next_page_token] as the value for the [ListDatasetsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListUploadFormatsRequest {
+  // Dataset task type to list upload formats.
+  string task_type = 1 [(required) = true];
+}
+
+message ListUploadFormatsResponse {
+  // List of upload formats for the specified dataset task type.
+  repeated string formats = 1;
+}
+
+message ListUploadSchemasRequest {
+  // Dataset task type to list schemas.
+  string task_type = 1 [(required) = true];
+  // Folder to search task type (if empty only public types allowed)
+  string folder_id = 2;
+}
+
+message ListUploadSchemasResponse {
+  // List of dataset schemas for the specified dataset task type.
+  repeated DatasetUploadSchema schemas = 1;
+}
+
+message ListTypesRequest {
+    // Folder to search task types (if empty only public types will be returned)
+  string folder_id = 1;
+}
+
+message ListTypesResponse {
+  // List of dataset type
+  repeated string types = 1;
+}
+
+message GetDatasetPreviewRequest {
+  // ID of the dataset.
+  string dataset_id = 1 [(required) = true];
+}
+
+message GetDatasetPreviewResponse {
+  // ID of the dataset.
+  string dataset_id = 1;
+  // List of dataset preview lines
+  repeated string preview_lines = 2;
+}
+
+message GetDownloadUrlsRequest {
+  // ID of the dataset.
+  string dataset_id = 1 [(required) = true];
+}
+
+message GetDownloadUrlsResponse {
+  // ID of the dataset.
+  string dataset_id = 1;
+  repeated DatasetFileDownloadUrl download_urls = 2;
+}
+
+message ListOperationsIdsRequest {
+  repeated string dataset_id = 1;
+}
+
+message ListOperationsIdsResponse {
+  map<string, string> dataset_id_to_operation_id = 1;
+}

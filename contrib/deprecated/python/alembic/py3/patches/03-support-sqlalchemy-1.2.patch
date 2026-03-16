@@ -1,0 +1,36 @@
+--- contrib/deprecated/python/alembic/py3/alembic/util/__init__.py	(index)
++++ contrib/deprecated/python/alembic/py3/alembic/util/__init__.py	(working tree)
+@@ -24,9 +24,10 @@ from .pyfiles import load_python_file  # noqa
+ from .pyfiles import pyc_file_from_path  # noqa
+ from .pyfiles import template_to_file  # noqa
+ from .sqla_compat import has_computed  # noqa
++from .sqla_compat import sqla_12  # noqa
+ from .sqla_compat import sqla_13  # noqa
+ from .sqla_compat import sqla_14  # noqa
+ 
+ 
+-if not sqla_13:
+-    raise CommandError("SQLAlchemy 1.3.0 or greater is required.")
++if not sqla_12:
++    raise CommandError("SQLAlchemy 1.2.0 or greater is required.")
+--- contrib/deprecated/python/alembic/py3/alembic/util/sqla_compat.py	(index)
++++ contrib/deprecated/python/alembic/py3/alembic/util/sqla_compat.py	(working tree)
+@@ -30,6 +30,7 @@ def _safe_int(value):
+ _vers = tuple(
+     [_safe_int(x) for x in re.findall(r"(\d+|[abc]\d)", __version__)]
+ )
++sqla_12 = _vers >= (1, 2)
+ sqla_13 = _vers >= (1, 3)
+ sqla_14 = _vers >= (1, 4)
+ 
+--- contrib/deprecated/python/alembic/py3/.dist-info/METADATA	(index)
++++ contrib/deprecated/python/alembic/py3/.dist-info/METADATA	(working tree)
+@@ -25,7 +25,7 @@ Classifier: Programming Language :: Python :: Implementation :: PyPy
+ Classifier: Topic :: Database :: Front-Ends
+ Requires-Python: !=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,>=2.7
+ Description-Content-Type: text/x-rst
+-Requires-Dist: SQLAlchemy (>=1.3.0)
++Requires-Dist: SQLAlchemy (>=1.2.0)
+ Requires-Dist: Mako
+ Requires-Dist: python-editor (>=0.3)
+ Requires-Dist: python-dateutil

@@ -1,0 +1,288 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v2.jobs;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v2/jobs;datasphere";
+option java_outer_classname = "Jobs";
+option java_package = "yandex.cloud.api.datasphere.v2.jobs";
+
+// Job parameters.
+message JobParameters {
+  // List of input files.
+  repeated File input_files = 1;
+  // List of output files descriptions.
+  repeated FileDesc output_files = 2;
+  // List of DataSphere S3 mount ids.
+  repeated string s3_mount_ids = 3;
+  // List of DataSphere dataset ids.
+  repeated string dataset_ids = 4;
+  // Job run command.
+  string cmd = 5;
+  // Job environment description.
+  Environment env = 6;
+  // Should project disk be attached to VM.
+  bool attach_project_disk = 7;
+  // VM specification.
+  repeated CloudInstanceType cloud_instance_types = 8 [(size) = ">=1"];
+  // Extended working storage configuration.
+  ExtendedWorkingStorage extended_working_storage = 9;
+  // List of literal arguments.
+  repeated Argument arguments = 10;
+  // List of DataSets descriptions to create.
+  repeated OutputDatasetDesc output_datasets = 11;
+  // Graceful shutdown settings.
+  GracefulShutdownParameters graceful_shutdown_parameters = 12;
+  // Spark connector settings.
+  SparkParameters spark_parameters = 13;
+}
+
+message CloudInstanceType {
+  // Name of DataSphere VM configuration.
+  string name = 1;
+}
+
+// Extended working storage configuration.
+message ExtendedWorkingStorage {
+  enum StorageType {
+    STORAGE_TYPE_UNSPECIFIED = 0;
+    SSD = 1;
+  }
+
+  StorageType type = 1;
+  int64 size_gb = 2;
+}
+
+message Argument {
+  string name = 1;
+  string value = 2;
+}
+
+enum FileCompressionType {
+  FILE_COMPRESSION_TYPE_UNSPECIFIED = 0;
+  NONE = 1;
+  ZIP = 2;
+}
+
+message File {
+  FileDesc desc = 1;
+  // SHA256 of the file.
+  string sha256 = 2;
+  // File size in bytes.
+  int64 size_bytes = 3;
+  // File compression info
+  FileCompressionType compression_type = 4;
+}
+
+message StorageFile {
+  File file = 1;
+  // File URL.
+  string url = 2;
+}
+
+message FileDesc {
+  // Path of the file on filesystem.
+  string path = 1;
+  // Variable to use in cmd substitution.
+  string var = 2;
+}
+
+message FileUploadError {
+  oneof file_type {
+    FileDesc output_file_desc = 1;
+    string log_file_name = 2;
+  }
+  enum ErrorType {
+    ERROR_TYPE_UNSPECIFIED = 0;
+    UPLOAD_FAILED = 1;
+    NOT_FOUND = 2;
+  }
+
+  string description = 3;
+  ErrorType type = 4;
+}
+
+message Environment {
+  // Environment variables.
+  map<string, string> vars = 1;
+
+  oneof docker_image {
+    // DS docker image id.
+    string docker_image_resource_id = 2;
+    DockerImageSpec docker_image_spec = 3;
+  }
+
+  PythonEnv python_env = 4;
+}
+
+message DockerImageSpec {
+  // Docker image URL.
+  string image_url = 1;
+  // Username for container registry.
+  string username = 2;
+  // Password for container registry.
+  oneof password {
+    // Plaintext password.
+    string password_plain_text = 3;
+    // ID of DataSphere secret containing password.
+    string password_ds_secret_name = 4;
+  }
+}
+
+message PythonEnv {
+  // Conda YAML.
+  string conda_yaml = 1;
+  // List of local modules descriptions.
+  repeated File local_modules = 2;
+  // Python version reduced to major.minor
+  string python_version = 3;
+  // List of pip requirements
+  repeated string requirements = 4;
+  // Pip install options
+  PipOptions pip_options = 5;
+}
+
+message PipOptions {
+  // --index-url option
+  string index_url = 1;
+  // --extra-index-urls option
+  repeated string extra_index_urls = 2;
+  // --trusted-hosts option
+  repeated string trusted_hosts = 3;
+  // --no-deps option
+  bool no_deps = 4;
+}
+
+message OutputDatasetDesc {
+  // Name to create dataset with
+  string name = 1;
+  // Description to show in UI
+  string description = 2;
+  map<string, string> labels = 3;
+  // Size of dataset to create
+  int64 size_gb = 4;
+
+  // Var name to replace in cmd, like in FileDesc
+  string var = 5;
+}
+
+message OutputDataset {
+  // Dataset description
+  OutputDatasetDesc desc = 1;
+  // Id of created dataset
+  string id = 2;
+}
+
+// Instance of the job.
+message Job {
+  // ID of the job.
+  string id = 1;
+  // Name of the job.
+  string name = 2;
+  // Description of the job.
+  string desc = 3;
+  // Create job timestamp.
+  google.protobuf.Timestamp created_at = 4;
+  // Finish job timestamp.
+  google.protobuf.Timestamp finished_at = 5;
+  // Status of the job.
+  JobStatus status = 6;
+  // Config of the job, copied from configuration file.
+  string config = 7;
+  // ID of the user who created the job.
+  string created_by_id = 8;
+  // ID of the project.
+  string project_id = 9;
+  JobParameters job_parameters = 10;
+  // Job data expiration timestamp.
+  google.protobuf.Timestamp data_expires_at = 11;
+  // Marks if the job data has been cleared.
+  bool data_cleared = 12;
+  // Output files of the job.
+  repeated File output_files = 13;
+  // Job log files.
+  repeated File log_files = 14;
+  // Job diagnostics files.
+  repeated File diagnostic_files = 15;
+  // Job total data size.
+  int64 data_size_bytes = 16;
+  // Start job timestamp.
+  google.protobuf.Timestamp started_at = 17;
+  // Details.
+  string status_details = 18;
+  // Actual VM instance type, job is running on.
+  CloudInstanceType actual_cloud_instance_type = 19;
+  // Reference to the parent job.
+  string parent_job_id = 20;
+  // Failed uploads.
+  repeated FileUploadError file_errors = 21;
+  // Created datasets.
+  repeated OutputDataset output_datasets = 22;
+}
+
+enum JobStatus {
+  JOB_STATUS_UNSPECIFIED = 0;
+  CREATING = 1;
+  EXECUTING = 2;
+  UPLOADING_OUTPUT = 3;
+  SUCCESS = 4;
+  ERROR = 5;
+  CANCELLED = 6;
+  CANCELLING = 7;
+  PREPARING = 8;
+}
+
+message JobResult {
+  // Execution return code.
+  int64 return_code = 1;
+}
+
+message GracefulShutdownParameters {
+  google.protobuf.Duration timeout = 1;
+  // default 15 (SIGTERM)
+  int64 signal = 2;
+}
+
+message JobMetadata {
+  // ID of the job.
+  string id = 1;
+  // Name of the job.
+  string name = 2;
+  // Description of the job.
+  string description = 3;
+  // Create job timestamp.
+  google.protobuf.Timestamp created_at = 4;
+  // Start job timestamp.
+  google.protobuf.Timestamp started_at = 5;
+  // Finish job timestamp.
+  google.protobuf.Timestamp finished_at = 6;
+  // Job data expiration timestamp.
+  google.protobuf.Timestamp data_expires_at = 7;
+  // Status of the job.
+  JobStatus status = 8;
+  // Details.
+  string status_details = 9;
+  // ID of the user who created the job.
+  string created_by_id = 10;
+  // ID of the project.
+  string project_id = 11;
+  // Reference to the parent job.
+  string parent_job_id = 12;
+}
+
+message JobProgress {
+  // Progress message
+  string message = 1;
+  // Progress of the job from 0 to 100
+  int64 progress = 2;
+  // Progress create time
+  google.protobuf.Timestamp create_time = 3;
+}
+
+message SparkParameters {
+  // ID of the Spark connector.
+  string connector_id = 1;
+}

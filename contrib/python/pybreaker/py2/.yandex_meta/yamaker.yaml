@@ -1,0 +1,6 @@
+exclude_from_macros:
+  - LICENSE
+  - tests.py
+keep:
+  - LICENSE
+  - tests.py

@@ -1,0 +1,5 @@
+exclude:
+  - aiosmtpd/docs/*
+  - aiosmtpd/tests/*
+mark_as_tests:
+  - aiosmtpd/qa/*

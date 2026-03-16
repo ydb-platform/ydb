@@ -1,0 +1,10 @@
+--- contrib/python/pytest-allure-adaptor/py3/allure/common.py	(index)
++++ contrib/python/pytest-allure-adaptor/py3/allure/common.py	(working tree)
+@@ -7,6 +7,7 @@ Created on Feb 23, 2014
+ import os
+ import uuid
+ from contextlib import contextmanager
++import setuptools
+ from distutils.version import StrictVersion
+ from functools import wraps
+ 

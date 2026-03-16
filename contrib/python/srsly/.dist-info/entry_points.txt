@@ -1,0 +1,5 @@
+[spacy_readers]
+srsly.read_json.v1 = srsly:read_json
+srsly.read_jsonl.v1 = srsly:read_jsonl
+srsly.read_msgpack.v1 = srsly:read_msgpack
+srsly.read_yaml.v1 = srsly:read_yaml

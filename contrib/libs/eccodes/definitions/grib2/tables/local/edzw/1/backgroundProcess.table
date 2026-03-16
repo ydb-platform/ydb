@@ -1,0 +1,42 @@
+0 0 main run
+1 1 pre-assimilation
+2 2 assimilation
+3 3 test
+4 4 onscreen analysis
+5 5 WarnMOS
+100 100 Blauthermik
+101 SSO SSO - wake - production of TKE due to sub grid scale orography
+102 HSH HSH - shear - production of TKE due to separated horizontal shear modes
+103 CON CON - buoyancy - production of TKE due to sub grid scale convection
+128 A Modell-Bezug 
+129 B Modell-Bezug 
+130 AB Modell-Bezug 
+131 C Modell-Bezug 
+132 AC Modell-Bezug 
+133 BC Modell-Bezug 
+134 ABC Modell-Bezug 
+135 D Modell-Bezug 
+136 AD Modell-Bezug 
+137 BD Modell-Bezug 
+138 ABD Modell-Bezug 
+139 CD Modell-Bezug 
+140 ACD Modell-Bezug 
+141 BCD Modell-Bezug 
+142 ABCD Modell-Bezug 
+143 E Modell-Bezug 
+144 AE Modell-Bezug 
+145 BE Modell-Bezug 
+146 ABE Modell-Bezug 
+147 CE Modell-Bezug 
+148 ACE Modell-Bezug 
+149 BCE Modell-Bezug 
+150 ABCE Modell-Bezug 
+151 DE Modell-Bezug 
+152 ADE Modell-Bezug 
+153 BDE Modell-Bezug 
+154 ABDE Modell-Bezug 
+155 CDE Modell-Bezug 
+156 ACDE Modell-Bezug 
+157 BCDE Modell-Bezug 
+158 ABCDE Modell-Bezug 
+255 NIL missing

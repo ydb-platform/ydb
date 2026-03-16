@@ -1,0 +1,301 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.mcpgateway.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/logging/v1/log_entry.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/mcpgateway/v1;mcpgateway";
+option java_package = "yandex.cloud.api.serverless.mcpgateway.v1";
+
+message McpGateway {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // MCP Gateway is being created.
+    CREATING = 1;
+    // MCP Gateway is ready to use.
+    ACTIVE = 2;
+    // MCP Gateway is being updated.
+    UPDATING = 3;
+    // MCP Gateway is being deleted.
+    DELETING = 4;
+    // MCP Gateway is in an error state. The only allowed action is delete.
+    ERROR = 5;
+  }
+  // ID of the MCP Gateway. Generated at creation time.
+  string id = 1 [(required) = true];
+  // ID of the folder that the MCP Gateway belongs to.
+  string folder_id = 2 [(required) = true];
+  // Tools of the MCP Gateway.
+  repeated McpTool tools = 3;
+  // Creation timestamp for the MCP Gateway.
+  google.protobuf.Timestamp created_at = 4 [(required) = true];
+  // Name of the MCP Gateway.
+  string name = 5 [(required) = true];
+  // Description of the MCP Gateway.
+  string description = 6;
+  // MCP Gateway labels as `key:value` pairs.
+  map<string, string> labels = 7;
+  // Status of the MCP Gateway.
+  Status status = 8;
+  // Base domain of the MCP Gateway.
+  string base_domain = 9;
+  // Log options for the MCP Gateway.
+  LogOptions log_options = 10;
+  // ID of the Service Account which will be used for resource access in MCP Gateway call.
+  string service_account_id = 11;
+  // ID of the VPC network MCP Gateway will be executed in, in order to access private resources.
+  string network_id = 12;
+  // ID of the cloud that the MCP Gateway belongs to.
+  string cloud_id = 13 [(required) = true];
+  // Publicity of the MCP Gateway. Public MCP Gateway can be accessed by anybody.
+  bool public = 14;
+}
+
+message McpGatewayPreview {
+  // ID of the MCP Gateway. Generated at creation time.
+  string id = 1 [(required) = true];
+  // ID of the folder that the MCP Gateway belongs to.
+  string folder_id = 2 [(required) = true];
+  // Creation timestamp for the MCP Gateway.
+  google.protobuf.Timestamp created_at = 3 [(required) = true];
+  // Name of the MCP Gateway.
+  string name = 4 [(required) = true];
+  // Description of the MCP Gateway.
+  string description = 5;
+  // MCP Gateway labels as `key:value` pairs.
+  map<string, string> labels = 6;
+  // Status of the MCP Gateway.
+  McpGateway.Status status = 7 [(required) = true];
+  // Base domain of the MCP Gateway.
+  string base_domain = 8;
+  // Log options for the MCP Gateway.
+  LogOptions log_options = 9;
+  // ID of the VPC network MCP Gateway will be executed in, in order to access private resources.
+  string network_id = 10;
+  // ID of the Service Account which will be used for resource access in MCP Gateway call.
+  string service_account_id = 11;
+  // Publicity of the MCP Gateway. Public MCP Gateway can be accessed by anybody.
+  bool public = 12;
+}
+
+message LogOptions {
+  // Is logging from MCP Gateway disabled.
+  bool disabled = 1;
+  oneof destination {
+    // ID of the logging group which should be used for MCP Gateway logs.
+    string log_group_id = 2;
+    // ID of the folder which default logging group should be used for MCP Gateway logs.
+    string folder_id = 3;
+  }
+  // Minimum logs level.
+  //
+  // See [LogLevel.Level] for details.
+  yandex.cloud.logging.v1.LogLevel.Level min_level = 4;
+}
+
+message McpTool {
+  // Name of the tool.
+  string name = 1 [(required) = true, (length) = "<=128", (pattern) = "([a-zA-Z][-a-zA-Z0-9_]{0,63})?"];
+  // Description of the tool.
+  string description = 2 [(length) = "<=65536"];
+  // JSON Schema describing tool input.
+  string input_json_schema = 3;
+  // Action to perform when this tool is invoked.
+  McpToolAction action = 4 [(required) = true];
+}
+
+message McpToolAction {
+  oneof action {
+    option (exactly_one) = true;
+    // Call Serverless Function.
+    FunctionCall function_call = 1;
+    // Call Serverless Container.
+    ContainerCall container_call = 2;
+    // Send HTTP request.
+    HttpCall http_call = 3;
+    // Call MCP Gateway.
+    McpCall mcp_call = 4;
+    // Call gRPC endpoint. Server must support gRPC reflection.
+    GrpcCall grpc_call = 5;
+    // Start Workflow.
+    StartWorkflow start_workflow = 6;
+  }
+}
+
+message FunctionCall {
+  // ID of serverless function to call.
+  string function_id = 1 [(required) = true];
+  // Tag of serverless function. If empty, $latest tag will be used.
+  string tag = 2;
+}
+
+message ContainerCall {
+  // ID of serverless container to call.
+  string container_id = 1 [(required) = true];
+  // Relative request path inside the container.
+  string path = 2;
+  // HTTP method to use for the request.
+  HttpMethod method = 3;
+  // Request body to send to the container.
+  string body = 4;
+  // HTTP headers to include in the request.
+  map<string, string> headers = 5;
+  // Query string parameters to include in the request.
+  map<string, string> query = 6;
+  // Policy that defines which headers from the incoming request should be forwarded
+  ForwardHeadersPolicy forward_headers = 7;
+}
+
+message HttpCall {
+  // Absolute URL to send the request to. (required)
+  string url = 1 [(required) = true];
+  // HTTP method to use.
+  HttpMethod method = 2;
+  // Request body payload.
+  string body = 3;
+  // HTTP headers to include.
+  map<string, string> headers = 4;
+  // Query string parameters to include.
+  map<string, string> query = 5;
+  // Use MCP Gateway service account credentials for the request.
+  bool use_service_account = 6;
+  // Policy that defines which headers from the incoming request should be forwarded
+  ForwardHeadersPolicy forward_headers = 7;
+}
+
+// Policy defining which HTTP headers from the incoming request should be forwarded.
+message ForwardHeadersPolicy {
+  // Mode of header forwarding. Determines how the headers list is interpreted.
+  ForwardMode mode = 1 [(required) = true];
+  // List of HTTP header names to forward. Interpretation depends on the mode:
+  // - WHITE_LIST: only these headers will be forwarded (all others are excluded)
+  // - BLACK_LIST: all headers except these will be forwarded (these are excluded)
+  repeated string headers = 2;
+
+  // Mode for header forwarding policy.
+  enum ForwardMode {
+    FORWARD_MODE_UNSPECIFIED = 0;
+    // Whitelist mode: only headers listed in the headers field will be forwarded.
+    // All other headers from the incoming request will be excluded.
+    WHITE_LIST = 1;
+    // Blacklist mode: all headers from the incoming request will be forwarded
+    // except those listed in the headers field.
+    BLACK_LIST = 2;
+  }
+}
+
+enum HttpMethod {
+  HTTP_METHOD_UNSPECIFIED = 0;
+  // OPTIONS HTTP method.
+  OPTIONS = 1;
+  // GET HTTP method.
+  GET = 2;
+  // HEAD HTTP method.
+  HEAD = 3;
+  // POST HTTP method.
+  POST = 4;
+  // PUT HTTP method.
+  PUT = 5;
+  // PATCH HTTP method.
+  PATCH = 6;
+  // DELETE HTTP method.
+  DELETE = 7;
+  // TRACE HTTP method.
+  TRACE = 8;
+  // CONNECT HTTP method.
+  CONNECT = 9;
+}
+
+message McpCall {
+  // MCP endpoint base URL. (required)
+  string url = 1 [(required) = true];
+  oneof action {
+    // Tool call action to invoke a specific tool on the MCP endpoint.
+    ToolCall tool_call = 2;
+  }
+  // Transport to use for MCP communication.
+  Transport transport = 3;
+  // Authorization mode for requests to the MCP endpoint.
+  oneof authorization {
+    // No authorization mode.
+    NoAuthorization unauthorized = 4;
+    // Header-based authorization.
+    HeaderAuthorization header = 5;
+    // Service account authorization.
+    SaAuthorization service_account = 6;
+  }
+  // Headers from the incoming request to forward downstream by name.
+  map<string, string> forward_headers = 7;
+  // Policy that defines which headers from the incoming request should be forwarded to the HTTP endpoint
+  ForwardHeadersPolicy transfer_headers = 8;
+
+  enum Transport {
+    // Unspecified transport.
+    TRANSPORT_UNSPECIFIED = 0;
+    // Server-Sent Events (HTTP SSE).
+    SSE = 1;
+    // Streamable HTTP transport.
+    STREAMABLE = 2;
+  }
+
+  // No authorization will be sent.
+  message NoAuthorization {}
+
+  // Use MCP Gateway service account to authorize.
+  message SaAuthorization {}
+
+  message HeaderAuthorization {
+    // Name of the authorization header to send.
+    string header_name = 1;
+    // Value of the authorization header to send.
+    string header_value = 2;
+  }
+
+  message ToolCall {
+    // Name of the tool to invoke on the MCP endpoint. (required)
+    string tool_name = 1 [(required) = true];
+    // JSON-encoded parameters to pass to the tool.
+    string parameters_json = 2;
+  }
+}
+
+message GrpcCall {
+  // gRPC server endpoint, e.g., host:port. (required)
+  string endpoint = 1 [(required) = true];
+  // Fully qualified gRPC method name, e.g., package.Service/Method. (required)
+  string method = 2 [(required) = true];
+  // Use MCP Gateway service account for authentication.
+  bool use_service_account = 3;
+  // Request body payload for the call.
+  string body = 4;
+  // gRPC/HTTP headers to include with the call.
+  map<string, string> headers = 5;
+  // Policy that defines which headers from the incoming request should be forwarded
+  ForwardHeadersPolicy forward_headers = 6;
+}
+
+message StartWorkflow {
+  // ID of the Workflow to start. (required)
+  string workflow_id = 1 [(required) = true];
+  // JSON-encoded workflow input payload.
+  string input_json = 2;
+
+  // Execution mode for the workflow.
+  // Determines whether the call should wait for workflow completion (SYNC)
+  // or return immediately after starting the workflow (ASYNC).
+  Mode mode = 3;
+
+  enum Mode {
+    // Unspecified mode. When not set, defaults to SYNC behavior.
+    MODE_UNSPECIFIED = 0;
+
+    // Synchronous mode. The call blocks until the workflow execution completes.
+    SYNC = 1;
+
+    // Asynchronous mode. The call returns immediately after starting the workflow.
+    // Returns the execution ID for tracking the workflow progress separately.
+    ASYNC = 2;
+  }
+}

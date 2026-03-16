@@ -1,0 +1,17 @@
+# CODE TABLE 3.15, Physical meaning of vertical coordinate
+20 20 Temperature (K)
+100 100 Pressure (Pa)
+101 101 Pressure deviation from mean sea level (Pa)
+102 102 Altitude above mean sea level (m)
+103 103 Height above ground (see Note 1) (m)
+104 104 Sigma coordinate
+105 105 Hybrid coordinate
+106 106 Depth below land surface (m)
+107 pt Potential temperature (theta) (K)
+108 108 Pressure deviation from ground to level (Pa)
+109 pv Potential vorticity (K m-2 kg-1 s-1)
+110 110 Geometrical height (m)
+111 111 Eta coordinate (see Note 2)
+112 112 Geopotential height (gpm)
+160 160 Depth below sea level (m)
+255 255 Missing

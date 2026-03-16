@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package yandex.cloud.iot.devices.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iot/devices/v1;devices";
+option java_package = "yandex.cloud.api.iot.devices.v1";
+
+// A set of methods to work with IoT Core messages on behalf of device
+service DeviceDataService {
+  // Publishes message on behalf of specified device
+  rpc Publish (PublishDeviceDataRequest) returns (PublishDeviceDataResponse) {
+    option (google.api.http) = { post: "/iot-devices/v1/devices/{device_id}/publish" body: "*" };
+  }
+}
+
+message PublishDeviceDataRequest {
+  // ID of device publishing message
+  string device_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Topic where message should be published
+  string topic = 2 [(required) = true, (length) = "<=1024"];
+
+  // Content of the message
+  bytes data = 3 [(length) = "<=262144"];
+}
+
+message PublishDeviceDataResponse {
+}

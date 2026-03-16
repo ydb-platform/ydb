@@ -1,0 +1,353 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.idp.application.saml;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/organizationmanager/v1/idp/application/saml/application.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/idp/application/saml;saml";
+option java_package = "yandex.cloud.api.organizationmanager.v1.idp.application.saml";
+
+// A set of methods for managing SAML applications in the Identity Provider system.
+service ApplicationService {
+  // Returns the specified SAML application.
+  //
+  // To get the list of available applications, make a [List] request.
+  rpc Get (GetApplicationRequest) returns (Application) {
+    option (google.api.http) = { get: "/organization-manager/v1/idp/application/saml/applications/{application_id}" };
+  }
+
+  // Retrieves the list of SAML applications in the specified organization.
+  rpc List (ListApplicationsRequest) returns (ListApplicationsResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/idp/application/saml/applications" };
+  }
+
+  // Creates a SAML application in the specified organization.
+  rpc Create (CreateApplicationRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/application/saml/applications" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateApplicationMetadata"
+      response: "Application"
+    };
+  }
+
+  // Updates the specified SAML application.
+  rpc Update (UpdateApplicationRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/idp/application/saml/applications/{application_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateApplicationMetadata"
+      response: "Application"
+    };
+  }
+
+  // Deletes the specified SAML application.
+  rpc Delete (DeleteApplicationRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/organization-manager/v1/idp/application/saml/applications/{application_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteApplicationMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Suspends the specified SAML application.
+  rpc Suspend (SuspendApplicationRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/application/saml/applications/{application_id}:suspend" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "SuspendApplicationMetadata"
+      response: "Application"
+    };
+  }
+
+  // Reactivates a previously suspended SAML application.
+  rpc Reactivate (ReactivateApplicationRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/application/saml/applications/{application_id}:reactivate" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "ReactivateApplicationMetadata"
+      response: "Application"
+    };
+  }
+
+  // Returns the list of supported attribute values for SAML applications.
+  rpc ListSupportedAttributeValues (ListSupportedAttributeValuesRequest) returns (ListSupportedAttributeValuesResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/idp/application/saml/applications:listSupportedAttributeValues" };
+  }
+
+  // Lists operations for the specified SAML application.
+  rpc ListOperations (ListApplicationOperationsRequest) returns (ListApplicationOperationsResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/idp/application/saml/applications/{application_id}/operations" };
+  }
+
+  // Lists access bindings for the specified SAML application.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/idp/application/saml/applications/{resource_id}:listAccessBindings" };
+  }
+
+  // Sets access bindings for the specified SAML application.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/application/saml/applications/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Updates access bindings for the specified SAML application.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/idp/application/saml/applications/{resource_id}:updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Lists assignments for the specified SAML application.
+  rpc ListAssignments(ListAssignmentsRequest) returns (ListAssignmentsResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/idp/application/saml/applications/{application_id}:listAssignments" };
+  }
+
+  // Updates assignments for the specified SAML application.
+  rpc UpdateAssignments(UpdateAssignmentsRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/idp/application/saml/applications/{application_id}:updateAssignments" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateAssignmentsMetadata"
+      response: "UpdateAssignmentsResponse"
+    };
+  }
+}
+
+// Request to get a SAML application by ID.
+message GetApplicationRequest {
+  // ID of the SAML application to return.
+  string application_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Request to list SAML applications in an organization.
+message ListApplicationsRequest {
+  // ID of the organization to list applications in.
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+  // The maximum number of results per page to return.
+  int64 page_size = 2 [(value) = "0-1000"];
+  // Page token for pagination.
+  string page_token = 3 [(length) = "<=2000"];
+  // A filter expression that filters resources listed in the response.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+// Response message for [ApplicationService.List].
+message ListApplicationsResponse {
+  // List of SAML applications.
+  repeated Application applications = 1;
+  // Token for getting the next page of the list.
+  string next_page_token = 2;
+}
+
+// Request to create a new SAML application.
+message CreateApplicationRequest {
+  // ID of the organization to create the application in.
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+  // Name of the SAML application.
+  string name = 2 [(required) = true, (pattern) = "[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  // Description of the SAML application.
+  string description = 3 [(length) = "<=256"];
+  // Resource labels as `` key:value `` pairs.
+  map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+  // Service provider configuration for the SAML application.
+  ServiceProvider service_provider = 5;
+  // Security settings for the SAML application.
+  SecuritySettingsSpec security_settings = 6;
+  // Attribute mapping configuration for the SAML application.
+  AttributeMappingSpec attribute_mapping = 7;
+  // Group claims settings for the SAML application.
+  GroupClaimsSettings group_claims_settings = 8;
+}
+
+// Security settings specification for SAML application creation.
+message SecuritySettingsSpec {
+  // Signature mode for SAML assertions and responses.
+  SecuritySettings.SignatureMode signature_mode = 1;
+}
+
+// NameID specification for SAML application.
+message NameIdSpec {
+  // Format of the NameID.
+  NameId.Format format = 1 [(required) = true];
+}
+
+// Attribute mapping specification for SAML application.
+message AttributeMappingSpec {
+  // NameID configuration.
+  NameIdSpec name_id = 1 [(required) = true];
+  // List of attribute mappings.
+  repeated Attribute attributes = 2 [(size) = "<=50"];
+}
+
+// Metadata for the [ApplicationService.Create] operation.
+message CreateApplicationMetadata {
+  // ID of the SAML application that is being created.
+  string application_id = 1;
+}
+
+// Request to update an existing SAML application.
+message UpdateApplicationRequest {
+  // ID of the SAML application to update.
+  string application_id = 1 [(required) = true, (length) = "<=50"];
+  // Field mask that specifies which fields of the application are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+  // New name for the SAML application.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  // New description for the SAML application.
+  string description = 4 [(length) = "<=256"];
+  // New resource labels as `` key:value `` pairs.
+  map<string, string> labels = 5 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+  // New service provider configuration for the SAML application.
+  ServiceProvider service_provider = 6;
+  // New security settings for the SAML application.
+  SecuritySettings security_settings = 7;
+  // New attribute mapping configuration for the SAML application.
+  AttributeMappingSpec attribute_mapping = 8;
+  // New group claims settings for the SAML application.
+  GroupClaimsSettings group_claims_settings = 9;
+}
+
+// Metadata for the [ApplicationService.Update] operation.
+message UpdateApplicationMetadata {
+  // ID of the SAML application that is being updated.
+  string application_id = 1;
+}
+
+// Request to delete a SAML application.
+message DeleteApplicationRequest {
+  // ID of the SAML application to delete.
+  string application_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Metadata for the [ApplicationService.Delete] operation.
+message DeleteApplicationMetadata {
+  // ID of the SAML application that is being deleted.
+  string application_id = 1;
+}
+
+// Request to suspend a SAML application.
+message SuspendApplicationRequest {
+  // ID of the SAML application to suspend.
+  string application_id = 1  [(required) = true, (length) = "<=50"];
+}
+
+// Metadata for the [ApplicationService.Suspend] operation.
+message SuspendApplicationMetadata {
+  // ID of the SAML application that is being suspended.
+  string application_id = 1;
+}
+
+// Request to reactivate a suspended SAML application.
+message ReactivateApplicationRequest {
+  // ID of the SAML application to reactivate.
+  string application_id = 1  [(required) = true, (length) = "<=50"];
+}
+
+// Metadata for the [ApplicationService.Reactivate] operation.
+message ReactivateApplicationMetadata {
+  // ID of the SAML application that is being reactivated.
+  string application_id = 1;
+}
+
+// Request to list supported attribute values for SAML applications.
+message ListSupportedAttributeValuesRequest {
+}
+
+// Response message for [ApplicationService.ListSupportedAttributeValues].
+message ListSupportedAttributeValuesResponse {
+  // List of supported attribute values.
+  repeated SupportedAttributeValue supported_attribute_values = 1;
+}
+
+// A supported attribute value for SAML applications.
+message SupportedAttributeValue {
+  // The attribute value.
+  string value = 1;
+}
+
+// Request to list operations for a SAML application.
+message ListApplicationOperationsRequest {
+  // ID of the SAML application to list operations for.
+  string application_id = 1 [(length) = "<=50"];
+  // The maximum number of results per page to return.
+  int64 page_size = 2 [(value) = "0-1000"];
+  // Page token for pagination.
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+// Response message for [ApplicationService.ListOperations].
+message ListApplicationOperationsResponse {
+  // List of operations.
+  repeated operation.Operation operations = 1;
+  // Token for getting the next page of the list.
+  string next_page_token = 2;
+}
+
+// An assignment for a SAML application.
+message Assignment {
+  // ID of the subject being assigned.
+  string subject_id = 1 [(required) = true, (length) = "<=100"];
+}
+
+// Actions that can be performed on assignments.
+enum AssignmentAction {
+  // The assignment action is not specified.
+  ASSIGNMENT_ACTION_UNSPECIFIED = 0;
+  // Add an assignment.
+  ADD = 1;
+  // Remove an assignment.
+  REMOVE = 2;
+}
+
+// A delta operation on assignments.
+message AssignmentDelta {
+  // Action to perform on the assignment.
+  AssignmentAction action = 1 [(required) = true];
+  // Assignment to perform the action on.
+  Assignment assignment = 2 [(required) = true];
+}
+
+// Response message for [ApplicationService.UpdateAssignments].
+message UpdateAssignmentsResponse {
+  // List of assignment deltas that were applied.
+  repeated AssignmentDelta assignment_deltas = 1;
+}
+
+// Request to list assignments for a SAML application.
+message ListAssignmentsRequest {
+  // ID of the SAML application to list assignments for.
+  string application_id = 1 [(required) = true, (length) = "<=50"];
+  // The maximum number of results per page to return.
+  int64 page_size = 2 [(value) = "0-1000"];
+  // Page token for pagination.
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+// Response message for [ApplicationService.ListAssignments].
+message ListAssignmentsResponse {
+  // List of assignments.
+  repeated Assignment assignments = 1;
+  // Token for getting the next page of the list.
+  string next_page_token = 2;
+}
+
+// Request to update assignments for a SAML application.
+message UpdateAssignmentsRequest {
+  // ID of the SAML application to update assignments for.
+  string application_id = 1 [(required) = true, (length) = "<=50"];
+  // List of assignment deltas to apply.
+  repeated AssignmentDelta assignment_deltas = 2 [(size) = "1-1000"];
+}
+
+// Metadata for the [ApplicationService.UpdateAssignments] operation.
+message UpdateAssignmentsMetadata {
+  // ID of the SAML application whose assignments are being updated.
+  string application_id = 1;
+}

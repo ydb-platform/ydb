@@ -1,0 +1,113 @@
+Metadata-Version: 2.1
+Name: jupyter-telemetry
+Version: 0.1.0
+Summary: Jupyter telemetry library
+Home-page: http://jupyter.org
+Author: Jupyter Development Team
+Author-email: jupyter@googlegroups.com
+License: BSD
+Keywords: Jupyter,JupyterLab
+Platform: Linux
+Platform: Mac OS X
+Platform: Windows
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Requires-Python: >=3.5
+Description-Content-Type: text/markdown
+Requires-Dist: jsonschema
+Requires-Dist: python-json-logger
+Requires-Dist: traitlets
+Requires-Dist: ruamel.yaml
+
+# Telemetry
+
+[![CircleCI](https://circleci.com/gh/jupyter/telemetry.svg?style=svg)](https://circleci.com/gh/jupyter/telemetry)
+[![codecov](https://codecov.io/gh/jupyter/telemetry/branch/master/graph/badge.svg)](https://codecov.io/gh/jupyter/telemetry)
+[![Documentation Status](https://readthedocs.org/projects/jupyter-telemetry/badge/?version=latest)](https://jupyter-telemetry.readthedocs.io/en/latest/?badge=latest)
+
+*Telemetry for Jupyter Applications and extensions.*
+
+> Telemetry (təˈlemətrē): the process of recording and transmitting the readings of an instrument. [Oxford Dictionaries]
+
+Jupyter Telemetry enables Jupyter Applications (e.g. Jupyter Server, Jupyter Notebook, JupyterLab, JupyterHub, etc.) to record **events**—i.e. actions by application users—and transmit them to remote (or local) destinations as **structured** data. It works with Python's standard `logging` library to handle the transmission of events allowing users to send events to local files, over the web, etc.
+
+## Install
+
+Jupyter's Telemetry library can be installed from PyPI.
+```
+pip install jupyter_telemetry
+```
+
+## Basic Usage
+
+Telemetry provides a configurable traitlets object, `EventLog`, for structured event-logging in Python. It leverages Python's standard `logging` library for filtering, handling, and recording events. All events are validated (using [jsonschema](https://pypi.org/project/jsonschema/)) against registered [JSON schemas](https://json-schema.org/).
+
+Let's look at a basic example of an `EventLog`.
+```python
+import logging
+from jupyter_telemetry import EventLog
+
+
+eventlog = EventLog(
+    # Use logging handlers to route where events
+    # should be record.
+    handlers=[
+        logging.FileHandler('events.log')
+    ],
+    # List schemas of events that should be recorded.
+    allowed_schemas=[
+        'uri.to.event.schema'
+    ]
+)
+```
+
+EventLog has two configurable traits:
+* `handlers`: a list of Python's `logging` handlers.
+* `allowed_schemas`: a list of event schemas to record.
+
+Event schemas must be registered with the `EventLog` for events to be recorded. An event schema looks something like:
+```json
+{
+  "$id": "url.to.event.schema",
+  "title": "My Event",
+  "description": "All events must have a name property.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "title": "Name",
+      "description": "Name of event",
+      "type": "string"
+    }
+  },
+  "required": ["name"],
+  "version": 1
+}
+```
+2 fields are required:
+* `$id`: a valid URI to identify the schema (and possibly fetch it from a remote address).
+* `version`: the version of the schema.
+
+The other fields follow standard JSON schema structure.
+
+Schemas can be registered from a Python `dict` object, a file, or a URL. This example loads the above example schema from file.
+```python
+# Register the schema.
+eventlog.register_schema_file('schema.json')
+```
+
+Events are recorded using the `record_event` method. This method validates the event data and routes the JSON string to the Python `logging` handlers listed in the `EventLog`.
+```python
+# Record an example event.
+event = {'name': 'example event'}
+eventlog.record_event(
+    schema_id='url.to.event.schema',
+    version=1,
+    event=event
+)
+```
+
+

@@ -1,0 +1,12 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.82, Average, accumulation, and/or extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for aerosol with source/sink
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.aerosol.def"
+include "grib2/templates/template.4.source.def"
+include "grib2/templates/template.4.aerosol_size.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.horizontal.def"
+include "grib2/templates/template.4.statistical.def"

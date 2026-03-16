@@ -1,0 +1,13 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.15, Average, accumulation, extreme values, or other statistically-processed values over a spatial area at a horizontal level or in a horizontal layer at a point in time
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.point_in_time.def"
+include "grib2/templates/template.4.horizontal.def"
+
+codetable[1] statisticalProcess 'grib2/tables/[tablesVersion]/4.10.table';
+codetable[1] spatialProcessing 'grib2/tables/[tablesVersion]/4.15.table';
+unsigned[1] numberOfPointsUsed;

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Modbus simulator.</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/apple60.png">
+  <link rel="apple-touch-icon" sizes="76x76" href="/apple76.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="/apple120.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/apple152.png">
+  <link rel="stylesheet" type="text/css" href="/pymodbus.css">
+  <!--REFRESH-->
+</head>
+<body>
+  <center><h1>Log</h1></center>
+  <table width="80%" class="listbox">
+    <thead>
+      <tr>
+        <th width="10%">Log entries</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!--LOG_ROWS-->
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="7"><!--LOG_FOOT--></th>
+      </tr>
+    </tfoot>
+  </table>
+  <fieldset class="tools_fieldset" width="30%">
+    <legend>Log</legend>
+    <form action="/api/log" method="get">
+      <input type="submit" value="Download" name="submit" />
+      <input type="submit" value="Monitor" name="submit" />
+      <input type="submit" value="Clear" name="submit" />
+    </form>
+  </fieldset>
+</body>
+</html>

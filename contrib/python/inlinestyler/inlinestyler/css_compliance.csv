@@ -1,0 +1,50 @@
+property,Outlook '07,Outlook '03,Windows Mail,Apple Mail,Entourage 2004,Entourage 2008,Notes 6 and 7,Lotus Notes 8.5,AOL Desktop 10,Thunderbird 2,Yahoo! Mail,Yahoo! Classic,Hotmail,Gmail,MySpace,AOL Web,MobileMe,iPhone 3.0,Android Email,Android Gmail,Palm Pre (WebOS),Palm Treo (Win Mobile 6.5),Palm Treo (Palm Garnet OS),Blackberry
+direction ,N,Y,Y,Y,N,Y,N,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,N,Y,Y,Y,Y
+font ,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,P,P,N,N
+font-family ,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,N,N
+font-style ,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,Y
+font-variant ,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,N
+font-size ,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N
+font-weight ,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y
+letter-spacing ,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,N,N
+line-height ,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,N,N
+text-align ,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y
+text-decoration ,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y
+text-indent ,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N
+text-transform ,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,Y
+white-space ,Y,N,N,Y,Y,Y,N,N,N,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,N,N,N
+word-spacing ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,N,N
+vertical-align ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,N
+color,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y
+background ,P,Y,Y,Y,Y,Y,N,N,Y,Y,Y,Y,N,P,Y,Y,Y,Y,N,N,Y,Y,N,Y
+background-color ,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y
+background-image ,N,Y,Y,Y,Y,Y,N,N,Y,Y,Y,Y,N,N,Y,Y,Y,Y,N,N,Y,Y,N,Y
+background-position ,N,Y,Y,Y,Y,Y,N,N,Y,Y,Y,Y,N,N,Y,Y,Y,Y,Y,Y,Y,Y,N,Y
+background-repeat ,N,Y,Y,Y,Y,Y,N,N,Y,Y,Y,Y,N,N,Y,Y,Y,Y,N,N,Y,Y,N,Y
+border,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y
+height ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,N
+margin,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,P,Y,N
+padding,P,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y
+width ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y
+bottom ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,N,N,N,N,N,Y,Y,Y,Y,N,Y,N,N,N
+clear ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,N,Y
+clip ,N,Y,Y,Y,Y,Y,N,N,Y,Y,N,N,N,N,N,Y,N,Y,N,N,Y,N,N,Y
+cursor ,N,Y,Y,Y,N,Y,N,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,N,N,N,N,N,N,N
+display ,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,N
+float ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,N,Y,Y,Y,N
+left ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,N,N,N,N,N,Y,Y,Y,Y,N,Y,N,N,N
+opacity ,N,N,N,Y,N,Y,N,N,Y,Y,N,N,N,N,Y,Y,Y,Y,N,N,Y,N,N,N
+overflow ,N,Y,Y,Y,N,Y,N,N,Y,Y,Y,Y,Y,Y,N,Y,Y,N,N,N,Y,N,Y,N
+position ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,N,N,N,N,N,Y,Y,Y,Y,N,Y,N,N,N
+right ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,N,N,N,N,N,Y,Y,Y,Y,N,Y,N,N,N
+top ,N,Y,Y,Y,Y,Y,N,Y,Y,Y,N,N,N,N,N,Y,Y,Y,Y,N,Y,N,N,N
+visibility ,N,Y,Y,Y,Y,Y,N,N,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,N,Y,Y,N,N
+z-index ,Y,Y,Y,Y,N,Y,N,Y,Y,Y,N,N,N,N,N,Y,Y,Y,Y,N,Y,N,N,N
+list-style-image ,N,Y,Y,Y,Y,Y,N,N,Y,Y,Y,Y,N,N,Y,Y,Y,Y,N,Y,Y,Y,N,Y
+list-style-position ,N,Y,Y,Y,Y,Y,N,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,N
+list-style-type ,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,N,Y,Y,Y,N
+border-collapse ,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y
+border-spacing ,N,N,N,Y,N,Y,N,N,N,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,Y,N,Y,Y
+caption-side ,N,N,N,N,N,N,N,N,N,Y,N,N,Y,Y,N,N,Y,N,N,N,N,N,N,N
+empty-cells ,N,N,N,Y,N,Y,N,N,N,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,N,N,N
+table-layout ,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,N,Y,Y,Y,Y,Y,Y,Y,N,Y

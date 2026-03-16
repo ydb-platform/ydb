@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v2;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v2;datasphere";
+option java_package = "yandex.cloud.api.datasphere.v2";
+
+// A Project resource.
+message Project {
+  reserved 10;
+  message Settings {
+
+    enum Ide {
+      IDE_UNSPECIFIED = 0;
+      // Project running on JupyterLab IDE.
+      JUPYTER_LAB = 1;
+    }
+
+    enum StaleExecutionTimeoutMode {
+      STALE_EXECUTION_TIMEOUT_MODE_UNSPECIFIED = 0;
+      // Setting to automatically stop stale execution after one hour with low consumption.
+      ONE_HOUR = 1;
+      // Setting to automatically stop stale execution after three hours with low consumption.
+      THREE_HOURS = 2;
+      // Setting to never automatically stop stale executions.
+      NO_TIMEOUT = 3;
+    }
+
+    // ID of the service account, on whose behalf all operations with clusters will be performed.
+    string service_account_id = 1;
+
+    // ID of the subnet where the DataProc cluster resides.
+    // Currently only subnets created in the availability zone ru-central1-a are supported.
+    string subnet_id = 2;
+
+    // ID of the DataProc cluster.
+    string data_proc_cluster_id = 3;
+
+    // Network interfaces security groups.
+    repeated string security_group_ids = 5;
+
+    // Is early access preview enabled for the project.
+    bool early_access = 6;
+
+    // Project IDE.
+    Ide ide = 7;
+
+    // Default project folder ID.
+    string default_folder_id = 8;
+
+    // Timeout to automatically stop stale executions.
+    StaleExecutionTimeoutMode stale_exec_timeout_mode = 9;
+
+    // Timeout for VM deallocation.
+    google.protobuf.Duration vm_inactivity_timeout = 11;
+
+    // Default VM configuration for DEDICATED mode.
+    string default_dedicated_spec = 12;
+
+    reserved 4, 10;
+  }
+
+  message Limits {
+    // The number of units that can be spent per hour.
+    google.protobuf.Int64Value max_units_per_hour = 1;
+    // The number of units that can be spent on the one execution.
+    google.protobuf.Int64Value max_units_per_execution = 2;
+  }
+
+  // ID of the project.
+  string id = 1;
+
+  google.protobuf.Timestamp created_at = 2;
+
+  // Name of the project. 1-63 characters long.
+  string name = 3;
+
+  // Description of the project. 0-256 characters long.
+  string description = 4;
+  map<string, string> labels = 5;
+  string created_by_id = 6;
+
+  // Settings of the project.
+  Settings settings = 7;
+
+  // Limits of the project.
+  Limits limits = 8;
+
+  reserved 9;
+
+  // ID of the community that the project belongs to.
+  string community_id = 11;
+}

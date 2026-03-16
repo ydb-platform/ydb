@@ -1,0 +1,3193 @@
+====================BSD-3-Clause====================
+ *  By downloading, copying, installing or using the software you agree to this license.
+ *  If you do not agree to this license, do not download, install,
+ *  copy or use the software.
+ *
+ *
+ *  License Agreement
+ *  For Open Source Computer Vision Library
+ *  (3 - clause BSD License)
+
+
+====================BSD-3-Clause====================
+ *  By downloading, copying, installing or using the software you agree to this license.
+ *  If you do not agree to this license, do not download, install,
+ *  copy or use the software.
+ *  
+ *  
+ *  License Agreement
+ *  For Open Source Computer Vision Library
+ *  (3 - clause BSD License)
+
+
+====================BSD-3-Clause====================
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
+ *  are met:
+ *
+ *   * Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *   * Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the following
+ *     disclaimer in the documentation and/or other materials provided
+ *     with the distribution.
+ *   * Neither the name of the copyright holders nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ *  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ *  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ *  POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+ *  Redistribution and use in source and binary forms, with or without modification,
+ *  are permitted provided that the following conditions are met :
+ *
+ *  * Redistributions of source code must retain the above copyright notice,
+ *  this list of conditions and the following disclaimer.
+ *
+ *  * Redistributions in binary form must reproduce the above copyright notice,
+ *  this list of conditions and the following disclaimer in the documentation
+ *  and / or other materials provided with the distribution.
+ *
+ *  * Neither the names of the copyright holders nor the names of the contributors
+ *  may be used to endorse or promote products derived from this software
+ *  without specific prior written permission.
+ *
+ *  This software is provided by the copyright holders and contributors "as is" and
+ *  any express or implied warranties, including, but not limited to, the implied
+ *  warranties of merchantability and fitness for a particular purpose are disclaimed.
+ *  In no event shall copyright holders or contributors be liable for any direct,
+ *  indirect, incidental, special, exemplary, or consequential damages
+ *  (including, but not limited to, procurement of substitute goods or services;
+ *  loss of use, data, or profits; or business interruption) however caused
+ *  and on any theory of liability, whether in contract, strict liability,
+ *  or tort(including negligence or otherwise) arising in any way out of
+ *  the use of this software, even if advised of the possibility of such damage.
+
+
+====================BSD-3-Clause====================
+ *  Redistribution and use in source and binary forms, with or without modification,
+ *  are permitted provided that the following conditions are met :
+ *  
+ *  * Redistributions of source code must retain the above copyright notice,
+ *  this list of conditions and the following disclaimer.
+ *  
+ *  * Redistributions in binary form must reproduce the above copyright notice,
+ *  this list of conditions and the following disclaimer in the documentation
+ *  and / or other materials provided with the distribution.
+ *  
+ *  * Neither the names of the copyright holders nor the names of the contributors
+ *  may be used to endorse or promote products derived from this software
+ *  without specific prior written permission.
+ *  
+ *  This software is provided by the copyright holders and contributors "as is" and
+ *  any express or implied warranties, including, but not limited to, the implied
+ *  warranties of merchantability and fitness for a particular purpose are disclaimed.
+ *  In no event shall copyright holders or contributors be liable for any direct,
+ *  indirect, incidental, special, exemplary, or consequential damages
+ *  (including, but not limited to, procurement of substitute goods or services;
+ *  loss of use, data, or profits; or business interruption) however caused
+ *  and on any theory of liability, whether in contract, strict liability,
+ *  or tort(including negligence or otherwise) arising in any way out of
+ *  the use of this software, even if advised of the possibility of such damage.
+
+
+====================BSD-3-Clause====================
+ * Software License Agreement (BSD License)
+
+
+====================BSD-3-Clause====================
+*  By downloading, copying, installing or using the software you agree to this license.
+*  If you do not agree to this license, do not download, install,
+*  copy or use the software.
+*
+*
+*  License Agreement
+*  For Open Source Computer Vision Library
+*  (3 - clause BSD License)
+
+
+====================BSD-3-Clause====================
+*  Redistribution and use in source and binary forms, with or without modification,
+*  are permitted provided that the following conditions are met :
+*
+*  * Redistributions of source code must retain the above copyright notice,
+*  this list of conditions and the following disclaimer.
+*
+*  * Redistributions in binary form must reproduce the above copyright notice,
+*  this list of conditions and the following disclaimer in the documentation
+*  and / or other materials provided with the distribution.
+*
+*  * Neither the names of the copyright holders nor the names of the contributors
+*  may be used to endorse or promote products derived from this software
+*  without specific prior written permission.
+*
+*  This software is provided by the copyright holders and contributors "as is" and
+*  any express or implied warranties, including, but not limited to, the implied
+*  warranties of merchantability and fitness for a particular purpose are disclaimed.
+*  In no event shall copyright holders or contributors be liable for any direct,
+*  indirect, incidental, special, exemplary, or consequential damages
+*  (including, but not limited to, procurement of substitute goods or services;
+*  loss of use, data, or profits; or business interruption) however caused
+*  and on any theory of liability, whether in contract, strict liability,
+*  or tort(including negligence or otherwise) arising in any way out of
+*  the use of this software, even if advised of the possibility of such damage.
+
+
+====================BSD-3-Clause====================
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+
+
+====================BSD-3-Clause====================
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009-2011, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+
+
+====================BSD-3-Clause====================
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009-2011, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of Intel Corporation may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+
+
+====================BSD-3-Clause====================
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2014, Beat Kueng (beat-kueng@gmx.net), Lukas Vogel, Morten Lysgaard
+// Third party copyrights are property of their respective owners.
+
+
+====================BSD-3-Clause====================
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2015, Smart Engines Ltd, all rights reserved.
+// Copyright (C) 2015, Institute for Information Transmission Problems of the Russian Academy of Sciences (Kharkevich Institute), all rights reserved.
+// Copyright (C) 2015, Dmitry Nikolaev, Simon Karpenko, Michail Aliev, Elena Kuznetsova, all rights reserved.
+// Third party copyrights are property of their respective owners.
+
+
+====================BSD-3-Clause====================
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2017, IBM Corporation, all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// @Authors
+//      Marc Fiammante marc.fiammante@fr.ibm.com
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of OpenCV Foundation or contributors may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the OpenCV Foundation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+
+
+====================BSD-3-Clause====================
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2017, Intel Corporation, all rights reserved.
+// Third party copyrights are property of their respective owners.
+
+
+====================BSD-3-Clause====================
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+
+
+====================BSD-3-Clause====================
+// This file is part of OpenCV project.
+// It is subject to the license terms in the LICENSE file found in the top-level
+// directory of this distribution and at http://opencv.org/license.html.
+
+
+====================BSD-3-Clause====================
+// This file is part of OpenCV project.
+// It is subject to the license terms in the LICENSE file found in the top-level directory
+// of this distribution and at http://opencv.org/license.html.
+
+
+====================BSD-3-Clause====================
+// This file is part of OpenCV project.
+// It is subject to the license terms in the LICENSE file found in the top-level directory
+// of this distribution and at http://opencv.org/license.html.#include "precomp.hpp"
+
+
+====================BSD-3-Clause====================
+By downloading, copying, installing or using the software you agree to this
+license. If you do not agree to this license, do not download, install,
+copy or use the software.
+                          License Agreement
+               For Open Source Computer Vision Library
+                       (3-clause BSD License)
+
+
+====================BSD-3-Clause====================
+By downloading, copying, installing or using the software you agree to this license.
+If you do not agree to this license, do not download, install,
+copy or use the software.
+
+
+                          License Agreement
+               For Open Source Computer Vision Library
+                       (3-clause BSD License)
+
+
+====================BSD-3-Clause====================
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+  * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+  * Neither the names of the copyright holders nor the names of the contributors
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+
+This software is provided by the copyright holders and contributors "as is" and
+any express or implied warranties, including, but not limited to, the implied
+warranties of merchantability and fitness for a particular purpose are disclaimed.
+In no event shall copyright holders or contributors be liable for any direct,
+indirect, incidental, special, exemplary, or consequential damages
+(including, but not limited to, procurement of substitute goods or services;
+loss of use, data, or profits; or business interruption) however caused
+and on any theory of liability, whether in contract, strict liability,
+or tort (including negligence or otherwise) arising in any way out of
+the use of this software, even if advised of the possibility of such damage.
+
+
+====================BSD-3-Clause====================
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+  * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+  * Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+  * Neither the names of the copyright holders nor the names of the contributors
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+This software is provided by the copyright holders and contributors "as is" and
+any express or implied warranties, including, but not limited to, the implied
+warranties of merchantability and fitness for a particular purpose are
+disclaimed. In no event shall copyright holders or contributors be liable for
+any direct, indirect, incidental, special, exemplary, or consequential damages
+(including, but not limited to, procurement of substitute goods or services;
+loss of use, data, or profits; or business interruption) however caused
+and on any theory of liability, whether in contract, strict liability,
+or tort (including negligence or otherwise) arising in any way out of
+the use of this software, even if advised of the possibility of such damage.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2013
+ * Radhakrishna Achanta
+ * email : Radhakrishna [dot] Achanta [at] epfl [dot] ch
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2014, 2015
+ * Zhengqin Li <li-zq12 at mails dot tsinghua dot edu dot cn>
+ * Jiansheng Chen <jschenthu at mail dot tsinghua dot edu dot cn>
+
+
+====================COPYRIGHT====================
+ * MSLIC Copyright (c) 2016, 2017
+ * Yong-Jin Liu
+ * email : liuyongjin [at] tsinghua [dot] edu [dot] cn
+
+
+====================COPYRIGHT====================
+* Copyright 2015-2017 Philippe Tillet
+* Copyright (c) 2017, Intel Corporation
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2000-2015, Intel Corporation, all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2009-2011, Willow Garage Inc., all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2010-2013, Advanced Micro Devices, Inc., all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2013, OpenCV Foundation, all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2014, Beat Kueng (beat-kueng@gmx.net), Lukas Vogel, Morten Lysgaard
+// Third party copyrights are property of their respective owners.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2015, Dmitry Nikolaev, Simon Karpenko, Michail Aliev, Elena Kuznetsova, all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2015, Institute for Information Transmission Problems of the Russian Academy of Sciences (Kharkevich Institute), all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2015, Itseez Inc., all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2015, OpenCV Foundation, all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2015, Smart Engines Ltd, all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2015, The Chinese University of Hong Kong, all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2017, IBM Corporation, all rights reserved.
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2021, Dr Seng Cheong Loke (lokesengcheong@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright (C) 2009-2015, NVIDIA Corporation, all rights reserved.
+
+
+====================File: 3rdparty/quirc/LICENSE====================
+quirc -- QR-code recognition library
+Copyright (C) 2010-2012 Daniel Beer <dlbeer@gmail.com>
+
+Permission to use, copy, modify, and/or distribute this software for
+any purpose with or without fee is hereby granted, provided that the
+above copyright notice and this permission notice appear in all
+copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
+PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+
+====================File: COPYRIGHT====================
+Copyright (C) 2000-2022, Intel Corporation, all rights reserved.
+Copyright (C) 2009-2011, Willow Garage Inc., all rights reserved.
+Copyright (C) 2009-2016, NVIDIA Corporation, all rights reserved.
+Copyright (C) 2010-2013, Advanced Micro Devices, Inc., all rights reserved.
+Copyright (C) 2015-2023, OpenCV Foundation, all rights reserved.
+Copyright (C) 2008-2016, Itseez Inc., all rights reserved.
+Copyright (C) 2019-2023, Xperience AI, all rights reserved.
+Copyright (C) 2019-2022, Shenzhen Institute of Artificial Intelligence and Robotics for Society, all rights reserved.
+Copyright (C) 2022-2023, Southern University of Science And Technology, all rights reserved.
+
+Third party copyrights are property of their respective owners.
+
+
+====================File: LICENSE====================
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+
+====================File: modules/calib3d/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                          License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include "opencv2/core/utility.hpp"
+
+#include "opencv2/core/private.hpp"
+
+#include "opencv2/calib3d.hpp"
+#include "opencv2/imgproc.hpp"
+#include "opencv2/features2d.hpp"
+
+
+#include "opencv2/core/ocl.hpp"
+
+#include <set>
+
+#define GET_OPTIMIZED(func) (func)
+
+
+namespace cv
+{
+
+/**
+ * Compute the number of iterations given the confidence, outlier ratio, number
+ * of model points and the maximum iteration number.
+ *
+ * @param p confidence value
+ * @param ep outlier ratio
+ * @param modelPoints number of model points required for estimation
+ * @param maxIters maximum number of iterations
+ * @return The number of iterations according to the formula
+ * \f[
+ * \frac{\ln(1-p)}{\ln\left(1-(1-ep)^\mathrm{modelPoints}\right)}
+ * \f]
+ *
+ * If the computed number of iterations is larger than maxIters, then maxIters is returned.
+ */
+int RANSACUpdateNumIters( double p, double ep, int modelPoints, int maxIters );
+
+class CV_EXPORTS PointSetRegistrator : public Algorithm
+{
+public:
+    class CV_EXPORTS Callback
+    {
+    public:
+        virtual ~Callback() {}
+        virtual int runKernel(InputArray m1, InputArray m2, OutputArray model) const = 0;
+        virtual void computeError(InputArray m1, InputArray m2, InputArray model, OutputArray err) const = 0;
+        virtual bool checkSubset(InputArray, InputArray, int) const { return true; }
+    };
+
+    virtual void setCallback(const Ptr<PointSetRegistrator::Callback>& cb) = 0;
+    virtual bool run(InputArray m1, InputArray m2, OutputArray model, OutputArray mask) const = 0;
+};
+
+CV_EXPORTS Ptr<PointSetRegistrator> createRANSACPointSetRegistrator(const Ptr<PointSetRegistrator::Callback>& cb,
+                                                                    int modelPoints, double threshold,
+                                                                    double confidence=0.99, int maxIters=1000 );
+
+CV_EXPORTS Ptr<PointSetRegistrator> createLMeDSPointSetRegistrator(const Ptr<PointSetRegistrator::Callback>& cb,
+                                                                   int modelPoints, double confidence=0.99, int maxIters=1000 );
+
+template<typename T> inline int compressElems( T* ptr, const uchar* mask, int mstep, int count )
+{
+    int i, j;
+    for( i = j = 0; i < count; i++ )
+        if( mask[i*mstep] )
+        {
+            if( i > j )
+                ptr[j] = ptr[i];
+            j++;
+        }
+    return j;
+}
+
+static inline bool haveCollinearPoints( const Mat& m, int count )
+{
+    int j, k, i = count-1;
+    const Point2f* ptr = m.ptr<Point2f>();
+
+    // check that the i-th selected point does not belong
+    // to a line connecting some previously selected points
+    // also checks that points are not too close to each other
+    for( j = 0; j < i; j++ )
+    {
+        double dx1 = ptr[j].x - ptr[i].x;
+        double dy1 = ptr[j].y - ptr[i].y;
+        for( k = 0; k < j; k++ )
+        {
+            double dx2 = ptr[k].x - ptr[i].x;
+            double dy2 = ptr[k].y - ptr[i].y;
+            if( fabs(dx2*dy1 - dy2*dx1) <= FLT_EPSILON*(fabs(dx1) + fabs(dy1) + fabs(dx2) + fabs(dy2)))
+                return true;
+        }
+    }
+    return false;
+}
+
+void findExtrinsicCameraParams2( const Mat& objectPoints,
+                  const Mat& imagePoints, const Mat& A,
+                  const Mat& distCoeffs, Mat& rvec, Mat& tvec,
+                  int useExtrinsicGuess );
+
+void projectPoints( InputArray objectPoints,
+                    InputArray rvec, InputArray tvec,
+                    InputArray cameraMatrix, InputArray distCoeffs,
+                    OutputArray imagePoints, OutputArray dpdr,
+                    OutputArray dpdt, OutputArray dpdf=noArray(),
+                    OutputArray dpdc=noArray(), OutputArray dpdk=noArray(),
+                    OutputArray dpdo=noArray(), double aspectRatio=0.);
+
+void getUndistortRectangles(InputArray _cameraMatrix, InputArray _distCoeffs,
+              InputArray R, InputArray newCameraMatrix, Size imgSize,
+              Rect_<double>& inner, Rect_<double>& outer );
+
+} // namespace cv
+
+int checkChessboardBinary(const cv::Mat & img, const cv::Size & size);
+
+#endif
+
+
+====================File: modules/core/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#ifdef BUILD_PLUGIN
+#include "opencv2/core/utility.hpp"
+#else  // BUILD_PLUGIN
+
+#include "opencv2/opencv_modules.hpp"
+#include "cvconfig.h"
+
+#include "opencv2/core/utility.hpp"
+#include "opencv2/core/core_c.h"
+#include "opencv2/core/cuda.hpp"
+#include "opencv2/core/opengl.hpp"
+#include "opencv2/core/va_intel.hpp"
+
+#include "opencv2/core/private.hpp"
+#include "opencv2/core/private.cuda.hpp"
+#ifdef HAVE_OPENCL
+#include "opencv2/core/ocl.hpp"
+#endif
+
+#include <ctype.h>
+#include <float.h>
+#include <limits.h>
+#include <math.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <limits>
+#include <float.h>
+#include <cstring>
+#include <cassert>
+
+#define USE_SSE2  (cv::checkHardwareSupport(CV_CPU_SSE2))
+#define USE_SSE4_2  (cv::checkHardwareSupport(CV_CPU_SSE4_2))
+#define USE_AVX  (cv::checkHardwareSupport(CV_CPU_AVX))
+#define USE_AVX2  (cv::checkHardwareSupport(CV_CPU_AVX2))
+
+#include "opencv2/core/hal/hal.hpp"
+#include "opencv2/core/hal/intrin.hpp"
+#include "opencv2/core/sse_utils.hpp"
+#include "opencv2/core/neon_utils.hpp"
+#include "opencv2/core/vsx_utils.hpp"
+#include "hal_replacement.hpp"
+
+#define GET_OPTIMIZED(func) (func)
+
+namespace cv
+{
+
+// -128.f ... 255.f
+extern const float g_8x32fTab[];
+#define CV_8TO32F(x)  cv::g_8x32fTab[(x)+128]
+
+extern const ushort g_8x16uSqrTab[];
+#define CV_SQR_8U(x)  cv::g_8x16uSqrTab[(x)+255]
+
+extern const uchar g_Saturate8u[];
+#define CV_FAST_CAST_8U(t)   (assert(-256 <= (t) && (t) <= 512), cv::g_Saturate8u[(t)+256])
+#define CV_MIN_8U(a,b)       ((a) - CV_FAST_CAST_8U((a) - (b)))
+#define CV_MAX_8U(a,b)       ((a) + CV_FAST_CAST_8U((b) - (a)))
+
+template<typename T1, typename T2=T1, typename T3=T1> struct OpNop
+{
+    typedef T1 type1;
+    typedef T2 type2;
+    typedef T3 rtype;
+    T3 operator ()(const T1 a) const { return saturate_cast<T3>(a); }
+};
+
+template<typename T1, typename T2=T1, typename T3=T1> struct OpSqr
+{
+    typedef T1 type1;
+    typedef T2 type2;
+    typedef T3 rtype;
+    T3 operator ()(const T1 a) const { return saturate_cast<T3>(a)*saturate_cast<T3>(a); }
+};
+
+template<typename T1, typename T2=T1, typename T3=T1> struct OpAdd
+{
+    typedef T1 type1;
+    typedef T2 type2;
+    typedef T3 rtype;
+    T3 operator ()(const T1 a, const T2 b) const { return saturate_cast<T3>(a + b); }
+};
+
+template<typename T1, typename T2=T1, typename T3=T1> struct OpAddSqr
+{
+    typedef T1 type1;
+    typedef T2 type2;
+    typedef T3 rtype;
+    T3 operator ()(const T1 a, const T2 b) const { return saturate_cast<T3>(a + saturate_cast<T3>(b)*saturate_cast<T3>(b)); }
+};
+
+template<typename T1, typename T2=T1, typename T3=T1> struct OpSub
+{
+    typedef T1 type1;
+    typedef T2 type2;
+    typedef T3 rtype;
+    T3 operator ()(const T1 a, const T2 b) const { return saturate_cast<T3>(a - b); }
+};
+
+template<typename T1, typename T2=T1, typename T3=T1> struct OpRSub
+{
+    typedef T1 type1;
+    typedef T2 type2;
+    typedef T3 rtype;
+    T3 operator ()(const T1 a, const T2 b) const { return saturate_cast<T3>(b - a); }
+};
+
+template<typename T> struct OpMin
+{
+    typedef T type1;
+    typedef T type2;
+    typedef T rtype;
+    T operator ()(const T a, const T b) const { return std::min(a, b); }
+};
+
+template<typename T> struct OpMax
+{
+    typedef T type1;
+    typedef T type2;
+    typedef T rtype;
+    T operator ()(const T a, const T b) const { return std::max(a, b); }
+};
+
+template<typename T> struct OpAbsDiff
+{
+    typedef T type1;
+    typedef T type2;
+    typedef T rtype;
+    T operator()(T a, T b) const { return a > b ? a - b : b - a; }
+};
+
+// specializations to prevent "-0" results
+template<> struct OpAbsDiff<float>
+{
+    typedef float type1;
+    typedef float type2;
+    typedef float rtype;
+    float operator()(float a, float b) const { return std::abs(a - b); }
+};
+template<> struct OpAbsDiff<double>
+{
+    typedef double type1;
+    typedef double type2;
+    typedef double rtype;
+    double operator()(double a, double b) const { return std::abs(a - b); }
+};
+
+template<typename T> struct OpAnd
+{
+    typedef T type1;
+    typedef T type2;
+    typedef T rtype;
+    T operator()( T a, T b ) const { return a & b; }
+};
+
+template<typename T> struct OpOr
+{
+    typedef T type1;
+    typedef T type2;
+    typedef T rtype;
+    T operator()( T a, T b ) const { return a | b; }
+};
+
+template<typename T> struct OpXor
+{
+    typedef T type1;
+    typedef T type2;
+    typedef T rtype;
+    T operator()( T a, T b ) const { return a ^ b; }
+};
+
+template<typename T> struct OpNot
+{
+    typedef T type1;
+    typedef T type2;
+    typedef T rtype;
+    T operator()( T a, T ) const { return ~a; }
+};
+
+template<> inline uchar OpAdd<uchar>::operator ()(uchar a, uchar b) const
+{ return CV_FAST_CAST_8U(a + b); }
+
+template<> inline uchar OpSub<uchar>::operator ()(uchar a, uchar b) const
+{ return CV_FAST_CAST_8U(a - b); }
+
+template<> inline short OpAbsDiff<short>::operator ()(short a, short b) const
+{ return saturate_cast<short>(std::abs(a - b)); }
+
+template<> inline schar OpAbsDiff<schar>::operator ()(schar a, schar b) const
+{ return saturate_cast<schar>(std::abs(a - b)); }
+
+template<> inline uchar OpMin<uchar>::operator ()(uchar a, uchar b) const { return CV_MIN_8U(a, b); }
+
+template<> inline uchar OpMax<uchar>::operator ()(uchar a, uchar b) const { return CV_MAX_8U(a, b); }
+
+typedef void (*UnaryFunc)(const uchar* src1, size_t step1,
+                       uchar* dst, size_t step, Size sz,
+                       void*);
+
+typedef void (*BinaryFunc)(const uchar* src1, size_t step1,
+                       const uchar* src2, size_t step2,
+                       uchar* dst, size_t step, Size sz,
+                       void*);
+
+typedef void (*BinaryFuncC)(const uchar* src1, size_t step1,
+                       const uchar* src2, size_t step2,
+                       uchar* dst, size_t step, int width, int height,
+                       void*);
+
+BinaryFunc getConvertFunc(int sdepth, int ddepth);
+BinaryFunc getConvertScaleFunc(int sdepth, int ddepth);
+BinaryFunc getCopyMaskFunc(size_t esz);
+
+/* default memory block for sparse array elements */
+#define  CV_SPARSE_MAT_BLOCK     (1<<12)
+
+/* initial hash table size */
+#define  CV_SPARSE_HASH_SIZE0    (1<<10)
+
+/* maximal average node_count/hash_size ratio beyond which hash table is resized */
+#define  CV_SPARSE_HASH_RATIO    3
+
+// There is some mess in code with vectors representation.
+// Both vector-column / vector-rows are used with dims=2 (as Mat2D always).
+// Reshape matrices if necessary (in case of vectors) and returns size with scaled width.
+Size getContinuousSize2D(Mat& m1, int widthScale=1);
+Size getContinuousSize2D(Mat& m1, Mat& m2, int widthScale=1);
+Size getContinuousSize2D(Mat& m1, Mat& m2, Mat& m3, int widthScale=1);
+
+void setSize( Mat& m, int _dims, const int* _sz, const size_t* _steps, bool autoSteps=false );
+void finalizeHdr(Mat& m);
+int updateContinuityFlag(int flags, int dims, const int* size, const size_t* step);
+
+struct NoVec
+{
+    size_t operator()(const void*, const void*, void*, size_t) const { return 0; }
+};
+
+#define CV_SPLIT_MERGE_MAX_BLOCK_SIZE(cn) ((INT_MAX/4)/(cn)) // HAL implementation accepts 'int' len, so INT_MAX doesn't work here
+
+enum { BLOCK_SIZE = 1024 };
+
+#if defined HAVE_IPP && (IPP_VERSION_X100 >= 700)
+#define ARITHM_USE_IPP 1
+#else
+#define ARITHM_USE_IPP 0
+#endif
+
+inline bool checkScalar(const Mat& sc, int atype, _InputArray::KindFlag sckind, _InputArray::KindFlag akind)
+{
+    if( sc.dims > 2 || !sc.isContinuous() )
+        return false;
+    Size sz = sc.size();
+    if(sz.width != 1 && sz.height != 1)
+        return false;
+    int cn = CV_MAT_CN(atype);
+    if( akind == _InputArray::MATX && sckind != _InputArray::MATX )
+        return false;
+    return sz == Size(1, 1) || sz == Size(1, cn) || sz == Size(cn, 1) ||
+           (sz == Size(1, 4) && sc.type() == CV_64F && cn <= 4);
+}
+
+inline bool checkScalar(InputArray sc, int atype, _InputArray::KindFlag sckind, _InputArray::KindFlag akind)
+{
+    if( sc.dims() > 2 || !sc.isContinuous() )
+        return false;
+    Size sz = sc.size();
+    if(sz.width != 1 && sz.height != 1)
+        return false;
+    int cn = CV_MAT_CN(atype);
+    if( akind == _InputArray::MATX && sckind != _InputArray::MATX )
+        return false;
+    return sz == Size(1, 1) || sz == Size(1, cn) || sz == Size(cn, 1) ||
+           (sz == Size(1, 4) && sc.type() == CV_64F && cn <= 4);
+}
+
+void convertAndUnrollScalar( const Mat& sc, int buftype, uchar* scbuf, size_t blocksize );
+
+#ifdef CV_COLLECT_IMPL_DATA
+struct ImplCollector
+{
+    ImplCollector()
+    {
+        useCollection   = false;
+        implFlags       = 0;
+    }
+    bool useCollection; // enable/disable impl data collection
+
+    int implFlags;
+    std::vector<int>    implCode;
+    std::vector<String> implFun;
+
+    cv::Mutex mutex;
+};
+#endif
+
+struct CoreTLSData
+{
+    CoreTLSData() :
+//#ifdef HAVE_OPENCL
+        oclExecutionContextInitialized(false), useOpenCL(-1),
+//#endif
+        useIPP(-1),
+        useIPP_NE(-1)
+#ifdef HAVE_OPENVX
+        ,useOpenVX(-1)
+#endif
+    {}
+
+    RNG rng;
+//#ifdef HAVE_OPENCL
+    ocl::OpenCLExecutionContext oclExecutionContext;
+    bool oclExecutionContextInitialized;
+    int useOpenCL; // 1 - use, 0 - do not use, -1 - auto/not initialized
+//#endif
+    int useIPP;    // 1 - use, 0 - do not use, -1 - auto/not initialized
+    int useIPP_NE; // 1 - use, 0 - do not use, -1 - auto/not initialized
+#ifdef HAVE_OPENVX
+    int useOpenVX; // 1 - use, 0 - do not use, -1 - auto/not initialized
+#endif
+};
+
+CoreTLSData& getCoreTlsData();
+
+#if defined(BUILD_SHARED_LIBS)
+#if defined _WIN32 || defined WINCE
+#define CL_RUNTIME_EXPORT __declspec(dllexport)
+#elif defined __GNUC__ && __GNUC__ >= 4
+#define CL_RUNTIME_EXPORT __attribute__ ((visibility ("default")))
+#else
+#define CL_RUNTIME_EXPORT
+#endif
+#else
+#define CL_RUNTIME_EXPORT
+#endif
+
+extern CV_EXPORTS
+bool __termination;  // skip some cleanups, because process is terminating
+                     // (for example, if ExitProcess() was already called)
+
+CV_EXPORTS
+cv::Mutex& getInitializationMutex();
+
+/// @brief Returns timestamp in nanoseconds since program launch
+int64 getTimestampNS();
+
+
+#define CV_SINGLETON_LAZY_INIT_(TYPE, INITIALIZER, RET_VALUE) \
+    static TYPE* const instance = INITIALIZER; \
+    return RET_VALUE;
+
+#define CV_SINGLETON_LAZY_INIT(TYPE, INITIALIZER) CV_SINGLETON_LAZY_INIT_(TYPE, INITIALIZER, instance)
+#define CV_SINGLETON_LAZY_INIT_REF(TYPE, INITIALIZER) CV_SINGLETON_LAZY_INIT_(TYPE, INITIALIZER, *instance)
+
+CV_EXPORTS void releaseTlsStorageThread();
+
+int cv_snprintf(char* buf, int len, const char* fmt, ...);
+int cv_vsnprintf(char* buf, int len, const char* fmt, va_list args);
+}
+
+#endif  // BUILD_PLUGIN
+#endif  // __OPENCV_PRECOMP_H__
+
+
+====================File: modules/cudaarithm/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include <limits>
+
+#include "cvconfig.h"
+
+#include "opencv2/cudaarithm.hpp"
+#include "opencv2/core/utility.hpp"
+
+#include "opencv2/core/private.cuda.hpp"
+
+#ifdef HAVE_CUBLAS
+#  include <cublas.h>
+#endif
+
+#ifdef HAVE_CUFFT
+#  include <cufft.h>
+#endif
+
+#endif /* __OPENCV_PRECOMP_H__ */
+
+
+====================File: modules/cudafilters/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include <limits>
+
+#include "opencv2/cudafilters.hpp"
+#include "opencv2/cudaarithm.hpp"
+#include "opencv2/imgproc.hpp"
+
+#include "opencv2/core/private.cuda.hpp"
+
+#endif /* __OPENCV_PRECOMP_H__ */
+
+
+====================File: modules/cudaimgproc/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include "opencv2/cudaimgproc.hpp"
+
+#include "opencv2/core/utility.hpp"
+#include "opencv2/core/private.hpp"
+#include "opencv2/core/private.cuda.hpp"
+
+#include "opencv2/opencv_modules.hpp"
+
+#ifdef HAVE_OPENCV_CUDAARITHM
+#  include "opencv2/cudaarithm.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDAFILTERS
+#  include "opencv2/cudafilters.hpp"
+#endif
+
+#include <limits>
+#include <algorithm>
+
+#endif /* __OPENCV_PRECOMP_H__ */
+
+
+====================File: modules/cudalegacy/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include <limits>
+#include <iostream>
+#include <algorithm>
+
+#if defined(__OPENCV_BUILD) && defined(__clang__)
+#pragma clang diagnostic ignored "-Winconsistent-missing-override"
+#endif
+#if defined(__OPENCV_BUILD) && defined(__GNUC__) && __GNUC__ >= 5
+#pragma GCC diagnostic ignored "-Wsuggest-override"
+#endif
+
+#include "opencv2/cudalegacy.hpp"
+#include "opencv2/core/utility.hpp"
+
+#include "opencv2/opencv_modules.hpp"
+
+#ifdef HAVE_OPENCV_OBJDETECT
+#  include "opencv2/objdetect.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CALIB3D
+#  include "opencv2/calib3d.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDAARITHM
+#  include "opencv2/cudaarithm.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDAFILTERS
+#  include "opencv2/cudafilters.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDAIMGPROC
+#  include "opencv2/cudaimgproc.hpp"
+#endif
+
+#include "opencv2/core/private.cuda.hpp"
+#if defined (HAVE_CUDA) && !defined (CUDA_DISABLER)
+#include "opencv2/cudalegacy/private.hpp"
+#endif
+
+#endif /* __OPENCV_PRECOMP_H__ */
+
+
+====================File: modules/cudaoptflow/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include <limits>
+
+#include "opencv2/cudaoptflow.hpp"
+#include "opencv2/cudaarithm.hpp"
+#include "opencv2/cudawarping.hpp"
+#include "opencv2/cudaimgproc.hpp"
+#include "opencv2/video.hpp"
+
+#include "opencv2/core/private.cuda.hpp"
+#if defined HAVE_CUDA
+#include "opencv2/core/cuda/vec_traits.hpp"
+#endif
+#include "opencv2/opencv_modules.hpp"
+
+#ifdef HAVE_OPENCV_CUDALEGACY
+#  include "opencv2/cudalegacy/private.hpp"
+#endif
+
+#endif /* __OPENCV_PRECOMP_H__ */
+
+
+====================File: modules/cudawarping/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include "opencv2/cudawarping.hpp"
+
+#include "opencv2/core/private.cuda.hpp"
+
+#endif /* __OPENCV_PRECOMP_H__ */
+
+
+====================File: modules/features2d/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                          License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include "opencv2/features2d.hpp"
+#include "opencv2/imgproc.hpp"
+
+#include "opencv2/core/utility.hpp"
+#include "opencv2/core/private.hpp"
+#include "opencv2/core/ocl.hpp"
+#include "opencv2/core/hal/hal.hpp"
+
+#include <algorithm>
+
+#endif
+
+
+====================File: modules/flann/src/precomp.hpp====================
+#ifndef OPENCV_FLANN_PRECOMP_HPP
+#define OPENCV_FLANN_PRECOMP_HPP
+
+#include <cstdio>
+#include <cstdarg>
+#include <sstream>
+
+#include "opencv2/core.hpp"
+#include "opencv2/core/utility.hpp"
+
+#include "opencv2/flann/miniflann.hpp"
+#include "opencv2/flann/dist.h"
+#include "opencv2/flann/index_testing.h"
+#include "opencv2/flann/params.h"
+#include "opencv2/flann/saving.h"
+
+// index types
+#include "opencv2/flann/all_indices.h"
+#include "opencv2/flann/flann_base.hpp"
+
+#include "opencv2/core/private.hpp"
+
+#endif
+
+
+====================File: modules/highgui/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                        Intel License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000, Intel Corporation, all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of Intel Corporation may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __HIGHGUI_H_
+#define __HIGHGUI_H_
+
+#if defined(__OPENCV_BUILD) && defined(BUILD_PLUGIN)
+#undef __OPENCV_BUILD  // allow public API only
+#endif
+
+#include "opencv2/highgui.hpp"
+#if !defined(BUILD_PLUGIN)
+#include "opencv_highgui_config.hpp"  // generated by CMake
+#endif
+
+#include "opencv2/core/utility.hpp"
+#if defined(__OPENCV_BUILD)
+#include "opencv2/core/private.hpp"
+#include "opencv2/core/utils/configuration.private.hpp"
+#endif
+
+#include "opencv2/imgproc.hpp"
+#include "opencv2/imgproc/imgproc_c.h"
+#include "opencv2/highgui/highgui_c.h"
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <limits.h>
+#include <ctype.h>
+
+#if defined _WIN32 || defined WINCE
+    #include <windows.h>
+    #undef small
+    #undef min
+    #undef max
+    #undef abs
+#endif
+
+/* Errors */
+#define HG_OK          0 /* Don't bet on it! */
+#define HG_BADNAME    -1 /* Bad window or file name */
+#define HG_INITFAILED -2 /* Can't initialize HigHGUI */
+#define HG_WCFAILED   -3 /* Can't create a window */
+#define HG_NULLPTR    -4 /* The null pointer where it should not appear */
+#define HG_BADPARAM   -5
+
+#define __BEGIN__ __CV_BEGIN__
+#define __END__  __CV_END__
+#define EXIT __CV_EXIT__
+
+#define CV_WINDOW_MAGIC_VAL     0x00420042
+#define CV_TRACKBAR_MAGIC_VAL   0x00420043
+
+//Yannick Verdie 2010, Max Kostin 2015
+void cvSetModeWindow_W32(const char* name, double prop_value);
+void cvSetModeWindow_GTK(const char* name, double prop_value);
+void cvSetModeWindow_COCOA(const char* name, double prop_value);
+void cvSetModeWindow_WinRT(const char* name, double prop_value);
+
+CvRect cvGetWindowRect_W32(const char* name);
+CvRect cvGetWindowRect_GTK(const char* name);
+CvRect cvGetWindowRect_COCOA(const char* name);
+CvRect cvGetWindowRect_WAYLAND(const char* name);
+
+double cvGetModeWindow_W32(const char* name);
+double cvGetModeWindow_GTK(const char* name);
+double cvGetModeWindow_COCOA(const char* name);
+double cvGetModeWindow_WinRT(const char* name);
+
+double cvGetPropWindowAutoSize_W32(const char* name);
+double cvGetPropWindowAutoSize_GTK(const char* name);
+
+double cvGetRatioWindow_W32(const char* name);
+double cvGetRatioWindow_GTK(const char* name);
+
+double cvGetOpenGlProp_W32(const char* name);
+double cvGetOpenGlProp_GTK(const char* name);
+
+double cvGetPropVisible_W32(const char* name);
+double cvGetPropVisible_COCOA(const char* name);
+
+double cvGetPropTopmost_W32(const char* name);
+double cvGetPropTopmost_COCOA(const char* name);
+
+void cvSetPropTopmost_W32(const char* name, const bool topmost);
+void cvSetPropTopmost_COCOA(const char* name, const bool topmost);
+
+double cvGetPropVsync_W32(const char* name);
+void cvSetPropVsync_W32(const char* name, const bool enabled);
+
+void setWindowTitle_W32(const cv::String& name, const cv::String& title);
+void setWindowTitle_GTK(const cv::String& name, const cv::String& title);
+void setWindowTitle_QT(const cv::String& name, const cv::String& title);
+void setWindowTitle_COCOA(const cv::String& name, const cv::String& title);
+void setWindowTitle_WAYLAND(const cv::String& name, const cv::String& title);
+
+int pollKey_W32();
+
+//for QT
+#if defined (HAVE_QT)
+CvRect cvGetWindowRect_QT(const char* name);
+double cvGetModeWindow_QT(const char* name);
+void cvSetModeWindow_QT(const char* name, double prop_value);
+
+double cvGetPropWindow_QT(const char* name);
+void cvSetPropWindow_QT(const char* name,double prop_value);
+
+double cvGetRatioWindow_QT(const char* name);
+void cvSetRatioWindow_QT(const char* name,double prop_value);
+
+double cvGetOpenGlProp_QT(const char* name);
+double cvGetPropVisible_QT(const char* name);
+#endif
+
+inline void convertToShow(const cv::Mat &src, cv::Mat &dst, bool toRGB = true)
+{
+    const int src_depth = src.depth();
+    CV_Assert(src_depth != CV_16F && src_depth != CV_32S);
+    cv::Mat tmp;
+    switch(src_depth)
+    {
+    case CV_8U:
+        tmp = src;
+        break;
+    case CV_8S:
+        cv::convertScaleAbs(src, tmp, 1, 127);
+        break;
+    case CV_16S:
+        cv::convertScaleAbs(src, tmp, 1/255., 127);
+        break;
+    case CV_16U:
+        cv::convertScaleAbs(src, tmp, 1/255.);
+        break;
+    case CV_32F:
+    case CV_64F: // assuming image has values in range [0, 1)
+        src.convertTo(tmp, CV_8U, 255., 0.);
+        break;
+    }
+    cv::cvtColor(tmp, dst, toRGB ? cv::COLOR_BGR2RGB : cv::COLOR_BGRA2BGR, dst.channels());
+}
+
+inline void convertToShow(const cv::Mat &src, const CvMat* arr, bool toRGB = true)
+{
+    cv::Mat dst = cv::cvarrToMat(arr);
+    convertToShow(src, dst, toRGB);
+    CV_Assert(dst.data == arr->data.ptr);
+}
+
+
+namespace cv {
+
+CV_EXPORTS Mutex& getWindowMutex();
+static inline Mutex& getInitializationMutex() { return getWindowMutex(); }
+
+}  // namespace
+
+#endif /* __HIGHGUI_H_ */
+
+
+====================File: modules/imgcodecs/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                        Intel License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000, Intel Corporation, all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of Intel Corporation may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __IMGCODECS_H_
+#define __IMGCODECS_H_
+
+#include "opencv2/imgcodecs.hpp"
+#include "opencv2/core/utility.hpp"
+#include "opencv2/core/private.hpp"
+#include "opencv2/imgproc.hpp"
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <limits.h>
+#include <ctype.h>
+
+#if defined _WIN32 || defined WINCE
+    #include <windows.h>
+    #undef small
+    #undef min
+    #undef max
+    #undef abs
+#endif
+
+#define __BEGIN__ __CV_BEGIN__
+#define __END__  __CV_END__
+#define EXIT __CV_EXIT__
+
+#endif /* __IMGCODECS_H_ */
+
+
+====================File: modules/imgproc/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                          License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include "opencv2/imgproc.hpp"
+#include "opencv2/core/utility.hpp"
+
+#include "opencv2/imgproc/imgproc_c.h"
+#include "opencv2/core/private.hpp"
+#include "opencv2/core/ocl.hpp"
+#include "opencv2/core/hal/hal.hpp"
+#include "opencv2/core/check.hpp"
+#include "opencv2/core/utils/buffer_area.private.hpp"
+#include "opencv2/imgproc/hal/hal.hpp"
+#include "hal_replacement.hpp"
+
+#include <math.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <limits.h>
+#include <float.h>
+#include <stack>
+#include <numeric>
+
+#define GET_OPTIMIZED(func) (func)
+
+/* helper tables */
+extern const uchar icvSaturate8u_cv[];
+#define CV_FAST_CAST_8U(t)  ( (-256 <= (t) && (t) <= 512) ? icvSaturate8u_cv[(t)+256] : 0 )
+#define CV_CALC_MIN_8U(a,b) (a) -= CV_FAST_CAST_8U((a) - (b))
+#define CV_CALC_MAX_8U(a,b) (a) += CV_FAST_CAST_8U((b) - (a))
+
+// -256.f ... 511.f
+extern const float icv8x32fTab_cv[];
+#define CV_8TO32F(x)  icv8x32fTab_cv[(x)+256]
+
+// (-128.f)^2 ... (255.f)^2
+extern const float icv8x32fSqrTab[];
+#define CV_8TO32F_SQR(x)  icv8x32fSqrTab[(x)+128]
+
+#define  CV_COPY( dst, src, len, idx ) \
+    for( (idx) = 0; (idx) < (len); (idx)++) (dst)[idx] = (src)[idx]
+
+#define  CV_SET( dst, val, len, idx )  \
+    for( (idx) = 0; (idx) < (len); (idx)++) (dst)[idx] = (val)
+
+#undef   CV_CALC_MIN
+#define  CV_CALC_MIN(a, b) if((a) > (b)) (a) = (b)
+
+#undef   CV_CALC_MAX
+#define  CV_CALC_MAX(a, b) if((a) < (b)) (a) = (b)
+
+#ifdef HAVE_IPP
+static inline IppiInterpolationType ippiGetInterpolation(int inter)
+{
+    inter &= cv::INTER_MAX;
+    return inter == cv::INTER_NEAREST ? ippNearest :
+        inter == cv::INTER_LINEAR ? ippLinear :
+        inter == cv::INTER_CUBIC ? ippCubic :
+        inter == cv::INTER_LANCZOS4 ? ippLanczos :
+        inter == cv::INTER_AREA ? ippSuper :
+        (IppiInterpolationType)-1;
+}
+#endif
+
+#include "_geom.h"
+#include "filterengine.hpp"
+
+#include "opencv2/core/sse_utils.hpp"
+
+inline bool isStorageOrMat(void * arr)
+{
+    if (CV_IS_STORAGE( arr ))
+        return true;
+    else if (CV_IS_MAT( arr ))
+        return false;
+    CV_Error( cv::Error::StsBadArg, "Destination is not CvMemStorage* nor CvMat*" );
+}
+
+
+namespace cv {
+
+CV_EXPORTS
+cv::Mutex& getInitializationMutex();  // defined in core module
+
+}  // namespace cv
+
+#endif /*__OPENCV_PRECOMP_H__*/
+
+
+====================File: modules/ml/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                        Intel License Agreement
+//
+// Copyright (C) 2000, Intel Corporation, all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of Intel Corporation may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_ML_PRECOMP_HPP__
+#define __OPENCV_ML_PRECOMP_HPP__
+
+#include "opencv2/core.hpp"
+#include "opencv2/ml.hpp"
+#include "opencv2/core/core_c.h"
+#include "opencv2/core/utility.hpp"
+
+#include "opencv2/core/private.hpp"
+
+#include <float.h>
+#include <limits.h>
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include <vector>
+
+/****************************************************************************************\
+ *                               Main struct definitions                                  *
+ \****************************************************************************************/
+
+/* log(2*PI) */
+#define CV_LOG2PI (1.8378770664093454835606594728112)
+
+namespace cv
+{
+namespace ml
+{
+    using std::vector;
+
+    #define CV_DTREE_CAT_DIR(idx,subset) \
+        (2*((subset[(idx)>>5]&(1 << ((idx) & 31)))==0)-1)
+
+    template<typename _Tp> struct cmp_lt_idx
+    {
+        cmp_lt_idx(const _Tp* _arr) : arr(_arr) {}
+        bool operator ()(int a, int b) const { return arr[a] < arr[b]; }
+        const _Tp* arr;
+    };
+
+    template<typename _Tp> struct cmp_lt_ptr
+    {
+        cmp_lt_ptr() {}
+        bool operator ()(const _Tp* a, const _Tp* b) const { return *a < *b; }
+    };
+
+    static inline void setRangeVector(std::vector<int>& vec, int n)
+    {
+        vec.resize(n);
+        for( int i = 0; i < n; i++ )
+            vec[i] = i;
+    }
+
+    static inline void writeTermCrit(FileStorage& fs, const TermCriteria& termCrit)
+    {
+        if( (termCrit.type & TermCriteria::EPS) != 0 )
+            fs << "epsilon" << termCrit.epsilon;
+        if( (termCrit.type & TermCriteria::COUNT) != 0 )
+            fs << "iterations" << termCrit.maxCount;
+    }
+
+    static inline TermCriteria readTermCrit(const FileNode& fn)
+    {
+        TermCriteria termCrit;
+        double epsilon = (double)fn["epsilon"];
+        if( epsilon > 0 )
+        {
+            termCrit.type |= TermCriteria::EPS;
+            termCrit.epsilon = epsilon;
+        }
+        int iters = (int)fn["iterations"];
+        if( iters > 0 )
+        {
+            termCrit.type |= TermCriteria::COUNT;
+            termCrit.maxCount = iters;
+        }
+        return termCrit;
+    }
+
+    struct TreeParams
+    {
+        TreeParams();
+        TreeParams( int maxDepth, int minSampleCount,
+                    double regressionAccuracy, bool useSurrogates,
+                    int maxCategories, int CVFolds,
+                    bool use1SERule, bool truncatePrunedTree,
+                    const Mat& priors );
+
+        inline void setMaxCategories(int val)
+        {
+            if( val < 2 )
+                CV_Error( cv::Error::StsOutOfRange, "max_categories should be >= 2" );
+            maxCategories = std::min(val, 15 );
+        }
+        inline void setMaxDepth(int val)
+        {
+            if( val < 0 )
+                CV_Error( cv::Error::StsOutOfRange, "max_depth should be >= 0" );
+            maxDepth = std::min( val, 25 );
+        }
+        inline void setMinSampleCount(int val)
+        {
+            minSampleCount = std::max(val, 1);
+        }
+        inline void setCVFolds(int val)
+        {
+            if( val < 0 )
+                CV_Error( cv::Error::StsOutOfRange,
+                          "params.CVFolds should be =0 (the tree is not pruned) "
+                          "or n>0 (tree is pruned using n-fold cross-validation)" );
+            if(val > 1)
+                CV_Error( cv::Error::StsNotImplemented,
+                          "tree pruning using cross-validation is not implemented."
+                          "Set CVFolds to 1");
+
+            if( val == 1 )
+                val = 0;
+            CVFolds = val;
+        }
+        inline void setRegressionAccuracy(float val)
+        {
+            if( val < 0 )
+                CV_Error( cv::Error::StsOutOfRange, "params.regression_accuracy should be >= 0" );
+            regressionAccuracy = val;
+        }
+
+        inline int getMaxCategories() const { return maxCategories; }
+        inline int getMaxDepth() const { return maxDepth; }
+        inline int getMinSampleCount() const { return minSampleCount; }
+        inline int getCVFolds() const { return CVFolds; }
+        inline float getRegressionAccuracy() const { return regressionAccuracy; }
+
+        inline bool getUseSurrogates() const { return useSurrogates; }
+        inline void setUseSurrogates(bool val) { useSurrogates = val; }
+        inline bool getUse1SERule() const { return use1SERule; }
+        inline void setUse1SERule(bool val) { use1SERule = val; }
+        inline bool getTruncatePrunedTree() const { return truncatePrunedTree; }
+        inline void setTruncatePrunedTree(bool val) { truncatePrunedTree = val; }
+        inline cv::Mat getPriors() const { return priors; }
+        inline void setPriors(const cv::Mat& val) { priors = val; }
+
+        public:
+        bool  useSurrogates;
+        bool  use1SERule;
+        bool  truncatePrunedTree;
+        Mat priors;
+
+    protected:
+        int   maxCategories;
+        int   maxDepth;
+        int   minSampleCount;
+        int   CVFolds;
+        float regressionAccuracy;
+    };
+
+    struct RTreeParams
+    {
+        RTreeParams();
+        RTreeParams(bool calcVarImportance, int nactiveVars, TermCriteria termCrit );
+        bool calcVarImportance;
+        int nactiveVars;
+        TermCriteria termCrit;
+    };
+
+    struct BoostTreeParams
+    {
+        BoostTreeParams();
+        BoostTreeParams(int boostType, int weakCount, double weightTrimRate);
+        int boostType;
+        int weakCount;
+        double weightTrimRate;
+    };
+
+    class DTreesImpl : public DTrees
+    {
+    public:
+        struct WNode
+        {
+            WNode()
+            {
+                class_idx = sample_count = depth = complexity = 0;
+                parent = left = right = split = defaultDir = -1;
+                Tn = INT_MAX;
+                value = maxlr = alpha = node_risk = tree_risk = tree_error = 0.;
+            }
+
+            int class_idx;
+            double Tn;
+            double value;
+
+            int parent;
+            int left;
+            int right;
+            int defaultDir;
+
+            int split;
+
+            int sample_count;
+            int depth;
+            double maxlr;
+
+            // global pruning data
+            int complexity;
+            double alpha;
+            double node_risk, tree_risk, tree_error;
+        };
+
+        struct WSplit
+        {
+            WSplit()
+            {
+                varIdx = next = 0;
+                inversed = false;
+                quality = c = 0.f;
+                subsetOfs = -1;
+            }
+
+            int varIdx;
+            bool inversed;
+            float quality;
+            int next;
+            float c;
+            int subsetOfs;
+        };
+
+        struct WorkData
+        {
+            WorkData(const Ptr<TrainData>& _data);
+
+            Ptr<TrainData> data;
+            vector<WNode> wnodes;
+            vector<WSplit> wsplits;
+            vector<int> wsubsets;
+            vector<double> cv_Tn;
+            vector<double> cv_node_risk;
+            vector<double> cv_node_error;
+            vector<int> cv_labels;
+            vector<double> sample_weights;
+            vector<int> cat_responses;
+            vector<double> ord_responses;
+            vector<int> sidx;
+            int maxSubsetSize;
+        };
+
+        inline int getMaxCategories() const CV_OVERRIDE { return params.getMaxCategories(); }
+        inline void setMaxCategories(int val) CV_OVERRIDE { params.setMaxCategories(val); }
+        inline int getMaxDepth() const CV_OVERRIDE { return params.getMaxDepth(); }
+        inline void setMaxDepth(int val) CV_OVERRIDE { params.setMaxDepth(val); }
+        inline int getMinSampleCount() const CV_OVERRIDE { return params.getMinSampleCount(); }
+        inline void setMinSampleCount(int val) CV_OVERRIDE { params.setMinSampleCount(val); }
+        inline int getCVFolds() const CV_OVERRIDE { return params.getCVFolds(); }
+        inline void setCVFolds(int val) CV_OVERRIDE { params.setCVFolds(val); }
+        inline bool getUseSurrogates() const CV_OVERRIDE { return params.getUseSurrogates(); }
+        inline void setUseSurrogates(bool val) CV_OVERRIDE { params.setUseSurrogates(val); }
+        inline bool getUse1SERule() const CV_OVERRIDE { return params.getUse1SERule(); }
+        inline void setUse1SERule(bool val) CV_OVERRIDE { params.setUse1SERule(val); }
+        inline bool getTruncatePrunedTree() const CV_OVERRIDE { return params.getTruncatePrunedTree(); }
+        inline void setTruncatePrunedTree(bool val) CV_OVERRIDE { params.setTruncatePrunedTree(val); }
+        inline float getRegressionAccuracy() const CV_OVERRIDE { return params.getRegressionAccuracy(); }
+        inline void setRegressionAccuracy(float val) CV_OVERRIDE { params.setRegressionAccuracy(val); }
+        inline cv::Mat getPriors() const CV_OVERRIDE { return params.getPriors(); }
+        inline void setPriors(const cv::Mat& val) CV_OVERRIDE { params.setPriors(val); }
+
+        DTreesImpl();
+        virtual ~DTreesImpl() CV_OVERRIDE;
+        virtual void clear() CV_OVERRIDE;
+
+        String getDefaultName() const CV_OVERRIDE { return "opencv_ml_dtree"; }
+        bool isTrained() const CV_OVERRIDE { return !roots.empty(); }
+        bool isClassifier() const CV_OVERRIDE { return _isClassifier; }
+        int getVarCount() const CV_OVERRIDE { return varType.empty() ? 0 : (int)(varType.size() - 1); }
+        int getCatCount(int vi) const { return catOfs[vi][1] - catOfs[vi][0]; }
+        int getSubsetSize(int vi) const { return (getCatCount(vi) + 31)/32; }
+
+        virtual void setDParams(const TreeParams& _params);
+        virtual void startTraining( const Ptr<TrainData>& trainData, int flags );
+        virtual void endTraining();
+        virtual void initCompVarIdx();
+        virtual bool train( const Ptr<TrainData>& trainData, int flags ) CV_OVERRIDE;
+
+        virtual int addTree( const vector<int>& sidx );
+        virtual int addNodeAndTrySplit( int parent, const vector<int>& sidx );
+        virtual const vector<int>& getActiveVars();
+        virtual int findBestSplit( const vector<int>& _sidx );
+        virtual void calcValue( int nidx, const vector<int>& _sidx );
+
+        virtual WSplit findSplitOrdClass( int vi, const vector<int>& _sidx, double initQuality );
+
+        // simple k-means, slightly modified to take into account the "weight" (L1-norm) of each vector.
+        virtual void clusterCategories( const double* vectors, int n, int m, double* csums, int k, int* labels );
+        virtual WSplit findSplitCatClass( int vi, const vector<int>& _sidx, double initQuality, int* subset );
+
+        virtual WSplit findSplitOrdReg( int vi, const vector<int>& _sidx, double initQuality );
+        virtual WSplit findSplitCatReg( int vi, const vector<int>& _sidx, double initQuality, int* subset );
+
+        virtual int calcDir( int splitidx, const vector<int>& _sidx, vector<int>& _sleft, vector<int>& _sright );
+        virtual int pruneCV( int root );
+
+        virtual double updateTreeRNC( int root, double T, int fold );
+        virtual bool cutTree( int root, double T, int fold, double min_alpha );
+        virtual float predictTrees( const Range& range, const Mat& sample, int flags ) const;
+        virtual float predict( InputArray inputs, OutputArray outputs, int flags ) const CV_OVERRIDE;
+
+        virtual void writeTrainingParams( FileStorage& fs ) const;
+        virtual void writeParams( FileStorage& fs ) const;
+        virtual void writeSplit( FileStorage& fs, int splitidx ) const;
+        virtual void writeNode( FileStorage& fs, int nidx, int depth ) const;
+        virtual void writeTree( FileStorage& fs, int root ) const;
+        virtual void write( FileStorage& fs ) const CV_OVERRIDE;
+
+        virtual void readParams( const FileNode& fn );
+        virtual int readSplit( const FileNode& fn );
+        virtual int readNode( const FileNode& fn );
+        virtual int readTree( const FileNode& fn );
+        virtual void read( const FileNode& fn ) CV_OVERRIDE;
+
+        virtual const std::vector<int>& getRoots() const CV_OVERRIDE { return roots; }
+        virtual const std::vector<Node>& getNodes() const CV_OVERRIDE { return nodes; }
+        virtual const std::vector<Split>& getSplits() const CV_OVERRIDE { return splits; }
+        virtual const std::vector<int>& getSubsets() const CV_OVERRIDE { return subsets; }
+
+        TreeParams params;
+
+        vector<int> varIdx;
+        vector<int> compVarIdx;
+        vector<uchar> varType;
+        vector<Vec2i> catOfs;
+        vector<int> catMap;
+        vector<int> roots;
+        vector<Node> nodes;
+        vector<Split> splits;
+        vector<int> subsets;
+        vector<int> classLabels;
+        vector<float> missingSubst;
+        vector<int> varMapping;
+        bool _isClassifier;
+
+        Ptr<WorkData> w;
+    };
+
+    template <typename T>
+    static inline void readVectorOrMat(const FileNode & node, std::vector<T> & v)
+    {
+        if (node.type() == FileNode::MAP)
+        {
+            Mat m;
+            node >> m;
+            m.copyTo(v);
+        }
+        else if (node.type() == FileNode::SEQ)
+        {
+            node >> v;
+        }
+    }
+
+}}
+
+#endif /* __OPENCV_ML_PRECOMP_HPP__ */
+
+
+====================File: modules/objdetect/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                          License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include "opencv2/objdetect.hpp"
+#include "opencv2/objdetect/barcode.hpp"
+#include "opencv2/imgproc.hpp"
+
+#include "opencv2/core/utility.hpp"
+#include "opencv2/core/ocl.hpp"
+#include "opencv2/core/private.hpp"
+
+#include <numeric>
+#include <array>
+#include <vector>
+
+#endif
+
+
+====================File: modules/optflow/src/precomp.hpp====================
+/*
+
+By downloading, copying, installing or using the software you agree to this
+license. If you do not agree to this license, do not download, install,
+copy or use the software.
+
+
+                          License Agreement
+               For Open Source Computer Vision Library
+                       (3-clause BSD License)
+
+Copyright (C) 2013, OpenCV Foundation, all rights reserved.
+Third party copyrights are property of their respective owners.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+  * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+  * Neither the names of the copyright holders nor the names of the contributors
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+
+This software is provided by the copyright holders and contributors "as is" and
+any express or implied warranties, including, but not limited to, the implied
+warranties of merchantability and fitness for a particular purpose are
+disclaimed. In no event shall copyright holders or contributors be liable for
+any direct, indirect, incidental, special, exemplary, or consequential damages
+(including, but not limited to, procurement of substitute goods or services;
+loss of use, data, or profits; or business interruption) however caused
+and on any theory of liability, whether in contract, strict liability,
+or tort (including negligence or otherwise) arising in any way out of
+the use of this software, even if advised of the possibility of such damage.
+
+*/
+
+#ifndef __OPENCV_OPTFLOW_PRECOMP_HPP__
+#define __OPENCV_OPTFLOW_PRECOMP_HPP__
+
+#include <opencv2/optflow.hpp>
+#include <opencv2/video.hpp>
+#include <opencv2/imgproc.hpp>
+#include "opencv2/core/utility.hpp"
+#include "opencv2/core/private.hpp"
+#include "opencv2/core/ocl.hpp"
+
+#include <algorithm>
+#include <cmath>
+
+#endif
+
+
+====================File: modules/photo/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                          License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include "opencv2/core/private.hpp"
+#include "opencv2/core/utility.hpp"
+#include "opencv2/photo.hpp"
+#include "opencv2/core/ocl.hpp"
+#include "opencv2/imgproc.hpp"
+
+#endif
+
+
+====================File: modules/stitching/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                          License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_STITCHING_PRECOMP_H__
+#define __OPENCV_STITCHING_PRECOMP_H__
+
+#include "opencv2/opencv_modules.hpp"
+
+#include <array>
+#include <vector>
+#include <algorithm>
+#include <utility>
+#include <set>
+#include <functional>
+#include <sstream>
+#include <iostream>
+#include <cmath>
+#include "opencv2/core.hpp"
+#include "opencv2/core/ocl.hpp"
+#include "opencv2/core/utility.hpp"
+#include "opencv2/stitching.hpp"
+#include "opencv2/stitching/detail/autocalib.hpp"
+#include "opencv2/stitching/detail/blenders.hpp"
+#include "opencv2/stitching/detail/timelapsers.hpp"
+#include "opencv2/stitching/detail/camera.hpp"
+#include "opencv2/stitching/detail/exposure_compensate.hpp"
+#include "opencv2/stitching/detail/matchers.hpp"
+#include "opencv2/stitching/detail/motion_estimators.hpp"
+#include "opencv2/stitching/detail/seam_finders.hpp"
+#include "opencv2/stitching/detail/util.hpp"
+#include "opencv2/stitching/detail/warpers.hpp"
+#include "opencv2/imgproc.hpp"
+#include "opencv2/features2d.hpp"
+#include "opencv2/calib3d.hpp"
+
+#ifdef HAVE_OPENCV_CUDAARITHM
+#  include "opencv2/cudaarithm.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDAWARPING
+#  include "opencv2/cudawarping.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDAFEATURES2D
+#  error #include "opencv2/cudafeatures2d.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDALEGACY
+#  include "opencv2/cudalegacy.hpp"
+#endif
+
+#include "opencv2/core/private.hpp"
+
+#include "util_log.hpp"
+
+#endif
+
+
+====================File: modules/superres/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                           License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include <vector>
+#include <limits>
+
+#include "opencv2/opencv_modules.hpp"
+#include "opencv2/core.hpp"
+#include "opencv2/core/cuda.hpp"
+#include "opencv2/core/opengl.hpp"
+#include "opencv2/core/utility.hpp"
+#include "opencv2/imgproc.hpp"
+#include "opencv2/video/tracking.hpp"
+#include "opencv2/core/private.hpp"
+
+#include "opencv2/core/private.cuda.hpp"
+#include "opencv2/core/ocl.hpp"
+
+#ifdef HAVE_OPENCV_CUDAARITHM
+#  include "opencv2/cudaarithm.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDAWARPING
+#  include "opencv2/cudawarping.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDAFILTERS
+#  include "opencv2/cudafilters.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDAIMGPROC
+#  include "opencv2/cudaimgproc.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDAOPTFLOW
+#  include "opencv2/cudaoptflow.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_CUDACODEC
+#  error #include "opencv2/cudacodec.hpp"
+#endif
+
+#ifdef HAVE_OPENCV_VIDEOIO
+    #include "opencv2/videoio.hpp"
+#endif
+
+#include "opencv2/superres.hpp"
+#include "opencv2/superres/optical_flow.hpp"
+#include "input_array_utility.hpp"
+
+#include "ring_buffer.hpp"
+
+#include "opencv2/core/private.hpp"
+
+#endif /* __OPENCV_PRECOMP_H__ */
+
+
+====================File: modules/video/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                          License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of the copyright holders may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __OPENCV_PRECOMP_H__
+#define __OPENCV_PRECOMP_H__
+
+#include "opencv2/video.hpp"
+#include "opencv2/core/utility.hpp"
+#include "opencv2/core/private.hpp"
+#include "opencv2/core/ocl.hpp"
+#include "opencv2/core.hpp"
+
+#endif
+
+
+====================File: modules/videoio/src/precomp.hpp====================
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                        Intel License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000, Intel Corporation, all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of Intel Corporation may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
+
+#ifndef __VIDEOIO_H_
+#define __VIDEOIO_H_
+
+#if defined(__OPENCV_BUILD) && defined(BUILD_PLUGIN)
+#undef __OPENCV_BUILD  // allow public API only
+#define OPENCV_HAVE_CVCONFIG_H 1  // but we still have access to cvconfig.h (TODO remove this)
+#include <opencv2/core.hpp>
+#include <opencv2/core/utils/trace.hpp>
+#endif
+
+#if defined __linux__ || defined __APPLE__ || defined __HAIKU__
+#include <unistd.h>  // -D_FORTIFY_SOURCE=2 workaround: https://github.com/opencv/opencv/issues/15020
+#endif
+
+#include "opencv2/core/cvdef.h"
+#include "opencv2/videoio.hpp"
+
+#include "opencv2/core/utility.hpp"
+#ifdef __OPENCV_BUILD
+#include "opencv2/core/private.hpp"
+#endif
+
+#include <opencv2/core/utils/configuration.private.hpp>
+#include <opencv2/core/utils/logger.defines.hpp>
+#ifdef NDEBUG
+#define CV_LOG_STRIP_LEVEL CV_LOG_LEVEL_DEBUG + 1
+#else
+#define CV_LOG_STRIP_LEVEL CV_LOG_LEVEL_VERBOSE + 1
+#endif
+#include <opencv2/core/utils/logger.hpp>
+
+#include "opencv2/imgcodecs.hpp"
+
+#include "opencv2/imgproc.hpp"
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <limits.h>
+#include <ctype.h>
+
+#if defined _WIN32 || defined WINCE
+    #if !defined _WIN32_WINNT
+        #ifdef HAVE_MSMF
+            #define _WIN32_WINNT 0x0600 // Windows Vista
+        #else
+            #define _WIN32_WINNT 0x0501 // Windows XP
+        #endif
+    #endif
+
+    #include <windows.h>
+    #undef small
+    #undef min
+    #undef max
+    #undef abs
+#endif
+
+#include "cap_interface.hpp"
+
+#endif /* __VIDEOIO_H_ */
+
+
+====================File: modules/ximgproc/src/precomp.hpp====================
+/*
+ *  By downloading, copying, installing or using the software you agree to this license.
+ *  If you do not agree to this license, do not download, install,
+ *  copy or use the software.
+ *
+ *
+ *  License Agreement
+ *  For Open Source Computer Vision Library
+ *  (3 - clause BSD License)
+ *
+ *  Redistribution and use in source and binary forms, with or without modification,
+ *  are permitted provided that the following conditions are met :
+ *
+ *  * Redistributions of source code must retain the above copyright notice,
+ *  this list of conditions and the following disclaimer.
+ *
+ *  * Redistributions in binary form must reproduce the above copyright notice,
+ *  this list of conditions and the following disclaimer in the documentation
+ *  and / or other materials provided with the distribution.
+ *
+ *  * Neither the names of the copyright holders nor the names of the contributors
+ *  may be used to endorse or promote products derived from this software
+ *  without specific prior written permission.
+ *
+ *  This software is provided by the copyright holders and contributors "as is" and
+ *  any express or implied warranties, including, but not limited to, the implied
+ *  warranties of merchantability and fitness for a particular purpose are disclaimed.
+ *  In no event shall copyright holders or contributors be liable for any direct,
+ *  indirect, incidental, special, exemplary, or consequential damages
+ *  (including, but not limited to, procurement of substitute goods or services;
+ *  loss of use, data, or profits; or business interruption) however caused
+ *  and on any theory of liability, whether in contract, strict liability,
+ *  or tort(including negligence or otherwise) arising in any way out of
+ *  the use of this software, even if advised of the possibility of such damage.
+ */
+
+#ifndef _OPENCV_XIMGPROC_PRECOMP_HPP_
+#define _OPENCV_XIMGPROC_PRECOMP_HPP_
+
+#include <opencv2/core.hpp>
+#include <opencv2/core/ocl.hpp>
+#include <opencv2/core/base.hpp>
+#include <opencv2/core/utility.hpp>
+#include <opencv2/core/private.hpp>
+#include <opencv2/imgproc.hpp>
+
+#include <opencv2/ximgproc.hpp>
+
+#include <algorithm>
+#include <map>
+
+#endif

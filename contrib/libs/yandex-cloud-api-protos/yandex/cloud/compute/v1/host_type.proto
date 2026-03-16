@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// Represents host resources.
+// Note: Platform can use hosts with different number of memory and cores.
+// TODO: Do we need sockets here?
+message HostType {
+  // Unique type identifier.
+  string id = 1;
+  // Total number of cores available for instances.
+  int64 cores = 2;
+  // Ammount of memory available for instances.
+  int64 memory = 3;
+  // Number of local disks available for instances
+  int64 disks = 4;
+  // Size of each local disk
+  int64 disk_size = 5;
+}

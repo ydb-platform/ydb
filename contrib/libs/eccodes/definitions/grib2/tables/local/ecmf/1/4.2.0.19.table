@@ -1,0 +1,4 @@
+# Code table 4.2 - discipline=0 category=19 for ECMWF
+192 192 Snow albedo (0-1)
+193 193 Forecast albedo (0-1)
+255 255 Missing

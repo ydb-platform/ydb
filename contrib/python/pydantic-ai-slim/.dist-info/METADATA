@@ -1,0 +1,134 @@
+Metadata-Version: 2.4
+Name: pydantic-ai-slim
+Version: 1.63.0
+Summary: Agent Framework / shim to use Pydantic with LLMs, slim package
+Project-URL: Homepage, https://github.com/pydantic/pydantic-ai/tree/main/pydantic_ai_slim
+Project-URL: Source, https://github.com/pydantic/pydantic-ai/tree/main/pydantic_ai_slim
+Project-URL: Documentation, https://ai.pydantic.dev/install/#slim-install
+Project-URL: Changelog, https://github.com/pydantic/pydantic-ai/releases
+Author-email: Samuel Colvin <samuel@pydantic.dev>, Marcelo Trylesinski <marcelotryle@gmail.com>, David Montague <david@pydantic.dev>, Alex Hall <alex@pydantic.dev>, Douwe Maan <douwe@pydantic.dev>
+License-Expression: MIT
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Environment :: MacOS X
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: Unix
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Internet
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.10
+Requires-Dist: exceptiongroup>=1.2.2; python_version < '3.11'
+Requires-Dist: genai-prices>=0.0.48
+Requires-Dist: griffelib>=2.0
+Requires-Dist: httpx>=0.27
+Requires-Dist: opentelemetry-api>=1.28.0
+Requires-Dist: pydantic-graph==1.63.0
+Requires-Dist: pydantic>=2.12
+Requires-Dist: typing-inspection>=0.4.0
+Provides-Extra: a2a
+Requires-Dist: fasta2a>=0.4.1; extra == 'a2a'
+Provides-Extra: ag-ui
+Requires-Dist: ag-ui-protocol>=0.1.10; extra == 'ag-ui'
+Requires-Dist: starlette>=0.45.3; extra == 'ag-ui'
+Provides-Extra: anthropic
+Requires-Dist: anthropic>=0.80.0; extra == 'anthropic'
+Provides-Extra: bedrock
+Requires-Dist: boto3>=1.42.14; extra == 'bedrock'
+Provides-Extra: cli
+Requires-Dist: argcomplete>=3.5.0; extra == 'cli'
+Requires-Dist: prompt-toolkit>=3; extra == 'cli'
+Requires-Dist: pyperclip>=1.9.0; extra == 'cli'
+Requires-Dist: rich>=13; extra == 'cli'
+Provides-Extra: cohere
+Requires-Dist: cohere>=5.20.6; (platform_system != 'Emscripten') and extra == 'cohere'
+Provides-Extra: dbos
+Requires-Dist: dbos>=2.10.0; extra == 'dbos'
+Provides-Extra: duckduckgo
+Requires-Dist: ddgs>=9.0.0; extra == 'duckduckgo'
+Provides-Extra: evals
+Requires-Dist: pydantic-evals==1.63.0; extra == 'evals'
+Provides-Extra: exa
+Requires-Dist: exa-py>=2.0.0; extra == 'exa'
+Provides-Extra: fastmcp
+Requires-Dist: fastmcp>=2.14.0; extra == 'fastmcp'
+Provides-Extra: google
+Requires-Dist: google-genai>=1.56.0; extra == 'google'
+Provides-Extra: groq
+Requires-Dist: groq>=0.25.0; extra == 'groq'
+Provides-Extra: huggingface
+Requires-Dist: huggingface-hub<2.0.0,>=1.3.4; extra == 'huggingface'
+Provides-Extra: logfire
+Requires-Dist: logfire[httpx]>=4.16.0; extra == 'logfire'
+Provides-Extra: mcp
+Requires-Dist: mcp<2.0,>=1.25.0; extra == 'mcp'
+Provides-Extra: mistral
+Requires-Dist: mistralai>=1.9.11; extra == 'mistral'
+Provides-Extra: openai
+Requires-Dist: openai>=2.11.0; extra == 'openai'
+Requires-Dist: tiktoken>=0.12.0; extra == 'openai'
+Provides-Extra: openrouter
+Requires-Dist: openai>=2.8.0; extra == 'openrouter'
+Provides-Extra: outlines-llamacpp
+Requires-Dist: outlines[llamacpp]<1.3.0,>=1.0.0; (python_version < '3.14') and extra == 'outlines-llamacpp'
+Provides-Extra: outlines-mlxlm
+Requires-Dist: outlines[mlxlm]<1.3.0,>=1.0.0; (python_version < '3.14' and platform_system == 'Darwin' and platform_machine == 'arm64') and extra == 'outlines-mlxlm'
+Provides-Extra: outlines-sglang
+Requires-Dist: outlines[sglang]<1.3.0,>=1.0.0; (python_version < '3.14') and extra == 'outlines-sglang'
+Requires-Dist: pillow>=12.1.1; (python_version < '3.14') and extra == 'outlines-sglang'
+Provides-Extra: outlines-transformers
+Requires-Dist: outlines[transformers]<1.3.0,>=1.0.0; (python_version < '3.14' and (sys_platform != 'darwin' or platform_machine != 'x86_64')) and extra == 'outlines-transformers'
+Requires-Dist: pillow>=12.1.1; (python_version < '3.14') and extra == 'outlines-transformers'
+Requires-Dist: torch>=2.8.0; (python_version < '3.14' and (sys_platform != 'darwin' or platform_machine != 'x86_64')) and extra == 'outlines-transformers'
+Requires-Dist: transformers>=4.0.0; (python_version < '3.14') and extra == 'outlines-transformers'
+Provides-Extra: outlines-vllm-offline
+Requires-Dist: outlines<1.3.0,>=1.0.0; (python_version < '3.14') and extra == 'outlines-vllm-offline'
+Requires-Dist: torch>=2.8.0; (python_version < '3.14' and (sys_platform != 'darwin' or platform_machine != 'x86_64')) and extra == 'outlines-vllm-offline'
+Requires-Dist: vllm>=0.15.0; (python_version < '3.12' and (sys_platform != 'darwin' or platform_machine != 'x86_64')) and extra == 'outlines-vllm-offline'
+Provides-Extra: prefect
+Requires-Dist: prefect>=3.4.21; extra == 'prefect'
+Provides-Extra: retries
+Requires-Dist: tenacity>=8.2.3; extra == 'retries'
+Provides-Extra: sentence-transformers
+Requires-Dist: sentence-transformers>=5.2.0; (python_version < '3.14') and extra == 'sentence-transformers'
+Provides-Extra: tavily
+Requires-Dist: tavily-python>=0.5.0; extra == 'tavily'
+Provides-Extra: temporal
+Requires-Dist: temporalio==1.20.0; extra == 'temporal'
+Provides-Extra: ui
+Requires-Dist: starlette>=0.45.3; extra == 'ui'
+Provides-Extra: vertexai
+Requires-Dist: google-auth>=2.36.0; extra == 'vertexai'
+Requires-Dist: requests>=2.32.2; extra == 'vertexai'
+Provides-Extra: voyageai
+Requires-Dist: voyageai>=0.3.7; (python_version < '3.14') and extra == 'voyageai'
+Provides-Extra: web
+Requires-Dist: httpx>=0.27.0; extra == 'web'
+Requires-Dist: starlette>=0.45.3; extra == 'web'
+Requires-Dist: uvicorn>=0.38.0; extra == 'web'
+Provides-Extra: xai
+Requires-Dist: xai-sdk>=1.5.0; extra == 'xai'
+Description-Content-Type: text/markdown
+
+# Pydantic AI Slim
+
+[![CI](https://github.com/pydantic/pydantic-ai/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/pydantic/pydantic-ai/actions/workflows/ci.yml?query=branch%3Amain)
+[![Coverage](https://coverage-badge.samuelcolvin.workers.dev/pydantic/pydantic-ai.svg)](https://coverage-badge.samuelcolvin.workers.dev/redirect/pydantic/pydantic-ai)
+[![PyPI](https://img.shields.io/pypi/v/pydantic-ai-slim.svg)](https://pypi.python.org/pypi/pydantic-ai-slim)
+[![versions](https://img.shields.io/pypi/pyversions/pydantic-ai-slim.svg)](https://github.com/pydantic/pydantic-ai)
+[![license](https://img.shields.io/github/license/pydantic/pydantic-ai.svg?v)](https://github.com/pydantic/pydantic-ai/blob/main/LICENSE)
+
+Pydantic AI core logic with minimal required dependencies.
+
+For more information on how to use this package see [ai.pydantic.dev/install](https://ai.pydantic.dev/install/).

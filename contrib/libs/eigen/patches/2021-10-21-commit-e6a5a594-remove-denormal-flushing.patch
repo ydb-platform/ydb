@@ -1,0 +1,104 @@
+diff --git a/Eigen/src/Core/arch/AVX/PacketMath.h b/Eigen/src/Core/arch/AVX/PacketMath.h
+index dd3f243d24ab3401b51aec8acca07de176c19478..7fc32fd7192a0caff2e12079187041bbebb627df 100644
+--- a/Eigen/src/Core/arch/AVX/PacketMath.h
++++ b/Eigen/src/Core/arch/AVX/PacketMath.h
+@@ -1274,12 +1274,7 @@ EIGEN_STRONG_INLINE Packet8f Bf16ToF32(const Packet8bf& a) {
+ EIGEN_STRONG_INLINE Packet8bf F32ToBf16(const Packet8f& a) {
+   Packet8bf r;
+ 
+-  // Flush input denormals value to zero with hardware capability.
+-  _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+-  __m256 flush = _mm256_and_ps(a, a);
+-  _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_OFF);
+-
+-  __m256i input = _mm256_castps_si256(flush);
++  __m256i input = _mm256_castps_si256(a);
+ 
+ #ifdef EIGEN_VECTORIZE_AVX2
+   // uint32_t lsb = (input >> 16);
+@@ -1293,7 +1288,7 @@ EIGEN_STRONG_INLINE Packet8bf F32ToBf16(const Packet8f& a) {
+   // input = input >> 16;
+   t = _mm256_srli_epi32(t, 16);
+   // Check NaN before converting back to bf16
+-  __m256 mask = _mm256_cmp_ps(flush, flush, _CMP_ORD_Q);
++  __m256 mask = _mm256_cmp_ps(a, a, _CMP_ORD_Q);
+   __m256i nan = _mm256_set1_epi32(0x7fc0);
+   t = _mm256_blendv_epi8(nan, t, _mm256_castps_si256(mask));
+   // output = numext::bit_cast<uint16_t>(input);
+@@ -1316,7 +1311,7 @@ EIGEN_STRONG_INLINE Packet8bf F32ToBf16(const Packet8f& a) {
+   lo = _mm_srli_epi32(lo, 16);
+   hi = _mm_srli_epi32(hi, 16);
+   // Check NaN before converting back to bf16
+-  __m256 mask = _mm256_cmp_ps(flush, flush, _CMP_ORD_Q);
++  __m256 mask = _mm256_cmp_ps(a, a, _CMP_ORD_Q);
+   __m128i nan = _mm_set1_epi32(0x7fc0);
+   lo = _mm_blendv_epi8(nan, lo, _mm_castps_si128(_mm256_castps256_ps128(mask)));
+   hi = _mm_blendv_epi8(nan, hi, _mm_castps_si128(_mm256_extractf128_ps(mask, 1)));
+diff --git a/Eigen/src/Core/arch/AVX512/PacketMath.h b/Eigen/src/Core/arch/AVX512/PacketMath.h
+index 59bbef0d17ba0329cddcd87bc96d300adb31ba54..34d49ab660c3670061c670ca6210ecafed39f7f1 100644
+--- a/Eigen/src/Core/arch/AVX512/PacketMath.h
++++ b/Eigen/src/Core/arch/AVX512/PacketMath.h
+@@ -1945,23 +1945,15 @@ EIGEN_STRONG_INLINE Packet16f Bf16ToF32(const Packet16bf& a) {
+ EIGEN_STRONG_INLINE Packet16bf F32ToBf16(const Packet16f& a) {
+   Packet16bf r;
+ 
+-  // Flush input denormals value to zero with hardware capability.
+-  _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+-#if defined(EIGEN_VECTORIZE_AVX512DQ)
+-  __m512 flush = _mm512_and_ps(a, a);
+-#else
+-  __m512 flush = _mm512_max_ps(a, a);
+-#endif // EIGEN_VECTORIZE_AVX512DQ
+-  _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_OFF);
+-
+ #if defined(EIGEN_VECTORIZE_AVX512BF16) && EIGEN_GNUC_AT_LEAST(10, 1)
+   // Since GCC 10.1 supports avx512bf16 and C style explicit cast
+   // (C++ static_cast is not supported yet), do converion via intrinsic
+   // and register path for performance.
+-  r = (__m256i)(_mm512_cvtneps_pbh(flush));
++  r = (__m256i)(_mm512_cvtneps_pbh(a));
++
+ #else
+   __m512i t;
+-  __m512i input = _mm512_castps_si512(flush);
++  __m512i input = _mm512_castps_si512(a);
+   __m512i nan = _mm512_set1_epi32(0x7fc0);
+ 
+   // uint32_t lsb = (input >> 16) & 1;
+@@ -1974,9 +1966,9 @@ EIGEN_STRONG_INLINE Packet16bf F32ToBf16(const Packet16f& a) {
+   t = _mm512_srli_epi32(t, 16);
+ 
+   // Check NaN before converting back to bf16
+-  __mmask16 mask = _mm512_cmp_ps_mask(flush, flush, _CMP_ORD_Q);
+-  t = _mm512_mask_blend_epi32(mask, nan, t);
++  __mmask16 mask = _mm512_cmp_ps_mask(a, a, _CMP_ORD_Q);
+ 
++  t = _mm512_mask_blend_epi32(mask, nan, t);
+   // output.value = static_cast<uint16_t>(input);
+   r = _mm512_cvtepi32_epi16(t);
+ #endif // EIGEN_VECTORIZE_AVX512BF16
+diff --git a/Eigen/src/Core/arch/Default/BFloat16.h b/Eigen/src/Core/arch/Default/BFloat16.h
+index aac60f15cc2801c1aacdc50053e38fdfc433decd..1c28f4f95e42f86265803b922a81bd89a8e8659b 100644
+--- a/Eigen/src/Core/arch/Default/BFloat16.h
++++ b/Eigen/src/Core/arch/Default/BFloat16.h
+@@ -250,10 +250,6 @@ EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC __bfloat16_raw truncate_to_bfloat16(const
+   if (Eigen::numext::isnan EIGEN_NOT_A_MACRO(v)) {
+     output.value = std::signbit(v) ? 0xFFC0: 0x7FC0;
+     return output;
+-  } else if (std::fabs(v) < std::numeric_limits<float>::min EIGEN_NOT_A_MACRO()) {
+-    // Flush denormal to +/- 0.
+-    output.value = std::signbit(v) ? 0x8000 : 0;
+-    return output;
+   }
+   const uint16_t* p = reinterpret_cast<const uint16_t*>(&v);
+ #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+@@ -288,9 +284,6 @@ EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC __bfloat16_raw float_to_bfloat16_rtne<fals
+     // qNaN magic: All exponent bits set + most significant bit of fraction
+     // set.
+     output.value = std::signbit(ff) ? 0xFFC0: 0x7FC0;
+-  } else if (std::fabs(ff) < std::numeric_limits<float>::min EIGEN_NOT_A_MACRO()) {
+-    // Flush denormal to +/- 0.0
+-    output.value = std::signbit(ff) ? 0x8000 : 0;
+   } else {
+     // Fast rounding algorithm that rounds a half value to nearest even. This
+     // reduces expected error when we convert a large number of floats. Here

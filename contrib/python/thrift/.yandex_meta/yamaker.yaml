@@ -1,0 +1,6 @@
+exclude_from_macros:
+  - src/ext/protocol.tcc
+copy:
+  - src/*
+keep:
+  - tests/keys/*

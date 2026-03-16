@@ -1,0 +1,24 @@
+Тут часть коммита https://gitlab.com/libeigen/eigen/-/commit/99adca8b34a9f980f54a38a810549411009bff6c#00256d805d079985ec624edad2a8ab8315c377d6
+
+--- a/Eigen/src/Core/MathFunctions.h
++++ b/Eigen/src/Core/MathFunctions.h
+@@ -1418,6 +1418,19 @@
+ double ceil(const double &x) { return ::ceil(x); }
+ #endif
+ 
++// Integer round down to nearest power of b
++// T is assumed to be an integer type with a>=0, and b>0
++template <typename T, typename U>
++EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE constexpr T round_down(T a, U b) {
++  using UnsignedT = typename internal::make_unsigned<T>::type;
++  using UnsignedU = typename internal::make_unsigned<U>::type;
++  EIGEN_STATIC_ASSERT((NumTraits<T>::IsInteger), THIS FUNCTION IS FOR INTEGER TYPES)
++  EIGEN_STATIC_ASSERT((NumTraits<U>::IsInteger), THIS FUNCTION IS FOR INTEGER TYPES)
++  // Note: explicitly declaring a and b as non-negative values allows the compiler to use better optimizations
++  const UnsignedT ua = UnsignedT(a);
++  const UnsignedU ub = UnsignedU(b);
++  return ub * (ua / ub);
++}
+ 
+ /** Log base 2 for 32 bits positive integers.
+   * Conveniently returns 0 for x==0. */

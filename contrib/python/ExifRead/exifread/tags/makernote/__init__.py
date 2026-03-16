@@ -1,0 +1,3 @@
+"""
+Makernote tag definitions.
+"""

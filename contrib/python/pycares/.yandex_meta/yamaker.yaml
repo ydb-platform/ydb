@@ -1,0 +1,6 @@
+requirements:
+  - contrib/libs/c-ares
+copy:
+  - _cffi_src/*
+exclude_from_macros:
+  - _cffi_src/build_cares.py

@@ -1,0 +1,90 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.api.testservice.v1;
+
+option go_package = "go.temporal.io/api/testservice/v1;testservice";
+option java_package = "io.temporal.api.testservice.v1";
+option java_multiple_files = true;
+option java_outer_classname = "ServiceProto";
+option ruby_package = "Temporalio::Api::TestService::V1";
+option csharp_namespace = "Temporalio.Api.TestService.V1";
+
+import "temporal/api/testservice/v1/request_response.proto";
+import "google/protobuf/empty.proto";
+
+// TestService API defines an interface supported only by the Temporal Test Server.
+// It provides functionality needed or supported for testing purposes only.
+//
+// This is an EXPERIMENTAL API.
+service TestService {
+    // LockTimeSkipping increments Time Locking Counter by one.
+    //
+    // If Time Locking Counter is positive, time skipping is locked (disabled).
+    // When time skipping is disabled, the time in test server is moving normally, with a real time pace.
+    // Test Server is typically started with locked time skipping and Time Locking Counter = 1.
+    //
+    // LockTimeSkipping and UnlockTimeSkipping calls are counted.
+    rpc LockTimeSkipping (LockTimeSkippingRequest) returns (LockTimeSkippingResponse) {
+    }
+
+    // UnlockTimeSkipping decrements Time Locking Counter by one.
+    //
+    // If the counter reaches 0, it unlocks time skipping and fast forwards time.
+    // LockTimeSkipping and UnlockTimeSkipping calls are counted. Calling UnlockTimeSkipping does not
+    // guarantee that time is going to be fast forwarded as another lock can be holding it.
+    //
+    // Time Locking Counter can't be negative, unbalanced calls to UnlockTimeSkipping will lead to rpc call failure
+    rpc UnlockTimeSkipping (UnlockTimeSkippingRequest) returns (UnlockTimeSkippingResponse) {
+    }
+
+    // This call returns only when the Test Server Time advances by the specified duration.
+    // This is an EXPERIMENTAL API.
+    rpc Sleep (SleepRequest) returns (SleepResponse) {
+    }
+
+    // This call returns only when the Test Server Time advances to the specified timestamp.
+    // If the current Test Server Time is beyond the specified timestamp, returns immediately.
+    // This is an EXPERIMENTAL API.
+    rpc SleepUntil (SleepUntilRequest) returns (SleepResponse) {
+    }
+
+    // UnlockTimeSkippingWhileSleep decreases time locking counter by one and increases it back
+    // once the Test Server Time advances by the duration specified in the request.
+    //
+    // This call returns only when the Test Server Time advances by the specified duration.
+    //
+    // If it is called when Time Locking Counter is
+    //   - more than 1 and no other unlocks are coming in, rpc call will block for the specified duration, time will not be fast forwarded.
+    //   - 1, it will lead to fast forwarding of the time by the duration specified in the request and quick return of this rpc call.
+    //   - 0 will lead to rpc call failure same way as an unbalanced UnlockTimeSkipping.
+    rpc UnlockTimeSkippingWithSleep (SleepRequest) returns (SleepResponse) {
+    }
+
+    // GetCurrentTime returns the current Temporal Test Server time
+    //
+    // This time might not be equal to {@link System#currentTimeMillis()} due to time skipping.
+    rpc GetCurrentTime (google.protobuf.Empty) returns (GetCurrentTimeResponse) {
+    }
+}

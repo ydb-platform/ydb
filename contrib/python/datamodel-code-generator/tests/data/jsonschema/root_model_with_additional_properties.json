@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "test.json",
+  "description": "test",
+  "type": "object",
+  "required": [
+    "test_id",
+    "test_ip",
+    "result",
+    "nested_object_result",
+    "nested_enum_result"
+  ],
+  "properties": {
+    "test_id": {
+      "type": "string",
+      "description": "test ID"
+    },
+    "test_ip": {
+      "type": "string",
+      "description": "test IP"
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "nested_object_result": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "status":{
+            "type": "integer"
+          }
+        },
+        "required": ["status"]
+      }
+    },
+    "nested_enum_result": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": ["red", "green"]
+      }
+    },
+    "all_of_result" :{
+      "type" : "object",
+      "additionalProperties" :
+      {
+        "allOf" : [
+          { "$ref" : "#/definitions/User" },
+          { "type" : "object",
+            "properties": {
+              "description": {"type" : "string" }
+            }
+          }
+        ]
+      }
+    },
+    "one_of_result" :{
+      "type" : "object",
+      "additionalProperties" :
+      {
+        "oneOf" : [
+          { "$ref" : "#/definitions/User" },
+          { "type" : "object",
+            "properties": {
+              "description": {"type" : "string" }
+            }
+          }
+        ]
+      }
+    },
+    "any_of_result" :{
+      "type" : "object",
+      "additionalProperties" :
+      {
+        "anyOf" : [
+          { "$ref" : "#/definitions/User" },
+          { "type" : "object",
+            "properties": {
+              "description": {"type" : "string" }
+            }
+          }
+        ]
+      }
+    },
+    "all_of_with_unknown_object" :{
+      "type" : "object",
+      "additionalProperties" :
+      {
+        "allOf" : [
+          { "$ref" : "#/definitions/User" },
+          { "description": "TODO" }
+        ]
+      }
+    },
+    "objectRef": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/User"
+      }
+    },
+    "deepNestedObjectRef": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": {
+             "$ref": "#/definitions/User"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "User": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

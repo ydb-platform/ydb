@@ -1,0 +1,95 @@
+--- contrib/python/django/django-2.2/django/utils/translation/trans_real.py	(index)
++++ contrib/python/django/django-2.2/django/utils/translation/trans_real.py	(working tree)
+@@ -18,6 +18,8 @@ from django.utils.safestring import SafeData, mark_safe
+ 
+ from . import LANGUAGE_SESSION_KEY, to_language, to_locale
+ 
++from library.python.resource import resfs_files
++
+ # Translations are cached in a dictionary for every language.
+ # The active translations are stored by threadid to make them thread local.
+ _translations = {}
+@@ -114,6 +116,21 @@ class TranslationCatalog:
+         raise KeyError
+ 
+ 
++def get_app_module_locale_path(app_module):
++    """Yandex-specific: resfs locale path"""
++    try:
++        getfilename = app_module.__loader__.get_filename
++    except AttributeError:
++        return
++    module_file = getfilename(app_module.__name__)
++    path = os.path.join(os.path.dirname(module_file), 'locale')
++
++    if not resfs_files(path):
++        path = os.path.join(app_module.__name__.replace('.', '/'), 'locale')
++
++    return path
++
++
+ class DjangoTranslation(gettext_module.GNUTranslations):
+     """
+     Set up the GNUTranslations context with regard to output charset.
+@@ -182,8 +199,10 @@ class DjangoTranslation(gettext_module.GNUTranslations):
+ 
+     def _init_translation_catalog(self):
+         """Create a base catalog using global django translations."""
+-        settingsfile = sys.modules[settings.__module__].__file__
+-        localedir = os.path.join(os.path.dirname(settingsfile), 'locale')
++        # Yandex-specific: resfs locale path
++        settingsfile_module = sys.modules[settings.__module__]
++        localedir = get_app_module_locale_path(settingsfile_module)
++        # End of Yandex-specific
+         translation = self._new_gnu_trans(localedir)
+         self.merge(translation)
+ 
+@@ -197,10 +216,14 @@ class DjangoTranslation(gettext_module.GNUTranslations):
+                 "apps registry is ready. Check that you don't make non-lazy "
+                 "gettext calls at import time.")
+         for app_config in app_configs:
+-            localedir = os.path.join(app_config.path, 'locale')
+-            if os.path.exists(localedir):
+-                translation = self._new_gnu_trans(localedir)
+-                self.merge(translation)
++            # Yandex-specific: resfs locale path
++            localedir = get_app_module_locale_path(app_config.module)
++            if not localedir:
++                continue
++            # End of Yandex-specific
++
++            translation = self._new_gnu_trans(localedir)
++            self.merge(translation)
+ 
+     def _add_local_translations(self):
+         """Merge translations defined in LOCALE_PATHS."""
+--- contrib/python/django/django-2.2/django/views/i18n.py	(index)
++++ contrib/python/django/django-2.2/django/views/i18n.py	(working tree)
+@@ -14,7 +14,7 @@ from django.utils.http import is_safe_url
+ from django.utils.translation import (
+     LANGUAGE_SESSION_KEY, check_for_language, get_language,
+ )
+-from django.utils.translation.trans_real import DjangoTranslation
++from django.utils.translation.trans_real import DjangoTranslation, get_app_module_locale_path
+ from django.views.generic import View
+ 
+ LANGUAGE_QUERY_PARAMETER = 'language'
+@@ -211,7 +211,17 @@ class JavaScriptCatalog(View):
+                 'Invalid package(s) provided to JavaScriptCatalog: %s' % ','.join(excluded)
+             )
+         # paths of requested packages
+-        return [os.path.join(app.path, 'locale') for app in app_configs]
++
++        # Yandex-specific: resfs locale path
++        paths = []
++        for app_config in app_configs:
++            path = get_app_module_locale_path(app_config.module)
++            if not path:
++                continue
++
++            paths.append(path)
++
++        return paths
+ 
+     @property
+     def _num_plurals(self):

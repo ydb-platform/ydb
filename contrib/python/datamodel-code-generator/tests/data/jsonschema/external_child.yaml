@@ -1,0 +1,7 @@
+Yaml:
+  type: "object"
+  properties:
+    firstName:
+      type: "string"
+
+

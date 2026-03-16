@@ -1,0 +1,19 @@
+--- contrib/python/django/django-4/django/core/management/color.py	(576a7444d36f4e80219abc07084358341dd31b59)
++++ contrib/python/django/django-4/django/core/management/color.py	(8f81c1a06c6aae5d6367ebe818d53b552b59a43f)
+@@ -11,11 +11,13 @@
+ try:
+     import colorama
+
+-    colorama.init()
++    if sys.platform == 'win32':
++        colorama.init()
++        HAS_COLORAMA = True
++    else:
++        HAS_COLORAMA = False
+ except (ImportError, OSError):
+     HAS_COLORAMA = False
+-else:
+-    HAS_COLORAMA = True
+
+
+ def supports_color():

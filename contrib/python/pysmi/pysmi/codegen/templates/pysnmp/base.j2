@@ -1,0 +1,24 @@
+{% block init scoped %}
+{% endblock %}
+{% block docstring scoped %}
+# SNMP MIB module ({{ mib['meta']['module'] }}) expressed in pysnmp data model.
+#
+# This Python module is designed to be imported and executed by the
+# pysnmp library.
+#
+# See https://www.pysnmp.com/pysnmp for further information.
+#
+# Notes
+# -----
+{% for comment in mib['meta']['comments'] -%}
+# {{ comment }}
+{% endfor -%}
+{% endblock %}
+{% block api_version_check scoped %}
+
+if 'mibBuilder' not in globals():
+    import sys
+
+    sys.stderr.write(__doc__)
+    sys.exit(1)
+{% endblock %}

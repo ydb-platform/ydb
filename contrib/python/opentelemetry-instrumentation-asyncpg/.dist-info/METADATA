@@ -1,0 +1,51 @@
+Metadata-Version: 2.4
+Name: opentelemetry-instrumentation-asyncpg
+Version: 0.60b1
+Summary: OpenTelemetry instrumentation for AsyncPG
+Project-URL: Homepage, https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-asyncpg
+Project-URL: Repository, https://github.com/open-telemetry/opentelemetry-python-contrib
+Author-email: OpenTelemetry Authors <cncf-opentelemetry-contributors@lists.cncf.io>
+License-Expression: Apache-2.0
+License-File: LICENSE
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.9
+Requires-Dist: opentelemetry-api~=1.12
+Requires-Dist: opentelemetry-instrumentation==0.60b1
+Requires-Dist: opentelemetry-semantic-conventions==0.60b1
+Provides-Extra: instruments
+Requires-Dist: asyncpg>=0.12.0; extra == 'instruments'
+Description-Content-Type: text/x-rst
+
+OpenTelemetry asyncpg Instrumentation
+=====================================
+
+|pypi|
+
+.. |pypi| image:: https://badge.fury.io/py/opentelemetry-instrumentation-asyncpg.svg
+   :target: https://pypi.org/project/opentelemetry-instrumentation-asyncpg/
+
+This library allows tracing PostgreSQL queries made by the
+`asyncpg <https://magicstack.github.io/asyncpg/current/>`_ library.
+
+Installation
+------------
+
+::
+
+     pip install opentelemetry-instrumentation-asyncpg
+
+References
+----------
+
+* `OpenTelemetry asyncpg Instrumentation <https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/asyncpg/asyncpg.html>`_
+* `OpenTelemetry Project <https://opentelemetry.io/>`_
+* `OpenTelemetry Python Examples <https://github.com/open-telemetry/opentelemetry-python/tree/main/docs/examples>`_

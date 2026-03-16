@@ -1,0 +1,37 @@
+{
+  "openapi": "3.0.2",
+  "components": {
+    "schemas": {
+      "ProcessingStatus": {
+        "title": "ProcessingStatus",
+        "enum": [
+          "COMPLETED",
+          "PENDING",
+          "FAILED"
+        ],
+        "type": "string",
+        "description": "The processing status"
+      },
+      "ProcessingTask": {
+        "title": "ProcessingTask",
+        "type": "object",
+        "properties": {
+          "processing_status": {
+            "title": "Status of the task",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProcessingStatus"
+              }
+            ],
+            "default": "COMPLETED"
+          }
+        }
+      },
+    }
+  },
+  "info": {
+    "title": "",
+    "version": ""
+  },
+  "paths": {}
+}

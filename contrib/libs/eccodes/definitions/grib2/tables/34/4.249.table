@@ -1,0 +1,7 @@
+# Code table 4.249 - Character of precipitation
+0 0 None
+1 1 Showers
+2 2 Intermittent
+3 3 Continuous
+# 4-254 Reserved
+255 255 Missing

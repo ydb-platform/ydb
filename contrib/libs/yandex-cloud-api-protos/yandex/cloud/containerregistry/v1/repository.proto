@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package yandex.cloud.containerregistry.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/containerregistry/v1;containerregistry";
+option java_package = "yandex.cloud.api.containerregistry.v1";
+
+// A Repository resource. For more information, see [Repository](/docs/container-registry/concepts/repository).
+message Repository {
+  // Name of the repository.
+  // The name is unique within the registry.
+  string name = 1;
+  // Output only. ID of the repository.
+  string id = 2;
+}

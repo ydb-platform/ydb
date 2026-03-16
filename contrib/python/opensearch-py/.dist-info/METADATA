@@ -1,0 +1,138 @@
+Metadata-Version: 2.4
+Name: opensearch-py
+Version: 3.1.0
+Summary: Python client for OpenSearch
+Home-page: https://github.com/opensearch-project/opensearch-py
+Author: Aleksei Atavin, Denis Zalevskiy, Rushi Agrawal, Shephali Mittal
+Author-email: axeo@aiven.io, dez@aiven.io, rushi.agr@gmail.com, shephalm@amazon.com
+Maintainer: Aleksei Atavin, Denis Zalevskiy, Rushi Agrawal, Shephali Mittal
+Maintainer-email: axeo@aiven.io, dez@aiven.io, rushi.agr@gmail.com, shephalm@amazon.com
+License: Apache-2.0
+Project-URL: Documentation, https://opensearch.org/docs/clients/python
+Project-URL: Source Code, https://github.com/opensearch-project/opensearch-py
+Project-URL: Issue Tracker, https://github.com/opensearch-project/opensearch-py/issues
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Requires-Python: >=3.10, <4
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+License-File: NOTICE.txt
+License-File: AUTHORS
+Requires-Dist: urllib3<1.27,>=1.26.19; python_version < "3.10"
+Requires-Dist: urllib3!=2.2.0,!=2.2.1,<3,>=1.26.19; python_version >= "3.10"
+Requires-Dist: requests<3.0.0,>=2.32.0
+Requires-Dist: python-dateutil
+Requires-Dist: certifi>=2024.07.04
+Requires-Dist: Events
+Requires-Dist: opensearch-protobufs==0.19.0
+Provides-Extra: develop
+Requires-Dist: requests<3.0.0,>=2.0.0; extra == "develop"
+Requires-Dist: coverage<8.0.0; extra == "develop"
+Requires-Dist: pyyaml; extra == "develop"
+Requires-Dist: pytest>=3.0.0; extra == "develop"
+Requires-Dist: pytest-cov; extra == "develop"
+Requires-Dist: pytz; extra == "develop"
+Requires-Dist: botocore; extra == "develop"
+Requires-Dist: pytest-mock<4.0.0; extra == "develop"
+Requires-Dist: sphinx; extra == "develop"
+Requires-Dist: sphinx_rtd_theme; extra == "develop"
+Requires-Dist: myst_parser; extra == "develop"
+Requires-Dist: sphinx_copybutton; extra == "develop"
+Requires-Dist: black>=24.3.0; extra == "develop"
+Requires-Dist: jinja2; extra == "develop"
+Provides-Extra: docs
+Requires-Dist: sphinx; extra == "docs"
+Requires-Dist: sphinx_rtd_theme; extra == "docs"
+Requires-Dist: myst_parser; extra == "docs"
+Requires-Dist: sphinx_copybutton; extra == "docs"
+Requires-Dist: aiohttp<4,>=3.12.14; extra == "docs"
+Provides-Extra: async
+Requires-Dist: aiohttp<4,>=3.12.14; extra == "async"
+Provides-Extra: kerberos
+Requires-Dist: requests_kerberos; extra == "kerberos"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: maintainer-email
+Dynamic: project-url
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+[![Release](https://github.com/opensearch-project/opensearch-py/actions/workflows/unified-release.yml/badge.svg)](https://github.com/opensearch-project/opensearch-py/actions/workflows/unified-release.yml)
+[![CI](https://github.com/opensearch-project/opensearch-py/actions/workflows/ci.yml/badge.svg)](https://github.com/opensearch-project/opensearch-py/actions/workflows/ci.yml)
+[![Integration](https://github.com/opensearch-project/opensearch-py/actions/workflows/integration.yml/badge.svg)](https://github.com/opensearch-project/opensearch-py/actions/workflows/integration.yml)
+[![Chat](https://img.shields.io/badge/chat-on%20forums-blue)](https://discuss.opendistrocommunity.dev/c/clients/)
+![PRs welcome!](https://img.shields.io/badge/PRs-welcome!-success)
+
+![OpenSearch logo](https://github.com/opensearch-project/opensearch-py/raw/main/OpenSearch.svg)
+
+OpenSearch Python Client
+
+- [Welcome!](https://github.com/opensearch-project/opensearch-py#welcome)
+- [User Guide](https://github.com/opensearch-project/opensearch-py#user-guide)
+- [API Doc](https://opensearch-project.github.io/opensearch-py/)
+- [Compatibility with OpenSearch](https://github.com/opensearch-project/opensearch-py#compatibility-with-opensearch)
+- [Project Resources](https://github.com/opensearch-project/opensearch-py#project-resources)
+- [Code of Conduct](https://github.com/opensearch-project/opensearch-py#code-of-conduct)
+- [License](https://github.com/opensearch-project/opensearch-py#license)
+- [Copyright](https://github.com/opensearch-project/opensearch-py#copyright)
+
+# Welcome!
+
+**opensearch-py** is [a community-driven, open source fork](https://aws.amazon.com/blogs/opensource/introducing-opensearch/)
+of elasticsearch-py licensed under the [Apache v2.0 License](https://github.com/opensearch-project/opensearch-py/blob/main/LICENSE.txt). 
+For more information, see [opensearch.org](https://opensearch.org/) and the [API Doc](https://opensearch-project.github.io/opensearch-py/).
+
+## User Guide
+
+To get started with the OpenSearch Python Client, see [User Guide](https://github.com/opensearch-project/opensearch-py/blob/main/USER_GUIDE.md). This repository also contains [working samples](https://github.com/opensearch-project/opensearch-py/tree/main/samples) and [benchmarks](https://github.com/opensearch-project/opensearch-py/tree/main/benchmarks).
+
+## Compatibility with OpenSearch
+
+See [Compatibility](https://github.com/opensearch-project/opensearch-py/blob/main/COMPATIBILITY.md).
+
+## Project Resources
+
+* [Project Website](https://opensearch.org/)
+* [Downloads](https://opensearch.org/downloads.html)
+* [Documentation](https://opensearch.org/docs/latest/clients/python/)
+* Need help? Try [Forums](https://discuss.opendistrocommunity.dev/)
+* [Project Principles](https://opensearch.org/#principles)
+* [Contributing to OpenSearch](https://github.com/opensearch-project/opensearch-py/blob/main/CONTRIBUTING.md)
+* [Maintainer Responsibilities](https://github.com/opensearch-project/opensearch-py/blob/main/MAINTAINERS.md)
+* [Release Management](https://github.com/opensearch-project/opensearch-py/blob/main/RELEASING.md)
+* [Admin Responsibilities](https://github.com/opensearch-project/opensearch-py/blob/main/ADMINS.md)
+* [Security](https://github.com/opensearch-project/opensearch-py/blob/main/SECURITY.md)
+
+## Code of Conduct
+
+This project has adopted the 
+[Amazon Open Source Code of Conduct](https://github.com/opensearch-project/opensearch-py/blob/main/CODE_OF_CONDUCT.md).
+For more information see the [Code of Conduct FAQ](https://aws.github.io/code-of-conduct-faq), or contact 
+[opensource-codeofconduct@amazon.com](mailto:opensource-codeofconduct@amazon.com) with any additional questions or comments.
+
+## License
+
+This project is licensed under the
+[Apache v2.0 License](https://github.com/opensearch-project/opensearch-py/blob/main/LICENSE.txt).
+
+## Copyright
+
+Copyright OpenSearch Contributors. See 
+[NOTICE](https://github.com/opensearch-project/opensearch-py/blob/main/NOTICE.txt) for details.

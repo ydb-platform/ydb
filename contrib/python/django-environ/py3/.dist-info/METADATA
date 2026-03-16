@@ -1,0 +1,352 @@
+Metadata-Version: 2.4
+Name: django-environ
+Version: 0.13.0
+Summary: A package that allows you to utilize 12factor inspired environment variables to configure your Django application.
+Home-page: https://django-environ.readthedocs.org
+Author: Daniele Faraglia
+Author-email: daniele.faraglia@gmail.com
+Maintainer: Daniele Faraglia
+Maintainer-email: daniele.faraglia@gmail.com
+License: MIT
+Project-URL: Documentation, https://django-environ.readthedocs.org
+Project-URL: Funding, https://opencollective.com/django-environ
+Project-URL: Say Thanks!, https://saythanks.io/to/joke2k
+Project-URL: Changelog, https://django-environ.readthedocs.org/en/latest/changelog.html
+Project-URL: Bug Tracker, https://github.com/joke2k/django-environ/issues
+Project-URL: Source Code, https://github.com/joke2k/django-environ
+Keywords: environment,django,variables,12factor
+Platform: any
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 2.2
+Classifier: Framework :: Django :: 3.0
+Classifier: Framework :: Django :: 3.1
+Classifier: Framework :: Django :: 3.2
+Classifier: Framework :: Django :: 4.0
+Classifier: Framework :: Django :: 4.1
+Classifier: Framework :: Django :: 4.2
+Classifier: Framework :: Django :: 5.0
+Classifier: Framework :: Django :: 5.1
+Classifier: Framework :: Django :: 5.2
+Classifier: Framework :: Django :: 6.0
+Classifier: Operating System :: OS Independent
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Utilities
+Requires-Python: >=3.9,<4
+Description-Content-Type: text/x-rst
+License-File: LICENSE.txt
+License-File: AUTHORS.rst
+Provides-Extra: testing
+Requires-Dist: coverage[toml]>=5.0a4; extra == "testing"
+Requires-Dist: pytest>=4.6.11; extra == "testing"
+Requires-Dist: setuptools>=71.0.0; extra == "testing"
+Provides-Extra: docs
+Requires-Dist: furo>=2024.8.6; extra == "docs"
+Requires-Dist: sphinx>=5.0; extra == "docs"
+Requires-Dist: sphinx-copybutton; extra == "docs"
+Requires-Dist: sphinx-notfound-page; extra == "docs"
+Provides-Extra: develop
+Requires-Dist: coverage[toml]>=5.0a4; extra == "develop"
+Requires-Dist: pytest>=4.6.11; extra == "develop"
+Requires-Dist: setuptools>=71.0.0; extra == "develop"
+Requires-Dist: furo>=2024.8.6; extra == "develop"
+Requires-Dist: sphinx>=5.0; extra == "develop"
+Requires-Dist: sphinx-copybutton; extra == "develop"
+Requires-Dist: sphinx-notfound-page; extra == "develop"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: maintainer-email
+Dynamic: platform
+Dynamic: project-url
+Dynamic: provides-extra
+Dynamic: requires-python
+Dynamic: summary
+
+==============
+django-environ
+==============
+
+
+``django-environ`` is the Python package that allows you to use
+`Twelve-factor methodology <https://www.12factor.net/>`_ to configure your
+Django application with environment variables.
+
+.. -teaser-end-
+
+For that, it gives you an easy way to configure Django application using
+environment variables obtained from an environment file and provided by the OS:
+
+.. -code-begin-
+
+.. code-block:: python
+
+   import environ
+   import os
+
+   env = environ.Env(
+       # set casting, default value
+       DEBUG=(bool, False)
+   )
+
+   # Set the project base directory
+   BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+   # Take environment variables from .env file
+   environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
+   # False if not in os.environ because of casting above
+   DEBUG = env('DEBUG')
+
+   # Raises Django's ImproperlyConfigured
+   # exception if SECRET_KEY not in os.environ
+   SECRET_KEY = env('SECRET_KEY')
+
+   # Parse database connection url strings
+   # like psql://user:pass@127.0.0.1:8458/db
+   DATABASES = {
+       # read os.environ['DATABASE_URL'] and raises
+       # ImproperlyConfigured exception if not found
+       #
+       # The db() method is an alias for db_url().
+       'default': env.db(),
+
+       # read os.environ['SQLITE_URL']
+       'extra': env.db_url(
+           'SQLITE_URL',
+           default='sqlite:////tmp/my-tmp-sqlite.db'
+       )
+   }
+
+   CACHES = {
+       # Read os.environ['CACHE_URL'] and raises
+       # ImproperlyConfigured exception if not found.
+       #
+       # The cache() method is an alias for cache_url().
+       'default': env.cache(),
+
+       # read os.environ['REDIS_URL']
+       'redis': env.cache_url('REDIS_URL')
+   }
+
+.. -overview-
+
+The idea of this package is to unify a lot of packages that make the same stuff:
+Take a string from ``os.environ``, parse and cast it to some of useful python
+typed variables. To do that and to use the `12factor <https://www.12factor.net/>`_
+approach, some connection strings are expressed as url, so this package can parse
+it and return a ``urllib.parse.ParseResult``. These strings from ``os.environ``
+are loaded from a ``.env`` file and filled in ``os.environ`` with ``setdefault``
+method, to avoid to overwrite the real environ.
+A similar approach is used in
+`Two Scoops of Django <https://www.feldroy.com/two-scoops-of-django>`_
+book and explained in `12factor-django <https://dev.to/ale_jacques/django-drf-12-factor-app-with-examples-36jg>`_
+article.
+
+
+Using ``django-environ`` you can stop to make a lot of unversioned
+``settings_*.py`` to configure your app.
+See `cookiecutter-django <https://github.com/cookiecutter/cookiecutter-django>`_
+for a concrete example on using with a django project.
+
+**Feature Support**
+
+- Fast and easy multi environment for deploy
+- Fill ``os.environ`` with .env file variables
+- Variables casting
+- Url variables exploded to django specific package settings
+- Optional support for Docker-style file based config variables (use
+  ``environ.FileAwareEnv`` instead of ``environ.Env``)
+
+.. -project-information-
+
+Project Information
+===================
+
+``django-environ`` is released under the `MIT / X11 License <https://choosealicense.com/licenses/mit/>`__,
+its documentation lives at `Read the Docs <https://django-environ.readthedocs.io/en/latest/>`_,
+the code on `GitHub <https://github.com/joke2k/django-environ>`_,
+and the latest release on `PyPI <https://pypi.org/project/django-environ/>`_.
+
+It’s rigorously tested on Python 3.9+, and officially supports
+Django 2.2, 3.0, 3.1, 3.2, 4.0, 4.1, 4.2, 5.0, 5.1, 5.2, and 6.0.
+
+If you'd like to contribute to ``django-environ`` you're most welcome!
+
+.. -support-
+
+Support
+=======
+
+Should you have any question, any remark, or if you find a bug, or if there is
+something you can't do with the ``django-environ``, please
+`open an issue <https://github.com/joke2k/django-environ>`_.
+
+
+Contributing
+============
+
+If you would like to contribute to ``django-environ``, please take a look at the
+`current issues <https://github.com/joke2k/django-environ/issues>`_.  If there is
+a bug or feature that you want but it isn't listed, make an issue and work on it.
+
+Bug reports
+-----------
+
+*Before raising an issue, please ensure that you are using the latest version
+of django-environ.*
+
+Please provide the following information with your issue to enable us to
+respond as quickly as possible.
+
+* The relevant versions of the packages you are using.
+* The steps to recreate your issue.
+* The full stacktrace if there is an exception.
+* An executable code example where possible
+
+Guidelines for bug reports:
+
+* **Use the GitHub issue search** — check if the issue has already been
+  reported.
+* **Check if the issue has been fixed** — try to reproduce it using the latest
+  ``main`` or ``develop`` branch in the repository.
+* Isolate the problem — create a reduced test case and a live example.
+
+A good bug report shouldn't leave others needing to chase you up for more
+information. Please try to be as detailed as possible in your report. What is
+your environment? What steps will reproduce the issue? What OS experience the
+problem? What would you expect to be the outcome? All these details will help
+people to fix any potential bugs.
+
+Feature requests
+----------------
+
+Feature requests are welcome. But take a moment to find out whether your idea
+fits with the scope and aims of the project. It's up to *you* to make a strong
+case to convince the project's developers of the merits of this feature. Please
+provide as much detail and context as possible.
+
+Pull requests
+-------------
+
+Good pull requests - patches, improvements, new features - are a fantastic
+help. They should remain focused in scope and avoid containing unrelated
+commits.
+
+Follow this process if you'd like your work considered for inclusion in the
+project:
+
+1. Check for open issues or open a fresh issue to start a discussion around a
+   feature idea or a bug.
+2. Fork `the repository <https://github.com/joke2k/django-environ>`_
+   on GitHub to start making your changes to the ``develop`` branch
+   (or branch off of it).
+3. Write a test which shows that the bug was fixed or that the feature works as
+   expected.
+4. Send a pull request and bug the maintainer until it gets merged and published.
+
+If you are intending to implement a fairly large feature we'd appreciate if you
+open an issue with GitHub detailing your use case and intended solution to
+discuss how it might impact other work that is in flight.
+
+We also appreciate it if you take the time to update and write tests for any
+changes you submit.
+
+**By submitting a patch, you agree to allow the project owner to license your
+work under the same license as that used by the project.**
+
+Resources
+---------
+
+* `How to Contribute to Open Source <https://opensource.guide/how-to-contribute/>`_
+* `Using Pull Requests <https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests>`_
+* `Writing good commit messages <https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html>`_
+
+
+Release Information
+===================
+
+v0.13.0 - 18-February-2026
+-----------------------------
+Added
++++++
+- Added optional warnings when defaults are used
+  `#582 <https://github.com/joke2k/django-environ/pull/582>`_.
+- Added `choices` argument support for value validation in ``Env.str(...)``
+  `#555 <https://github.com/joke2k/django-environ/pull/555>`_.
+- Added Valkey support via ``valkey://`` and ``valkeys://`` cache URL schemes
+  `#554 <https://github.com/joke2k/django-environ/pull/554>`_.
+- Added support for ``rediss://`` scheme in channels URL parsing
+  `#573 <https://github.com/joke2k/django-environ/pull/573>`_.
+- Added django-prometheus database backend aliases to DB URL parsing schemes
+  `#559 <https://github.com/joke2k/django-environ/pull/559>`_.
+
+Changed
++++++++
+- Declared support for Python 3.14
+  `#580 <https://github.com/joke2k/django-environ/pull/580>`_.
+- Declared support for Django 5.2 and Django 6.0
+  `#578 <https://github.com/joke2k/django-environ/pull/578>`_.
+
+Fixed
++++++
+- Improved type hint coverage and related lint issues
+  `#546 <https://github.com/joke2k/django-environ/pull/546>`_.
+- Fixed typos in the FAQ page
+  `#445 <https://github.com/joke2k/django-environ/pull/445>`_.
+
+`Full changelog <https://django-environ.readthedocs.org/en/latest/changelog.html>`_.
+
+Security Policy
+===============
+
+
+Reporting a Vulnerability
+-------------------------
+
+If you discover a security vulnerability within ``django-environ``, please
+send an e-mail to Daniele Faraglia via daniele.faraglia+oss@gmail.com. All security
+vulnerabilities will be promptly addressed.
+
+
+Credits
+=======
+
+``django-environ`` was initially created by `Daniele Faraglia <https://github.com/joke2k>`_
+and currently maintained by `Serghei Iakovlev <https://github.com/sergeyklay/>`_.
+
+A full list of contributors can be found in `GitHub <https://github.com/joke2k/django-environ/graphs/contributors>`__.
+
+Acknowledgments
+===============
+
+The existence of ``django-environ`` would have been impossible without these
+projects:
+
+- `rconradharris/envparse <https://github.com/rconradharris/envparse>`_
+- `jazzband/dj-database-url <https://github.com/jazzband/dj-database-url>`_
+- `migonzalvar/dj-email-url <https://github.com/migonzalvar/dj-email-url>`_
+- `ghickman/django-cache-url <https://github.com/ghickman/django-cache-url>`_
+- `dstufft/dj-search-url <https://github.com/dstufft/dj-search-url>`_
+- `julianwachholz/dj-config-url <https://github.com/julianwachholz/dj-config-url>`_
+- `nickstenning/honcho <https://github.com/nickstenning/honcho>`_
+- `rconradharris/envparse <https://github.com/rconradharris/envparse>`_

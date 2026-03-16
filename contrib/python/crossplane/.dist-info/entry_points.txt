@@ -1,0 +1,2 @@
+[console_scripts]
+crossplane = crossplane.__main__:main

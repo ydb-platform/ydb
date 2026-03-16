@@ -1,0 +1,29 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ subject }}</title>
+</head>
+<body style="font-family: sans-serif;color: #333;font-size: 14px;padding: 10px;margin: 0;">
+    <div style="color: #000;font-weight: bold;font-size: 16px;margin-bottom: 25px;padding: 15px;background-color: #eee;">{{ subject }}</div>
+    <div style="padding-left:10px">
+    {% block contents %}
+        {{ contents|safe }}
+    {% endblock %}
+    </div>
+    <div style="font-size: 10px;color: #999;margin-top: 25px;">
+        {% block footer %}
+            <hr noshade style="color: #ccc;">
+            {% if footer %}<div>{{ footer|safe }}</div>{% endif %}
+            <div>{{ SITE_URL }}</div>
+            {% if directive_unsubscribe %}
+                <div>{% trans "You can unsubscribe from this list using" %} <a href="{{ directive_unsubscribe }}">{% trans "this link" %}</a>.</div>
+            {% endif %}
+            {% if directive_mark_read %}
+                <img src="{{ directive_mark_read }}">
+            {% endif %}
+        {% endblock %}
+    </div>
+</body>
+</html>

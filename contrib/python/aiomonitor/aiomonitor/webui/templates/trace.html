@@ -1,0 +1,12 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="w-full">
+{% for item_type, item_text in trace_data %}
+  {% if item_type == "header" %}
+    <h2 class="font-mono text-sm py-1 px-2 my-2 rounded shadow-sm border-2 border-slate-400 bg-gray-50">{{ item_text }}</h2>
+  {% else %}
+    <pre class="font-mono text-xs text-gray-700 py-2 px-3 ml-3 my-2 rounded border border-slate-300 bg-gray-50">{{ item_text }}</pre>
+  {% endif %}
+{% endfor %}
+</div>
+{% endblock %}

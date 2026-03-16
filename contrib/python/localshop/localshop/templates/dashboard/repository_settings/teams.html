@@ -1,0 +1,35 @@
+{% extends "dashboard/repository_settings/base.html" %}
+{% load i18n %}
+
+{% block content_panel %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading">Teams</div>
+        <table class="table table-striped table-condensed">
+            <tbody>
+                {% for team in view.repository.teams.all %}
+                <tr>
+                    <td>
+                        {{ team }}
+                    </td>
+                    <td>
+                        <form method="post">
+                            <input type="hidden" name="team" value="{{ team.pk }}">
+                            <input type="hidden" name="delete" value="true">
+                            <button type="submit" class="btn btn-danger">Remove</button>
+                            {% csrf_token %}
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="panel-footer">
+            <form method="post" class="form-inline">
+                {% include "partial/_form_fields.html" with style='inline' nolabel=True %}
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">Add team</button>
+            </form>
+        </div>
+    </div>
+{% endblock %}

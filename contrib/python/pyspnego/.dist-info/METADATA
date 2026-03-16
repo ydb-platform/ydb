@@ -1,0 +1,108 @@
+Metadata-Version: 2.4
+Name: pyspnego
+Version: 0.12.0
+Summary: Windows Negotiate Authentication Client and Server
+Author-email: Jordan Borean <jborean93@gmail.com>
+License-Expression: MIT
+Project-URL: homepage, https://github.com/jborean93/pyspnego
+Keywords: windows,spnego,negotiate,ntlm,kerberos,sspi,gssapi,auth
+Classifier: Development Status :: 4 - Beta
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: cryptography
+Requires-Dist: sspilib>=0.3.0; sys_platform == "win32"
+Provides-Extra: kerberos
+Requires-Dist: gssapi>=1.6.0; sys_platform != "win32" and extra == "kerberos"
+Requires-Dist: krb5>=0.3.0; sys_platform != "win32" and extra == "kerberos"
+Provides-Extra: yaml
+Requires-Dist: ruamel.yaml; extra == "yaml"
+Dynamic: license-file
+
+# Python SPNEGO Library
+
+[![Test workflow](https://github.com/jborean93/pyspnego/actions/workflows/ci.yml/badge.svg)](https://github.com/jborean93/pyspnego/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/jborean93/pyspnego/branch/main/graph/badge.svg)](https://codecov.io/gh/jborean93/pyspnego)
+[![PyPI version](https://badge.fury.io/py/pyspnego.svg)](https://badge.fury.io/py/pyspnego)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jborean93/pyspnego/blob/master/LICENSE)
+
+Library to handle SPNEGO (Negotiate, NTLM, Kerberos) and CredSSP authentication. Also includes a packet parser that can
+be used to decode raw NTLM/SPNEGO/Kerberos tokens into a human readable format.
+
+
+## Requirements
+
+See [How to Install](#how-to-install) for more details
+
+* CPython 3.9+
+* [cryptography](https://github.com/pyca/cryptography)
+* [sspilib](https://github.com/jborean93/sspilib) - Windows only
+
+### Optional Requirements
+
+The following Python libraries can be installed to add extra features that do not come with the base package:
+
+* [python-gssapi](https://github.com/pythongssapi/python-gssapi) and [pykrb5](https://github.com/jborean93/pykrb5) for Kerberos authentication on Linux
+* [ruamel.yaml](https://pypi.org/project/ruamel.yaml/) for YAML output support on `pyspnego-parse`
+
+
+## How to Install
+
+To install pyspnego with all basic features, run
+
+```bash
+pip install pyspnego
+```
+
+### Kerberos Authentication
+
+While pyspnego supports Kerberos authentication on Linux, it isn't included by default due to its reliance on system
+packages to be present.
+
+To install these packages, run the below
+
+```bash
+# Debian/Ubuntu
+apt-get install gcc python3-dev libkrb5-dev
+
+# Centos/RHEL/Fedora
+dnf install gcc python-devel krb5-devel
+
+# Arch Linux
+pacman -S gcc krb5
+```
+
+Once installed you can install the Python packages with
+
+```bash
+pip install pyspnego[kerberos]
+```
+
+Kerberos also needs to be configured to talk to the domain but that is outside the scope of this page.
+
+## How to Use
+
+See [the examples section](docs/examples) for examples on how to use the authentication side of the library.
+
+_Note: While server/acceptor authentication is available for all protocols it is highly recommended you have the system GSSAPI and NTLM system libraries present for acceptor authentication. Pyspnego NTLM acceptor authentication should work but it is not as thoroughly tested as the GSSAPI implementation._
+
+
+### CredSSP Authentication
+
+Since version 0.2.0, pyspnego can be used for CredSSP authentication. While this isn't part of the SPNEGO/Negotiate
+protocol it uses common features and code like ASN.1 structures and even Negotiate auth as part of the CredSSP process.
+Both `initiate` and `accept` usages are supported when specifying `protocol='credssp'` but there are no guarantees the
+acceptor is free of any bugs so use with caution.
+
+
+## Backlog
+
+* Add support for anonymous authentication
+* See if `pywinrm` wants to use this

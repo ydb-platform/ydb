@@ -1,0 +1,152 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     LicenseRef-scancode-generic-cla 44751dc6467a98b3bb6fca3fedf445c9
+BELONGS ya.make
+    # contributors license agreement
+    License text:
+        Before we can merge your changes, you must agree to the [Uber Contributor License Agreement](https://cla-assistant.io/uber/h3).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        README.md [210:210]
+
+KEEP     Apache-2.0           68471c107b02dc658adffcbdbd61f502
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        h3lib/include/algos.h [4:14]
+        h3lib/include/alloc.h [4:14]
+        h3lib/include/baseCells.h [4:14]
+        h3lib/include/bbox.h [4:14]
+        h3lib/include/constants.h [4:14]
+        h3lib/include/coordijk.h [4:14]
+        h3lib/include/faceijk.h [4:14]
+        h3lib/include/geoCoord.h [4:14]
+        h3lib/include/h3Index.h [4:14]
+        h3lib/include/h3api.h [4:14]
+        h3lib/include/linkedGeo.h [4:14]
+        h3lib/include/mathExtensions.h [4:14]
+        h3lib/include/polygon.h [4:14]
+        h3lib/include/polygonAlgos.h [4:14]
+        h3lib/include/vec2d.h [4:14]
+        h3lib/include/vec3d.h [4:14]
+        h3lib/include/vertex.h [4:14]
+        h3lib/include/vertexGraph.h [4:14]
+        h3lib/lib/algos.c [4:14]
+        h3lib/lib/baseCells.c [4:14]
+        h3lib/lib/bbox.c [4:14]
+        h3lib/lib/coordijk.c [4:14]
+        h3lib/lib/faceijk.c [4:14]
+        h3lib/lib/geoCoord.c [4:14]
+        h3lib/lib/h3Index.c [4:14]
+        h3lib/lib/h3UniEdge.c [4:14]
+        h3lib/lib/linkedGeo.c [4:14]
+        h3lib/lib/localij.c [4:14]
+        h3lib/lib/mathExtensions.c [4:14]
+        h3lib/lib/polygon.c [4:14]
+        h3lib/lib/vec2d.c [4:14]
+        h3lib/lib/vec3d.c [4:14]
+        h3lib/lib/vertex.c [4:14]
+        h3lib/lib/vertexGraph.c [4:14]
+
+KEEP     Apache-2.0           6bfe5f41966b0d9ccfa0d21940da2a06
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 99.81
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [1:201]
+
+KEEP     Apache-2.0           90868ce316b0d260358fe5b255f5d71b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 55.56
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [210:214]
+
+SKIP     LicenseRef-scancode-commercial-license AND LicenseRef-scancode-generic-cla b7401234b51f0272223ed3376e34c614
+BELONGS ya.make
+    License text:
+        Before we can merge your changes, you must agree to the [Uber Contributor License Agreement](https://cla-assistant.io/uber/h3).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-commercial-license
+        Score           : 14.29
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/commercial-license.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [15:15]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [15:15]
+
+KEEP     Apache-2.0           d3b219aa92ce75896aaf145449b3a9b3
+BELONGS ya.make
+    License text:
+        [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [10:10]
+
+KEEP     MIT                  d98bd0ad8e8d4847bf2b97239190ee6f
+BELONGS ya.make
+    License text:
+        [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 80.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [10:10]

@@ -1,0 +1,399 @@
+====================BSD-3-Clause====================
+ * SPDX-License-Identifier: BSD-3-Clause
+
+
+====================BSD-3-Clause====================
+* Re-branded to "hwloc" and moved to the Open MPI project, relicensed under the
+  BSD license.
+
+
+====================BSD-3-Clause====================
+* SPDX-License-Identifier: BSD-3-Clause
+
+
+====================BSD-3-Clause====================
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+SPDX-License-Identifier: BSD-3-Clause
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1996 by Internet Software Consortium.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009 CNRS
+ * Copyright © 2009-2019 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009 CNRS
+ * Copyright © 2009-2020 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009 CNRS
+ * Copyright © 2009-2021 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009 CNRS
+ * Copyright © 2009-2022 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009 CNRS
+ * Copyright © 2009-2023 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009 CNRS
+ * Copyright © 2009-2024 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009, 2011 Université Bordeaux
+ * Copyright © 2011 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009, 2011, 2012 CNRS, Inria, Université Bordeaux.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009, 2024 CNRS
+ * Copyright © 2009-2024 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009,2024 CNRS
+ * Copyright © 2009-2025 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2010 Université Bordeaux
+ * Copyright © 2009-2018 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2010, 2012 Université Bordeaux
+ * Copyright © 2011-2015 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2010, 2020 Université Bordeaux
+ * Copyright © 2009-2011 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2011 Université Bordeaux
+ * Copyright © 2009-2011 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2011, 2020 Université Bordeaux
+ * Copyright © 2009-2018 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2012 Université Bordeaux
+ * Copyright © 2009-2020 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2012, 2020 Université Bordeaux
+ * Copyright © 2009-2011 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2013, 2015, 2020 Université Bordeaux
+ * Copyright © 2009-2018 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2014 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2017 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2018 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2009-2025 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2010-2012, 2014 Université Bordeaux
+ * Copyright © 2010 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2010-2013 Université Bordeaux
+ * Copyright © 2010-2011 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2010-2025 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2010-2026 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2011-2012 Université Bordeaux
+ * Copyright © 2011 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2012 Université Bordeaux
+ * Copyright © 2025 Siemens Corporation and/or its affiliates.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2012-2018 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2012-2019 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2012-2024 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2013-2021 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2013-2023 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2013-2024 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2013-2025 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2014 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2015 Intel, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2015-2018 Intel
+ * Copyright © 2015-2020 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2015-2020 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2015-2021 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2015-2026 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2016 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2017-2020 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2018-2020 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2019-2025 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2020-2021 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2020-2025 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2020-2026 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2021 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2022 IBM Corporation.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright © 2023 Université de Reims Champagne-Ardenne.  All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Portions Copyright (c) 1995 by International Business Machines, Inc.
+
+
+====================COPYRIGHT====================
+* Copyright (c) 2009-2011 Universit?eacute; Bordeaux
+* Copyright (c) 2009-2010 Cisco Systems, Inc. All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2004-2005 High Performance Computing Center Stuttgart, University of Stuttgart.  All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2004-2005 The Regents of the University of California. All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2004-2005 The University of Tennessee and The University of Tennessee Research Foundation.  All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2004-2006 The Trustees of Indiana University and Indiana University Research and Technology Corporation.  All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2009      CNRS
+Copyright © 2009-2016 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2009 CNRS
+Copyright © 2009-2026 Inria.  All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2009-2012 Oracle and/or its affiliates.  All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2009-2013 Université Bordeaux
+Copyright © 2009-2011 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2009-2015 Université Bordeaux
+Copyright © 2009-2015 Cisco Systems, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2010      IBM
+Copyright © 2010      Jirka Hladky
+Copyright © 2012      Aleksej Saushev, The NetBSD Foundation
+Copyright © 2012      Blue Brain Project, EPFL. All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2013-2014 University of Wisconsin-La Crosse. All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2015      Research Organization for Information Science and Technology (RIST). All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2015-2016 Intel, Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright © 2020 Hewlett Packard Enterprise.  All rights reserved.
+
+
+====================ISC====================
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM DISCLAIMS
+ * ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL INTERNET SOFTWARE
+ * CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+ * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
+ * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS
+ * ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
+ * SOFTWARE.
+
+
+====================ISC====================
+ * SPDX-License-Identifier: ISC
+
+
+====================Ibm-Dhcp====================
+ * International Business Machines, Inc. (hereinafter called IBM) grants
+ * permission under its copyrights to use, copy, modify, and distribute this
+ * Software with or without fee, provided that the above copyright notice and
+ * all paragraphs of this notice appear in all copies, and that the name of IBM
+ * not be used in connection with the marketing of any product incorporating
+ * the Software or modifications thereof, without specific, written prior
+ * permission.
+ *
+ * To the extent it has a right to do so, IBM grants an immunity from suit
+ * under its patents, if any, for the use, sale or manufacture of products to
+ * the extent that such products are used for performing Domain Name System
+ * dynamic updates in TCP/IP networks by means of the Software.  No immunity is
+ * granted for any product per se or for any other function of any product.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", AND IBM DISCLAIMS ALL WARRANTIES,
+ * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE.  IN NO EVENT SHALL IBM BE LIABLE FOR ANY SPECIAL,
+ * DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER ARISING
+ * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE, EVEN
+ * IF IBM IS APPRISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+
+====================LicenseRef-scancode-proprietary-license====================
+   * Capacity values may not be modified using hwloc_memattr_set_value().
+
+
+====================LicenseRef-scancode-proprietary-license====================
+   * Locality values may not be modified using hwloc_memattr_set_value().
+
+
+====================LicenseRef-scancode-unknown-license-reference AND ISC====================
+hwloc/base64.c is distributed under the ISC license.
+
+
+====================MIT====================
+is distributed under the MIT license.

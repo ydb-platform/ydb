@@ -1,0 +1,2 @@
+[console_scripts]
+aiogram-dialog-preview = aiogram_dialog.tools.web_preview:main

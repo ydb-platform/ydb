@@ -1,0 +1,17 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.4, Grid point data - IEEE packing
+# added for conversion from other packing
+transient bitsPerValue=0 : hidden;
+transient referenceValue=0 : hidden;
+transient binaryScaleFactor=0 : hidden;
+transient decimalScaleFactor=0 : hidden;
+alias numberOfBits = bitsPerValue;
+alias numberOfBitsContainingEachPackedValue = bitsPerValue;
+
+codetable[1] precision ('5.7.table',masterDir,localDir) = 1 : edition_specific;
+concept accuracy(zero) {
+  32  = { precision = 1; }
+  64  = { precision = 2; }
+  128 = { precision = 3; }
+} : long_type, no_copy;

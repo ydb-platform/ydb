@@ -1,0 +1,24 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "PersonC",
+    "type": "object",
+    "properties": {
+        "name": {
+            "title": "name",
+            "type": "string"
+        },
+        "pet": {
+            "title": "pet",
+            "type": "object",
+            "oneOf": [
+                {
+                    "$ref": "file_b.json#/definitions/Pets/Cat"
+                },
+                {
+                    "$ref": "file_b.json#/definitions/Pets/Dog"
+                }
+            ]
+        }
+    },
+    "additionalProperties": false
+}

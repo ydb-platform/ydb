@@ -1,0 +1,16 @@
+--- contrib/python/invoke/py3/invoke/util.py	(index)
++++ contrib/python/invoke/py3/invoke/util.py	(working tree)
+@@ -20,10 +20,11 @@ import sys
+ # attribute access, since six.moves does import shenanigans.)
+ try:
+     from .vendor.lexicon import Lexicon  # noqa
+-    from .vendor import yaml  # noqa
+ except ImportError:
+     from lexicon import Lexicon  # type: ignore[no-redef] # noqa
+-    import yaml  # type: ignore[no-redef] # noqa
++import six
++from six.moves import reduce  # noqa
++import yaml  # noqa
+ 
+ 
+ LOG_FORMAT = "%(name)s.%(module)s.%(funcName)s: %(message)s"

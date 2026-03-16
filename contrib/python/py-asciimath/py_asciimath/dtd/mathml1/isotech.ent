@@ -1,0 +1,187 @@
+<!-- 
+
+     File isotech.ent produced by the dsssl script ent.dsl
+     from input data in unicode.xml.
+
+     Please report any errors to 
+     David Carlisle <davidc@nag.co.uk>.
+
+     The numeric character values assigned to each entity
+     (should) match either official Unicode assignments
+     or assignments in the STIX proposal for characters
+     for Mathematics.
+
+     The STIX assignments are temporary and will change if
+     the proposal or some variant of it is adopted by the
+     Unicode Consortium.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1991
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+-->
+
+<!ENTITY acd        "&#58278;" ><!--UE3A6 ac current -->
+<!ENTITY aleph      "&#8501;"  ><!--U2135 /aleph aleph, Hebrew -->
+<!ENTITY and        "&#8743;"  ><!--U2227 /wedge /land B: logical and -->
+<!ENTITY andand     "&#58222;" ><!--UE36E two logical and -->
+<!ENTITY andd       "&#58260;" ><!--UE394 and, horizontal dash -->
+<!ENTITY andslope   "&#58634;" ><!--UE50A sloping large and -->
+<!ENTITY andv       "&#58257;" ><!--UE391 and with middle stem -->
+<!ENTITY angrt      "&#8735;"  ><!--U221F right (90 degree) angle -->
+<!ENTITY angsph     "&#8738;"  ><!--U2222 /sphericalangle angle-spherical -->
+<!ENTITY angst      "&#8491;"  ><!--U212B Angstrom capital A, ring -->
+<!ENTITY ap         "&#8776;"  ><!--U2248 /approx R: approximate -->
+<!ENTITY apacir     "&#58252;" ><!--UE38C approximate, circumflex accent -->
+<!ENTITY awconint   "&#8755;"  ><!--U2233 contour integral, anti-clockwise -->
+<!ENTITY awint      "&#58267;" ><!--UE39B anti clock-wise integration -->
+<!ENTITY And        "&#58228;" ><!--UE374 dbl logical and -->
+<!ENTITY becaus     "&#8757;"  ><!--U2235 /because R: because -->
+<!ENTITY bernou     "&#8492;"  ><!--U212C Bernoulli function (script capital B)  -->
+<!ENTITY bne        "&#58248;" ><!--UE388 reverse not equal -->
+<!ENTITY bnequiv    "&#58247;" ><!--UE387 reverse not equivalent -->
+<!ENTITY bnot       "&#8976;"  ><!--U2310 reverse not -->
+<!ENTITY bNot       "&#58285;" ><!--UE3AD reverse not with two horizontal strokes -->
+<!ENTITY bottom     "&#8869;"  ><!--U22A5 /bot bottom -->
+<!ENTITY cap        "&#8745;"  ><!--U2229 /cap B: intersection -->
+<!ENTITY cirfnint   "&#58261;" ><!--UE395 circulation function -->
+<!ENTITY compfn     "&#8728;"  ><!--U2218 /circ B: composite function (small circle) -->
+<!ENTITY cong       "&#8773;"  ><!--U2245 /cong R: congruent with -->
+<!ENTITY conint     "&#8750;"  ><!--U222E /oint L: contour integral operator -->
+<!ENTITY ctdot      "&#8943;"  ><!--U22EF /cdots, three dots, centered -->
+<!ENTITY cup        "&#8746;"  ><!--U222A /cup B: union or logical sum -->
+<!ENTITY cwconint   "&#8754;"  ><!--U2232 contour integral, clockwise -->
+<!ENTITY cwint      "&#8753;"  ><!--U2231 clockwise integral -->
+<!ENTITY cylcty     "&#9005;"  ><!--U232D cylindricity -->
+<!ENTITY Cconint    "&#8752;"  ><!--U2230 triple contour integral operator -->
+<!ENTITY Conint     "&#8751;"  ><!--U222F double contour integral operator -->
+<!ENTITY disin      "&#58272;" ><!--UE3A0 set membership, long horizontal stroke -->
+<!ENTITY dsol       "&#58281;" ><!--UE3A9 solidus, bar above -->
+<!ENTITY dtdot      "&#8945;"  ><!--U22F1 /ddots, three dots, descending -->
+<!ENTITY dwangle    "&#58282;" ><!--UE3AA large downward pointing angle -->
+<!ENTITY Dot        "&#168;"   ><!--U00A8 dieresis or umlaut mark -->
+<!ENTITY DotDot     "&#8412;"  ><!--U20DC four dots above -->
+<!ENTITY elinters   "&#58279;" ><!--UE3A7 electrical intersection -->
+<!ENTITY epar       "&#8917;"  ><!--U22D5 parallel, equal; equal or parallel -->
+<!ENTITY eparsl     "&#58244;" ><!--UE384 parallel, slanted, equal; homothetically congruent to -->
+<!ENTITY equiv      "&#8801;"  ><!--U2261 /equiv R: identical with -->
+<!ENTITY eqvparsl   "&#58246;" ><!--UE386 equivalent, equal; congruent and parallel -->
+<!ENTITY exist      "&#8707;"  ><!--U2203 /exists at least one exists -->
+<!ENTITY fltns      "&#58241;" ><!--UE381 flatness -->
+<!ENTITY fnof       "&#402;"   ><!--U0192 function of (italic small f) -->
+<!ENTITY forall     "&#8704;"  ><!--U2200 /forall for all -->
+<!ENTITY fpartint   "&#58262;" ><!--UE396 finite part integral -->
+<!ENTITY ge         "&#8805;"  ><!--U2265 /geq /ge R: greater-than-or-equal -->
+<!ENTITY hamilt     "&#8459;"  ><!--U210B Hamiltonian (script capital H)  -->
+<!ENTITY iff        "&#58213;" ><!--UE365 /iff if and only if  -->
+<!ENTITY iinfin     "&#58226;" ><!--UE372 infinity sign, incomplete -->
+<!ENTITY imped      "&#58635;" ><!--UE50B impedance -->
+<!ENTITY infin      "&#8734;"  ><!--U221E /infty infinity -->
+<!ENTITY infintie   "&#58636;" ><!--UE50C tie, infinity -->
+<!ENTITY int        "&#8747;"  ><!--U222B /int L: integral operator -->
+<!ENTITY intlarhk   "&#58266;" ><!--UE39A integral, left arrow with hook -->
+<!ENTITY isin       "&#8712;"  ><!--U2208 /in R: set membership  -->
+<!ENTITY isindot    "&#58268;" ><!--UE39C set membership, dot above -->
+<!ENTITY isinE      "&#58270;" ><!--UE39E set membership, two horizontal strokes -->
+<!ENTITY isins      "&#58276;" ><!--UE3A4 set membership, vertical bar on horizontal stroke -->
+<!ENTITY isinsv     "&#58274;" ><!--UE3A2 large set membership, vertical bar on horizontal stroke -->
+<!ENTITY isinv      "&#8712;"  ><!--U2208 set membership, variant -->
+<!ENTITY Int        "&#8748;"  ><!--U222C double integral operator -->
+<!ENTITY lagran     "&#8466;"  ><!--U2112 Lagrangian (script capital L)  -->
+<!ENTITY lang       "&#12296;" ><!--U3008 /langle O: left angle bracket -->
+<!ENTITY lArr       "&#8656;"  ><!--U21D0 /Leftarrow A: is implied by -->
+<!ENTITY lbbrk      "&#12308;" ><!--U3014 left broken bracket -->
+<!ENTITY le         "&#8804;"  ><!--U2264 /leq /le R: less-than-or-equal -->
+<!ENTITY loang      "&#12312;" ><!--U3018 left open angular bracket -->
+<!ENTITY lobrk      "&#12314;" ><!--U301A left open bracket -->
+<!ENTITY lopar      "&#58233;" ><!--UE379 left open parenthesis -->
+<!ENTITY lowast     "&#8727;"  ><!--U2217 low asterisk -->
+<!ENTITY Lang       "&#12298;" ><!--U300A left angle bracket, double -->
+<!ENTITY minus      "&#8722;"  ><!--U2212 B: minus sign -->
+<!ENTITY mnplus     "&#8723;"  ><!--U2213 /mp B: minus-or-plus sign -->
+<!ENTITY nabla      "&#8711;"  ><!--U2207 /nabla del, Hamilton operator -->
+<!ENTITY ne         "&#8800;"  ><!--U2260 /ne /neq R: not equal -->
+<!ENTITY nedot      "&#58250;" ><!--UE38A not equal, dot -->
+<!ENTITY nhpar      "&#58253;" ><!--UE38D not, horizontal, parallel -->
+<!ENTITY ni         "&#8715;"  ><!--U220B /ni /owns R: contains -->
+<!ENTITY nis        "&#58277;" ><!--UE3A5 contains, vertical bar on horizontal stroke -->
+<!ENTITY nisd       "&#58273;" ><!--UE3A1 contains, long horizontal stroke -->
+<!ENTITY niv        "&#8715;"  ><!--U220B contains, variant -->
+<!ENTITY notin      "&#8713;"  ><!--U2209 /notin N: negated set membership -->
+<!ENTITY notindot   "&#58269;" ><!--UE39D negated set membership, dot above -->
+<!ENTITY notinE     "&#58637;" ><!--UE50D negated set membership, two horizontal strokes -->
+<!ENTITY notinva    "&#58224;" ><!--UE370 negated set membership, variant -->
+<!ENTITY notinvb    "&#58235;" ><!--UE37B negated set membership, variant -->
+<!ENTITY notinvc    "&#58236;" ><!--UE37C negated set membership, variant -->
+<!ENTITY notni      "&#8716;"  ><!--U220C negated contains -->
+<!ENTITY notniva    "&#8716;"  ><!--U220C negated contains, variant -->
+<!ENTITY notnivb    "&#58237;" ><!--UE37D contains, variant -->
+<!ENTITY notnivc    "&#58238;" ><!--UE37E contains, variant -->
+<!ENTITY nparsl     "&#58249;" ><!--UE389 not parallel, slanted -->
+<!ENTITY npart      "&#58256;" ><!--UE390 not partial differential -->
+<!ENTITY npolint    "&#58265;" ><!--UE399 line integration, not including the pole -->
+<!ENTITY nvinfin    "&#58254;" ><!--UE38E not, vert, infinity -->
+<!ENTITY Not        "&#58284;" ><!--UE3AC not with two horizontal strokes -->
+<!ENTITY olcross    "&#58280;" ><!--UE3A8 circle, cross -->
+<!ENTITY or         "&#8744;"  ><!--U2228 /vee /lor B: logical or -->
+<!ENTITY ord        "&#58259;" ><!--UE393 or, horizontal dash -->
+<!ENTITY order      "&#8500;"  ><!--U2134 order of (script small o)  -->
+<!ENTITY oror       "&#58223;" ><!--UE36F two logical or -->
+<!ENTITY orslope    "&#58286;" ><!--UE3AE sloping large or -->
+<!ENTITY orv        "&#58258;" ><!--UE392 or with middle stem -->
+<!ENTITY Or         "&#58229;" ><!--UE375 dbl logical or -->
+<!ENTITY par        "&#8741;"  ><!--U2225 /parallel R: parallel -->
+<!ENTITY parsl      "&#58242;" ><!--UE382 parallel, slanted -->
+<!ENTITY part       "&#8706;"  ><!--U2202 /partial partial differential -->
+<!ENTITY permil     "&#8240;"  ><!--U2030 per thousand -->
+<!ENTITY perp       "&#8869;"  ><!--U22A5 /perp R: perpendicular -->
+<!ENTITY pertenk    "&#8241;"  ><!--U2031 per 10 thousand -->
+<!ENTITY phmmat     "&#8499;"  ><!--U2133 physics M-matrix (script capital M)  -->
+<!ENTITY pointint   "&#58230;" ><!--UE376 integral around a point operator -->
+<!ENTITY prime      "&#8242;"  ><!--U2032 /prime prime or minute -->
+<!ENTITY profalar   "&#9006;"  ><!--U232E all-around profile -->
+<!ENTITY profline   "&#8978;"  ><!--U2312 profile of a line -->
+<!ENTITY profsurf   "&#8979;"  ><!--U2313 profile of a surface -->
+<!ENTITY prop       "&#8733;"  ><!--U221D /propto R: is proportional to -->
+<!ENTITY Prime      "&#8243;"  ><!--U2033 double prime or second -->
+<!ENTITY qint       "&#58232;" ><!--UE378 /iiiint quadruple integral operator -->
+<!ENTITY qprime     "&#58225;" ><!--UE371 quadruple prime -->
+<!ENTITY quatint    "&#58231;" ><!--UE377 quaternion integral operator -->
+<!ENTITY radic      "&#8730;"  ><!--U221A /surd radical -->
+<!ENTITY rang       "&#12297;" ><!--U3009 /rangle C: right angle bracket -->
+<!ENTITY rArr       "&#8658;"  ><!--U21D2 /Rightarrow A: implies -->
+<!ENTITY rbbrk      "&#12309;" ><!--U3015 right broken bracket -->
+<!ENTITY roang      "&#12313;" ><!--U3019 right open angular bracket -->
+<!ENTITY robrk      "&#12315;" ><!--U301B right open bracket -->
+<!ENTITY ropar      "&#58234;" ><!--UE37A right open parenthesis -->
+<!ENTITY rppolint   "&#58263;" ><!--UE397 line integration, rectangular path around pole -->
+<!ENTITY Rang       "&#12299;" ><!--U300B right angle bracket, double -->
+<!ENTITY scpolint   "&#58264;" ><!--UE398 line integration, semi-circular path around pole -->
+<!ENTITY sim        "&#8764;"  ><!--U223C /sim R: similar -->
+<!ENTITY simdot     "&#58251;" ><!--UE38B similar, dot -->
+<!ENTITY sime       "&#8771;"  ><!--U2243 /simeq R: similar, equals -->
+<!ENTITY smeparsl   "&#58245;" ><!--UE385 similar, parallel, slanted, equal -->
+<!ENTITY square     "&#9633;"  ><!--U25A1 /square, square -->
+<!ENTITY squarf     "&#9642;"  ><!--U25AA /blacksquare, square, filled  -->
+<!ENTITY strns      "&#58240;" ><!--UE380 straightness -->
+<!ENTITY sub        "&#8834;"  ><!--U2282 /subset R: subset or is implied by -->
+<!ENTITY sube       "&#8838;"  ><!--U2286 /subseteq R: subset, equals -->
+<!ENTITY sup        "&#8835;"  ><!--U2283 /supset R: superset or implies -->
+<!ENTITY supe       "&#8839;"  ><!--U2287 /supseteq R: superset, equals -->
+<!ENTITY tdot       "&#8411;"  ><!--U20DB three dots above -->
+<!ENTITY there4     "&#8756;"  ><!--U2234 /therefore R: therefore -->
+<!ENTITY tint       "&#8749;"  ><!--U222D /iiint triple integral operator -->
+<!ENTITY top        "&#8868;"  ><!--U22A4 /top top -->
+<!ENTITY topbot     "&#9014;"  ><!--U2336 top and bottom -->
+<!ENTITY topcir     "&#58243;" ><!--UE383 top, circle below -->
+<!ENTITY tprime     "&#8244;"  ><!--U2034 triple prime -->
+<!ENTITY utdot      "&#8944;"  ><!--U22F0 three dots, ascending -->
+<!ENTITY uwangle    "&#58283;" ><!--UE3AB large upward pointing angle -->
+<!ENTITY vangrt     "&#8894;"  ><!--U22BE right angle, variant -->
+<!ENTITY veeeq      "&#8794;"  ><!--U225A logical or, equals -->
+<!ENTITY Verbar     "&#8214;"  ><!--U2016 /Vert dbl vertical bar -->
+<!ENTITY wedgeq     "&#8793;"  ><!--U2259 /wedgeq R: corresponds to (wedge, equals) -->
+<!ENTITY xnis       "&#58275;" ><!--UE3A3 large contains, vertical bar on horizontal stroke -->

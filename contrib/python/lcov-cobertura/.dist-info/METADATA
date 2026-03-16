@@ -1,0 +1,127 @@
+Metadata-Version: 2.2
+Name: lcov_cobertura
+Version: 2.1.1
+Summary: LCOV to Cobertura XML converter
+Home-page: https://eriwen.github.io/lcov-to-cobertura-xml/
+Download-URL: https://raw.githubusercontent.com/eriwen/lcov-to-cobertura-xml/master/lcov_cobertura/lcov_cobertura.py
+Author: Eric Wendelin
+Author-email: me@eriwen.com
+Maintainer: Steve Arnold
+Maintainer-email: nerdboy@gentoo.org
+License: Apache License, Version 2.0
+Keywords: lcov,cobertura
+Classifier: Programming Language :: Python
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Testing
+Classifier: Topic :: Software Development :: Quality Assurance
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: importlib-metadata; python_version < "3.8"
+Provides-Extra: doc
+Requires-Dist: sphinx; extra == "doc"
+Requires-Dist: recommonmark; extra == "doc"
+Requires-Dist: sphinx_rtd_theme; extra == "doc"
+Requires-Dist: sphinxcontrib-apidoc; extra == "doc"
+Provides-Extra: test
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: xmldiff; extra == "test"
+Provides-Extra: cov
+Requires-Dist: pytest-cov; extra == "cov"
+Requires-Dist: coverage[toml]; extra == "cov"
+Provides-Extra: all
+Requires-Dist: pytest-cov; extra == "all"
+Requires-Dist: coverage[toml]; extra == "all"
+Requires-Dist: sphinx; extra == "all"
+Requires-Dist: recommonmark; extra == "all"
+Requires-Dist: sphinx_rtd_theme; extra == "all"
+Requires-Dist: sphinxcontrib-apidoc; extra == "all"
+Requires-Dist: pytest; extra == "all"
+Requires-Dist: xmldiff; extra == "all"
+Dynamic: download-url
+
+# lcov to cobertura XML converter
+
+[![CI](https://github.com/eriwen/lcov-to-cobertura-xml/actions/workflows/ci.yml/badge.svg)](https://github.com/eriwen/lcov-to-cobertura-xml/actions/workflows/ci.yml)
+[![Docs](https://github.com/eriwen/lcov-to-cobertura-xml/actions/workflows/sphinx.yml/badge.svg)](https://github.com/eriwen/lcov-to-cobertura-xml/actions/workflows/sphinx.yml)
+[![Security check - Bandit](https://github.com/eriwen/lcov-to-cobertura-xml/actions/workflows/bandit.yml/badge.svg)](https://github.com/eriwen/lcov-to-cobertura-xml/actions/workflows/bandit.yml)
+[![Release](https://github.com/eriwen/lcov-to-cobertura-xml/actions/workflows/release.yml/badge.svg)](https://github.com/eriwen/lcov-to-cobertura-xml/actions/workflows/release.yml)
+
+This project does as the name implies: it converts code coverage report files in [lcov](http://ltp.sourceforge.net/coverage/lcov.php) format to [Cobertura](http://cobertura.sourceforge.net/)'s XML report format so that CI servers like [Jenkins](http://jenkins-ci.org) can aggregate results and determine build stability etc.
+
+Coverage metrics supported:
+
+ - Package/folder overall line and branch coverage
+ - Class/file overall line and branch coverage
+ - Functions hit
+ - Line and Branch hits
+ 
+## Quick usage
+
+[Grab it raw](https://raw.github.com/eriwen/lcov-to-cobertura-xml/master/lcov_cobertura/lcov_cobertura.py) and run it with python:
+```bash
+python lcov_cobertura.py lcov-file.dat
+```
+
+ - `-b/--base-dir` - (Optional) Directory where source files are located. Defaults to the current directory
+ - `-e/--excludes` - (Optional) Comma-separated list of regexes of packages to exclude
+ - `-o/--output` - (Optional) Path to store cobertura xml file. _Defaults to ./coverage.xml_
+ - `-d/--demangle` - (Optional) Demangle C++ function names. _Requires c++filt_
+
+```bash
+python lcov_cobertura.py lcov-file.dat --base-dir src/dir --excludes test.lib --output build/coverage.xml --demangle
+```
+ 
+## With [pip](http://pypi.python.org/pypi/pip):
+```bash
+pip install lcov_cobertura
+```
+
+### Command-line usage
+```bash
+lcov_cobertura lcov-file.dat
+```
+
+ - `-b/--base-dir` - (Optional) Directory where source files are located. Defaults to the current directory
+ - `-e/--excludes` - (Optional) Comma-separated list of regexes of packages to exclude
+ - `-o/--output` - (Optional) Path to store cobertura xml file. _Defaults to ./coverage.xml_
+ - `-d/--demangle` - (Optional) Demangle C++ function names. _Requires c++filt_
+
+```bash
+lcov_cobertura lcov-file.dat --base-dir src/dir --excludes test.lib --output build/coverage.xml --demangle
+```
+
+### Usage as a Python module
+
+Use it anywhere in your python:
+```python
+from lcov_cobertura import LcovCobertura
+
+LCOV_INPUT = 'SF:foo/file.ext\nDA:1,1\nDA:2,0\nend_of_record\n'
+converter = LcovCobertura(LCOV_INPUT)
+cobertura_xml = converter.convert()
+print(cobertura_xml)
+```
+
+## Environment Support
+
+Python 3.8+ is supported. The last release with Python 2.x support is [version 1.6](https://pypi.org/project/lcov_cobertura/1.6/). 
+
+## Contributions
+This project is made possible due to the efforts of these fine people:
+
+ - [Eric Wendelin](https://eriwen.com)
+ - [Björge Dijkstra](https://github.com/bjd)
+ - [Jon Schewe](http://mtu.net/~jpschewe)
+ - [Yury V. Zaytsev](http://yury.zaytsev.net)
+ - [Steve Arnold](https://github.com/sarnold)
+
+## License
+This project is provided under the [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0).

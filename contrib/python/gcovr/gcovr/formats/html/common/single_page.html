@@ -1,0 +1,65 @@
+{# -*- engine: jinja -*- #}
+{% extends "base.html" %}
+
+{% block summary %}
+{% include "directory_page.summary.html" | indent(2) %}
+
+{% endblock %}
+
+{% block content %}
+{% if not info.static_report %}
+<script>
+  gcovr.root_dirname = "{{ directories[-1].dirname }}";
+</script>
+{% endif %}
+<hr class="js-disabled-hidden"/>
+<div id="{{ FUNCTIONS_FNAME }}" class="js-enabled-hidden js-disabled-hidden" data-title="Functions">
+  <details>
+    {# If javascript is enabled this details content is moved one level up and the details is removed #}
+    <summary>Overall list of functions</summary>
+    <nav class="function_page">
+      {%- set function_list = all_functions %}
+      {%  include "functions_page.content.html" %}
+    </nav>
+  </details>
+</div>
+
+{%  for directory in directories %}
+<div id="{{ directory.dirname }}" class="js-enabled-hidden{% if not loop.first %} js-disabled-hidden{% endif %}" data-title="{{ directory.relative_path }}">
+  <nav>
+    {% include "directory_page.navigation.html" | indent(2) %}
+  </nav>
+  {% set entries = directory.entries %}
+  {% include "directory_page.content.html" | indent(2) %}
+  <hr class="js-enabled-hidden block-separator"/>
+</div>
+{%  endfor %}
+
+{%  for file in files %}
+<div id="{{ file.link }}" class="js-enabled-hidden" data-title="{{ file.filename }}">
+  {# If javascript is enabled this summary is moved to the summary block at the top #}
+  {% set fname = file.fname %}
+  {% set filename = file.filename %}
+  {% set html_filename = file.html_filename %}
+  {% set link = file.link %}
+  {% set lines = file.lines %}
+  {% set functions = file.functions %}
+  {% set branches = file.branches %}
+  {% set conditions = file.conditions %}
+  {% set decisions = file.decisions %}
+  {% set calls = file.calls %}
+  {% include "source_page.summary.html" | indent(2) %}
+  <hr/>
+  <nav>
+    {%  set function_list = file.function_list %}
+    {%  set source_lines = file.source_lines %}
+    {% include "source_page.navigation.html" | indent(4) %}
+  </nav>
+  {%  include "source_page.content.html" | indent(2) %}
+  {% if not loop.last %}
+  <hr class="js-enabled-hidden block-separator"/>
+  {%  endif %}
+</div>
+{%  endfor %}
+
+{% endblock %}

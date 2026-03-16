@@ -1,0 +1,8 @@
+disable_includes:
+  - linux/dn.h
+  - linux/irda.h
+  - netinet/in_var.h
+mark_as_sources:
+  - netifaces.c
+copy:
+  - netifaces.c

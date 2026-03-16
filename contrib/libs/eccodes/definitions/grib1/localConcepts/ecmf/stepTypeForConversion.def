@@ -1,0 +1,223 @@
+# Concept stepTypeForConversion for ECMWF
+
+# ECC-457: total precipitation
+"accum"={timeRangeIndicator=0;indicatorOfParameter=228;gribTablesVersionNo=128;centre=98;}
+"accum"={timeRangeIndicator=1;indicatorOfParameter=228;gribTablesVersionNo=128;centre=98;}
+"accum"={timeRangeIndicator=10;indicatorOfParameter=228;gribTablesVersionNo=128;centre=98;}
+
+# sro
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=8;centre=98;}
+# ssro
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=9;centre=98;}
+# parcs
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=20;centre=98;}
+# es
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=44;centre=98;}
+# smlt
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=45;centre=98;}
+# dsrp
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=47;centre=98;}
+# 10fg
+"max"={gribTablesVersionNo=128;indicatorOfParameter=49;centre=98;}
+# lspf
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=50;centre=98;}
+# mx2t24
+"max"={gribTablesVersionNo=128;indicatorOfParameter=51;centre=98;}
+# mn2t24
+"min"={gribTablesVersionNo=128;indicatorOfParameter=52;centre=98;}
+# uvb
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=57;centre=98;}
+# par
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=58;centre=98;}
+# mx2t6
+"max"={gribTablesVersionNo=128;indicatorOfParameter=121;centre=98;}
+# mn2t6
+"min"={gribTablesVersionNo=128;indicatorOfParameter=122;centre=98;}
+# lsp
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=142;centre=98;}
+"accum"={gribTablesVersionNo=170;indicatorOfParameter=142;centre=98;}
+"accum"={gribTablesVersionNo=180;indicatorOfParameter=142;centre=98;}
+# cp
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=143;centre=98;}
+"accum"={gribTablesVersionNo=170;indicatorOfParameter=143;centre=98;}
+"accum"={gribTablesVersionNo=180;indicatorOfParameter=143;centre=98;}
+# sf
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=144;centre=98;}
+"accum"={gribTablesVersionNo=180;indicatorOfParameter=144;centre=98;}
+# bld
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=145;centre=98;}
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=145;centre=98;}
+# sshf
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=146;centre=98;}
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=146;centre=98;}
+"accum"={gribTablesVersionNo=170;indicatorOfParameter=146;centre=98;}
+"accum"={gribTablesVersionNo=180;indicatorOfParameter=146;centre=98;}
+"accum"={gribTablesVersionNo=190;indicatorOfParameter=146;centre=98;}
+# slhf
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=147;centre=98;}
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=147;centre=98;}
+"accum"={gribTablesVersionNo=170;indicatorOfParameter=147;centre=98;}
+"accum"={gribTablesVersionNo=180;indicatorOfParameter=147;centre=98;}
+"accum"={gribTablesVersionNo=190;indicatorOfParameter=147;centre=98;}
+# snr
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=149;centre=98;}
+# tnr
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=150;centre=98;}
+# ssrd
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=169;centre=98;}
+"accum"={gribTablesVersionNo=190;indicatorOfParameter=169;centre=98;}
+# strd
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=175;centre=98;}
+"accum"={gribTablesVersionNo=190;indicatorOfParameter=175;centre=98;}
+# ssr
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=176;centre=98;}
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=176;centre=98;}
+"accum"={gribTablesVersionNo=170;indicatorOfParameter=176;centre=98;}
+"accum"={gribTablesVersionNo=190;indicatorOfParameter=176;centre=98;}
+# str
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=177;centre=98;}
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=177;centre=98;}
+"accum"={gribTablesVersionNo=170;indicatorOfParameter=177;centre=98;}
+"accum"={gribTablesVersionNo=190;indicatorOfParameter=177;centre=98;}
+# tsr
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=178;centre=98;}
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=178;centre=98;}
+"accum"={gribTablesVersionNo=190;indicatorOfParameter=178;centre=98;}
+# ttr
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=179;centre=98;}
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=179;centre=98;}
+"accum"={gribTablesVersionNo=190;indicatorOfParameter=179;centre=98;}
+# ewss
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=180;centre=98;}
+"accum"={gribTablesVersionNo=170;indicatorOfParameter=180;centre=98;}
+"accum"={gribTablesVersionNo=180;indicatorOfParameter=180;centre=98;}
+# nsss
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=181;centre=98;}
+"accum"={gribTablesVersionNo=170;indicatorOfParameter=181;centre=98;}
+"accum"={gribTablesVersionNo=180;indicatorOfParameter=181;centre=98;}
+# e
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=182;centre=98;}
+"accum"={gribTablesVersionNo=170;indicatorOfParameter=182;centre=98;}
+"accum"={gribTablesVersionNo=180;indicatorOfParameter=182;centre=98;}
+"accum"={gribTablesVersionNo=190;indicatorOfParameter=182;centre=98;}
+# sund
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=189;centre=98;}
+# lgws
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=195;centre=98;}
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=195;centre=98;}
+# mgws
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=196;centre=98;}
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=196;centre=98;}
+# gwd
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=197;centre=98;}
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=197;centre=98;}
+# mx2t
+"max"={gribTablesVersionNo=128;indicatorOfParameter=201;centre=98;}
+"max"={gribTablesVersionNo=170;indicatorOfParameter=201;centre=98;}
+"max"={gribTablesVersionNo=190;indicatorOfParameter=201;centre=98;}
+# mn2t
+"min"={gribTablesVersionNo=128;indicatorOfParameter=202;centre=98;}
+"min"={gribTablesVersionNo=170;indicatorOfParameter=202;centre=98;}
+"min"={gribTablesVersionNo=190;indicatorOfParameter=202;centre=98;}
+# ro
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=205;centre=98;}
+"accum"={gribTablesVersionNo=180;indicatorOfParameter=205;centre=98;}
+# tsrc
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=208;centre=98;}
+# ttrc
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=209;centre=98;}
+# ssrc
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=210;centre=98;}
+# strc
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=211;centre=98;}
+# tisr
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=212;centre=98;}
+# vimd
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=213;centre=98;}
+# tp
+"accum"={gribTablesVersionNo=160;indicatorOfParameter=228;centre=98;}
+"accum"={gribTablesVersionNo=170;indicatorOfParameter=228;centre=98;}
+"accum"={gribTablesVersionNo=190;indicatorOfParameter=228;centre=98;}
+# csf
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=239;centre=98;}
+# lsf
+"accum"={gribTablesVersionNo=128;indicatorOfParameter=240;centre=98;}
+# fdir
+"accum"={gribTablesVersionNo=228;indicatorOfParameter=21;centre=98;}
+# cdir
+"accum"={gribTablesVersionNo=228;indicatorOfParameter=22;centre=98;}
+# mx2t3
+"max"={gribTablesVersionNo=228;indicatorOfParameter=26;centre=98;}
+# mn2t3
+"min"={gribTablesVersionNo=228;indicatorOfParameter=27;centre=98;}
+# 10fg3
+"max"={gribTablesVersionNo=228;indicatorOfParameter=28;centre=98;}
+# litota1
+"avg"={gribTablesVersionNo=228;indicatorOfParameter=51;centre=98;}
+# licga1
+"avg"={gribTablesVersionNo=228;indicatorOfParameter=53;centre=98;}
+# ssrdc
+"accum"={gribTablesVersionNo=228;indicatorOfParameter=129;centre=98;}
+# strdc
+"accum"={gribTablesVersionNo=228;indicatorOfParameter=130;centre=98;}
+# fzra
+"accum"={gribTablesVersionNo=228;indicatorOfParameter=216;centre=98;}
+# mxtpr
+"max"={gribTablesVersionNo=228;indicatorOfParameter=226;centre=98;}
+# mntpr
+"min"={gribTablesVersionNo=228;indicatorOfParameter=227;centre=98;}
+# pev
+"accum"={gribTablesVersionNo=228;indicatorOfParameter=251;centre=98;}
+# srta
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=100;centre=98;}
+# trta
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=101;centre=98;}
+# srtca
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=102;centre=98;}
+# trtca
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=103;centre=98;}
+# umfa
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=104;centre=98;}
+# dmfa
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=105;centre=98;}
+# udra
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=106;centre=98;}
+# ddra
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=107;centre=98;}
+# tpfa
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=108;centre=98;}
+# tdcha
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=109;centre=98;}
+# ttpha
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=110;centre=98;}
+# qtpha
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=111;centre=98;}
+# utpha
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=112;centre=98;}
+# vtpha
+"accum"={gribTablesVersionNo=162;indicatorOfParameter=113;centre=98;}
+# mvv
+"avg"={gribTablesVersionNo=130;indicatorOfParameter=232;centre=98;}
+# msshfl
+"avg"={gribTablesVersionNo=172;indicatorOfParameter=146;centre=98;}
+# mslhfl
+"avg"={gribTablesVersionNo=172;indicatorOfParameter=147;centre=98;}
+# mean2t24
+"avg"={gribTablesVersionNo=128;indicatorOfParameter=55;centre=98;}
+# mn2d24
+"avg"={gribTablesVersionNo=128;indicatorOfParameter=56;centre=98;}
+# msdsrf
+"avg"={gribTablesVersionNo=172;indicatorOfParameter=169;centre=98;}
+# msdtrf
+"avg"={gribTablesVersionNo=172;indicatorOfParameter=175;centre=98;}
+# msnsrf
+"avg"={gribTablesVersionNo=172;indicatorOfParameter=176;centre=98;}
+# msntrf
+"avg"={gribTablesVersionNo=172;indicatorOfParameter=177;centre=98;}
+# mtnsrf
+"avg"={gribTablesVersionNo=172;indicatorOfParameter=178;centre=98;}
+# mtntrf
+"avg"={gribTablesVersionNo=172;indicatorOfParameter=179;centre=98;}
+
+# 10fg6
+"max"={gribTablesVersionNo=128;indicatorOfParameter=123;centre=98;}

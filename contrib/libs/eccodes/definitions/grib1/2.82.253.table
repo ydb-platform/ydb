@@ -1,0 +1,197 @@
+1 pres PRES Pressure Pa
+2 msl MSL Mean sea level pressure Pa
+3 ptend PTEND Pressure tendency Pa s**-1
+4 pv PV Potential vorticity K m**2 kg**-1 s**-1
+5 icaht ICAHT ICAO Standard Atmosphere reference height m
+6 z Z Geopotential m**2 s**-2
+7 gh GH Geopotential Height gpm
+8 h H Geometrical height m
+9 hstdv HSTDV Standard deviation of height m
+10 tco TCO Total column ozone kg m**-2
+11 t T Temperature K
+12 vptmp VPTMP Virtual potential temperature K
+13 pt PT Potential temperature K
+14 papt PAPT Pseudo-adiabatic potential temperature K
+15 tmax TMAX Maximum temperature K
+16 tmin TMIN Minimum temperature K
+17 td TD Dew point temperature K
+18 depr DEPR Dew point depression (or deficit) K
+19 lapr LAPR Lapse rate K s**-1
+20 vis VIS Visibility m
+23 rdsp RDSP Radar spectra (3) ~
+24 pli PLI Parcel lifted index (to 500 hPa) K
+25 ta TA Temperature anomaly K
+26 presa PRESA Pressure anomaly Pa
+27 gpa GPA Geopotential height anomaly gpm
+30 wvsp WVSP Wave spectra (3) ~
+31 wdir WDIR Wind direction Degree true
+32 ws WS Wind speed m s**-1
+33 u U U component of wind m s**-1
+34 v V V component of wind m s**-1
+35 strf STRF Stream function m**2 s**-1
+37 mntsf MNTSF Montgomery stream Function m**2 s**-1
+38 sgcvv SGCVV Sigma coordinate vertical velocity s**-1
+39 w W Vertical velocity Pa s**-1
+40 tw TW Vertical velocity m s**-1
+41 absv ABSV Absolute vorticity s**-1
+42 absd ABSD Absolute divergence s**-1
+43 vo VO Vorticity (relative) s**-1
+44 d D Divergence s**-1
+45 vucsh VUCSH Vertical u-component shear s**-1
+46 vvcsh VVCSH Vertical v-component shear s**-1
+47 dirc DIRC Direction of current Degree true
+48 spc SPC Speed of current m s**-1
+49 ucurr UCURR U-component of current  m s**-1
+50 vcurr VCURR V-component of current  m s**-1
+51 q Q Specific humidity kg kg**-1
+52 r R Relative humidity %
+53 mixr MIXR Humidity mixing ratio kg m**-2
+54 pwat PWAT Precipitable water kg m**-2
+55 vp VP Vapour pressure Pa
+56 satd SATD Saturation deficit Pa
+57 e E Evaporation m of water equivalent
+58 ciwc CIWC Cloud ice water content kg m**-2
+59 prate PRATE Precipitation rate kg m**-2 s**-1
+60 tstm TSTM Thunderstorm probability %
+61 tp TP Total precipitation kg m**-2
+62 lsp LSP large scale precipitation (water) kg m**-2
+63 acpcp ACPCP Convective precipitation (water) kg m**-2
+64 srweq SRWEQ Snow fall rate water equivalent kg m**-2 s**-1
+65 sf SF Snow Fall water equivalent kg m**-2
+66 sdp SDP Snow depth water equivalent kg m**-2
+67 mld MLD Mixed layer depth m
+68 tthdp TTHDP Transient thermocline depth m
+69 mthd MTHD Main thermocline depth m
+70 mtha MTHA Main thermocline anomaly m
+71 tcc TCC Total Cloud Cover %
+72 ccc CCC Convective cloud cover (0 - 1)
+73 lcc LCC Low cloud cover (0 - 1)
+74 mcc MCC Medium cloud cover (0 - 1)
+75 hcc HCC High cloud cover (0 - 1)
+76 cwat CWAT Cloud water kg m**-2
+77 bli BLI Best lifted index (to 500 hPa) K
+78 csf CSF Convective snowfall m of water equivalent
+79 lsf LSF Large-scale snowfall m of water equivalent
+80 wtmp WTMP Water temperature K
+81 lsm LSM Land-sea mask (0 - 1)
+82 dslm DSLM Deviation of sea-level from mean m
+83 srg SRG Surface roughness * g m
+84 al AL Albedo (0 - 1)
+85 slt SLT Soil Temperature K
+86 sm SM Soil Moisture kg m**-3
+87 veg VEG Vegetation fraction (0 - 1)
+88 s S Salinity kg kg**-1
+89 den DEN Density kg m**-3
+90 ro RO Runoff m
+91 icec ICEC Ice cover (1=land, 0=sea) (0 - 1)
+92 icetk ICETK Ice thickness m
+93 diced DICED Direction of ice drift Degree true
+94 siced SICED Speed of ice drift m s**-1
+95 uice UICE U-component of ice drift m s**-1
+96 vice VICE V-component of ice drift m s**-1
+97 iceg ICEG Ice growth rate m s**-1
+98 iced ICED Ice divergence s**-1
+99 snom SNOM Snow melt kg m**-2
+100 swh SWH Signific.height,combined wind waves+swell m
+101 mdww MDWW Mean direction of wind waves Degree true
+102 shww SHWW Significant height of wind waves m
+103 mpww MPWW Mean period of wind waves s
+104 swdir SWDIR Direction of swell waves Degree true
+105 swell SWELL Significant height of swell waves m
+106 swper SWPER Mean period of swell waves s
+107 mdps MDPS Mean direction of primary swell Degree true
+108 mpps MPPS Mean period of primary swell s
+109 dirsw DIRSW Secondary wave direction Degree true
+110 swp SWP Secondary wave period s
+111 nswrs NSWRS Net short-wave radiation flux (surface) J m**-2
+112 nlwrs NLWRS Net long-wave radiation flux (surface) J m**-2
+113 nswrt NSWRT Net short-wave radiation flux(atmosph.top) J m**-2
+114 nlwrt NLWRT Net long-wave radiation flux(atmosph.top) J m**-2
+115 lwavr LWAVR Long wave radiation flux J m**-2
+116 swavr SWAVR Short wave radiation flux J m**-2
+117 grad GRAD Global radiation flux J m**-2
+118 btmp BTMP Brightness temperature K
+119 lwrad LWRAD Radiance (with respect to wave number) W m**-1 sr**-1
+120 swrad SWRAD Radiance (with respect to wave length) W m**-1 sr**-1
+121 slhf SLHF Surface latent heat flux J m**-2
+122 sshf SSHF Surface sensible heat flux J m**-2
+123 bld BLD Boundary layer dissipation J m**-2
+124 uflx UFLX Momentum flux, u-component N m**-2
+125 vflx VFLX Momentum flux, v-component N m**-2
+126 wmixe WMIXE Wind mixing energy J
+127 imgd IMGD Image data ~
+128 armsp ARMSP Analysed RMS of PHI (CANARI) m**2 s**-2
+129 frmsp FRMSP Forecast RMS of PHI (CANARI) m**2 s**-2
+130 cssw CSSW SW net clear sky rad W m**-2
+131 cslw CSLW LW net clear sky rad W m**-2
+132 lhe LHE Latent heat flux through evaporation W m**-2
+133 msca MSCA Mask of significant cloud amount s**-1
+135 icei ICEI Icing index -
+136 psct PSCT Pseudo satellite image: cloud top temperature (infrared) -
+137 pstb PSTB Pseudo satellite image: water vapour Tb -
+138 pstbc PSTBC Pseudo satellite image: water vapour Tb + correction for clouds -
+139 pscw PSCW Pseudo satellite image: cloud water reflectivity (visible) -
+144 prtp PRTP Precipitation Type -
+158 mrad MRAD Surface downward moon radiation -
+160 cape CAPE CAPE out of the model J kg-1 
+161 xhail XHAIL AROME hail diagnostic kg m**-2
+162 ugst UGST Gust, u-component m s*-1
+163 vgst VGST Gust, v-component m s*-1
+166 mcn MCN MOCON out of the model  kg kg**-1 s**-1
+167 totqv TOTQV Total water vapour kg kg**-1
+181 rain RAIN Rain kg m**-2
+182 srain SRAIN Stratiform rain kg m**-2
+183 cr CR Convective rain kg m**-2
+184 snow SNOW Snow kg m**-2
+185 tpsolid TPSOLID Total solid precipitation kg m**-2
+186 cb CB Cloud base m
+187 ct CT Cloud top m
+188 ful FUL Fraction of urban land %
+190 asn ASN Snow albedo (0-1)
+191 rsn RSN Snow density kg m**-3
+192 w_i W_I Water on canopy (Interception content) kg m**-2
+193 w_so_ice W_SO_ICE Water on canopy (Interception content) kg m**-2
+195 gwdu GWDU Gravity wave stress U-comp kg m**-1 s**-1
+196 gwdv GWDV Gravity wave stress V-comp kg m**-1 s**-1
+200 tke TKE TKE m**2 s**-2
+201 grpl GRPL Graupel kg m**-2
+204 hail HAIL Hail kg m**-2
+209 lgt LGT Lightning -
+210 refl REFL Simulated reflectivity  dBz ?
+212 pdep PDEP Pressure departure Pa
+213 vdiv VDIV Vertical Divergence s**-1
+214 upom UPOM Updraft omega ms*-1
+215 dnom DNOM Downdraft omega ms*-1
+216 upmf UPMF Updraft mesh fraction -
+217 dnmf DNMF Downdraft mesh fraction -
+220 stdo STDO Standard deviation of orography * g  m**2s**-2
+221 atop ATOP Anisotropy coeff of topography  rad
+222 dtop DTOP Direction of main axis of topography  -
+225 clfr CLFR Fraction of clay within soil  -
+226 slfr SLFR Fraction of sand within soil  -
+228 fg FG Gust m s*-1
+229 alb ALB Albedo of bare ground  -
+230 alv ALV Albedo of vegetation  -
+231 smnr SMNR Stomatal minimum resistance  s m**-1
+232 lai LAI Leaf area index  m**2 m**-2
+234 dvi DVI Dominant vegetation index  -
+235 se SE Surface emissivity  -
+237 sld SLD Soil depth m
+238 swv SWV Soil wetness kg m**-2
+239 zt ZT Thermal roughness length * g  m
+240 rev REV Resistance to evapotransiration  s m**-1
+241 rmn RMN Minimum relative moisture at 2 meters -
+242 rmx RMX Maximum relative moisture at 2 meters -
+243 dutp DUTP Duration of total precipitation s
+244 lhsub LHSUB Latent Heat Sublimation J kg**-1
+245 wevap WEVAP Water evaporation kg m**-2
+246 snsub SNSUB Snow Sublimation kg m**-2
+247 shis SHIS Snow history ???
+248 ao AO A Ozone kg kg**-1
+249 bo BO B Ozone kg kg**-1
+250 co CO C Ozone kg kg**-1
+251 aers AERS Surface aerosol sea kg kg**-1
+252 aerl AERL Surface aerosol land kg kg**-1
+253 aerc AERC Surface aerosol soot (carbon) kg kg**-1
+254 aerd AERD Surface aerosol desert kg kg**-1
+255 - - Missing

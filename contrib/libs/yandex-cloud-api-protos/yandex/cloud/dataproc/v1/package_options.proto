@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+
+package yandex.cloud.dataproc.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dataproc/v1;dataproc";

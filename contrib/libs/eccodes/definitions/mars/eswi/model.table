@@ -1,0 +1,22 @@
+#########################
+##
+## author: Sebastien Villaume
+## created: 6 Oct 2011
+## modified: 20 Feb 2014
+##
+#
+# Model ##### SMHI local definitions #####
+0 none not set, default
+10 ifs IFS
+20 alaro ALARO 
+21 surfex SURFEX
+22 arome AROME 
+30 hirlam HIRLAM
+31 rca RCA
+40 hiromb HIROMB
+41 swan SWAN
+42 hbm HBM 
+43 nemo NEMO
+50 match MATCH
+60 mesan MESAN
+61 mescan MESCAN

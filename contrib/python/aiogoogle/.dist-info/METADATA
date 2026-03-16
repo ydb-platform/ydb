@@ -1,0 +1,74 @@
+Metadata-Version: 2.4
+Name: aiogoogle
+Version: 5.17.0
+Summary: Async Google API client
+Home-page: https://github.com/omarryhan/aiogoogle
+Author: Omar Ryhan
+Author-email: omarryhan@gmail.com
+License: MIT
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Operating System :: OS Independent
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: aiohttp
+Requires-Dist: aiofiles
+Requires-Dist: google-auth
+Requires-Dist: tonyg-rfc3339
+Requires-Dist: async-timeout
+Requires-Dist: contextvars; python_version < "3.7"
+Provides-Extra: curio-asks
+Requires-Dist: asks; extra == "curio-asks"
+Requires-Dist: curio; extra == "curio-asks"
+Provides-Extra: trio-asks
+Requires-Dist: asks; extra == "trio-asks"
+Requires-Dist: trio; extra == "trio-asks"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: summary
+
+<p align="center">
+  <img src="https://github.com/omarryhan/aiogoogle/blob/master/logo.png?raw=true" alt="Logo" title="Aiogoogle" height="233" width="482"/>
+  <p align="center">
+    <a href="https://github.com/omarryhan/aiogoogle/actions?query=workflow%3ACI"><img alt="Build Status" src="https://github.com/omarryhan/aiogoogle/workflows/CI/badge.svg"></a>
+    <a href="https://github.com/omarryhan/aiogoogle"><img alt="Software License" src="https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square"></a>
+    <a href="https://github.com/python/black"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg" /></a>
+    <a href="https://static.pepy.tech/badge/aiogoogle"><img alt="Downloads" src="https://static.pepy.tech/badge/aiogoogle"></a>
+    <a href="https://static.pepy.tech/badge/aiogoogle/month"><img alt="Monthly Downloads" src="https://static.pepy.tech/badge/aiogoogle/month"></a>
+  </p>
+</p>
+
+# Aiogoogle
+
+**Async** Google API client
+
+Aiogoogle makes it possible to access most of Google's public APIs which include:
+
+- Google Calendar API
+- Google Drive API
+- Google Contacts API
+- Gmail API
+- Google Maps API
+- Youtube API
+- Translate API
+- Google Sheets API
+- Google Docs API
+- Gogle Analytics API
+- Google Books API
+- Google Fitness API
+- Google Genomics API
+- Google Cloud Storage
+- Kubernetes Engine API
+- And [more](https://developers.google.com/apis-explorer)
+
+## Documentation 📑
+
+You can find the documentation [here](https://aiogoogle.readthedocs.io/en/latest/#).
+

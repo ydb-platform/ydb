@@ -1,0 +1,15 @@
+# Product discipline 10 - Oceanographic products, parameter category 3: surface properties
+0 0 Water temperature (K)
+1 1 Deviation of sea level from mean (m)
+2 2 Heat exchange coefficient (-)
+3 3 Practical salinity (Numeric)
+4 4 Downward heat flux (W m-2)
+5 5 Eastward surface stress (N m-2)
+6 6 Northward surface stress (N m-2)
+7 7 x-component surface stress (N m-2)
+8 8 y-component surface stress (N m-2)
+9 9 Thermosteric change in sea surface height (m)
+10 10 Halosteric change in sea surface height (m)
+11 11 Steric change in sea surface height (m)
+12 12 Sea salt flux (kg m-2 s-1)
+255 255 Missing

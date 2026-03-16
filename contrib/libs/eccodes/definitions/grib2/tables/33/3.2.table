@@ -1,0 +1,16 @@
+# Code table 3.2 - Shape of the reference system
+0 0 Earth assumed spherical with radius = 6 367 470.0 m
+1 1 Earth assumed spherical with radius specified (in m) by data producer
+2 2 Earth assumed oblate spheroid with size as determined by IAU in 1965 (major axis = 6 378 160.0 m, minor axis = 6 356 775.0 m, f = 1/297.0)
+3 3 Earth assumed oblate spheroid with major and minor axes specified (in km) by data producer
+4 4 Earth assumed oblate spheroid as defined in IAG-GRS80 model (major axis = 6 378 137.0 m, minor axis = 6 356 752.314 m, f = 1/298.257 222 101)
+5 5 Earth assumed represented by WGS-84 (as used by ICAO since 1998)
+6 6 Earth assumed spherical with radius of 6 371 229.0 m
+7 7 Earth assumed oblate spheroid with major or minor axes specified (in m) by data producer
+8 8 Earth model assumed spherical with radius of 6 371 200 m, but the horizontal datum of the resulting latitude/longitude field is the WGS-84 reference frame
+9 9 Earth represented by the Ordnance Survey Great Britain 1936 Datum, using the Airy 1830 Spheroid, the Greenwich meridian as 0 longitude, and the Newlyn datum as mean sea level, 0 height
+10 10 Earth model assumed WGS84 with corrected geomagnetic coordinates (latitude and longitude) defined by Gustafsson et al., 1992
+11 11 Sun assumed spherical with radius = 695 990 000 m (Allen, C.W., Astrophysical Quantities, 3rd ed.; Athlone: London, 1976) and Stonyhurst latitude and longitude system with origin at the intersection of the solar central meridian (as seen from Earth) and the solar equator (Thompson, W., Coordinate systems for solar image data, Astron. Astrophys. 2006, 449, 791-803)
+# 12-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

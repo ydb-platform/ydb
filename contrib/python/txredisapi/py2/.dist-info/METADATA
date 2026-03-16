@@ -1,0 +1,25 @@
+Metadata-Version: 2.1
+Name: txredisapi
+Version: 1.4.7
+Summary: non-blocking redis client for python
+Home-page: http://github.com/IlyaSkriblovsky/txredisapi
+Author: Alexandre Fiori
+Author-email: fiorix@gmail.com
+License: http://www.apache.org/licenses/LICENSE-2.0
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Requires-Dist: six
+Requires-Dist: twisted
+
+UNKNOWN
+
+

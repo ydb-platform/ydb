@@ -1,0 +1,15 @@
+{
+    "Arm Right": {
+        "Joint 1": 5,
+        "Joint 2": 3,
+        "Joint 3": 66
+    },
+    "Arm Left": {
+        "Joint 1": 55,
+        "Joint 2": 13,
+        "Joint 3": 6
+    },
+    "Head": {
+        "Joint 1": 10
+    }
+}

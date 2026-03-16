@@ -1,0 +1,30 @@
+--- contrib/python/mcp-windbg/mcp_windbg/prompts/__init__.py	(index)
++++ contrib/python/mcp-windbg/mcp_windbg/prompts/__init__.py	(working tree)
+@@ -5,7 +5,8 @@ from pathlib import Path
+ 
+ def get_prompts_directory() -> Path:
+     """Get the path to the prompts directory."""
+-    return Path(__file__).parent
++    import importlib.resources
++    return importlib.resources.files(__package__)
+ 
+ 
+ def load_prompt(name: str) -> str:
+@@ -23,7 +24,7 @@ def load_prompt(name: str) -> str:
+     prompts_dir = get_prompts_directory()
+     prompt_path = prompts_dir / f"{name}.prompt.md"
+ 
+-    if not prompt_path.exists():
++    if not prompt_path.is_file():
+         raise FileNotFoundError(f"Prompt file not found: {prompt_path}")
+ 
+     return prompt_path.read_text(encoding="utf-8")
+@@ -36,5 +37,7 @@ def get_available_prompts() -> list[str]:
+         List of prompt names (without .prompt.md extension)
+     """
+     prompts_dir = get_prompts_directory()
+-    prompt_files = prompts_dir.glob("*.prompt.md")
++    prompt_files = [
++        f for f in prompts_dir.iterdir() if f.name.endswith('.prompt.md')
++    ]
+     return [f.stem.replace(".prompt", "") for f in prompt_files]

@@ -1,0 +1,694 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2006 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2007-2016 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2012      Oak Ridge National Labs.  All rights reserved.
+# Copyright (c) 2017      Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for Open RTE's orterun.
+#
+[orterun:init-failure]
+Open RTE was unable to initialize properly.  The error occured while
+attempting to %s.  Returned value %d instead of ORTE_SUCCESS.
+[orterun:usage]
+%s (%s) %s
+
+Usage: %s [OPTION]...  [PROGRAM]...
+Start the given program using Open RTE
+
+%s
+
+Report bugs to %s
+[orterun:version]
+%s (%s) %s
+
+Report bugs to %s
+[orterun:allocate-resources]
+%s was unable to allocate enough resources to start your application.
+This might be a transient error (too many nodes in the cluster were
+unavailable at the time of the request) or a permenant error (you
+requsted more nodes than exist in your cluster).
+
+While probably only useful to Open RTE developers, the error returned
+was %d.
+[orterun:error-spawning]
+%s was unable to start the specified application.  An attempt has been
+made to clean up all processes that did start.  The error returned was
+%d.
+[orterun:appfile-not-found]
+Unable to open the appfile:
+
+    %s
+
+Double check that this file exists and is readable.
+[orterun:executable-not-specified]
+No executable was specified on the %s command line.
+
+Aborting.
+[orterun:multi-apps-and-zero-np]
+%s found multiple applications specified on the command line, with
+at least one that failed to specify the number of processes to execute.
+When specifying multiple applications, you must specify how many processes
+of each to launch via the -np argument.
+[orterun:nothing-to-do]
+%s could not find anything to do.
+
+It is possible that you forgot to specify how many processes to run
+via the "-np" argument.
+[orterun:call-failed]
+%s encountered a %s call failure.  This should not happen, and
+usually indicates an error within the operating system itself.
+Specifically, the following error occurred:
+
+    %s
+
+The only other available information that may be helpful is the errno
+that was returned: %d.
+[orterun:environ]
+%s was unable to set
+ %s = %s
+in the environment. Returned value %d instead of ORTE_SUCCESS.
+[orterun:precondition]
+%s was unable to precondition transports
+Returned value %d instead of ORTE_SUCCESS.
+[orterun:attr-failed]
+%s was unable to define an attribute
+Returned value %d instead of ORTE_SUCCESS.
+#
+[orterun:proc-ordered-abort]
+%s has exited due to process rank %lu with PID %lu on
+node %s calling "abort". This may have caused other processes
+in the application to be terminated by signals sent by %s
+(as reported here).
+#
+[orterun:proc-exit-no-sync]
+%s has exited due to process rank %lu with PID %lu on
+node %s exiting improperly. There are three reasons this could occur:
+
+1. this process did not call "init" before exiting, but others in
+the job did. This can cause a job to hang indefinitely while it waits
+for all processes to call "init". By rule, if one process calls "init",
+then ALL processes must call "init" prior to termination.
+
+2. this process called "init", but exited without calling "finalize".
+By rule, all processes that call "init" MUST call "finalize" prior to
+exiting or it will be considered an "abnormal termination"
+
+3. this process called "MPI_Abort" or "orte_abort" and the mca parameter
+orte_create_session_dirs is set to false. In this case, the run-time cannot
+detect that the abort call was an abnormal termination. Hence, the only
+error message you will receive is this one.
+
+This may have caused other processes in the application to be
+terminated by signals sent by %s (as reported here).
+
+You can avoid this message by specifying -quiet on the %s command line.
+#
+[orterun:proc-exit-no-sync-unknown]
+%s has exited due to a process exiting without calling "finalize",
+but has no info as to the process that caused that situation. This
+may have caused other processes in the application to be
+terminated by signals sent by %s (as reported here).
+#
+[orterun:proc-aborted]
+%s noticed that process rank %lu with PID %lu on node %s exited on signal %d.
+#
+[orterun:proc-aborted-unknown]
+%s noticed that the job aborted, but has no info as to the process
+that caused that situation.
+#
+[orterun:proc-aborted-signal-unknown]
+%s noticed that the job aborted by signal, but has no info as
+to the process that caused that situation.
+#
+[orterun:proc-aborted-strsignal]
+%s noticed that process rank %lu with PID %lu on node %s exited on signal %d (%s).
+#
+[orterun:abnormal-exit]
+WARNING: %s has exited before it received notification that all
+started processes had terminated.  You should double check and ensure
+that there are no runaway processes still executing.
+#
+[orterun:sigint-while-processing]
+WARNING: %s is in the process of killing a job, but has detected an
+interruption (probably control-C).
+
+It is dangerous to interrupt %s while it is killing a job (proper
+termination may not be guaranteed).  Hit control-C again within 1
+second if you really want to kill %s immediately.
+#
+[orterun:double-prefix]
+Both a prefix was supplied to %s and the absolute path to %s was
+given:
+
+  Prefix: %s
+  Path:   %s
+
+Only one should be specified to avoid potential version
+confusion. Operation will continue, but the -prefix option will be
+used. This is done to allow you to select a different prefix for
+the backend computation nodes than used on the frontend for %s.
+#
+[orterun:app-prefix-conflict]
+Both a prefix or absolute path was given for %s, and a different
+prefix provided for the first app_context:
+
+  Mpirun prefix: %s
+  App prefix:    %s
+
+Only one should be specified to avoid potential version
+confusion. Operation will continue, but the application's prefix
+option will be ignored.
+#
+[orterun:empty-prefix]
+A prefix was supplied to %s that only contained slashes.
+
+This is a fatal error; %s will now abort.  No processes were launched.
+#
+[debugger-mca-param-not-found]
+Internal error -- the orte_base_user_debugger MCA parameter was not able to
+be found.  Please contact the Open RTE developers; this should not
+happen.
+#
+[debugger-orte_base_user_debugger-empty]
+The MCA parameter "orte_base_user_debugger" was empty, indicating that
+no user-level debuggers have been defined.  Please set this MCA
+parameter to a value and try again.
+#
+[debugger-not-found]
+A suitable debugger could not be found in your PATH.  Check the values
+specified in the orte_base_user_debugger MCA parameter for the list of
+debuggers that was searched.
+#
+[debugger-exec-failed]
+%s was unable to launch the specified debugger.  This is what was
+launched:
+
+    %s
+
+Things to check:
+
+    - Ensure that the debugger is installed properly
+    - Ensure that the "%s" executable is in your path
+    - Ensure that any required licenses are available to run the debugger
+#
+[orterun:sys-limit-pipe]
+%s was unable to launch the specified application as it encountered an error:
+
+Error: system limit exceeded on number of pipes that can be open
+Node: %s
+
+when attempting to start process rank %lu.
+
+This can be resolved by setting the mca parameter opal_set_max_sys_limits to 1,
+increasing your limit descriptor setting (using limit or ulimit commands),
+asking the system administrator for that node to increase the system limit, or
+by rearranging your processes to place fewer of them on that node.
+#
+[orterun:sys-limit-sockets]
+Error: system limit exceeded on number of network connections that can be open
+
+This can be resolved by setting the mca parameter opal_set_max_sys_limits to 1,
+increasing your limit descriptor setting (using limit or ulimit commands),
+or asking the system administrator to increase the system limit.
+#
+[orterun:pipe-setup-failure]
+%s was unable to launch the specified application as it encountered an error:
+
+Error: pipe function call failed when setting up I/O forwarding subsystem
+Node: %s
+
+while attempting to start process rank %lu.
+#
+[orterun:sys-limit-children]
+%s was unable to launch the specified application as it encountered an error:
+
+Error: system limit exceeded on number of processes that can be started
+Node: %s
+
+when attempting to start process rank %lu.
+
+This can be resolved by either asking the system administrator for that node to
+increase the system limit, or by rearranging your processes to place fewer of them
+on that node.
+#
+[orterun:failed-term-attrs]
+%s was unable to launch the specified application as it encountered an error:
+
+Error: reading tty attributes function call failed while setting up
+I/O forwarding system
+Node: %s
+
+while attempting to start process rank %lu.
+#
+[orterun:wdir-not-found]
+%s was unable to launch the specified application as it could not
+change to the specified working directory:
+
+Working directory: %s
+Node: %s
+
+while attempting to start process rank %lu.
+#
+[orterun:exe-not-found]
+%s was unable to find the specified executable file, and therefore
+did not launch the job.  This error was first reported for process
+rank %lu; it may have occurred for other processes as well.
+
+NOTE: A common cause for this error is misspelling a %s command
+      line parameter option (remember that %s interprets the first
+      unrecognized command line token as the executable).
+
+Node:       %s
+Executable: %s
+#
+[orterun:exe-not-accessible]
+%s was unable to launch the specified application as it could not access
+or execute an executable:
+
+Executable: %s
+Node: %s
+
+while attempting to start process rank %lu.
+#
+[orterun:pipe-read-failure]
+%s was unable to launch the specified application as it encountered an error:
+
+Error: reading from a pipe function call failed while spawning a local process
+Node: %s
+
+while attempting to start process rank %lu.
+#
+[orterun:proc-failed-to-start]
+%s was unable to start the specified application as it encountered an
+error:
+
+Error code: %d
+Error name: %s
+Node: %s
+
+when attempting to start process rank %lu.
+#
+[orterun:proc-socket-not-avail]
+%s was unable to start the specified application as it encountered an
+error:
+
+Error name: %s
+Node: %s
+
+when attempting to start process rank %lu.
+#
+[orterun:proc-failed-to-start-no-status]
+%s was unable to start the specified application as it encountered an
+error on node %s. More information may be available above.
+#
+[orterun:proc-failed-to-start-no-status-no-node]
+%s was unable to start the specified application as it encountered an
+error.  More information may be available above.
+#
+[debugger requires -np]
+The number of MPI processes to launch was not specified on the command
+line.
+
+The %s debugger requires that you specify a number of MPI processes to
+launch on the command line via the "-np" command line parameter.  For
+example:
+
+    %s -np 4 %s
+
+Skipping the %s debugger for now.
+#
+[debugger requires executable]
+The %s debugger requires that you specify an executable on the %s
+command line; you cannot specify application context files when
+launching this job in the %s debugger.  For example:
+
+    %s -np 4 my_mpi_executable
+
+Skipping the %s debugger for now.
+#
+[debugger only accepts single app]
+The %s debugger only accepts SPMD-style launching; specifying an
+MPMD-style launch (with multiple applications separated via ':') is
+not permitted.
+
+Skipping the %s debugger for now.
+#
+[orterun:daemon-died-during-execution]
+%s has detected that a required daemon terminated during execution
+of the application with a non-zero status. This is a fatal error.
+A best-effort attempt has been made to cleanup. However, it is
+-strongly- recommended that you execute the orte-clean utility
+to ensure full cleanup is accomplished.
+#
+[orterun:no-orted-object-exit]
+%s was unable to determine the status of the daemons used to
+launch this application. Additional manual cleanup may be required.
+Please refer to the "orte-clean" tool for assistance.
+#
+[orterun:unclean-exit]
+%s was unable to cleanly terminate the daemons on the nodes shown
+below. Additional manual cleanup may be required - please refer to
+the "orte-clean" tool for assistance.
+#
+[orterun:event-def-failed]
+%s was unable to define an event required for proper operation of
+the system. The reason for this error was:
+
+Error: %s
+
+Please report this to the Open MPI mailing list users@open-mpi.org.
+#
+[orterun:ompi-server-filename-bad]
+%s was unable to parse the filename where contact info for the
+ompi-server was to be found. The option we were given was:
+
+--ompi-server %s
+
+This appears to be missing the required ':' following the
+keyword "file". Please remember that the correct format for this
+command line option is:
+
+--ompi-server file:path-to-file
+
+where path-to-file can be either relative to the cwd or absolute.
+#
+[orterun:ompi-server-filename-missing]
+%s was unable to parse the filename where contact info for the
+ompi-server was to be found. The option we were given was:
+
+--ompi-server %s
+
+This appears to be missing a filename following the ':'. Please
+remember that the correct format for this command line option is:
+
+--ompi-server file:path-to-file
+
+where path-to-file can be either relative to the cwd or absolute.
+#
+[orterun:ompi-server-filename-access]
+%s was unable to access the filename where contact info for the
+ompi-server was to be found. The option we were given was:
+
+--ompi-server %s
+
+Please remember that the correct format for this command line option is:
+
+--ompi-server file:path-to-file
+
+where path-to-file can be either relative to the cwd or absolute, and that
+you must have read access permissions to that file.
+#
+[orterun:ompi-server-file-bad]
+%s was unable to read the ompi-server's contact info from the
+given filename. The filename we were given was:
+
+FILE: %s
+
+Please remember that the correct format for this command line option is:
+
+--ompi-server file:path-to-file
+
+where path-to-file can be either relative to the cwd or absolute, and that
+the file must have a single line in it that contains the Open MPI
+uri for the ompi-server. Note that this is *not* a standard uri, but
+a special format used internally by Open MPI for communications. It can
+best be generated by simply directing the ompi-server to put its
+uri in a file, and then giving %s that filename.
+[orterun:multiple-hostfiles]
+Error: More than one hostfile was passed for a single application
+context, which is not supported at this time.
+#
+[orterun:conflicting-params]
+%s has detected multiple instances of an MCA param being specified on
+the command line, with conflicting values:
+
+MCA param: %s
+Value 1: %s
+Value 2: %s
+
+This MCA param does not support multiple values, and the system is unable
+to identify which value was intended. If this was done in error, please
+re-issue the command with only one value. You may wish to review the
+output from ompi_info for guidance on accepted values for this param.
+
+[orterun:server-not-found]
+%s was instructed to wait for the requested ompi-server, but was unable to
+establish contact with the server during the specified wait time:
+
+Server uri:  %s
+Timeout time: %ld
+
+Error received: %s
+
+Please check to ensure that the requested server matches the actual server
+information, and that the server is in operation.
+#
+[orterun:server-unavailable]
+The user has called an operation involving MPI_Connect and/or MPI_Accept
+that spans multiple invocations of mpirun. This requires the support of
+the ompi-server tool, which must be executing somewhere that can be
+accessed by all participants.
+
+Please ensure the tool is running, and provide each mpirun with the MCA
+parameter "pmix_server_uri" pointing to it.
+#
+[orterun:malformedport]
+An operation involving MPI_Connect and/or MPI_Accept was called with
+an unrecognized port string. This typically happens when passing the
+string on a cmd line and failing to properly quote it to protect
+against the special characters it includes
+#
+[orterun:ompi-server-pid-bad]
+%s was unable to parse the PID of the %s to be used as the ompi-server.
+The option we were given was:
+
+--ompi-server %s
+
+Please remember that the correct format for this command line option is:
+
+--ompi-server PID:pid-of-%s
+
+where PID can be either "PID" or "pid".
+#
+[orterun:ompi-server-could-not-get-hnp-list]
+%s was unable to search the list of local %s contact files to find the
+specified pid.  You might check to see if your local session directory
+is available and that you have read permissions on the top of that
+directory tree.
+#
+[orterun:ompi-server-pid-not-found]
+%s was unable to find an %s with the specified pid of %d that was to
+be used as the ompi-server.  The option we were given was:
+
+--ompi-server %s
+
+Please remember that the correct format for this command line option is:
+
+--ompi-server PID:pid-of-%s
+
+where PID can be either "PID" or "pid".
+#
+[orterun:write_file]
+%s was unable to open a file to printout %s as requested. The file
+name given was:
+
+File: %s
+#
+[orterun:multiple-paffinity-schemes]
+Multiple processor affinity schemes were specified (can only specify
+one):
+
+Slot list: %s
+opal_paffinity_alone:  true
+
+Please specify only the one desired method.
+#
+[orterun:slot-list-failed]
+We were unable to successfully process/set the requested processor
+affinity settings:
+
+Specified slot list: %s
+Error: %s
+
+This could mean that a non-existent processor was specified, or
+that the specification had improper syntax.
+#
+[orterun:invalid-node-rank]
+An invalid node rank was obtained - this is probably something
+that should be reported to the OMPI developers.
+#
+[orterun:invalid-local-rank]
+An invalid local rank was obtained - this is probably something
+that should be reported to the OMPI developers.
+#
+[orterun:invalid-phys-cpu]
+An invalid physical processor id was returned when attempting to
+set processor affinity - please check to ensure that your system
+supports such functionality. If so, then this is probably something
+that should be reported to the OMPI developers.
+#
+[orterun:failed-set-paff]
+An attempt to set processor affinity has failed - please check to
+ensure that your system supports such functionality. If so, then
+this is probably something that should be reported to the OMPI
+developers.
+#
+[orterun:topo-not-supported]
+An attempt was made to bind a process to a specific hardware topology
+mapping (e.g., binding to a socket) but the operating system does not
+support such topology-aware actions.  Talk to your local system
+administrator to find out if your system can support topology-aware
+functionality (e.g., Linux Kernels newer than v2.6.18).
+
+Systems that do not support processor topology-aware functionality
+cannot use "bind to socket" and other related functionality.
+
+  Local host:        %s
+  Action attempted:  %s %s
+  Application name:  %s
+#
+[orterun:binding-not-avail]
+A request to bind the processes if the operating system supports such
+an operation was made, but the OS does not support this operation:
+
+  Local host:        %s
+  Action requested:  %s
+  Application name:  %s
+
+Because the request was made on an "if-available" basis, the job was
+launched without taking the requested action. If this is not the
+desired behavior, talk to your local system administrator to find out
+if your system can support the requested action.
+#
+[orterun:not-enough-resources]
+Not enough %s were found on the local host to meet the requested
+binding action:
+
+  Local host:        %s
+  Action requested:  %s
+  Application name:  %s
+
+Please revise the request and try again.
+#
+[orterun:paffinity-missing-module]
+A request to bind processes was made, but no paffinity module
+was found:
+
+  Local host:        %s
+
+This is potentially a configuration. You can rerun your job without
+requesting binding, or check the configuration.
+#
+[orterun:invalid-slot-list-range]
+A slot list was provided that exceeds the boundaries on available
+resources:
+
+  Local host: %s
+  Slot list:  %s
+
+Please check your boundaries and try again.
+#
+[orterun:proc-comm-failed]
+A critical communication path was lost to:
+
+  My name:      %s
+  Process name: %s
+  Node:         %s
+#
+[orterun:proc-mem-exceeded]
+A process exceeded memory limits:
+
+  Process name: %s
+  Node:         %s
+#
+[orterun:proc-stalled]
+One or more processes appear to have stalled - a monitored file
+failed to show the required activity.
+#
+[orterun:proc-sensor-exceeded]
+One or more processes have exceeded a specified sensor limit, but
+no further info is available.
+#
+[orterun:proc-heartbeat-failed]
+%s failed to receive scheduled heartbeat communications from a remote
+process:
+
+  Process name: %s
+  Node:         %s
+#
+[orterun:non-zero-exit]
+%s detected that one or more processes exited with non-zero status, thus causing
+the job to be terminated. The first process to do so was:
+
+  Process name: %s
+  Exit code:    %d
+#
+[orterun:unrecognized-mr-type]
+%s does not recognize the type of job. This should not happen and
+indicates an ORTE internal problem.
+#
+[multiple-combiners]
+More than one combiner was specified. The combiner takes the output
+from the final reducer in each chain to produce a single, combined
+result. Thus, there can only be one combiner for a job. Please
+review your command line and try again.
+#
+[orterun:negative-nprocs]
+%s has detected that one or more applications was given a negative
+number of processes to run:
+
+  Application:  %s
+  Num procs:    %d
+
+Please correct this value and try again.
+#
+[orterun:timeout]
+The user-provided time limit for job execution has been reached:
+
+  Timeout: %d seconds
+
+The job will now be aborted.  Please check your code and/or
+adjust/remove the job execution time limit (as specified by --timeout
+command line option or MPIEXEC_TIMEOUT environment variable).
+#
+[orterun:conflict-env-set]
+ERROR: You have attempted to pass environment variables to Open MPI
+with both the "-x" method and by setting the MCA parameter "mca_base_env_list".
+
+Open MPI does not support mixing these two methods.  Please choose one
+method and try launching your job again.
+
+Your job will now abort.
+#
+[orterun:pmix-failed]
+The call to pmix_init_server() failed. This may be due to your
+system's restriction for Unix's socket's path-length.
+
+   orte_proc_session_dir: %s
+
+Please try to set TMPDIR to something short (like /tmp) or change
+Your computer's name (see uname -n).
+#
+[orterun:timeoutconflict]
+Conflicting requests for timeout were given:
+
+  --timeout command line option: %d
+  MPIEXEC_TIMEOUT envar:         %s
+
+Only one method should be provided, or else they must agree. Please
+correct and retry.

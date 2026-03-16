@@ -1,0 +1,5 @@
+[console_scripts]
+telnetlib3-client = telnetlib3.client:main
+telnetlib3-fingerprint = telnetlib3.client:fingerprint_main
+telnetlib3-fingerprint-server = telnetlib3.fingerprinting:fingerprint_server_main
+telnetlib3-server = telnetlib3.server:main

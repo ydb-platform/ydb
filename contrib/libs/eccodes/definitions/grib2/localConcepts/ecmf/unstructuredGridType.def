@@ -1,0 +1,11 @@
+'undefined' = { numberOfGridUsed = 0; }
+'ORCA2'     = { numberOfGridUsed = 1; }
+'ORCA1'     = { numberOfGridUsed = 2; }
+'ORCA025'   = { numberOfGridUsed = 3; }
+'ORCA12'    = { numberOfGridUsed = 4; }
+'eORCA1'    = { numberOfGridUsed = 5; }
+'eORCA025'  = { numberOfGridUsed = 6; }
+'eORCA12'   = { numberOfGridUsed = 7; }
+'CORE2'     = { numberOfGridUsed = 8; }
+'NG5'       = { numberOfGridUsed = 9; }
+'DART'      = { numberOfGridUsed = 10; }

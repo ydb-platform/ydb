@@ -1,0 +1,60 @@
+--- contrib/python/M2Crypto/py3/SWIG/_m2crypto_wrap.c	(index)
++++ contrib/python/M2Crypto/py3/SWIG/_m2crypto_wrap.c	(working tree)
+@@ -10704,6 +10704,7 @@ fail:
+ }
+ 
+ 
++#if 0
+ SWIGINTERN PyObject *_wrap_OPENSSL_sk_find_all(PyObject *self, PyObject *args) {
+   PyObject *resultobj = 0;
+   OPENSSL_STACK *arg1 = (OPENSSL_STACK *) 0 ;
+@@ -10739,6 +10740,7 @@ SWIGINTERN PyObject *_wrap_OPENSSL_sk_find_all(PyObject *self, PyObject *args) {
+ fail:
+   return NULL;
+ }
++#endif
+ 
+ 
+ SWIGINTERN PyObject *_wrap_OPENSSL_sk_push(PyObject *self, PyObject *args) {
+@@ -10971,6 +10973,7 @@ fail:
+ }
+ 
+ 
++#if 0
+ SWIGINTERN PyObject *_wrap_ossl_check_OPENSSL_STRING_type(PyObject *self, PyObject *args) {
+   PyObject *resultobj = 0;
+   char *arg1 = (char *) 0 ;
+@@ -11396,6 +11399,7 @@ SWIGINTERN PyObject *_wrap_ossl_check_OPENSSL_BLOCK_freefunc_type(PyObject *self
+ fail:
+   return NULL;
+ }
++#endif
+ 
+ 
+ SWIGINTERN PyObject *_wrap_threading_init(PyObject *self, PyObject *args) {
+@@ -31023,7 +31027,9 @@ static PyMethodDef SwigMethods[] = {
+ 	 { "OPENSSL_sk_delete_ptr", _wrap_OPENSSL_sk_delete_ptr, METH_VARARGS, NULL},
+ 	 { "OPENSSL_sk_find", _wrap_OPENSSL_sk_find, METH_VARARGS, NULL},
+ 	 { "OPENSSL_sk_find_ex", _wrap_OPENSSL_sk_find_ex, METH_VARARGS, NULL},
++#if 0
+ 	 { "OPENSSL_sk_find_all", _wrap_OPENSSL_sk_find_all, METH_VARARGS, NULL},
++#endif
+ 	 { "OPENSSL_sk_push", _wrap_OPENSSL_sk_push, METH_VARARGS, NULL},
+ 	 { "OPENSSL_sk_unshift", _wrap_OPENSSL_sk_unshift, METH_VARARGS, NULL},
+ 	 { "OPENSSL_sk_shift", _wrap_OPENSSL_sk_shift, METH_O, NULL},
+@@ -31033,6 +31039,7 @@ static PyMethodDef SwigMethods[] = {
+ 	 { "OPENSSL_sk_dup", _wrap_OPENSSL_sk_dup, METH_O, NULL},
+ 	 { "OPENSSL_sk_sort", _wrap_OPENSSL_sk_sort, METH_O, NULL},
+ 	 { "OPENSSL_sk_is_sorted", _wrap_OPENSSL_sk_is_sorted, METH_O, NULL},
++#if 0
+ 	 { "ossl_check_OPENSSL_STRING_type", _wrap_ossl_check_OPENSSL_STRING_type, METH_O, NULL},
+ 	 { "ossl_check_const_OPENSSL_STRING_sk_type", _wrap_ossl_check_const_OPENSSL_STRING_sk_type, METH_O, NULL},
+ 	 { "ossl_check_OPENSSL_STRING_sk_type", _wrap_ossl_check_OPENSSL_STRING_sk_type, METH_O, NULL},
+@@ -31051,6 +31058,7 @@ static PyMethodDef SwigMethods[] = {
+ 	 { "ossl_check_OPENSSL_BLOCK_compfunc_type", _wrap_ossl_check_OPENSSL_BLOCK_compfunc_type, METH_O, NULL},
+ 	 { "ossl_check_OPENSSL_BLOCK_copyfunc_type", _wrap_ossl_check_OPENSSL_BLOCK_copyfunc_type, METH_O, NULL},
+ 	 { "ossl_check_OPENSSL_BLOCK_freefunc_type", _wrap_ossl_check_OPENSSL_BLOCK_freefunc_type, METH_O, NULL},
++#endif
+ 	 { "threading_init", _wrap_threading_init, METH_NOARGS, NULL},
+ 	 { "threading_cleanup", _wrap_threading_cleanup, METH_NOARGS, NULL},
+ 	 { "time_t_bits", _wrap_time_t_bits, METH_NOARGS, NULL},

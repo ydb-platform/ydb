@@ -1,0 +1,5 @@
+requirements:
+  - setuptools
+  - tornado: contrib/python/tornado/tornado-4
+mark_as_sources:
+  - luigi/static/visualiser/js/test/*

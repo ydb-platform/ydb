@@ -1,0 +1,30 @@
+--- contrib/python/mitmproxy/mitmproxy/flow.py	(index)
++++ contrib/python/mitmproxy/mitmproxy/flow.py	(working tree)
+@@ -9,6 +9,17 @@ from mitmproxy import stateobject
+ from mitmproxy import version
+ 
+ 
++class classproperty:
++    """
++    Decorator which makes a method a class' property instead
++    (it's like ``@classmethod`` and ``@property`` decorators together)
++    """
++    def __init__(self, getter):
++        self.getter = getter
++    def __get__(self, obj, objtype):
++        return self.getter(objtype)
++
++
+ class Error(stateobject.StateObject):
+     """
+     An Error.
+@@ -151,8 +162,7 @@ class Flow(stateobject.StateObject):
+ 
+     __types: dict[str, type["Flow"]] = {}
+ 
+-    @classmethod
+-    @property
++    @classproperty
+     def type(cls) -> str:
+         """The flow type, for example `http`, `tcp`, or `dns`."""
+         return cls.__name__.removesuffix("Flow").lower()

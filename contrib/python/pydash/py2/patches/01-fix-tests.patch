@@ -1,0 +1,21 @@
+--- contrib/python/pydash/py2/tests/test_objects.py	(index)
++++ contrib/python/pydash/py2/tests/test_objects.py	(working tree)
+@@ -10,7 +10,7 @@ from . import fixtures
+ from .fixtures import parametrize
+ 
+ 
+-today = dt.date.today()
++today = 'today'
+ 
+ 
+ @parametrize(
+@@ -813,6 +813,9 @@ def test_to_pairs(case, expected):
+     ],
+ )
+ def test_to_string(case, expected):
++    if case is today:
++        case = dt.date.today()
++        expected = str(case)
+     assert _.to_string(case) == expected
+ 
+ 

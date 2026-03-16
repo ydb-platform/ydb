@@ -1,0 +1,50 @@
+import dataclasses
+import warnings
+from typing import Callable
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
+
+from evidently.core.datasets import Dataset
+from evidently.core.report import Snapshot
+from evidently.ui.workspace import Project
+from evidently.ui.workspace import RemoteWorkspace
+from evidently.ui.workspace import Workspace
+from evidently.ui.workspace import WorkspaceBase
+
+DemoData = Tuple[Dataset, Dataset]
+
+
+@dataclasses.dataclass
+class DemoProject:
+    name: str
+    create_project: Callable[[WorkspaceBase, str], Project]
+    create_data: Callable[[], DemoData]
+    create_snapshot: Optional[Callable[[int, DemoData], Snapshot]]
+    create_datasets: Optional[Callable[[], List[Tuple[Dataset, str, str]]]]
+    count: int
+
+    def create(self, workspace: Union[str, WorkspaceBase]):
+        if isinstance(workspace, WorkspaceBase):
+            ws = workspace
+        else:
+            if workspace.startswith("http"):
+                ws = RemoteWorkspace(workspace)
+            else:
+                ws = Workspace.create(workspace)
+
+        # todo: fix all the warnings
+        warnings.filterwarnings("ignore")
+        warnings.simplefilter("ignore")
+
+        project = self.create_project(ws, self.name)
+        data = self.create_data()
+
+        if self.create_datasets is not None:
+            for dataset, name, description in self.create_datasets():
+                ws.add_dataset(project.id, dataset, name, description)
+        for i in range(0, self.count):
+            if self.create_snapshot is not None:
+                snapshot = self.create_snapshot(i, data)
+                ws.add_run(project.id, snapshot, include_data=True)

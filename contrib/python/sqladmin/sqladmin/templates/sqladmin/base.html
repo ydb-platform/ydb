@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="stylesheet" href="{{ url_for('admin:statics', path='css/tabler.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('admin:statics', path='css/tabler-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('admin:statics', path='css/fontawesome.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('admin:statics', path='css/select2.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('admin:statics', path='css/flatpickr.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('admin:statics', path='css/main.css') }}">
+  {% if admin.favicon_url %}
+  <link rel="icon" href="{{ admin.favicon_url }}">
+  {% endif %}
+  {% block head %}
+  {% endblock %}
+  <title>{{ admin.title }}</title>
+</head>
+
+<body>
+  {% block body %}
+  <main>
+    {% block main %}
+    {% endblock %}
+  </main>
+  {% endblock %}
+  <script type="text/javascript" src="{{ url_for('admin:statics', path='js/jquery.min.js') }}"></script>
+  <script type="text/javascript" src="{{ url_for('admin:statics', path='js/tabler.min.js') }}"></script>
+  <script type="text/javascript" src="{{ url_for('admin:statics', path='js/popper.min.js') }}"></script>
+  <script type="text/javascript" src="{{ url_for('admin:statics', path='js/bootstrap.min.js') }}"></script>
+  <script type="text/javascript" src="{{ url_for('admin:statics', path='js/select2.full.min.js') }}"></script>
+  <script type="text/javascript" src="{{ url_for('admin:statics', path='js/flatpickr.min.js') }}"></script>
+  <script type="text/javascript" src="{{ url_for('admin:statics', path='js/main.js') }}"></script>
+  {% block tail %}
+  {% endblock %}
+</body>
+
+</html>

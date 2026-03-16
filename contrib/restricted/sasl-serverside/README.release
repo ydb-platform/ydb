@@ -1,0 +1,89 @@
+* Ensure version is incremented in:
+  configure.ac
+  docsrc/conf.py
+  include/sasl.h
+  win32/common.mak
+  win32/include/config.h
+
+* Add release notes to
+  docsrc/sasl/release-notes/2.1/index.rst
+
+* NOCONFIGURE=yes ./autogen.sh
+  to generate configure etc
+
+* MUST build with one of the supported database backends:
+  bdb gdbm lmdb ndbm
+  It is recommended to use lmdb
+
+Generally using Debian or Ubuntu distributions for the compile steps is useful
+as they provide both MIT and Heimdal development packages:
+
+  NOTE: Sphinx version 4.4.0 or later is required.  It may be mandatory to install
+  it manually via python3-pip:
+    pip install -U Sphinx
+  OR
+    apt install sphinx-common (Documentation)
+
+  Other dependencies:
+  apt install libpod-pom-view-restructured-perl (Documentation)
+  apt install liblmdb-dev (LMDB backend)
+  apt install libkrb5-dev (MIT Kerberos)
+  apt install heimdal-dev (Heimdal Kerberos)
+
+* Confirm build compiles with no kerberos support
+  ./configure --with-dblib=lmdb
+  make
+
+* Confirm build compiles with MIT kerberos support
+  LDFLAGS="-L/usr/lib/x86_64-linux-gnu/mit-krb5/" CPPFLAGS="-I/usr/include/mit-krb5" ./configure --with-dblib=lmdb
+  make
+
+* Confirm build compiles with Heimdal kerberos support
+  LDFLAGS="-L/usr/lib/x86_64-linux-gnu/heimdal/" CPPFLAGS="-I/usr/include/heimdal" ./configure --with-dblib=lmdb
+  make
+
+* If possible, build on a non-Linux OS such as FreeBSD
+  NOTE: Currently FreeBSD has ndbm installed as an alternative
+        to test with rather than LMDB
+  pkg install openssl
+  pkg install heimdal
+  
+* git tag the repository:
+  git tag -a -s cyrus-sasl-MAJOR.MINOR.PATCH
+
+  We are pleased to announce the release of Cyrus SASL version MAJOR.MINOR.PATCH.
+
+  This release contains features and fixes you can find on the following pages:
+
+  https://www.cyrusimap.org/sasl/sasl/release-notes/2.1/index.html#new-in-MAJOR-MINOR-PATCH
+
+* check out the tag:
+  git checkout cyrus-sasl-MAJOR.MINOR.PATCH
+
+* make distcheck
+  Generates the tarball etc
+
+* Post release announcement to announce@cyrus.topicbox.com
+
+  Example:
+
+  The Cyrus team is proud to announce the immediate availability of a new version of Cyrus SASL: MAJOR.MINOR.PATCH
+
+  <INSERT HIGHLIGHTS OF THE RELEASE>
+
+  Of course, please check the release notes for the full list of changes.
+
+  Release notes:
+
+      https://www.cyrusimap.org/sasl/sasl/release-notes/2.1/index.html#new-in-MAJOR-MINOR-PATCH
+
+  Download URLs:
+
+      https://github.com/cyrusimap/cyrus-sasl/releases/download/cyrus-sasl-MAJOR.MINOR.PATCH/cyrus-sasl-MAJOR.MINOR.PATCH.tar.gz
+      https://github.com/cyrusimap/cyrus-sasl/releases/download/cyrus-sasl-MAJOR.MINOR.PATCH/cyrus-sasl-MAJOR.MINOR.PATCH.tar.gz.sig
+
+  On behalf of the Cyrus team,
+
+  Kind regards,
+
+  YOUR NAME HERE

@@ -1,0 +1,7 @@
+requirements:
+  - contrib/libs/lzmasdk
+copy:
+  - compat/*
+exclude_from_macros:
+  - compat/copying.txt
+  - pylzma/pylzma_compressobj.c

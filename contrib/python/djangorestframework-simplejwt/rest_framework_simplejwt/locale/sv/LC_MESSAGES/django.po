@@ -1,0 +1,161 @@
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR Pasindu <pasinduprabashitha@gmail.com>, 2022.
+msgid ""
+msgstr ""
+"Project-Id-Version: djangorestframework_simplejwt\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-02-28 15:09-0300\n"
+"Last-Translator: Pasindu <pasinduprabashitha@gmail.com>\n"
+"Language: sv\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: authentication.py:89
+msgid "Authorization header must contain two space-delimited values"
+msgstr "Auktoriseringshuvudet måste innehålla två mellanslagsavgränsade värden"
+
+#: authentication.py:115
+msgid "Given token not valid for any token type"
+msgstr "Givet token är inte giltigt för någon tokentyp"
+
+#: authentication.py:128 authentication.py:166
+msgid "Token contained no recognizable user identification"
+msgstr "Token innehöll ingen identifiering av användaren"
+
+#: authentication.py:135
+msgid "User not found"
+msgstr "Användaren hittades inte"
+
+#: authentication.py:139
+msgid "User is inactive"
+msgstr "Användaren är inaktiv"
+
+#: authentication.py:146
+msgid "The user's password has been changed."
+msgstr ""
+
+#: backends.py:90
+msgid "Unrecognized algorithm type '{}'"
+msgstr "Okänd algoritmtyp '{}'"
+
+#: backends.py:96
+msgid "You must have cryptography installed to use {}."
+msgstr "Du måste ha kryptografi installerad för att kunna använda {}."
+
+#: backends.py:111
+msgid ""
+"Unrecognized type '{}', 'leeway' must be of type int, float or timedelta."
+msgstr ""
+
+#: backends.py:125 backends.py:177 tokens.py:69
+#, fuzzy
+#| msgid "Token is invalid or expired"
+msgid "Token is invalid"
+msgstr "Token är ogiltig eller har löpt ut"
+
+#: backends.py:173
+msgid "Invalid algorithm specified"
+msgstr "Ogiltig algoritm har angetts"
+
+#: backends.py:175 tokens.py:67
+#, fuzzy
+#| msgid "Token is invalid or expired"
+msgid "Token is expired"
+msgstr "Token är ogiltig eller har löpt ut"
+
+#: exceptions.py:55
+msgid "Token is invalid or expired"
+msgstr "Token är ogiltig eller har löpt ut"
+
+#: serializers.py:35
+msgid "No active account found with the given credentials"
+msgstr "Inget aktivt konto hittades med de angivna användaruppgifterna"
+
+#: serializers.py:108
+#, fuzzy
+#| msgid "No active account found with the given credentials"
+msgid "No active account found for the given token."
+msgstr "Inget aktivt konto hittades med de angivna användaruppgifterna"
+
+#: serializers.py:178 tokens.py:280
+msgid "Token is blacklisted"
+msgstr "Token är svartlistad"
+
+#: settings.py:74
+msgid ""
+"The '{}' setting has been removed. Please refer to '{}' for available "
+"settings."
+msgstr ""
+"Inställningen '{}' har tagits bort. Se '{}' för tillgängliga inställningar"
+
+#: token_blacklist/admin.py:79
+msgid "jti"
+msgstr "jti"
+
+#: token_blacklist/admin.py:85
+msgid "user"
+msgstr "användare"
+
+#: token_blacklist/admin.py:91
+msgid "created at"
+msgstr "skapad vid"
+
+#: token_blacklist/admin.py:97
+msgid "expires at"
+msgstr "går ut kl"
+
+#: token_blacklist/apps.py:7
+msgid "Token Blacklist"
+msgstr "Token svartlist"
+
+#: token_blacklist/models.py:19
+msgid "Outstanding Token"
+msgstr ""
+
+#: token_blacklist/models.py:20
+msgid "Outstanding Tokens"
+msgstr ""
+
+#: token_blacklist/models.py:32
+#, python-format
+msgid "Token for %(user)s (%(jti)s)"
+msgstr ""
+
+#: token_blacklist/models.py:45
+msgid "Blacklisted Token"
+msgstr ""
+
+#: token_blacklist/models.py:46
+msgid "Blacklisted Tokens"
+msgstr ""
+
+#: token_blacklist/models.py:57
+#, python-format
+msgid "Blacklisted token for %(user)s"
+msgstr ""
+
+#: tokens.py:53
+msgid "Cannot create token with no type or lifetime"
+msgstr "Kan inte skapa token utan typ eller livslängd"
+
+#: tokens.py:127
+msgid "Token has no id"
+msgstr "Token har inget id"
+
+#: tokens.py:139
+msgid "Token has no type"
+msgstr "Token har ingen typ"
+
+#: tokens.py:142
+msgid "Token has wrong type"
+msgstr "Token har fel typ"
+
+#: tokens.py:201
+msgid "Token has no '{}' claim"
+msgstr "Token har inget '{}'-anspråk"
+
+#: tokens.py:206
+msgid "Token '{}' claim has expired"
+msgstr "Token '{}'-anspråket har löpt ut"

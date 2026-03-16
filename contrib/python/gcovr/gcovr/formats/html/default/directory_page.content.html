@@ -1,0 +1,73 @@
+{# -*- engine: jinja -*- #}
+<div class="Box m-3 filelist">
+  <div class="Box-header py-2 d-flex sticky">
+    {% set class_sortable = " sortable" if not info.static_report and entries | length > 1 else "" %}
+    <div role="rowheader" class="color-fg-muted flex-auto min-width-0 col-md-2{{class_sortable}}{% if info.sort_by == 'filename' and class_sortable %} {{info.sorted}}{% endif %}">File</div>
+    <div role="rowheader" class="color-fg-muted flex-auto min-width-0 d-flex flex-justify-end flex-wrap flex-items-baseline"></div>
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}{% if info.sort_by == 'lines' and class_sortable %} {{info.sorted}}{% endif %}">Lines</div>
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}">Functions</div>
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}{% if info.sort_by == 'branches' and class_sortable %} {{info.sorted}}{% endif %}">Branches</div>
+    {% if SHOW_CONDITION_COVERAGE %}
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}">Conditions</div>
+    {% endif %}
+    {% if SHOW_DECISION %}
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}">Decisions</div>
+    {% endif %}
+    {% if SHOW_CALLS %}
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}">Calls</div>
+    {% endif %}
+  </div>
+  {% for row in entries %}
+  <div class="Box-row Box-row--focus-gray py-2 d-flex">
+    <div role="gridcell" class="color-fg-muted flex-auto min-width-0 col-md-2">
+      <div class="d-flex">
+        <span class="css-truncate css-truncate-target d-block width-fit">
+          {% if row.link is not none %}
+          <a class="" title="{{row.filename}}" href="{% if info.single_page %}#{% endif %}{{row.link}}">{{row.filename}}</a>
+          {% else %}
+          {{row.filename}}
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    <div role="gridcell" class="color-fg-muted flex-auto min-width-0 d-flex flex-justify-end flex-wrap flex-items-baseline file-list {{row.lines.class}}">
+      <span style="width: 200px;">
+        {% if row.lines.coverage != "-" %}
+        <meter class="{{row.lines.class}}" min="0" max="100" value="{{row.lines.coverage}}" title="{{row.lines.coverage}}%">{{row.lines.coverage}}</meter>
+        {% endif %}
+      </span>
+    </div>
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2 file-list {{row.lines.class}}" data-sort="{{row.lines.sort}}">
+      <span>{{row.lines.coverage}}%</span>
+      <span title="Exec / Excl / Total">{{row.lines.exec}} / {{row.lines.excluded}} / {{row.lines.total}}</span>
+    </div>
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2 file-list {{row.functions.class}}" data-sort="{{row.functions.sort}}">
+      <span>{{row.functions.coverage}}%</span>
+      <span title="Exec / Excl / Total">{{row.functions.exec}} / {{row.functions.excluded}} / {{row.functions.total}}</span>
+    </div>
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2 file-list {{row.branches.class}}" data-sort="{{row.branches.sort}}">
+      <span>{{row.branches.coverage}}%</span>
+      <span title="Exec / Excl / Total">{{row.branches.exec}} / {{row.branches.excluded}} / {{row.branches.total}}</span>
+    </div>
+    {% if SHOW_CONDITION_COVERAGE %}
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2 file-list {{row.conditions.class}}" data-sort="{{row.conditions.sort}}">
+      <span>{{row.conditions.coverage}}%</span>
+      <span title="Exec / Excl / Total">{{row.conditions.exec}} / {{row.conditions.excluded}} / {{row.conditions.total}}</span>
+    </div>
+    {% endif %}
+    {% if SHOW_DECISION %}
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2 file-list {{row.decisions.class}}" data-sort="{{row.decisions.sort}}">
+      <span>{{row.decisions.coverage}}%</span>
+      <span title="Exec / Excl / Total">{{row.decisions.exec}} / {{row.decisions.excluded}} / {{row.decisions.total}}</span>
+    </div>
+    {% endif %}
+    {% if SHOW_CALLS %}
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2 file-list {{row.calls.class}}" data-sort="{{row.calls.sort}}">
+      <span>{{row.calls.coverage}}%</span>
+      <span title="Exec / Excl / Total">{{row.calls.exec}} / {{row.calls.excluded}} / {{row.calls.total}}</span>
+    </div>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+

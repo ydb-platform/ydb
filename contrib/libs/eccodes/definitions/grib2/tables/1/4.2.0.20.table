@@ -1,0 +1,11 @@
+0 0	Mass density (concentration)	kg.m-3
+1 1	Total column (integrated mass density)	kg.m-2
+2 2	Volume mixing ratio (mole fraction in air)	mole.mole-1
+3 3	Mass mixing ratio (mass fraction in air)	kg.kg-1
+4 4	Surface dry deposition mass flux	kg.m-2.s-1
+5 5	Surface wet deposition mass flux	kg.m-2.s-1
+6 6	Atmosphere emission mass flux	kg.m-2.s-1
+7 7	Chemical gross production rate of mole concentration	mole.m-3.s-1
+8 8	Chemical gross destruction rate of mole concentration	mole.m-3.s-1
+9 9	Surface dry deposition mass flux into stomata	kg.m-2.s-1
+255 255	Missing	

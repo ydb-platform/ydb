@@ -1,0 +1,46 @@
+# (C) Copyright 2005- ECMWF.
+# Cluster means and standard deviations
+
+constant GRIBEXSection1Problem = 328 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] clusterNumber  : dump;
+alias number=clusterNumber;
+
+unsigned[1] totalNumberOfClusters  : dump;
+alias totalNumber=totalNumberOfClusters;
+
+# spareSetToZero
+pad padding_loc2_1(1);
+
+unsigned[1] clusteringMethod  : dump;
+
+unsigned[2] startTimeStep  : dump;
+
+unsigned[2] endTimeStep  : dump;
+
+signed[3] northernLatitudeOfDomain  : dump;
+
+signed[3] westernLongitudeOfDomain  : dump;
+
+signed[3] southernLatitudeOfDomain  : dump;
+
+signed[3] easternLongitudeOfDomain  : dump;
+
+unsigned[1] operationalForecastCluster  : dump;
+
+unsigned[1] controlForecastCluster  : dump;
+
+unsigned[1] numberOfForecastsInCluster  : dump;
+if (numberOfForecastsInCluster > 0) {
+unsigned[1] ensembleForecastNumbers[numberOfForecastsInCluster] : dump;
+}
+# spareToEnsureFixedLength
+padto padding_loc2_2(offsetSection1 + 328);
+
+
+constant unknown="-";
+concept_nofail clusteringDomain(unknown,"cluster_domain.def",conceptsMasterDir,conceptsLocalDirAll);
+alias number = clusterNumber;
+alias domain = clusteringDomain;

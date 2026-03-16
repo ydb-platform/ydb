@@ -1,0 +1,30 @@
+--- contrib/python/horovod/horovod/tensorflow/keras/__init__.py	(index)
++++ contrib/python/horovod/horovod/tensorflow/keras/__init__.py	(working tree)
+@@ -15,6 +15,7 @@
+ 
+ import tensorflow as tf
+ 
++import setuptools
+ from distutils.version import LooseVersion
+ if LooseVersion(tf.__version__) >= LooseVersion("1.4.0"):
+     from tensorflow import keras
+--- contrib/python/horovod/horovod/tensorflow/keras/callbacks.py	(index)
++++ contrib/python/horovod/horovod/tensorflow/keras/callbacks.py	(working tree)
+@@ -15,6 +15,7 @@
+ 
+ import tensorflow as tf
+ 
++import setuptools
+ from distutils.version import LooseVersion
+ if LooseVersion(tf.__version__) >= LooseVersion("1.4.0"):
+     from tensorflow import keras
+--- contrib/python/horovod/horovod/tensorflow/util.py	(index)
++++ contrib/python/horovod/horovod/tensorflow/util.py	(working tree)
+@@ -12,6 +12,7 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ # ==============================================================================
++import setuptools
+ from distutils.version import LooseVersion
+ 
+ import tensorflow as tf

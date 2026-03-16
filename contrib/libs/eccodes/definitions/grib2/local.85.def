@@ -1,0 +1,3 @@
+alias localDefinitionNumber=grib2LocalSectionNumber;
+template  localSection  "grib2/local.[centreForLocal:l].[grib2LocalSectionNumber:l].def";
+position offsetAfterLocalSection;

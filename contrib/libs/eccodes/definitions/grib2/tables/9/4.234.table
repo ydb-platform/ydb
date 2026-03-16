@@ -1,0 +1,21 @@
+# Canopy Cover Fraction (to be used as partitioned parameter)
+1 1 Crops Mixed Farming
+2 2 Short Grass
+3 3 Evergreen Needleleaf Trees
+4 4 Deciduous Needleleaf Trees
+5 5 Deciduous Broadleaf Trees
+6 6 Evergreen Broadleaf Trees
+7 7 Tall Grass
+8 8 Desert
+9 9 Tundra
+10 10 Irrigated Crops
+11 11 Semidesert
+12 12 Ice Caps and Glaciers
+13 13 Bogs and Marshes
+14 14 Inland Water
+15 15 Ocean
+16 16 Evergreen Shrubs
+17 17 Deciduous Shrubs
+18 18 Mixed Forest
+19 19 Interrupted Forest
+20 20 Water and Land Mixtures

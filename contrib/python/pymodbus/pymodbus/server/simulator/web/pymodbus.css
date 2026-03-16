@@ -1,0 +1,62 @@
+html {
+  height: 100%;
+  width: 100%;
+}
+body {
+  height: 100%;
+  width: 100%;
+  background-color: bisque;
+}
+table.listbox {
+  border-collapse: collapse;
+  border: 1px solid black;
+}
+table.listbox th {
+  background-color: lightgray;
+  border: 1px solid black;
+  padding: 5px
+}
+table.listbox td {
+  border: 1px solid black;
+  text-align: right;
+  background-color: #f1f1f1;
+  padding: 5px
+}
+legend {
+  font-size:  18px;
+  font-weight:  bold;
+  position:  relative;
+  color: black;
+  padding: 5px 5px;
+}
+a {
+  padding: 2px 4px 2px 4px;
+  text-decoration: none;
+  font-size: 18px;
+  display: block;
+}
+a:hover {
+  color: #f1f1f1;
+}
+p {
+  padding: 2px 4px 6px 4px;
+  display: block;
+}
+iframe {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+input[type="submit"] {
+  font-size:  14px;
+  background-color: lightblue;
+  margin-top: 10px;
+}
+
+
+.tools_fieldset {
+  display: inline;
+  vertical-align:top
+}

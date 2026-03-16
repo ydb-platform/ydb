@@ -1,0 +1,28 @@
+# (C) Copyright 2005- ECMWF.
+# EUROSIP products
+
+constant GRIBEXSection1Problem = 240 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber  : dump;
+alias number=perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble  : dump;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+unsigned[2] forecastMonth : dump;
+
+unsigned[4] dateOfForecastRun : dump;
+alias referenceDate = dateOfForecastRun;
+
+unsigned[1] numberOfModels :dump;
+pad padding_local1_31(42);
+listOfModelIdentifiers list (numberOfModels) {
+  codetable[2] modelIdentifier 'common/c-1.table' :dump;
+}
+padto padding_sec1_loc(offsetSection1 + 240 );
+
+alias number = perturbationNumber;
+
+alias total=numberOfForecastsInEnsemble;

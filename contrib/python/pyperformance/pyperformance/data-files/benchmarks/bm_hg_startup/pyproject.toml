@@ -1,0 +1,13 @@
+[project]
+name = "pyperformance_bm_hg_startup"
+requires-python = ">=3.8"
+dependencies = [
+    "pyperf",
+    "mercurial",
+]
+urls = {repository = "https://github.com/python/pyperformance"}
+dynamic = ["version"]
+
+[tool.pyperformance]
+name = "hg_startup"
+tags = "startup"

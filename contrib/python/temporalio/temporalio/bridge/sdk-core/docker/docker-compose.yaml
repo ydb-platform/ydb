@@ -1,0 +1,40 @@
+version: '3.5'
+
+services:
+  cassandra:
+    image: cassandra:3.11
+    logging:
+      driver: none
+  #    ports:
+  #      - '9042:9042'
+
+  temporal:
+    image: temporalio/auto-setup:1.22.0
+    ports:
+      - "7233:7233"
+      - "7234:7234"
+#      - "7235:7235"
+#      - "7239:7239"
+#      - "6933:6933"
+#      - "6934:6934"
+#      - "6935:6935"
+#      - "6939:6939"
+    environment:
+      - "CASSANDRA_SEEDS=cassandra"
+      - "DYNAMIC_CONFIG_FILE_PATH=/etc/dynamic-config.yaml"
+    volumes:
+      - ../../etc/dynamic-config.yaml:/etc/dynamic-config.yaml
+    depends_on:
+      - cassandra
+
+  temporal-web:
+    image: temporalio/ui:2.8.0
+    logging:
+      driver: none
+    ports:
+      - "8080:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      - temporal

@@ -1,0 +1,9 @@
+requirements:
+  - contrib/libs/openssl
+  - typing
+exclude:
+  - SWIG/*.def
+  - SWIG/*.i
+  - SWIG/Makefile
+copy:
+  - SWIG/*

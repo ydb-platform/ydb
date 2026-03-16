@@ -1,0 +1,31 @@
+Metadata-Version: 2.1
+Name: fido2
+Version: 1.1.3
+Summary: FIDO2/WebAuthn library for implementing clients and servers.
+Home-page: https://github.com/Yubico/python-fido2
+Keywords: fido2,webauthn,ctap,u2f
+Author: Dain Nilsson
+Author-email: dain@yubico.com
+Requires-Python: >=3.8,<4.0
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: License :: OSI Approved :: BSD License
+Classifier: License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)
+Classifier: Operating System :: MacOS
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Internet
+Classifier: Topic :: Security :: Cryptography
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Provides-Extra: pcsc
+Requires-Dist: cryptography (>=2.6,!=35,<45)
+Requires-Dist: pyscard (>=1.9,<3) ; extra == "pcsc"
+Project-URL: Repository, https://github.com/Yubico/python-fido2

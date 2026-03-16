@@ -1,0 +1,109 @@
+msgid ""
+msgstr ""
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: POEditor.com\n"
+"Project-Id-Version: dj-rest-auth\n"
+"Language: ro\n"
+
+#: registration/serializers.py:66
+msgid "View is not defined, pass it as a context variable"
+msgstr "View-ul nu este definit, trimite-l ca variabilă în context."
+
+#: registration/serializers.py:71
+msgid "Define adapter_class in view"
+msgstr "Definește adapter_class în view"
+
+#: registration/serializers.py:91
+msgid "Define callback_url in view"
+msgstr "Definește callback_url în view"
+
+#: registration/serializers.py:95
+msgid "Define client_class in view"
+msgstr "Definește client_class în view"
+
+#: registration/serializers.py:124
+msgid "Incorrect input. access_token or code is required."
+msgstr "Valori de intrare greșite. access_token sau code sunt necesare."
+
+#: registration/serializers.py:133
+msgid "Incorrect value"
+msgstr "Valoare greșită"
+
+#: registration/serializers.py:147
+msgid "User is already registered with this e-mail address."
+msgstr "Utilizatorul este deja înregistrat cu această adresă de email."
+
+#: registration/serializers.py:193
+msgid "A user is already registered with this e-mail address."
+msgstr "Un utilizator este deja înregistrat cu această adresă de email."
+
+#: registration/serializers.py:201
+msgid "The two password fields didn't match."
+msgstr "Cele două parole nu se potrivesc."
+
+#: registration/views.py:48
+msgid "Verification e-mail sent."
+msgstr "Emailul de verificare a fost trimis."
+
+#: registration/views.py:101
+msgid "ok"
+msgstr "OK"
+
+#: serializers.py:37
+msgid "Must include \"email\" and \"password\"."
+msgstr "Trebuie să includă „email” și „password”."
+
+#: serializers.py:48
+msgid "Must include \"username\" and \"password\"."
+msgstr "Trebuie să includă „username” și „password”."
+
+#: serializers.py:61
+msgid "Must include either \"username\" or \"email\" and \"password\"."
+msgstr "Trebuie să includă fie „username” sau „email” și „password”."
+
+#: serializers.py:106
+msgid "User account is disabled."
+msgstr "Contul utilizatorului este dezactivat."
+
+#: serializers.py:114
+msgid "E-mail is not verified."
+msgstr "Emailul nu este verificat."
+
+#: serializers.py:123
+msgid "Unable to log in with provided credentials."
+msgstr "Autentificare imposibilă cu datele furnizate."
+
+#: serializers.py:316
+msgid "Your old password was entered incorrectly. Please enter it again."
+msgstr "Parola veche este greșită. Încercați din nou."
+
+#: views.py:175
+msgid "Successfully logged out."
+msgstr "Deconectare efectuată cu succes."
+
+#: views.py:199
+msgid "Refresh token was not included in request data."
+msgstr "Token-ul de reîmprospătare nu a fost inclus în cererea primită."
+
+#: views.py:207 views.py:211
+msgid "An error has occurred."
+msgstr "A apărut o eroare."
+
+#: views.py:216
+msgid "Neither cookies or blacklist are enabled, so the token has not been deleted server side. Please make sure the token is deleted client side."
+msgstr "Nu sunt active nici cookie-urile nici blacklist-ul, astfel încât token-ul nu a fost șters de pe server. Asigură-te că token-ul este șters de la client."
+
+#: views.py:268
+msgid "Password reset e-mail has been sent."
+msgstr "Emailul pentru resetarea parolei a fost trimis."
+
+#: views.py:295
+msgid "Password has been reset with the new password."
+msgstr "Parola a fost schimbată cu noua parolă."
+
+#: views.py:318
+msgid "New password has been saved."
+msgstr "Noua parolă a fost salvată."
+

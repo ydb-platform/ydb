@@ -1,0 +1,43 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.61, Bi-Fourier coefficients on Mercator projection
+# Spectral Mercator with modelling subdomains definition
+
+transient biFourierMakeTemplate = 0;
+
+include "grib2/templates/template.3.bf.def"
+
+include "grib2/templates/template.3.shape_of_the_earth.def"
+
+# La1 - latitude of first grid point
+signed[4] latitudeOfFirstGridPoint: edition_specific,no_copy ;
+alias La1 =  latitudeOfFirstGridPoint;
+meta geography.latitudeOfFirstGridPointInDegrees scale(latitudeOfFirstGridPoint,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# Lo1 - longitude of first grid point
+signed[4] longitudeOfFirstGridPoint : edition_specific,no_copy;
+alias Lo1 =  longitudeOfFirstGridPoint;
+meta geography.longitudeOfFirstGridPointInDegrees scale(longitudeOfFirstGridPoint,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# LaD - Latitude(s) at which the Mercator projection intersects the Earth
+# (Latitude(s) where Di and Dj are specified)
+signed[4] LaD : edition_specific,no_copy;
+meta geography.LaDInDegrees scale(LaD,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# La2 - latitude of last grid point
+signed[4] latitudeOfLastGridPoint : edition_specific,no_copy;
+alias La2 =  latitudeOfLastGridPoint;
+meta geography.latitudeOfLastGridPointInDegrees scale(latitudeOfLastGridPoint,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# Lo2 - longitude of last grid point
+signed[4] longitudeOfLastGridPoint: edition_specific,no_copy ;
+alias Lo2 =  longitudeOfLastGridPoint;
+meta geography.longitudeOfLastGridPointInDegrees scale(longitudeOfLastGridPoint,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# Orientation of the grid, angle between i direction on the map and the equator
+# NOTE 1: Limited to the range of 0 to 90 degrees; if the angle of orientation of the grid is neither 0 nor 90 degrees,
+#         Di and Dj must be equal to each other
+unsigned[4] orientationOfTheGrid : dump ;
+meta geography.orientationOfTheGridInDegrees
+    scale(orientationOfTheGrid,oneConstant,grib2divider,truncateDegrees) : dump;
+

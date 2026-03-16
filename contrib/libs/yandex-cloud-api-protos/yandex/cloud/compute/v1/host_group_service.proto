@@ -1,0 +1,355 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/compute/v1/instance.proto";
+import "yandex/cloud/compute/v1/host_group.proto";
+import "yandex/cloud/compute/v1/maintenance.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// A set of methods for managing groups of dedicated hosts.
+service HostGroupService {
+  // Returns the specified host group.
+  rpc Get (GetHostGroupRequest) returns (HostGroup) {
+    option (google.api.http) = { get: "/compute/v1/hostGroups/{host_group_id}" };
+  }
+
+
+  // Retrieves the list of host groups in the specified folder.
+  rpc List (ListHostGroupsRequest) returns (ListHostGroupsResponse) {
+    option (google.api.http) = { get: "/compute/v1/hostGroups" };
+  }
+
+  // Creates a host group in the specified folder.
+  rpc Create (CreateHostGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/hostGroups" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateHostGroupMetadata"
+      response: "HostGroup"
+    };
+  }
+
+  // Updates the specified host group.
+  rpc Update (UpdateHostGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/compute/v1/hostGroups/{host_group_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateHostGroupMetadata"
+      response: "HostGroup"
+    };
+  }
+
+  // Deletes the specified host group.
+  rpc Delete (DeleteHostGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/compute/v1/hostGroups/{host_group_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteHostGroupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified host group.
+  rpc ListOperations (ListHostGroupOperationsRequest) returns (ListHostGroupOperationsResponse) {
+    option (google.api.http) = { get: "/compute/v1/hostGroups/{host_group_id}/operations" };
+  }
+
+  // Lists instances that belongs to the specified host group.
+  rpc ListInstances (ListHostGroupInstancesRequest) returns (ListHostGroupInstancesResponse) {
+    option (google.api.http) = { get: "/compute/v1/hostGroups/{host_group_id}/instances" };
+  }
+
+  // Lists hosts that belongs to the specified host group.
+  rpc ListHosts (ListHostGroupHostsRequest) returns (ListHostGroupHostsResponse) {
+    option (google.api.http) = { get: "/compute/v1/hostGroups/{host_group_id}/hosts" };
+  }
+
+  // Update host
+  rpc UpdateHost (UpdateHostGroupHostRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/compute/v1/hostGroups/{host_group_id}/hosts/{host_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateHostGroupHostMetadata"
+      response: "Host"
+    };
+  }
+
+  // access
+
+  // Lists access bindings for the host group.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/compute/v1/hostGroups/{resource_id}:listAccessBindings" };
+  }
+
+  // Sets access bindings for the host group.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/hostGroups/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Updates access bindings for the host group.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/hostGroups/{resource_id}:updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+}
+
+message GetHostGroupRequest {
+  // ID of the host group to return.
+  // To get the host group ID, use [HostGroupService.List] request.
+  string host_group_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListHostGroupsRequest {
+  // ID of the folder to list host groups in.
+  // To get the folder ID, use [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListHostGroupsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListHostGroupsResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression consists of one or more conditions united by `AND` operator: `<condition1> [AND <condition2> [<...> AND <conditionN>]]`.
+  //
+  // Each condition has the form `<field> <operator> <value>`, where:
+  // 1. `<field>` is the field name. Currently you can use filtering only on the limited number of fields.
+  // 2. `<operator>` is a logical operator, one of `=`, `!=`, `IN`, `NOT IN`.
+  // 3. `<value>` represents a value.
+  // String values should be written in double (`"`) or single (`'`) quotes. C-style escape sequences are supported (`\"` turns to `"`, `\'` to `'`, `\\` to backslash).
+  string filter = 4 [(length) = "<=1000"];
+
+  // By which column the listing should be ordered and in which direction,
+  // format is "createdAt desc". "id asc" if omitted.
+  // The default sorting order is ascending
+  string order_by = 5 [(length) = "<=100"];
+}
+
+message ListHostGroupsResponse {
+  // Lists host groups for the specified folder.
+  repeated HostGroup host_groups = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListHostGroupsRequest.page_size], use
+  // [next_page_token] as the value
+  // for the [ListHostGroupsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateHostGroupRequest {
+  // ID of the folder to create a host group in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the group.
+  string name = 2 [(pattern) = "|[a-z]([-_a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the group.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 4 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+  // Availability zone where all dedicated hosts will be allocated.
+  string zone_id = 5 [(required) = true, (length) = "<=50"];
+
+  // ID of host type. Resources provided by each host of the group.
+  string type_id = 6 [(required) = true, (length) = "<=50"];
+
+  // Behaviour on maintenance events.
+  MaintenancePolicy maintenance_policy = 7;
+
+  // Scale policy. Only fixed number of hosts are supported at this moment.
+  ScalePolicy scale_policy = 8;
+}
+
+message CreateHostGroupMetadata {
+  // ID of the host group that is being created.
+  string host_group_id = 1;
+}
+
+message UpdateHostGroupRequest {
+  // ID of the host group to update.
+  // To get the host group ID, use an [HostGroupService.List] request.
+  string host_group_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask that specifies which fields of the HostGroup resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the group.
+  string name = 3 [(pattern) = "|[a-z]([-_a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the group.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  //
+  // The existing set of `labels` is completely replaced by the provided set.
+  map<string, string> labels = 5 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+  // Behaviour on maintenance events
+  MaintenancePolicy maintenance_policy = 6;
+
+  // Scale policy. Only fixed number of hosts are supported at this moment.
+  ScalePolicy scale_policy = 7;
+}
+
+message UpdateHostGroupMetadata {
+  // ID of the host group that is being updated.
+  string host_group_id = 1;
+}
+
+message DeleteHostGroupRequest {
+  // ID of the host group to delete.
+  // To get the host group ID, use [HostGroupService.List] request.
+  string host_group_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteHostGroupMetadata {
+  // ID of the host group that is being deleted.
+  string host_group_id = 1;
+}
+
+message ListHostGroupInstancesRequest {
+  // ID of the host group to list instances for.
+  // To get the host group ID, use [HostGroupService.List] request.
+  string host_group_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListHostGroupInstancesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListHostGroupInstancesResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression consists of one or more conditions united by `AND` operator: `<condition1> [AND <condition2> [<...> AND <conditionN>]]`.
+  //
+  // Each condition has the form `<field> <operator> <value>`, where:
+  // 1. `<field>` is the field name. Currently you can use filtering only on the limited number of fields.
+  // 2. `<operator>` is a logical operator, one of `=`, `!=`, `IN`, `NOT IN`.
+  // 3. `<value>` represents a value.
+  // String values should be written in double (`"`) or single (`'`) quotes. C-style escape sequences are supported (`\"` turns to `"`, `\'` to `'`, `\\` to backslash).
+  // Currently you can use filtering only on the [Host.id] field.
+  // To get the host ID, use [HostGroupService.ListHosts] request.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListHostGroupInstancesResponse {
+  // Lists instances for the specified host group.
+  repeated Instance instances = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is more than [ListHostGroupInstancesRequest.page_size], use
+  // [next_page_token] as the value
+  // for the [ListHostGroupInstancesRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+
+message ListHostGroupHostsRequest {
+  // ID of the host group to list hosts for.
+  // To get the host group ID, use [HostGroupService.List] request.
+  string host_group_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListHostGroupHostsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListHostGroupHostsResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListHostGroupHostsResponse {
+  // Lists hosts for the specified host group.
+  repeated Host hosts = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is more than [ListHostGroupHostsRequest.page_size], use
+  // [next_page_token] as the value
+  // for the [ListHostGroupHostsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message UpdateHostGroupHostRequest {
+  // ID of the host group to update.
+  string host_group_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the host to update.
+  string host_id = 2 [(required) = true, (length) = "<=50"];
+
+  // Field mask that specifies which fields of the Host are going to be updated.
+  google.protobuf.FieldMask update_mask = 3;
+
+  // The date and time when this host will be automatically freed of instances.
+  // Timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp deadline_at = 4;
+}
+
+message UpdateHostGroupHostMetadata {
+  // ID of the host group that is being updated.
+  string host_group_id = 1;
+
+  // ID of the host that is being updated.
+  string host_id = 2;
+}
+
+message ListHostGroupOperationsRequest {
+  // ID of the host group to list operations for.
+  // To get the host group ID, use [HostGroupService.List] request.
+  string host_group_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListHostGroupOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListHostGroupOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListHostGroupOperationsResponse {
+  // List of operations for the specified host group.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListHostGroupOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListHostGroupOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

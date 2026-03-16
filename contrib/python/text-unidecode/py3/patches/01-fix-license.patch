@@ -1,0 +1,5 @@
+--- a/ya.make	(index)
++++ b/ya.make	(working tree)
+@@ -6,1 +6,1 @@ OWNER(g:python-contrib)
+-LICENSE(Artistic-1.0 AND GPL-2.0-or-later)
++LICENSE(Artistic-1.0 OR GPL-2.0-or-later)

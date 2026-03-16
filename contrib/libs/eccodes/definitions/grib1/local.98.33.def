@@ -1,0 +1,25 @@
+# (C) Copyright 2005- ECMWF.
+
+template mars_labeling "grib1/mars_labeling.def";
+
+constant GRIBEXSection1Problem = 0 ;
+
+unsigned[1] yearOfReference  = yearOfCentury : dump;
+unsigned[1] monthOfReference = month : dump;
+unsigned[1] dayOfReference = day : dump;
+unsigned[1] hourOfReference = hour : dump;
+unsigned[1] minuteOfReference = minute : dump;
+unsigned[1] centuryOfReference = centuryOfReferenceTimeOfData : dump;
+transient secondsOfReference = 0 ;
+
+unsigned[1] numberOfForcasts=0 : dump;
+if (numberOfForcasts) {
+  unsigned[3] forecastSteps[numberOfForcasts] : dump;
+}
+unsigned[1] numberOfAnalysis=1 : dump;
+if (numberOfAnalysis) {
+  signed[3] analysisOffsets[numberOfAnalysis] : dump;
+}
+
+meta dateOfReference  g1date(centuryOfReference,yearOfReference,monthOfReference,dayOfReference) : dump;
+meta timeOfReference  time(hourOfReference,minuteOfReference,secondsOfReference) : dump;

@@ -1,0 +1,22 @@
+Read res@ files from builtin resources.
+
+--- a/src/apprentice.c
++++ b/src/apprentice.c
+@@ -3043,4 +3043,17 @@ apprentice_map(struct magic_set *ms, const char *fn)
+ 	map->type = MAP_TYPE_USER;	/* unspecified */
+ 
++	if (strncmp(fn, "res@", 4) == 0) {
++		map->type = MAP_TYPE_MALLOC;
++		_magic_read_res(fn + 4, &map->p, &map->len);
++		if (map->p == NULL) {
++			file_error(ms, 0, "cannot read_res %s", fn);
++			goto error;
++		}
++		if (check_buffer(ms, map, fn) != 0) {
++			goto error;
++		}
++		return map;
++	}
++
+ 	dbname = mkdbname(ms, fn, 0);
+ 	if (dbname == NULL)

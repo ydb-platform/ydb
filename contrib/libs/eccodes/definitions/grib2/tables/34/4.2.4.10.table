@@ -1,0 +1,12 @@
+# Product discipline 4 - Space weather products, parameter category 10: space weather indices
+0 0 Scintillation index (sigma phi) (rad)
+1 1 Scintillation index S4 (Numeric)
+2 2 Rate of change of TEC index (ROTI) (TECU/min)
+3 3 Disturbance ionosphere index spatial gradient (DIXSG) (Numeric)
+4 4 Along arc TEC rate (AATR) (TECU/min)
+5 5 Kp (Numeric)
+6 6 Equatorial disturbance storm time index (Dst) (nT)
+7 7 Auroral electrojet (AE) (nT)
+# 8-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

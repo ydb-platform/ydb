@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.translate.v2;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/translate/v2;translate";
+option java_package = "yandex.cloud.api.ai.translate.v2";
+
+message TranslatedText {
+  // Translated text.
+  string text = 1;
+
+  // The language code of the source text.
+  // Most languages are specified in [ISO 639-1](https://en.wikipedia.org/wiki/ISO_639-1) format (for example, `` ru ``), but the field are not limited to it.
+  string detected_language_code = 2;
+}
+
+message Language {
+  // The language code.
+  // Most languages are specified in [ISO 639-1](https://en.wikipedia.org/wiki/ISO_639-1) format (for example, `` ru ``), but the field are not limited to it.
+  string code = 1;
+
+  // The name of the language (for example, `` English ``).
+  string name = 2;
+}

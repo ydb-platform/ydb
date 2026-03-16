@@ -1,0 +1,155 @@
+Metadata-Version: 2.4
+Name: Cerberus
+Version: 1.3.8
+Summary: Lightweight, extensible schema and data validation tool for Pythondictionaries.
+Author-email: Nicola Iarocci <nicola@nicolaiarocci.com>
+Maintainer-email: Frank Sachsenheim <funkyfuture@riseup.net>
+License: ISC License
+        
+        Copyright (c) 2012-2016 Nicola Iarocci.
+        
+        Permission to use, copy, modify, and/or distribute this software for any
+        purpose with or without fee is hereby granted, provided that the above
+        copyright notice and this permission notice appear in all copies.
+        
+        THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+        REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+        FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+        INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+        LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+        OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+        PERFORMANCE OF THIS SOFTWARE.
+        
+Project-URL: Documentation, http://docs.python-cerberus.org
+Project-URL: Repository, https://github.com/pyeve/cerberus
+Keywords: validation,schema,dictionaries,documents,normalization
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: License :: OSI Approved :: ISC License (ISCL)
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Requires-Python: >=3.7
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+License-File: AUTHORS
+Requires-Dist: importlib-metadata; python_version < "3.8"
+Dynamic: license-file
+
+Cerberus |latest-version|
+=========================
+|python-support| |black|
+
+Cerberus is a lightweight and extensible data validation library for Python.
+
+.. code-block:: python
+
+    >>> v = Validator({'name': {'type': 'string'}})
+    >>> v.validate({'name': 'john doe'})
+    True
+
+
+Features
+--------
+
+Cerberus provides type checking and other base functionality out of the box and
+is designed to be non-blocking and easily and widely extensible, allowing for
+custom validation. It has no dependencies, but has the potential to become
+yours.
+
+
+Versioning & Interpreter support
+--------------------------------
+
+Starting with Cerberus 1.2, it is maintained according to
+`semantic versioning`_. So, a major release sheds off the old and defines a
+space for the new, minor releases ship further new features and improvements
+(you know the drill, new bugs are inevitable too), and micro releases polish a
+definite amount of features to glory.
+
+We intend to test Cerberus against all CPython interpreters at least until half
+a year after their `end of life`_ and against the most recent PyPy interpreter
+as a requirement for a release. If you still need to use it with a potential
+security hole in your setup, it should most probably work with the latest
+minor version branch from the time when the interpreter was still tested.
+Subsequent minor versions have good chances as well. In any case, you are
+advised to run the contributed test suite on your target system.
+
+
+Documentation
+-------------
+
+Complete documentation is available at http://docs.python-cerberus.org
+
+
+Installation
+------------
+
+Cerberus is on PyPI_, so all you need to do is:
+
+.. code-block:: console
+
+    $ pip install cerberus
+
+
+Testing
+-------
+
+Just run:
+
+.. code-block:: console
+
+    $ python setup.py test
+
+Or you can use tox to run the tests under all supported Python versions. Make
+sure the required python versions are installed and run:
+
+.. code-block:: console
+
+    $ pip install tox  # first time only
+    $ tox
+
+
+Contributing
+------------
+
+Please see the `Contribution Guidelines`_.
+
+
+Copyright
+---------
+
+Cerberus is an open source project by `Nicola Iarocci`_. See the license_ file
+for more information.
+
+
+.. _Contribution Guidelines: https://github.com/pyeve/cerberus/blob/1.3.x/CONTRIBUTING.rst
+.. _end of life: https://devguide.python.org/#status-of-python-branches
+.. _license: https://github.com/pyeve/cerberus/blob/1.3.x/LICENSE
+.. _Nicola Iarocci: https://nicolaiarocci.com/
+.. _PyPI: https://pypi.python.org/
+.. _semantic versioning: https://semver.org/
+
+.. |black| image:: https://img.shields.io/badge/code%20style-black-000000.svg
+   :alt: Black code style
+   :target: https://black.readthedocs.io/
+.. |latest-version| image:: https://img.shields.io/pypi/v/cerberus.svg
+   :alt: Latest version on PyPI
+   :target: https://pypi.org/project/cerberus
+.. |license| image:: https://img.shields.io/pypi/l/cerberus.svg
+   :alt: Software license
+   :target: https://github.com/pyeve/cerberus/blob/1.3.x/LICENSE
+.. |python-support| image:: https://img.shields.io/pypi/pyversions/cerberus.svg
+   :target: https://pypi.python.org/pypi/cerberus
+   :alt: Python versions

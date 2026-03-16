@@ -1,0 +1,186 @@
+# Chinese translations for WTForms.
+# Copyright (C) 2020 WTForms Team
+# This file is distributed under the same license as the WTForms project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2020.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: WTForms 1.0.3\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2020-04-22 09:05-0700\n"
+"PO-Revision-Date: 2012-01-31 13:03-0700\n"
+"Last-Translator: wuxqing <wuxqing@gmail.com>\n"
+"Language: zh\n"
+"Language-Team: zh_CN <james+i18n@simplecodes.com>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.8.0\n"
+
+#: wtforms/validators.py:68
+#, python-format
+msgid "Invalid field name '%s'."
+msgstr "'%s' 是无效的字段名。"
+
+#: wtforms/validators.py:76
+#, python-format
+msgid "Field must be equal to %(other_name)s."
+msgstr "字段必须和 %(other_name)s 相等。"
+
+#: wtforms/validators.py:109
+#, python-format
+msgid "Field must be at least %(min)d character long."
+msgid_plural "Field must be at least %(min)d characters long."
+msgstr[0] "字段长度必须至少 %(min)d 个字符。"
+msgstr[1] "字段长度必须至少 %(min)d 个字符。"
+
+#: wtforms/validators.py:112
+#, python-format
+msgid "Field cannot be longer than %(max)d character."
+msgid_plural "Field cannot be longer than %(max)d characters."
+msgstr[0] "字段长度不能超过 %(max)d 个字符。"
+msgstr[1] "字段长度不能超过 %(max)d 个字符。"
+
+#: wtforms/validators.py:115
+#, python-format
+msgid "Field must be exactly %(max)d character long."
+msgid_plural "Field must be exactly %(max)d characters long."
+msgstr[0] ""
+msgstr[1] ""
+
+#: wtforms/validators.py:118
+#, python-format
+msgid "Field must be between %(min)d and %(max)d characters long."
+msgstr "字段长度必须介于 %(min)d 到 %(max)d 个字符之间。"
+
+#: wtforms/validators.py:154
+#, python-format
+msgid "Number must be at least %(min)s."
+msgstr "数值必须大于 %(min)s。"
+
+#: wtforms/validators.py:156
+#, python-format
+msgid "Number must be at most %(max)s."
+msgstr "数值必须小于 %(max)s。"
+
+#: wtforms/validators.py:158
+#, python-format
+msgid "Number must be between %(min)s and %(max)s."
+msgstr "数值大小必须介于 %(min)s 到 %(max)s 之间。"
+
+#: wtforms/validators.py:218 wtforms/validators.py:258
+msgid "This field is required."
+msgstr "该字段是必填字段。"
+
+#: wtforms/validators.py:290
+msgid "Invalid input."
+msgstr "无效的输入。"
+
+#: wtforms/validators.py:355
+msgid "Invalid email address."
+msgstr "无效的 Email 地址。"
+
+#: wtforms/validators.py:388
+msgid "Invalid IP address."
+msgstr "无效的 IP 地址。"
+
+#: wtforms/validators.py:430
+msgid "Invalid Mac address."
+msgstr "无效的 MAC 地址。"
+
+#: wtforms/validators.py:465
+msgid "Invalid URL."
+msgstr "无效的 URL。"
+
+#: wtforms/validators.py:485
+msgid "Invalid UUID."
+msgstr "无效的 UUID。"
+
+#: wtforms/validators.py:515
+#, python-format
+msgid "Invalid value, must be one of: %(values)s."
+msgstr "无效的值，必须是下列之一: %(values)s。"
+
+#: wtforms/validators.py:547
+#, python-format
+msgid "Invalid value, can't be any of: %(values)s."
+msgstr "无效的值，不能是下列任何一个: %(values)s。"
+
+#: wtforms/csrf/core.py:98 wtforms/ext/csrf/form.py:47
+msgid "Invalid CSRF Token"
+msgstr "无效的 CSRF 验证令牌"
+
+#: wtforms/csrf/session.py:61 wtforms/ext/csrf/session.py:58
+msgid "CSRF token missing"
+msgstr "缺失 CSRF 验证令牌"
+
+#: wtforms/csrf/session.py:69 wtforms/ext/csrf/session.py:66
+msgid "CSRF failed"
+msgstr "CSRF 验证失败"
+
+#: wtforms/csrf/session.py:74 wtforms/ext/csrf/session.py:71
+msgid "CSRF token expired"
+msgstr "CSRF 验证令牌过期"
+
+#: wtforms/ext/appengine/fields.py:87 wtforms/ext/appengine/fields.py:164
+#: wtforms/ext/appengine/fields.py:166 wtforms/ext/django/fields.py:95
+#: wtforms/ext/sqlalchemy/fields.py:125 wtforms/ext/sqlalchemy/fields.py:127
+#: wtforms/ext/sqlalchemy/fields.py:180 wtforms/ext/sqlalchemy/fields.py:185
+#: wtforms/fields/core.py:513
+msgid "Not a valid choice"
+msgstr "不是有效的选择"
+
+#: wtforms/ext/appengine/fields.py:185
+msgid "Not a valid list"
+msgstr "不是有效的列表"
+
+#: wtforms/ext/appengine/fields.py:204
+msgid "Not a valid integer list"
+msgstr ""
+
+#: wtforms/ext/dateutil/fields.py:63
+msgid "Please input a date/time value"
+msgstr "请输入一个日期/时间值"
+
+#: wtforms/ext/dateutil/fields.py:75 wtforms/ext/dateutil/fields.py:83
+msgid "Invalid date/time input"
+msgstr "无效的日期/时间输入"
+
+#: wtforms/fields/core.py:505
+msgid "Invalid Choice: could not coerce"
+msgstr "选择无效：无法转化类型"
+
+#: wtforms/fields/core.py:539
+msgid "Invalid choice(s): one or more data inputs could not be coerced"
+msgstr "选择无效：至少一个数据输入无法被转化类型"
+
+#: wtforms/fields/core.py:546
+#, python-format
+msgid "'%(value)s' is not a valid choice for this field"
+msgstr "“%(value)s” 对该字段而言是无效选项"
+
+#: wtforms/fields/core.py:629 wtforms/fields/core.py:639
+msgid "Not a valid integer value"
+msgstr "不是有效的整数"
+
+#: wtforms/fields/core.py:705
+msgid "Not a valid decimal value"
+msgstr "不是有效的小数"
+
+#: wtforms/fields/core.py:732
+msgid "Not a valid float value"
+msgstr "不是有效的浮点数"
+
+#: wtforms/fields/core.py:793
+msgid "Not a valid datetime value"
+msgstr "不是有效的日期与时间值"
+
+#: wtforms/fields/core.py:810
+msgid "Not a valid date value"
+msgstr "不是有效的日期值"
+
+#: wtforms/fields/core.py:827
+msgid "Not a valid time value"
+msgstr ""
+

@@ -1,0 +1,4 @@
+requirements:
+  - tornado: null
+exclude:
+  - crossdock/*

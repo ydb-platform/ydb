@@ -1,0 +1,100 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <med.b.makhlouf@gmail.com>, 2020.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2017-06-13 19:40+0530\n"
+"PO-Revision-Date: 2020-11-30 23:15+0100\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"X-Generator: \n"
+
+#: admin.py:113
+#, python-format
+msgid ""
+"Default value type must be equal to declared config parameter type. Please "
+"fix the default value of '%(name)s'."
+msgstr ""
+"يجب أن يكون نوع القيمة الافتراضي مساوياً لنوع معلمة التكوين المعلن. الرجاء "
+"إصلاح القيمة الافتراضية لـ '%(name)s'."
+
+#: admin.py:123
+#, python-format
+msgid ""
+"Constance doesn't support config values of the type %(config_type)s. Please "
+"fix the value of '%(name)s'."
+msgstr ""
+"لا يعتمد كونستانس قيم التكوين من النوع %(config_type)s. الرجاء إصلاح قيمة "
+"'%(name)s'."
+
+#: admin.py:147
+msgid ""
+"The settings have been modified by someone else. Please reload the form and "
+"resubmit your changes."
+msgstr ""
+"تم تعديل الإعدادات بواسطة شخص آخر. الرجاء إعادة تحميل النموذج وإعادة إرسال "
+"التغييرات."
+
+#: admin.py:160
+msgid ""
+"CONSTANCE_CONFIG_FIELDSETS does not contain fields that exist in "
+"CONSTANCE_CONFIG."
+msgstr ""
+"لا يحتوي CONSTANCE_CONFIG_FIELDSETS على حقول موجودة في CONSTANCE_CONFIG."
+
+#: admin.py:224
+msgid "Live settings updated successfully."
+msgstr "تم تحديث الإعدادات المباشرة بنجاح."
+
+#: admin.py:285
+msgid "config"
+msgstr "التكوين"
+
+#: apps.py:8
+msgid "Constance"
+msgstr "كونستانس"
+
+#: backends/database/models.py:19
+msgid "constance"
+msgstr "كونستانس"
+
+#: backends/database/models.py:20
+msgid "constances"
+msgstr "كونستانس"
+
+#: management/commands/constance.py:30
+msgid "Get/Set In-database config settings handled by Constance"
+msgstr ""
+"الحصول على / تعيين إعدادات التكوين في قاعدة البيانات التي تعالجها كونستانس"
+
+#: templates/admin/constance/change_list.html:75
+msgid "Save"
+msgstr "حفظ"
+
+#: templates/admin/constance/change_list.html:84
+msgid "Home"
+msgstr "الصفحة الرئيسية"
+
+#: templates/admin/constance/includes/results_list.html:5
+msgid "Name"
+msgstr "الإسم"
+
+#: templates/admin/constance/includes/results_list.html:6
+msgid "Default"
+msgstr "افتراضي"
+
+#: templates/admin/constance/includes/results_list.html:7
+msgid "Value"
+msgstr "القيمة"
+
+#: templates/admin/constance/includes/results_list.html:8
+msgid "Is modified"
+msgstr "تم تعديله"

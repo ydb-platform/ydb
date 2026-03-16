@@ -1,0 +1,8 @@
+transient conceptDir = "mars";
+concept waveDomain(unknown,"wave_domain.def",conceptDir,conceptDir) : no_copy,read_only;
+alias mars.domain = waveDomain;
+
+# ECC-570
+if (class is "lw") {
+  unalias mars.domain;
+}

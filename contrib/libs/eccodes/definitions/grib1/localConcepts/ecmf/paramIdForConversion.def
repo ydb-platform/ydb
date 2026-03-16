@@ -1,0 +1,53 @@
+# Concept paramIdForConversion for ECMWF
+# See ECC-1806
+
+# 55
+228004 = {gribTablesVersionNo=128; indicatorOfParameter=55;  centre=98;}
+# 56
+235168 = {gribTablesVersionNo=128; indicatorOfParameter=56;  centre=98;}
+# 130232
+235135 = {gribTablesVersionNo=130; indicatorOfParameter=232; centre=98;}
+# 151163
+262104 = {gribTablesVersionNo=151; indicatorOfParameter=163; centre=98;}
+# 151145
+262124 = {gribTablesVersionNo=151; indicatorOfParameter=145; centre=98;}
+# 172146
+235033 = {gribTablesVersionNo=172; indicatorOfParameter=146; centre=98;}
+# 172147
+235034 = {gribTablesVersionNo=172; indicatorOfParameter=147; centre=98;}
+# 172169
+235035 = {gribTablesVersionNo=172; indicatorOfParameter=169; centre=98;}
+# 172175
+235036 = {gribTablesVersionNo=172; indicatorOfParameter=175; centre=98;}
+# 172176
+235037 = {gribTablesVersionNo=172; indicatorOfParameter=176; centre=98;}
+# 172177
+235038 = {gribTablesVersionNo=172; indicatorOfParameter=177; centre=98;}
+# 172178
+235039 = {gribTablesVersionNo=172; indicatorOfParameter=178; centre=98;}
+# 172179
+235040 = {gribTablesVersionNo=172; indicatorOfParameter=179; centre=98;}
+# 174098
+262000 = {gribTablesVersionNo=174; indicatorOfParameter=98;  centre=98;}
+# 151175
+262118 = {gribTablesVersionNo=151; indicatorOfParameter=175; centre=98;}
+# 151132
+262139 = {gribTablesVersionNo=151; indicatorOfParameter=132; centre=98;}
+# 151131
+262140 = {gribTablesVersionNo=151; indicatorOfParameter=131; centre=98;}
+# 72
+260087 = {gribTablesVersionNo=128; indicatorOfParameter=72; centre=98;}
+# 73
+260097 = {gribTablesVersionNo=128; indicatorOfParameter=73; centre=98;}
+# 172050
+235026 = {gribTablesVersionNo=172; indicatorOfParameter=50; centre=98;}
+# 172145
+235032 = {gribTablesVersionNo=172; indicatorOfParameter=145; centre=98;}
+# 172189 <-- ecCodes 2.38
+# 235189 = {gribTablesVersionNo=172; indicatorOfParameter=189; centre=98;}
+# 172195
+235045 = {gribTablesVersionNo=172; indicatorOfParameter=195; centre=98;}
+# 172196
+235046 = {gribTablesVersionNo=172; indicatorOfParameter=196; centre=98;}
+# 172197
+235047 = {gribTablesVersionNo=172; indicatorOfParameter=197; centre=98;}

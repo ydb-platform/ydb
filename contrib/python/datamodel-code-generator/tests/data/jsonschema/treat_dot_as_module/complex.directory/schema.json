@@ -1,0 +1,10 @@
+{
+  "properties": {
+    "ExtType": {
+      "type": "a",
+      "title": "ExtType"
+    }
+  },
+  "title": "ExtType",
+  "type": "object"
+}

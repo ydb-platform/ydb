@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package yandex.cloud.baremetal.v1alpha;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/baremetal/v1alpha;baremetal";
+option java_package = "yandex.cloud.api.baremetal.v1alpha";
+
+// A HardwarePool resource.
+message HardwarePool {
+  // ID of the hardware pool.
+  string id = 1;
+
+  // ID of the zone where the hardware pool is located.
+  //
+  // To get the zone ID use a [ZoneService.List] request.
+  string zone_id = 2;
+}

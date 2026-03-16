@@ -1,0 +1,7 @@
+exclude:
+  - README.html
+  - README.txt
+exclude_from_macros:
+  - xmltestdata/*
+keep:
+  - xmltestdata/*

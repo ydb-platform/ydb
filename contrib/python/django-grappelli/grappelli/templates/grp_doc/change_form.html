@@ -1,0 +1,388 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Change-Form{% endblock %}
+
+{% block extrahead %}
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(django.jQuery);
+    </script>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Change-Form</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Change-Form</h1>
+    <div class="g-d-c">
+        <div class="g-d-24">
+            <div class="grp-doc-description">
+                <p>A change-form is used for adding/editing the data of an object. Its basic structure and most important components are explained below. At the end of the page, you'll find a complete change-form template. Make sure to read about <a href="{% url 'grp_doc_basic_page_structure' %}">how a custom template is built</a> first to gain basic understanding.</p>
+            </div>
+        </div>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Extend the Base, Load Stuff You Need, Define the Body-Class</h1>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} extends "admin/base_site.html" {% templatetag closeblock %}
+{% templatetag openblock %} load i18n static admin_modify grp_tags {% templatetag closeblock %}
+{% templatetag openblock %} block bodyclass {% templatetag closeblock %}grp-change-form{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Custom Stylesheets, Javascripts</h1>
+                    <p>Link custom stylesheets if needed. Regarding javascripts, you should take a look at Grappellis change_list.html &mdash; mentioned below are just the parts you need for the page-tools and collapsibles.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block extrastyle {% templatetag closeblock %}
+    <link href="Path to your custom stylesheet" rel="stylesheet" type="text/css" />
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% templatetag openblock %} block javascripts {% templatetag closeblock %}
+    {% endfilter %}&#123;&#123; block.super &#125;&#125;{% filter force_escape %}
+    {% templatetag openblock %} url 'admin:jsi18n' as jsi18nurl {% templatetag closeblock %}
+    <script src="Path to your custom javascript" type="text/javascript"></script>
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+
+                Take a look at Grappellis change_form.html to find out what js you might need
+
+                // PAGE-TOOLS HANDLERS
+                $("a#grp-open-all").on("click", function(){
+                    $("#grp-content .grp-collapse-handler").each(function() {
+                        $(this).parent(".grp-collapse").removeClass("grp-closed").addClass("grp-open");
+                    });
+                });
+                $("a#grp-close-all").on("click", function(){
+                    $("#grp-content .grp-collapse-handler").each(function() {
+                        $(this).parent(".grp-collapse").removeClass("grp-open").addClass("grp-closed");
+                    });
+                });
+
+                // INITIALIZE COLLAPSE
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(grp.jQuery);
+    </script>
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Page-Tools &amp; Breadcrumbs</h1>
+                    <p>A detailed explanation on how breadcrumbs &amp; page-tools are built can be found <a href="{% url 'grp_doc_context_navigation' %}">here</a>.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block page-tools {% templatetag closeblock %}
+    {% templatetag openblock %} if not is_popup {% templatetag closeblock %}
+        <ul>
+            <li><a href="javascript://" class="grp-tool" id="grp-open-all">&nbsp;</a></li>
+            <li><a href="javascript://" class="grp-tool" id="grp-close-all">&nbsp;</a></li>
+        </ul>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% templatetag openblock %} block breadcrumbs {% templatetag closeblock %}
+    {% templatetag openblock %} if not is_popup {% templatetag closeblock %}
+        <ul>
+            <li><a href="../../../">{% templatetag openblock %} trans "Home" {% templatetag closeblock %}</a></li>
+            <li><a href="../../">{% templatetag openblock %} opts.app_config.verbose_name {% templatetag closeblock %}</a></li>
+            <li>
+                {% templatetag openblock %} if has_change_permission {% templatetag closeblock %}
+                    <a href="../">{% endfilter %}&#123;&#123; opts.verbose_name_plural|capfirst &#125;&#125;{% filter force_escape %}</a>
+                {% templatetag openblock %} else {% templatetag closeblock %}
+                    {% endfilter %}&#123;&#123; opts.verbose_name_plural|capfirst &#125;&#125;{% filter force_escape %}
+                {% templatetag openblock %} endif {% templatetag closeblock %}
+            </li>
+            <li>
+                {% templatetag openblock %} if add {% templatetag closeblock %}
+                    {% templatetag openblock %} trans "Add" {% templatetag closeblock %} {% endfilter %}&#123;&#123; opts.verbose_name &#125;&#125;{% filter force_escape %}
+                {% templatetag openblock %} else {% templatetag closeblock %}
+                    {% endfilter %}&#123;&#123; original|truncatewords:"18" &#125;&#125;{% filter force_escape %}
+                {% templatetag openblock %} endif {% templatetag closeblock %}
+            </li>
+        </ul>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>The Actual Content</h1>
+                    <p>A detailed explanation on how the different components of the content are built can be found using the following links: <a href="{% url 'grp_doc_modules' %}">Modules, Rows &amp; Cells, Collapsible Modules</a>, <a href="{% url 'grp_doc_groups' %}">Stacked &amp; Tabular Groups, Collapsible Groups</a>, <a href="{% url 'grp_doc_form_fields' %}">Labels, Form Fields &amp; Widths</a>, <a href="{% url 'grp_doc_fieldsets' %}">Fieldsets</a> and <a href="{% url 'grp_doc_submit_rows' %}">Submit Rows</a>.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block content {% templatetag closeblock %}
+    <form {% templatetag openblock %} if has_file_field {% templatetag closeblock %}enctype="multipart/form-data"{% templatetag openblock %} endif {% templatetag closeblock %} action="{{ form_url }}" method="post" id="{{ opts.module_name }}_form">{% templatetag openblock %} csrf_token {% templatetag closeblock %}
+        {% templatetag openblock %} block form_top {% templatetag closeblock %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+        <!-- POPUP -->
+        {% templatetag openblock %} if is_popup {% templatetag closeblock %}<input type="hidden" name="_popup" value="1" />{% templatetag openblock %} endif {% templatetag closeblock %}
+
+        <!-- ERRORS -->
+        {% templatetag openblock %} if errors {% templatetag closeblock %}
+            <p class="errornote">
+                {% templatetag openblock %} blocktrans count errors|length as counter {% templatetag closeblock %}
+                    Please correct the error below.
+                {% templatetag openblock %} plural {% templatetag closeblock %}
+                    Please correct the errors below.
+                {% templatetag openblock %} endblocktrans {% templatetag closeblock %}
+            </p>
+            <ul class="errorlist">{% templatetag openblock %} for error in adminform.form.non_field_errors %}<li>{% endfilter %}&#123;&#123; error &#125;&#125;{% filter force_escape %}</li>{% templatetag openblock %} endfor {% templatetag closeblock %}</ul>
+        {% templatetag openblock %} endif {% templatetag closeblock %}
+
+        <!-- FIELDSETS -->
+        {% templatetag openblock %} block field_sets {% templatetag closeblock %}
+            {% templatetag openblock %} for fieldset in adminform {% templatetag closeblock %}
+                <!-- Include the admin fieldsets or place your custom fieldset in here -->
+                {% templatetag openblock %} include "admin/includes/fieldset.html" {% templatetag closeblock %}
+            {% templatetag openblock %} endfor {% templatetag closeblock %}
+        {% templatetag openblock %} endblock {% templatetag closeblock %}
+        {% templatetag openblock %} block after_field_sets {% templatetag closeblock %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+        <!-- INLINES -->
+        {% templatetag openblock %} block inline_field_sets {% templatetag closeblock %}
+            {% templatetag openblock %} for inline_admin_formset in inline_admin_formsets {% templatetag closeblock %}
+                <!-- Include the admin inlines or place your custom inlines in here -->
+                {% templatetag openblock %} include inline_admin_formset.opts.template {% templatetag closeblock %}
+            {% templatetag openblock %} endfor {% templatetag closeblock %}
+        {% templatetag openblock %} endblock {% templatetag closeblock %}
+        {% templatetag openblock %} block after_related_objects {% templatetag closeblock %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+        <!-- SUBMIT ROW -->
+        {% templatetag openblock %} block submit_buttons_bottom {% templatetag closeblock %}{% templatetag openblock %} submit_row {% templatetag closeblock %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+        <!-- ADMIN-FORM/ADD -->
+        {% templatetag openblock %} if adminform and add {% templatetag closeblock %}
+            {% templatetag openblock %} block extrahead {% templatetag closeblock %}
+                {% endfilter %}&#123;&#123; block.super &#125;&#125;{% filter force_escape %}
+                <script type="text/javascript">
+                    (function($){
+                        $(function(){
+                            try {
+                                // focus on first form-field
+                                $("#{{ adminform.first_field.auto_id }}, #{{ adminform.first_field.auto_id }}_0")
+                                .eq(0).focus();
+                            } catch(e) {}
+                        });
+                    }(grp.jQuery));
+                </script>
+            {% templatetag openblock %} endblock {% templatetag closeblock %}
+        {% templatetag openblock %} endif {% templatetag closeblock %}
+
+        <!-- JS FOR PREPOPULATED FIELDS -->
+        {% templatetag openblock %} prepopulated_fields_js {% templatetag closeblock %}
+    </form>
+
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>The complete change–form template</h1>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} extends "admin/base_site.html" {% templatetag closeblock %}
+{% templatetag openblock %} load i18n static admin_modify grp_tags {% templatetag closeblock %}
+
+{% templatetag openblock %} block extrastyle {% templatetag closeblock %}
+    <link href="Path to your custom stylesheet" rel="stylesheet" type="text/css" />
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% templatetag openblock %} block javascripts {% templatetag closeblock %}
+    {% endfilter %}&#123;&#123; block.super &#125;&#125;{% filter force_escape %}
+    {% templatetag openblock %} url 'admin:jsi18n' as jsi18nurl {% templatetag closeblock %}
+    <script src="Path to your custom javascript" type="text/javascript"></script>
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+
+                Take a look at Grappellis change_form.html to find out what js you might need
+
+                // PAGE-TOOLS HANDLERS
+                $("a#grp-open-all").on("click", function(){
+                    $("#grp-content .grp-collapse-handler").each(function() {
+                        $(this).parent(".grp-collapse").removeClass("grp-closed").addClass("grp-open");
+                    });
+                });
+                $("a#grp-close-all").on("click", function(){
+                    $("#grp-content .grp-collapse-handler").each(function() {
+                        $(this).parent(".grp-collapse").removeClass("grp-open").addClass("grp-closed");
+                    });
+                });
+
+                // INITIALIZE COLLAPSE
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(grp.jQuery);
+    </script>
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% templatetag openblock %} block bodyclass {% templatetag closeblock %}grp-change-form{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% templatetag openblock %} block page-tools {% templatetag closeblock %}
+    {% templatetag openblock %} if not is_popup {% templatetag closeblock %}
+        <ul>
+            <li><a href="javascript://" class="grp-tool" id="grp-open-all">&nbsp;</a></li>
+            <li><a href="javascript://" class="grp-tool" id="grp-close-all">&nbsp;</a></li>
+        </ul>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% templatetag openblock %} block breadcrumbs {% templatetag closeblock %}
+    {% templatetag openblock %} if not is_popup {% templatetag closeblock %}
+        <ul>
+            <li><a href="../../../">{% templatetag openblock %} trans "Home" {% templatetag closeblock %}</a></li>
+            <li><a href="../../">{% templatetag openblock %} opts.app_config.verbose_name {% templatetag closeblock %}</a></li>
+            <li>
+                {% templatetag openblock %} if has_change_permission {% templatetag closeblock %}
+                    <a href="../">{% endfilter %}&#123;&#123; opts.verbose_name_plural|capfirst &#125;&#125;{% filter force_escape %}</a>
+                {% templatetag openblock %} else {% templatetag closeblock %}
+                    {% endfilter %}&#123;&#123; opts.verbose_name_plural|capfirst &#125;&#125;{% filter force_escape %}
+                {% templatetag openblock %} endif {% templatetag closeblock %}
+            </li>
+            <li>
+                {% templatetag openblock %} if add {% templatetag closeblock %}
+                    {% templatetag openblock %} trans "Add" {% templatetag closeblock %} {% endfilter %}&#123;&#123; opts.verbose_name &#125;&#125;{% filter force_escape %}
+                {% templatetag openblock %} else {% templatetag closeblock %}
+                    {% endfilter %}&#123;&#123; original|truncatewords:"18" &#125;&#125;{% filter force_escape %}
+                {% templatetag openblock %} endif {% templatetag closeblock %}
+            </li>
+        </ul>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% templatetag openblock %} block content {% templatetag closeblock %}
+    <form {% templatetag openblock %} if has_file_field {% templatetag closeblock %}enctype="multipart/form-data"{% templatetag openblock %} endif {% templatetag closeblock %} action="{{ form_url }}" method="post" id="{{ opts.module_name }}_form">{% templatetag openblock %} csrf_token {% templatetag closeblock %}
+        {% templatetag openblock %} block form_top {% templatetag closeblock %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+        <!-- POPUP -->
+        {% templatetag openblock %} if is_popup {% templatetag closeblock %}<input type="hidden" name="_popup" value="1" />{% templatetag openblock %} endif {% templatetag closeblock %}
+
+        <!-- ERRORS -->
+        {% templatetag openblock %} if errors {% templatetag closeblock %}
+            <p class="errornote">
+                {% templatetag openblock %} blocktrans count errors|length as counter {% templatetag closeblock %}
+                    Please correct the error below.
+                {% templatetag openblock %} plural {% templatetag closeblock %}
+                    Please correct the errors below.
+                {% templatetag openblock %} endblocktrans {% templatetag closeblock %}
+            </p>
+            <ul class="errorlist">{% templatetag openblock %} for error in adminform.form.non_field_errors %}<li>{% endfilter %}&#123;&#123; error &#125;&#125;{% filter force_escape %}</li>{% templatetag openblock %} endfor {% templatetag closeblock %}</ul>
+        {% templatetag openblock %} endif {% templatetag closeblock %}
+
+        <!-- FIELDSETS -->
+        {% templatetag openblock %} block field_sets {% templatetag closeblock %}
+            {% templatetag openblock %} for fieldset in adminform {% templatetag closeblock %}
+                <!-- Include the admin fieldsets or place your custom fieldset in here -->
+                {% templatetag openblock %} include "admin/includes/fieldset.html" {% templatetag closeblock %}
+            {% templatetag openblock %} endfor {% templatetag closeblock %}
+        {% templatetag openblock %} endblock {% templatetag closeblock %}
+        {% templatetag openblock %} block after_field_sets {% templatetag closeblock %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+        <!-- INLINES -->
+        {% templatetag openblock %} block inline_field_sets {% templatetag closeblock %}
+            {% templatetag openblock %} for inline_admin_formset in inline_admin_formsets {% templatetag closeblock %}
+                <!-- Include the admin inlines or place your custom inlines in here -->
+                {% templatetag openblock %} include inline_admin_formset.opts.template {% templatetag closeblock %}
+            {% templatetag openblock %} endfor {% templatetag closeblock %}
+        {% templatetag openblock %} endblock {% templatetag closeblock %}
+        {% templatetag openblock %} block after_related_objects {% templatetag closeblock %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+        <!-- SUBMIT ROW -->
+        {% templatetag openblock %} block submit_buttons_bottom {% templatetag closeblock %}{% templatetag openblock %} submit_row {% templatetag closeblock %}{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+        <!-- ADMIN-FORM/ADD -->
+        {% templatetag openblock %} if adminform and add {% templatetag closeblock %}
+            {% templatetag openblock %} block extrahead {% templatetag closeblock %}
+                {% endfilter %}&#123;&#123; block.super &#125;&#125;{% filter force_escape %}
+                <script type="text/javascript">
+                    (function($){
+                        $(function(){
+                            try {
+                                // focus on first form-field
+                                $("#{{ adminform.first_field.auto_id }}, #{{ adminform.first_field.auto_id }}_0")
+                                .eq(0).focus();
+                            } catch(e) {}
+                        });
+                    }(grp.jQuery));
+                </script>
+            {% templatetag openblock %} endblock {% templatetag closeblock %}
+        {% templatetag openblock %} endif {% templatetag closeblock %}
+
+        <!-- JS FOR PREPOPULATED FIELDS -->
+        {% templatetag openblock %} prepopulated_fields_js {% templatetag closeblock %}
+    </form>
+
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+    </div>
+{% endblock %}

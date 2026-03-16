@@ -1,0 +1,155 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# 
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-01-25 16:26+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: .\admin.py:70
+msgid "Initial version."
+msgstr "初始版本"
+
+#: .\admin.py:178
+#, python-format
+msgid "Reverted to previous version, saved on %(datetime)s"
+msgstr "恢复到 %(datetime)s 的版本"
+
+#: .\admin.py:186
+#, python-format
+msgid "Could not load %(object_repr)s version - not found"
+msgstr "无法载入 %(object_repr)s 版本 - 未找到"
+
+#: .\admin.py:206
+#, python-format
+msgid "Recover %(name)s"
+msgstr "恢复 %(name)s"
+
+#: .\admin.py:222
+#, python-format
+msgid "Revert %(name)s"
+msgstr "恢复 %(name)s"
+
+#: .\admin.py:259 .\templates\reversion\change_list.html:7
+#: .\templates\reversion\recover_form.html:10
+#: .\templates\reversion\recover_list.html:10
+#, python-format
+msgid "Recover deleted %(name)s"
+msgstr "恢复已删除的 %(name)s"
+
+#: .\apps.py:7
+msgid "Reversion"
+msgstr "版本记录"
+
+#: .\models.py:39
+#, python-format
+msgid "Could not save %(object_repr)s version - missing dependency."
+msgstr "无法保存 %(object_repr)s 版本 - 缺少依赖"
+
+#: .\models.py:52
+msgid "date created"
+msgstr "创建日期"
+
+#: .\models.py:61
+msgid "user"
+msgstr "用户"
+
+#: .\models.py:67
+msgid "comment"
+msgstr "评论"
+
+#: .\models.py:116
+msgid "revision"
+msgstr "修改"
+
+#: .\models.py:117
+msgid "revisions"
+msgstr "修改"
+
+#: .\models.py:275
+#, python-format
+msgid "Could not load %(object_repr)s version - incompatible version data."
+msgstr "无法载入 %(object_repr)s 版本 - 不兼容的版本数据。"
+
+#: .\models.py:279
+#, python-format
+msgid "Could not load %(object_repr)s version - unknown serializer %(format)s."
+msgstr "无法载入 %(object_repr)s 版本 - 未知的序列化 %(format)s。"
+
+#: .\models.py:335
+#, fuzzy
+msgid "version"
+msgstr "版本"
+
+#: .\models.py:336
+msgid "versions"
+msgstr "版本"
+
+#: .\templates\reversion\object_history.html:8
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr "单击下方的日期以恢复当前对象到之前的版本。"
+
+#: .\templates\reversion\object_history.html:15
+#: .\templates\reversion\recover_list.html:23
+msgid "Date/time"
+msgstr "时间"
+
+#: .\templates\reversion\object_history.html:16
+msgid "User"
+msgstr "用户"
+
+#: .\templates\reversion\object_history.html:17
+msgid "Action"
+msgstr "操作"
+
+#: .\templates\reversion\object_history.html:38
+msgid ""
+"This object doesn't have a change history. It probably wasn't added via this "
+"admin site."
+msgstr "此对象不存在任何变更历史，它可能不是通过管理站点添加的。"
+
+#: .\templates\reversion\recover_form.html:7
+#: .\templates\reversion\recover_list.html:7
+#: .\templates\reversion\revision_form.html:7
+msgid "Home"
+msgstr "首页"
+
+#: .\templates\reversion\recover_form.html:20
+msgid "Press the save button below to recover this version of the object."
+msgstr "单击保存按钮以恢复为此版本。"
+
+#: .\templates\reversion\recover_list.html:17
+msgid ""
+"Choose a date from the list below to recover a deleted version of an object."
+msgstr "单击下方的日期以恢复一个已删除的对象。"
+
+#: .\templates\reversion\recover_list.html:37
+msgid "There are no deleted objects to recover."
+msgstr "没有可供恢复的已删除对象。"
+
+#: .\templates\reversion\revision_form.html:11
+msgid "History"
+msgstr "历史"
+
+#: .\templates\reversion\revision_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "恢复 %(verbose_name)s"
+
+#: .\templates\reversion\revision_form.html:21
+msgid "Press the save button below to revert to this version of the object."
+msgstr "单击保存按钮将此对象恢复到此版本。"

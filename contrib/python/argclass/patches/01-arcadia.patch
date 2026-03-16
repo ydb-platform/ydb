@@ -1,0 +1,13 @@
+--- contrib/python/argclass/argclass/__main__.py	(index)
++++ contrib/python/argclass/argclass/__main__.py	(working tree)
+@@ -3,6 +3,7 @@ import sys
+ from pathlib import Path
+ 
+ import argclass
++import __res
+ 
+ 
+ class GreetCommand(argclass.Parser):
+@@ -32 +33 @@ def main() -> None:
+-            f"python\n{open(__file__).read().strip()}\n```"
++            f"python\n{__res.find(b'resfs/file/py/argclass/__main__.py').decode('utf-8').strip()}\n```"

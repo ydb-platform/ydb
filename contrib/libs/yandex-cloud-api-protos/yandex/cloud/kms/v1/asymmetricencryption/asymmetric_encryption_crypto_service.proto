@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package yandex.cloud.kms.v1.asymmetricencryption;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/kms/v1/asymmetricencryption;kms";
+option java_package = "yandex.cloud.api.kms.v1";
+
+// Data plane for KMS symmetric cryptography operations
+
+// Set of methods that perform asymmetric decryption.
+service AsymmetricEncryptionCryptoService {
+  // Decrypts the given ciphertext with the specified key.
+  rpc Decrypt (AsymmetricDecryptRequest) returns (AsymmetricDecryptResponse) {
+    option (google.api.http) = {post: "/kms/v1/asymmetricEncryptionKeys/{key_id}:decrypt" body: "*"};
+  }
+
+  // Gets value of public key.
+  rpc GetPublicKey(AsymmetricGetPublicKeyRequest) returns (AsymmetricGetPublicKeyResponse) {
+    option (google.api.http) = {get: "/kms/v1/asymmetricEncryptionKeys/{key_id}/publicKey"};
+  }
+}
+
+message AsymmetricDecryptRequest {
+  // ID of the asymmetric KMS key to use for decryption.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Ciphertext to be decrypted.
+  // Should be encoded with base64.
+  bytes ciphertext = 2 [(required) = true, (length) = "<=32768"];
+}
+
+message AsymmetricDecryptResponse {
+  // ID of the asymmetric KMS key that was used for decryption.
+  string key_id = 1;
+
+  // Decrypted plaintext.
+  bytes plaintext = 2;
+}
+
+message AsymmetricGetPublicKeyRequest {
+  // ID of the asymmetric KMS key to be used for public key retrieval.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message AsymmetricGetPublicKeyResponse {
+  // ID of the asymmetric KMS key to get public key of.
+  string key_id = 1;
+
+  // Public key value.
+  // The value is a PEM-encoded X.509 public key, also known as SubjectPublicKeyInfo (SPKI),
+  // as defined in RFC 5280.
+  string public_key = 2;
+}

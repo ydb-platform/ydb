@@ -1,0 +1,40 @@
+.theme-green, .theme-blue {
+  --unknown_color: lightgray;
+  --low_color: #FF6666;
+  --medium_color: #F9FD63;
+  --partial_covered_color: var(--medium_color);
+  --uncovered_color: #FF8C8C;
+  --warning_color: orangered;
+  --notTakenBranch_color: red;
+  --notTakenCondition_color: red;
+  --uncheckedDecision_color: darkorange;
+  --notTakenDecision_color: red;
+  --notInvokedCall_color: red;
+  --excluded_color: darkkhaki;
+  /* Colors taken from github theme */
+  --color-fg-default: #1F2328;
+  --color-canvas-default: #ffffff;
+  --color-border-default: #d0d7de;
+  --color-border-muted: hsla(210, 18%, 87%, 1);
+  --color-fg-muted: #656d76;
+  --color-canvas-subtle: #f6f8fa;
+  --color-accent-subtle: #ddf4ff;;
+}
+
+.theme-green {
+  --high_color: #85E485;
+  --covered_color: #85E485;
+  --takenBranch_color: green;
+  --takenCondition_color: green;
+  --takenDecision_color: green;
+  --invokedCall_color: green;
+}
+
+.theme-blue {
+  --high_color: #66B4FF;
+  --covered_color: #66B4Ff;
+  --takenBranch_color: blue;
+  --takenCondition_color: blue;
+  --takenDecision_color: blue;
+  --invokedCall_color: blue;
+}

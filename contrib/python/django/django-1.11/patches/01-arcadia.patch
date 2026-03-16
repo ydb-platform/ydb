@@ -1,0 +1,540 @@
+--- contrib/python/django/django-1.11/django/core/management/__init__.py	(index)
++++ contrib/python/django/django-1.11/django/core/management/__init__.py	(working tree)
+@@ -18,6 +18,8 @@ from django.utils import autoreload, lru_cache, six
+ from django.utils._os import npath, upath
+ from django.utils.encoding import force_text
+ 
++from library.python.django.utils import find_modules_in_path
++
+ 
+ def find_commands(management_dir):
+     """
+@@ -64,7 +66,7 @@ def get_commands():
+     The dictionary is cached on the first call and reused on subsequent
+     calls.
+     """
+-    commands = {name: 'django.core' for name in find_commands(upath(__path__[0]))}
++    commands = {name: 'django.core' for name in find_modules_in_path('django.core.management.commands')}
+ 
+     if not settings.configured:
+         return commands
+@@ -73,6 +75,12 @@ def get_commands():
+         path = os.path.join(app_config.path, 'management')
+         commands.update({name: app_config.name for name in find_commands(path)})
+ 
++        try:
++            commands.update(
++                {name: app_config.name for name in find_modules_in_path('%s.management.commands' % app_config.name)})
++        except ImportError:
++            commands.update({name: app_config.name for name in find_commands(path)})
++
+     return commands
+ 
+ 
+--- contrib/python/django/django-1.11/django/core/management/commands/loaddata.py	(index)
++++ contrib/python/django/django-1.11/django/core/management/commands/loaddata.py	(working tree)
+@@ -23,6 +23,9 @@ from django.utils._os import upath
+ from django.utils.encoding import force_text
+ from django.utils.functional import cached_property
+ from django.utils.glob import glob_escape
++from six import BytesIO
++
++from library.python import resource
+ 
+ try:
+     import bz2
+@@ -31,6 +34,32 @@ except ImportError:
+     has_bz2 = False
+ 
+ 
++cached_resfs_read = lru_cache.lru_cache(maxsize=None)(resource.resfs_read)
++
++
++def open_fixture(fixture_file, open_method, mode):
++    """
++    Yandex-specific
++    :return:
++    """
++    # try load from resource, in case of success - use correct open_method
++    content = resource.resfs_read(fixture_file)
++    if content is None:
++        return open_method(fixture_file, mode)
++    if has_bz2 and open_method == bz2.BZ2File:
++        return BytesIO(bz2.decompress(content))
++    f = BytesIO(content)
++    if open_method == open:
++        return f
++    if open_method == gzip.GzipFile:
++        return gzip.GzipFile(fileobj=f, mode=mode)
++    if open_method == SingleZipReader:
++        return SingleZipReader(f, mode=mode)
++    raise NotImplementedError('open_method {} for {} is not implemented'.format(
++        open_method, fixture_file
++    ))
++
++
+ class Command(BaseCommand):
+     help = 'Installs the named fixture(s) in the database.'
+     missing_args_message = (
+@@ -148,7 +177,8 @@ class Command(BaseCommand):
+         for fixture_file, fixture_dir, fixture_name in self.find_fixtures(fixture_label):
+             _, ser_fmt, cmp_fmt = self.parse_name(os.path.basename(fixture_file))
+             open_method, mode = self.compression_formats[cmp_fmt]
+-            fixture = open_method(fixture_file, mode)
++            fixture = open_fixture(fixture_file, open_method, mode)
++
+             try:
+                 self.fixture_count += 1
+                 objects_in_fixture = 0
+@@ -206,6 +236,37 @@ class Command(BaseCommand):
+                 )
+ 
+     @lru_cache.lru_cache(maxsize=None)
++    def find_fixtures_in_resource(self, fixture_label):
++        """
++        Yandex-specific
++        :param fixture_label: some string, which user provides in loaddata command
++        :return: list of (candidate, fixture_dir, fixture_name)
++        """
++        fixture_name, _, _ = self.parse_name(fixture_label)
++
++        if self.verbosity >= 2:
++            self.stdout.write("Trying load '%s' from resource..." % fixture_label)
++
++        # try load by literal path
++        if cached_resfs_read(fixture_label) is not None:
++            return [(fixture_label, None, fixture_name)]
++
++        result = []
++        for fixture_dir in self.fixture_paths_in_resource:
++            fixture_path = os.path.join(fixture_dir, fixture_label)
++            # try load by literal path in dir
++            fixture = cached_resfs_read(fixture_path)
++            if fixture is not None:
++                result.append((fixture_path, fixture_dir, fixture_name))
++                continue
++
++            # try load all files in dir without regarding an extension
++            for entry in resource.resfs_files(prefix=fixture_path + '/'):
++                result.append((entry, fixture_path, fixture_name))
++
++        return result
++
++    @lru_cache.lru_cache(maxsize=None)
+     def find_fixtures(self, fixture_label):
+         """
+         Finds fixture files for a given label.
+@@ -218,6 +279,12 @@ class Command(BaseCommand):
+         if self.verbosity >= 2:
+             self.stdout.write("Loading '%s' fixtures..." % fixture_name)
+ 
++        # Yandex-specific: at first we should try to load fixtures from Arcadia resource
++        fixture_files = self.find_fixtures_in_resource(fixture_label)
++        if fixture_files:
++            return fixture_files
++        # End of Yandex-specific
++
+         if os.path.isabs(fixture_name):
+             fixture_dirs = [os.path.dirname(fixture_name)]
+             fixture_name = os.path.basename(fixture_name)
+@@ -293,6 +360,31 @@ class Command(BaseCommand):
+         dirs = [upath(os.path.abspath(os.path.realpath(d))) for d in dirs]
+         return dirs
+ 
++    @cached_property
++    def fixture_paths_in_resource(self):
++        """
++        Yandex-specific
++        Return a list of fixture prefixes.
++        """
++        dirs = []
++        fixture_dirs = settings.FIXTURE_DIRS
++        if len(fixture_dirs) != len(set(fixture_dirs)):
++            raise ImproperlyConfigured("settings.FIXTURE_DIRS contains duplicates.")
++        for app_config in apps.get_app_configs():
++            app_label = app_config.label
++            app_dir = os.path.dirname(app_config.module.__loader__.get_filename(app_config.module.__name__)) + '/fixtures'
++            if app_dir in fixture_dirs:
++                raise ImproperlyConfigured(
++                    "'%s' is a default fixture directory for the '%s' app "
++                    "and cannot be listed in settings.FIXTURE_DIRS." % (app_dir, app_label)
++                )
++
++            if self.app_label and app_label != self.app_label:
++                continue
++            dirs.append(app_dir)
++        dirs.extend(list(fixture_dirs))
++        return dirs
++
+     def parse_name(self, fixture_name):
+         """
+         Splits fixture name in name, serialization format, compression format.
+--- contrib/python/django/django-1.11/django/core/management/commands/makemigrations.py	(index)
++++ contrib/python/django/django-1.11/django/core/management/commands/makemigrations.py	(working tree)
+@@ -2,6 +2,7 @@ import io
+ import os
+ import sys
+ import warnings
++from importlib import import_module
+ from itertools import takewhile
+ 
+ from django.apps import apps
+@@ -22,6 +23,9 @@ from django.utils.deprecation import RemovedInDjango20Warning
+ from django.utils.six import iteritems
+ from django.utils.six.moves import zip
+ 
++from library.python.django.utils import get_module_dir
++from yalibrary.makelists import from_file
++
+ 
+ class Command(BaseCommand):
+     help = "Creates new migration(s) for apps."
+@@ -95,6 +99,10 @@ class Command(BaseCommand):
+         # the loader doesn't try to resolve replaced migrations from DB.
+         loader = MigrationLoader(None, ignore_no_migrations=True)
+ 
++        # Yandex - specific: we need loader later in order to get migrations module
++        self._loader = loader
++        # End of Yandex-specific
++
+         # Raise an error if any migrations are applied before their dependencies.
+         consistency_check_labels = set(config.label for config in apps.get_app_configs())
+         # Non-default databases are only checked if database routers used.
+@@ -231,6 +239,12 @@ class Command(BaseCommand):
+                     migration_string = writer.as_string()
+                     with io.open(writer.path, "w", encoding='utf-8') as fh:
+                         fh.write(migration_string)
++                        # Yandex - specific: we're trying to add migration to ya.make in migrations dir
++                        try:
++                            self._add_migration_to_ya_make(app_label, writer.filename)
++                        except IOError:
++                            self.stdout.write('Failed to update ya.make, please ensure that it is in migrations dir')
++                        # End of Yandex-specific
+                 elif self.verbosity == 3:
+                     # Alternatively, makemigrations --dry-run --verbosity 3
+                     # will output the migrations to stdout rather than saving
+@@ -310,6 +324,12 @@ class Command(BaseCommand):
+                     # Write the merge migrations file to the disk
+                     with io.open(writer.path, "w", encoding='utf-8') as fh:
+                         fh.write(writer.as_string())
++                        # Yandex - specific: we're trying to add migration to ya.make in migrations dir
++                        try:
++                            self._add_migration_to_ya_make(app_label, writer.filename)
++                        except IOError:
++                            self.stdout.write('Failed to update ya.make, please ensure that it is migrations dir')
++                        # End of Yandex-specific
+                     if self.verbosity > 0:
+                         self.stdout.write("\nCreated new merge migration %s" % writer.path)
+                 elif self.verbosity == 3:
+@@ -320,3 +340,16 @@ class Command(BaseCommand):
+                         "Full merge migrations file '%s':" % writer.filename) + "\n"
+                     )
+                     self.stdout.write("%s\n" % writer.as_string())
++
++    # Yandex - specific: we're trying to add migration to ya.make in migrations dir
++    def _add_migration_to_ya_make(self, app_label, migration_name):
++        migration_package_name, _ = self._loader.migrations_module(app_label)
++        migration_module = import_module(migration_package_name)
++        migration_fs_path = get_module_dir(migration_module)
++        ya_make_path = os.path.join(migration_fs_path, 'ya.make')
++        make_list = from_file(ya_make_path)
++        if not make_list.project.py_srcs().children:
++            make_list.project.py_srcs().add('__init__.py')
++        make_list.project.py_srcs().add(migration_name)
++        make_list.write(ya_make_path)
++    # End of Yandex-specific
+--- contrib/python/django/django-1.11/django/core/paginator.py	(index)
++++ contrib/python/django/django-1.11/django/core/paginator.py	(working tree)
+@@ -123,7 +123,7 @@ class Paginator(object):
+ QuerySetPaginator = Paginator   # For backwards-compatibility.
+ 
+ 
+-class Page(collections.Sequence):
++class Page(six.moves.collections_abc.Sequence):
+ 
+     def __init__(self, object_list, number, paginator):
+         self.object_list = object_list
+--- contrib/python/django/django-1.11/django/db/migrations/loader.py	(index)
++++ contrib/python/django/django-1.11/django/db/migrations/loader.py	(working tree)
+@@ -1,6 +1,5 @@
+ from __future__ import unicode_literals
+ 
+-import os
+ import sys
+ from importlib import import_module
+ 
+@@ -15,6 +14,9 @@ from .exceptions import (
+     NodeNotFoundError,
+ )
+ 
++from library.python.django.utils import find_modules_in_path
++
++
+ MIGRATIONS_MODULE_NAME = 'migrations'
+ 
+ 
+@@ -102,14 +104,10 @@ class MigrationLoader(object):
+                 if was_loaded:
+                     six.moves.reload_module(module)
+             self.migrated_apps.add(app_config.label)
+-            directory = os.path.dirname(module.__file__)
+-            # Scan for .py files
+             migration_names = set()
+-            for name in os.listdir(directory):
+-                if name.endswith(".py"):
+-                    import_name = name.rsplit(".", 1)[0]
+-                    if import_name[0] not in "_.~":
+-                        migration_names.add(import_name)
++            for name in find_modules_in_path(module_name):
++                migration_names.add(name)
++
+             # Load them
+             for migration_name in migration_names:
+                 migration_module = import_module("%s.%s" % (module_name, migration_name))
+--- contrib/python/django/django-1.11/django/db/migrations/questioner.py	(index)
++++ contrib/python/django/django-1.11/django/db/migrations/questioner.py	(working tree)
+@@ -10,6 +10,9 @@ from django.utils import datetime_safe, six, timezone
+ from django.utils.six.moves import input
+ 
+ from .loader import MigrationLoader
++# Yandex-Specific: right imports
++from library.python.django.utils import get_module_dir
++# End of Yandex-Specific
+ 
+ 
+ class MigrationQuestioner(object):
+@@ -46,13 +49,9 @@ class MigrationQuestioner(object):
+         except ImportError:
+             return self.defaults.get("ask_initial", False)
+         else:
+-            # getattr() needed on PY36 and older (replace with attribute access).
+-            if getattr(migrations_module, "__file__", None):
+-                filenames = os.listdir(os.path.dirname(migrations_module.__file__))
+-            elif hasattr(migrations_module, "__path__"):
+-                if len(migrations_module.__path__) > 1:
+-                    return False
+-                filenames = os.listdir(list(migrations_module.__path__)[0])
++            # Yandex-Specific: in arcadia we should use specific methods in order to find migrations directory
++            filenames = os.listdir(get_module_dir(migrations_module))
++            # End of Yandex-Specific
+             return not any(x.endswith(".py") for x in filenames if x != "__init__.py")
+ 
+     def ask_not_null_addition(self, field_name, model_name):
+--- contrib/python/django/django-1.11/django/db/migrations/serializer.py	(index)
++++ contrib/python/django/django-1.11/django/db/migrations/serializer.py	(working tree)
+@@ -384,7 +384,7 @@ def serializer_factory(value):
+         return FunctoolsPartialSerializer(value)
+     if isinstance(value, (types.FunctionType, types.BuiltinFunctionType, types.MethodType)):
+         return FunctionTypeSerializer(value)
+-    if isinstance(value, collections.Iterable):
++    if isinstance(value, six.moves.collections_abc.Iterable):
+         return IterableSerializer(value)
+     if isinstance(value, (COMPILED_REGEX_TYPE, RegexObject)):
+         return RegexSerializer(value)
+--- contrib/python/django/django-1.11/django/db/models/fields/__init__.py	(index)
++++ contrib/python/django/django-1.11/django/db/models/fields/__init__.py	(working tree)
+@@ -163,7 +163,7 @@ class Field(RegisterLookupMixin):
+         self.unique_for_date = unique_for_date
+         self.unique_for_month = unique_for_month
+         self.unique_for_year = unique_for_year
+-        if isinstance(choices, collections.Iterator):
++        if isinstance(choices, six.moves.collections_abc.Iterator):
+             choices = list(choices)
+         self.choices = choices or []
+         self.help_text = help_text
+@@ -433,7 +433,7 @@ class Field(RegisterLookupMixin):
+         for name, default in possibles.items():
+             value = getattr(self, attr_overrides.get(name, name))
+             # Unroll anything iterable for choices into a concrete list
+-            if name == "choices" and isinstance(value, collections.Iterable):
++            if name == "choices" and isinstance(value, six.moves.collections_abc.Iterable):
+                 value = list(value)
+             # Do correct kind of comparison
+             if name in equals_comparison:
+--- contrib/python/django/django-1.11/django/db/models/sql/query.py	(index)
++++ contrib/python/django/django-1.11/django/db/models/sql/query.py	(working tree)
+@@ -8,7 +8,7 @@ all about the internals of models in order to get the information it needs.
+ """
+ import copy
+ import warnings
+-from collections import Counter, Iterator, Mapping, OrderedDict
++from collections import Counter, OrderedDict
+ from itertools import chain, count, product
+ from string import ascii_uppercase
+ 
+@@ -35,6 +35,7 @@ from django.utils import six
+ from django.utils.deprecation import RemovedInDjango20Warning
+ from django.utils.encoding import force_text
+ from django.utils.tree import Node
++from django.utils.six.moves.collections_abc import Iterator, Mapping
+ 
+ __all__ = ['Query', 'RawQuery']
+ 
+--- contrib/python/django/django-1.11/django/template/engine.py	(index)
++++ contrib/python/django/django-1.11/django/template/engine.py	(working tree)
+@@ -82,6 +82,11 @@ class Engine(object):
+             raise ImproperlyConfigured(
+                 "No DjangoTemplates backend is configured.")
+         else:
++            try:
++                if isinstance(engines['django'], DjangoTemplates):
++                    return engines['django'].engine
++            except KeyError:
++                pass
+             raise ImproperlyConfigured(
+                 "Several DjangoTemplates backends are configured. "
+                 "You must select one explicitly.")
+--- contrib/python/django/django-1.11/django/utils/autoreload.py	(index)
++++ contrib/python/django/django-1.11/django/utils/autoreload.py	(working tree)
+@@ -284,7 +284,7 @@ def reloader_thread():
+ 
+ def restart_with_reloader():
+     while True:
+-        args = [sys.executable] + ['-W%s' % o for o in sys.warnoptions] + sys.argv
++        args = sys.argv
+         new_environ = os.environ.copy()
+         if _win and six.PY2:
+             # Environment variables on Python 2 + Windows must be str.
+--- contrib/python/django/django-1.11/django/utils/module_loading.py	(index)
++++ contrib/python/django/django-1.11/django/utils/module_loading.py	(working tree)
+@@ -5,6 +5,8 @@ from importlib import import_module
+ 
+ from django.utils import six
+ 
++from library.python.django.utils import get_module_dir
++
+ 
+ def import_string(dotted_path):
+     """
+@@ -154,12 +156,4 @@ def module_dir(module):
+     Raise ValueError otherwise, e.g. for namespace packages that are split
+     over several directories.
+     """
+-    # Convert to list because _NamespacePath does not support indexing on 3.3.
+-    paths = list(getattr(module, '__path__', []))
+-    if len(paths) == 1:
+-        return paths[0]
+-    else:
+-        filename = getattr(module, '__file__', None)
+-        if filename is not None:
+-            return os.path.dirname(filename)
+-    raise ValueError("Cannot determine directory containing %s" % module)
++    return get_module_dir(module)
+--- contrib/python/django/django-1.11/django/utils/six.py	(index)
++++ contrib/python/django/django-1.11/django/utils/six.py	(working tree)
+@@ -298,6 +298,7 @@ _moved_attributes = [
+     MovedModule("urllib_robotparser", "robotparser", "urllib.robotparser"),
+     MovedModule("xmlrpc_client", "xmlrpclib", "xmlrpc.client"),
+     MovedModule("xmlrpc_server", "SimpleXMLRPCServer", "xmlrpc.server"),
++    MovedModule("collections_abc", "collections", "collections.abc" if sys.version_info >= (3, 3) else "collections"),
+ ]
+ # Add windows specific modules.
+ if sys.platform == "win32":
+--- contrib/python/django/django-1.11/django/utils/translation/trans_real.py	(index)
++++ contrib/python/django/django-1.11/django/utils/translation/trans_real.py	(working tree)
+@@ -21,6 +21,8 @@ from django.utils.encoding import force_text
+ from django.utils.safestring import SafeData, mark_safe
+ from django.utils.translation import LANGUAGE_SESSION_KEY
+ 
++from library.python.resource import resfs_files
++
+ # Translations are cached in a dictionary for every language.
+ # The active translations are stored by threadid to make them thread local.
+ _translations = {}
+@@ -87,6 +89,21 @@ def to_language(locale):
+         return locale.lower()
+ 
+ 
++def get_app_module_locale_path(app_module):
++    """Yandex-specific: resfs locale path"""
++    try:
++        getfilename = app_module.__loader__.get_filename
++    except AttributeError:
++        return
++    module_file = getfilename(app_module.__name__)
++    path = os.path.join(os.path.dirname(module_file), 'locale')
++
++    if not resfs_files(path):
++        path = os.path.join(app_module.__name__.replace('.', '/'), 'locale')
++
++    return path
++
++
+ class DjangoTranslation(gettext_module.GNUTranslations):
+     """
+     This class sets up the GNUTranslations context with regard to output
+@@ -157,8 +174,10 @@ class DjangoTranslation(gettext_module.GNUTranslations):
+ 
+     def _init_translation_catalog(self):
+         """Creates a base catalog using global django translations."""
+-        settingsfile = upath(sys.modules[settings.__module__].__file__)
+-        localedir = os.path.join(os.path.dirname(settingsfile), 'locale')
++        # Yandex-specific: resfs locale path
++        settingsfile_module = sys.modules[settings.__module__]
++        localedir = get_app_module_locale_path(settingsfile_module)
++        # End of Yandex-specific
+         translation = self._new_gnu_trans(localedir)
+         self.merge(translation)
+ 
+@@ -172,10 +191,14 @@ class DjangoTranslation(gettext_module.GNUTranslations):
+                 "apps registry is ready. Check that you don't make non-lazy "
+                 "gettext calls at import time.")
+         for app_config in app_configs:
+-            localedir = os.path.join(app_config.path, 'locale')
+-            if os.path.exists(localedir):
+-                translation = self._new_gnu_trans(localedir)
+-                self.merge(translation)
++            # Yandex-specific: resfs locale path
++            localedir = get_app_module_locale_path(app_config.module)
++            if not localedir:
++                continue
++            # End of Yandex-specific
++
++            translation = self._new_gnu_trans(localedir)
++            self.merge(translation)
+ 
+     def _add_local_translations(self):
+         """Merges translations defined in LOCALE_PATHS."""
+--- contrib/python/django/django-1.11/django/views/i18n.py	(index)
++++ contrib/python/django/django-1.11/django/views/i18n.py	(working tree)
+@@ -18,7 +18,7 @@ from django.utils.http import is_safe_url, urlunquote
+ from django.utils.translation import (
+     LANGUAGE_SESSION_KEY, check_for_language, get_language, to_locale,
+ )
+-from django.utils.translation.trans_real import DjangoTranslation
++from django.utils.translation.trans_real import DjangoTranslation, get_app_module_locale_path
+ from django.views.generic import View
+ 
+ DEFAULT_PACKAGES = ['django.conf']
+@@ -219,7 +219,11 @@ def get_javascript_catalog(locale, domain, packages):
+     # paths of requested packages
+     for package in packages:
+         p = importlib.import_module(package)
+-        path = os.path.join(os.path.dirname(upath(p.__file__)), 'locale')
++        # Yandex-specific: resfs locale path
++        path = get_app_module_locale_path(p)
++        if not path:
++            continue
++        # End of Yandex-specific
+         paths.append(path)
+ 
+     trans = DjangoTranslation(locale, domain=domain, localedirs=paths)
+@@ -367,7 +371,17 @@ class JavaScriptCatalog(View):
+         allowable_packages = dict((app_config.name, app_config) for app_config in apps.get_app_configs())
+         app_configs = [allowable_packages[p] for p in packages if p in allowable_packages]
+         # paths of requested packages
+-        return [os.path.join(app.path, 'locale') for app in app_configs]
++
++        # Yandex-specific: resfs locale path
++        paths = []
++        for app_config in app_configs:
++            path = get_app_module_locale_path(app_config.module)
++            if not path:
++                continue
++
++            paths.append(path)
++
++        return paths
+ 
+     def get_plural(self):
+         plural = None

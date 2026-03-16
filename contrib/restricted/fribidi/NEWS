@@ -1,0 +1,186 @@
+Overview of changes between 1.0.15 and 1.0.16
+=============================================
+
+* Update Unicode character databases to v16.0.0
+
+Overview of changes between 1.0.14 and 1.0.15
+=============================================
+
+* Fixed the bad tarball from 1.0.14 with stall include files. There are no other changes
+
+Overview of changes between 1.0.13 and 1.0.14
+=============================================
+
+* Updated Unicode tables to version 15.1
+
+Overview of changes between 1.0.12 and 1.0.13
+=============================================
+
+* Adding missing man pages to the tar release file.
+
+Overview of changes between 1.0.11 and 1.0.12
+=============================================
+
+* Various fuzzing fixes.
+
+Overview of changes between 1.0.10 and 1.0.11
+=============================================
+
+* Updated Unicode tables to version 14.
+* Skip isolates in fribidi_get_par_direction().
+* Various fuzzing fixes.
+* Various build fixes.
+
+Overview of changes between 1.0.9 and 1.0.10
+=============================================
+
+* Fixed various compilation problems and symbol exports necessary for proper compilation under windows.
+
+Overview of changes between 1.0.8 and 1.0.9
+=============================================
+
+* A bug fix in the fribidi unicode algorithm where isolate sequences were not really isolated.
+
+* Restored mistakenly removed deprecated function fribidi_log2vis_get_embedding_levels()
+
+* autotools now generates xz archives instead of bzip2 archives
+
+Overview of changes between 1.0.7 and 1.0.8
+=============================================
+
+* A bug fix in the fribidi unicode algorithm for multiple isolate sequences.
+
+* Fixed a potential buffer overflow for a long sequence of isolate overrides characters
+
+
+Overview of changes between 1.0.6 and 1.0.7
+=============================================
+
+* This is a minor bugfix that removes symlinks and updates the meson version.
+
+Overview of changes between 1.0.5 and 1.0.6
+=============================================
+
+* This is a minor bugfix release that fixes a list of minor issues that have turned up during the last year.
+
+* Various compilation and cross compilation issues.
+
+* Various minor header cleanups.
+
+* Removed libc's bsearch for performance and portability reasons
+
+Overview of changes between 1.0.4 and 1.0.5
+=============================================
+
+* This is a bugfix release that fixed a bug BidiCharacterTest.c due to which a large number of character tests were not run. Once run, it uncovered 18 test failures. These have all been fixed in this release.
+
+* The release also includes a small speedup due to small arrays being allocated on the stack instead of in dynamic memory.
+
+* Updated Unicode tables to version 11.
+
+Overview of changes between 1.0.3 and 1.0.4
+=============================================
+
+* Updated Unicode tables to version 11.
+
+Overview of changes between 1.0.2 and 1.0.3
+=============================================
+
+* Minor compilation issues.
+
+Overview of changes between 1.0.1 and 1.0.2
+=============================================
+
+* Added meson build system.
+* glib dependency was completely removed even for tests.
+* Tests now run on Visual Studio (through meson).
+* Cleanup of obsolete options
+* Travis support.
+
+Overview of changes between 1.0 and 1.0.1
+=============================================
+
+* Minor distribution related fixes.
+
+Overview of changes between 0.19.7 and 1.0
+=============================================
+
+* Full isolate and parenthesis support as per Unicode 6.3 to Unicode 10.0 . 
+* To get access to the new algorithm calls to the function
+  `fribidi_get_par_embedding_levels()` must be replaced with calls to
+  `fribidi_get_par_embedding_levels_ex()`. These function are not API
+  compatible. Calling the older function will use default values for
+  the new bracket properties and will sometimes yield non-compliant
+  results.
+
+Overview of changes between 0.19.6 and 0.19.7
+=============================================
+* Disable thread-unsafe memory pool by default. (bug #79385)
+* Misc fixes.
+
+Overview of changes between 0.19.5 and 0.19.6
+=============================================
+* Fix two minor bidi bugs.
+* Build with new libtool to support ppc64le.
+
+Overview of changes between 0.19.4 and 0.19.5
+=============================================
+* Update to Unicode 6.2.0.
+
+Overview of changes between 0.19.2 and 0.19.4
+=============================================
+* Update to Unicode 6.1.0.
+* Misc fixes.
+
+Overview of changes between 0.19.1 and 0.19.2
+=============================================
+* Update to Unicode Character Database 5.1.0
+* Fixed bug in Arabic ligature table (bug #208870)
+* Handle RLM/LRM in CP1255 charset converter. (bug #15328, Artyom)
+
+Overview of changes between 0.10.9 and 0.19.1
+=============================================
+* This is the first release of the fribidi2 module in CVS, mostly
+  developed in 2004 and 2005.
+* Support for Arabic joining/shaping added.
+* API for correct handling of multi-line paragraphs added.
+* Restructured code base.
+* Supposed to be fully API/ABI compatible with 0.10 releases.
+  Please report if it is not.
+
+Overview of changes between 0.10.8 and 0.10.9
+=============================================
+* Minor bugfix.
+
+Overview of changes between 0.10.7 and 0.10.8
+=============================================
+* Update to Unicode Character Database 5.0.0
+
+Overview of changes between 0.10.6 and 0.10.7
+=============================================
+* Nothing really.  Just to fix my mess with 0.10.6 release (that never left
+  the door.)
+
+Overview of changes between 0.10.5 and 0.10.6
+=============================================
+* Fixed type sizes when stdint.h is not available.
+
+Overview of changes between 0.10.4 and 0.10.5
+=============================================
+* Unicode 4.1.0 character database used.
+* Fixed type sizes on 64-bit architectures.
+* We've become GNU FriBidi.  Note capitalization please.
+* We have moved to http://fribidi.org/, hosted on freedesktop.org.
+
+Overview of changes between 0.10.2 and 0.10.4
+=============================================
+* Unicode 3.2 data files used.
+
+Overview of changes between 0.10.1 and 0.10.2
+=============================================
+* Rule L3 of UAX#9 implemented.  Now fribidi implements the whole Unicode
+  BiDi Algorithm.
+* The autogenerated table files now contain much fewer symbols, which reduces
+  the relocation time of the library.
+
+See ChangeLog for more descriptive list of changes.

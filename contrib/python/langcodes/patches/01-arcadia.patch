@@ -1,0 +1,12 @@
+--- contrib/python/langcodes/langcodes/registry_parser.py	(index)
++++ contrib/python/langcodes/langcodes/registry_parser.py	(working tree)
+@@ -51,3 +51,1 @@ def parse_registry():
+-    with open(
+-        data_filename('language-subtag-registry.txt'), encoding='utf-8'
+-    ) as data_file:
++    with data_filename('language-subtag-registry.txt').open(encoding='utf-8') as data_file:
+--- contrib/python/langcodes/langcodes/util.py	(index)
++++ contrib/python/langcodes/langcodes/util.py	(working tree)
+@@ -8 +8 @@ def data_filename(filename):
+-    return os.path.join(DATA_ROOT, filename)
++    return DATA_ROOT / filename

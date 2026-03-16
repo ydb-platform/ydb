@@ -1,0 +1,13 @@
+# Local table for label of category
+#0 0 Reserved
+1 1 None (severity)
+2 2 Weak (severity)
+3 3 Light (severity)
+4 4 Moderate (severity)
+5 5 Heavy (severity)
+6 6 Severe (severity)
+7 7 Extreme (severity)
+#8 - 100 Reserved for Severities
+#101 - 200 Reserved for Intensities
+255 255 Conforms to Missing
+65535 65535 Missing

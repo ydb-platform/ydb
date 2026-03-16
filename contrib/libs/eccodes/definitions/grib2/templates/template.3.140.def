@@ -1,0 +1,73 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.140, Lambert azimuthal equal area projection
+include "grib2/templates/template.3.shape_of_the_earth.def"
+
+constant isGridded = true;
+
+# Nx - number of points along X-axis
+unsigned[4] numberOfPointsAlongXAxis : dump;
+alias Nx = numberOfPointsAlongXAxis;
+alias Ni = Nx;
+
+# Ny - number of points along Y-axis
+unsigned[4] numberOfPointsAlongYAxis : dump;
+alias Ny = numberOfPointsAlongYAxis;
+alias numberOfPointsAlongAMeridian = Ny;
+alias Nj = Ny;
+
+# La1 - latitude of first grid point
+signed[4] latitudeOfFirstGridPoint: edition_specific;
+alias La1 = latitudeOfFirstGridPoint;
+meta geography.latitudeOfFirstGridPointInDegrees scale(
+    latitudeOfFirstGridPoint, one,grib2divider,truncateDegrees) : dump;
+#meta latitudeOfFirstGridPointInMicrodegrees times(latitudeOfFirstGridPoint,mAngleMultiplier,angleDivisor): no_copy;
+
+# Lo1 - longitude of first grid point
+signed[4] longitudeOfFirstGridPoint: edition_specific ;
+alias La1 = longitudeOfFirstGridPoint;
+meta geography.longitudeOfFirstGridPointInDegrees scale(
+    longitudeOfFirstGridPoint,one,grib2divider,truncateDegrees) : dump;
+
+signed[4] standardParallelInMicrodegrees : dump;
+alias standardParallel=standardParallelInMicrodegrees;
+meta geography.standardParallelInDegrees scale(standardParallelInMicrodegrees,one,grib2divider,truncateDegrees) : dump;
+
+signed[4] centralLongitudeInMicrodegrees : dump;
+alias centralLongitude=centralLongitudeInMicrodegrees;
+meta geography.centralLongitudeInDegrees scale(centralLongitudeInMicrodegrees,one,grib2divider,truncateDegrees) : dump;
+
+# Resolution and component flag
+flags[1] resolutionAndComponentFlags 'grib2/tables/[tablesVersion]/3.3.table' : dump;
+
+# Dx - X-direction grid length in millimetres
+unsigned[4] xDirectionGridLengthInMillimetres: dump;
+alias Dx  = xDirectionGridLengthInMillimetres;
+meta geography.xDirectionGridLengthInMetres scale(xDirectionGridLengthInMillimetres,one,thousand,truncateDegrees): dump;
+alias DxInMetres = xDirectionGridLengthInMetres;
+
+# Dy - Y-direction grid length in millimetres
+unsigned[4] yDirectionGridLengthInMillimetres : dump ;
+alias Dy  = yDirectionGridLengthInMillimetres ;
+meta geography.yDirectionGridLengthInMetres scale(yDirectionGridLengthInMillimetres,one,thousand,truncateDegrees): dump;
+alias DyInMetres = yDirectionGridLengthInMetres;
+
+include "grib2/templates/template.3.scanning_mode.def"
+
+iterator lambert_azimuthal_equal_area(
+    numberOfPoints,missingValue,values,
+    radius,Nx,Ny,
+    latitudeOfFirstGridPointInDegrees,longitudeOfFirstGridPointInDegrees,
+    standardParallelInDegrees,centralLongitudeInDegrees,
+    Dx,Dy,
+    iScansNegatively, jScansPositively,
+    jPointsAreConsecutive, alternativeRowScanning);
+
+nearest lambert_azimuthal_equal_area(values,radius,Nx,Ny);
+
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);

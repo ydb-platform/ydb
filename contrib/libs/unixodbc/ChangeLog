@@ -1,0 +1,1697 @@
+7-Oct-20205
+2.3.14
+
+    * Fix bug in SQLDriverConnect with pooling
+
+29-Sep-2025
+2.3.13
+
+    * Disable connection pooling if the cursor lib is in use, the two conflict over the manupluation
+      of driver function entry points
+    * small patch to odbc/isql to have a -i option that removes the help text, but does 
+      not disable prompts like the -b option. This patch also prevents isql from crashing
+      when no $HOME is set.
+    * Prevent the DM from going via the W functions, bipassing the cursor lib if in use
+    * Added better support for cross compiling in exe/Makefile.am
+    * Refactor in SQLCancel and a endian fix at the same time
+    * Add check for Solaris version of getpwuid_r
+    * Make definition of TCHAR match WCHAR
+    * Added some missing error logging in SQLSpecialColumns[W]
+    * Set driver_name in SQLBrowseConnect(W) to "" to prevent seg fault if lib not found
+    * Various mem buffers fixes. Thanks chipitsine
+    * Fix race condition with threaded applications where SQLGetPrivateProfileString can fail
+      due to collision with loading driver library during connection
+    * Added some ODBC 4 types to sql.h
+    * Fix sizeof( ptr ) error in extract_diag_error()
+    * Add missing check and call to SQL_ATTR_RESET_CONNECTION in SQLConnect
+    * Deal with arbitrary length passwords in pooled connections
+    * Fix some buffer overflows in SQLError(W) and SQLGetDiagRec(W)
+    * Fix bug with setting Env Attribute via DMEnvAttr
+
+8-Aug-2023
+2.3.12
+
+    * Fix iconv handle leak with pooling
+    * Add windows encoding patch
+    * Avoid failed build if clock_gettime() is not available
+    * Allow passing in a entire connection string into iusql
+    * Allow isql to handle SQL_SUCCESS_WITH_INFO from SQLPrepare
+    * Add extra logging for ODBCINST connect settings
+    * Allow allocated copy (instead of fixed length) for the connection string with 
+      pooling to allow any length
+    * Export __clear_ini_cache() from odbcinst to allow explicitly clearing the ini cache
+    * Fix seg fault when used with SQLAPI
+    * Add --enable-utf8ini flag to add utf8 to WCHAR conversions in SQLGetPrivateProfileStringW
+    * Allow longer error messages via GetDiag functions
+    * Add --enable-singleenv to enable single shared env handle when using pooling
+
+4-May-2022
+2.3.11
+
+    * Missing files has caused a problem. I am pushing a 2.3.11 to try and make versiosn match up
+
+11-Jan-2021
+2.3.10
+
+    * Add connection pooling via wide connection functions
+    * Remove "#define VERSION" from unixodbc_conf.h
+    * Call driver functions through prototypes 
+    * Add connection pool limit option
+    * Add fseeko support in cursor lib
+    * Try and prevent logging buffer overflow
+    * Add 'echo' option to isql/iusql
+    * Alter isql/iusql buffering
+    * Alter unicode to ascii conversion in SQLGetDiagField
+    * Fix pooling problem when user name and or password is not provided
+    * Fix a couple of reported buffer overflow conditions
+    * Fix iconv leak with timeout in pooled connection
+
+06-Sep-2020
+2.3.9
+
+    * Remove "#define UNIXODBC_SOURCE" from unixodbc_conf.h
+
+30-Aug-2020
+2.3.8
+
+    * Add configure support for editline
+    * SQLDriversW was ignoring user config
+    * SQLDataSources Fix termination character
+    * Fix for pooling seg fault
+    * Make calling SQLSetStmtAttrW call the W function in the driver if its there
+    * Try and fix race condition clearing system odbc.ini file
+    * Remove trailing space from isql/iusql SQL
+    * When setting connection attributes set before connect also check if the W entry points can be used
+    * Try calling the W error functions first if available in the driver
+    * Add iconvperdriver configure option to allow calling unicode_setup in SQLAllocHandle
+    * iconv handles was being lost when reusing pooled connection
+    * Catch null copy in iniPropertyInsert
+    * Fix a few leaks 
+
+10-Aug-2018
+2.3.7
+
+    * Fix for pkg-config file update on no linux platforms
+    * Add W entry for GUI work
+    * Various fixes for SQLBrowseConnect/W, SQLGetConnectAttr/W,and SQLSetConnectAttr/W
+    * Fix buffer overflows in SQLConnect/W and refine behaviour of SQLGet/WritePrivateProfileString
+    * SQLBrowseConnect/W allow disconnecting a started browse session after error
+    * Add --with-stats-ftok-name configure option to allow the selection of a file name
+      used to generate the IPC id when collecting stats. Default is the system odbc.ini file
+    * Improve diag record handling with the behavior of Windows DM and export SQLCancelHandle
+    * bug fix when SQLGetPrivateProfileString() is called to get a list of sections or a list of keys
+    * Connection pooling: Fix liveness check for Unicode drivers
+
+19-March-2018
+2.3.6
+
+    * Fix order of arguments in SQLWriteFileDSN.c, fix unwanted free() in iusql.c (CVE-2018-7485)
+    * Add pkg-config files
+
+2-Jan-2018
+2.3.5
+
+    * Add configure option --enable-setlibversion set mark the libs with VERS_3.52
+      Linux only, so any driver built with the libs will work with closed source 
+      DM's
+    * Add persistent storage of isql command line history if readline() is used (thanks Axel)
+    * Rename some local mutex functions to avoid name clashes
+    * Assorted fixes (Thanks Markus * 2)
+    * Fix regression in ini caching
+    * Make SQLDrivers look in user as well as system odbcinst.ini for driver attributes
+    * If in use, clear the ini cache when a write is done via SQLWritePrivateProfileString() so 
+      the new value is read
+    * Fix problem with pooling if the environment was released by the application
+    * Add check for SQL_COLUMN_COUNT in SQLColAttribute
+    * isql would not display long error messages. Fixed now.
+    * Fix problem calling the driver to report errors if the error is from the DM and the driver 
+      has not been called
+    * SQLSetConnectAttrW crashes when attempting to set SQL_ATTR_LOGIN_TIMEOUT
+    * Buffer overflow in unicode_to_ansi_copy() (CVE-2018-7409)
+    * SQLDriverConnect with not-found FILEDSN causes crash
+    * SQLGetDescRec with null name pointer causes crash
+    * Connection string escaping does not work
+    * SQLDriverConnect/W with very long driver name causes crash
+    * Connection string with trailing empty value causes crash
+    * Freeing explicitly allocated descriptor results in writing to freed memory
+    * Buffer overflows and missing null checks in SQLConfigDataSource, SQLInstallDriverEx, and SQLWriteFileDSN
+    * Statement enters incorrect state upon SQLExecDirectW returning SQL_NO_DATA
+    * SQLBulkOperations fails to exit async state after success
+    * SQLFreeStmt causes prepared statements in S1 or S2 to erroneously transition to S3
+    * Buffer length fixes for SQLGetDiagField
+    * SQLSetConnectAttrW and Unicode string pre-connect attributes do not work
+    * SQLGetData and SQLSetPos async states are incorrect
+    * Various string conversion and length issues in SQLColAttribute(s)
+    * Missing buffer length check in SQLColAttribute(s)W
+    * SQLGetStmtAttr state handling incorrect in S5, S6, and S7 (via SQLExtendedFetch)
+    * SQLSetPos and SQLExtendedFetch state management fixes
+    * SQLExecDirect/W erroneous transition to S1 upon error in S5
+    * Async SQLGetData and SQLExecDirect/W fails to restore state upon cancellation
+    * SQLFetchScroll cannot move cursor back into the rowset
+    * SQLSetDescField doesn't adjust the length of the buffer when converting to unicode
+    * SQLGetDescField/W and SQLSetDescField/W do not check for negative buffer lengths
+    * SQLSetStmtAttrW SQL_ATTR_APP_PARAM_DESC and SQL_ATTR_APP_ROW_DESC does not accept null
+    * SQLGetData async state reentrancy issues
+    * SQLDriversW off-by-one in enumerating driver list
+    * SQLPrimaryKeys does not pass length in characters to driver
+    * SQLGetConnectAttr with string attributes truncates to half buffer length
+    * SQLTransact with autocommit enabled erroneously changes statement state
+    * SQLDataSources/W fails to reset list position upon end
+    * SQLGetEnvAttr successfully returns unset SQL_ATTR_ODBC_VERSION
+    * Lack of SQL_HANDLE_SENV support
+    * SQLAllocEnv fails to set environment version correctly
+    * SQLMoreResults with streamed output parameters returns unexpected HY010
+    * Custom pre-connect pointer attributes are truncated to 32 bits
+    * 08003 message should be "Connection not open"
+    * SQL_ATTR_ACCESS_MODE set using SQLSetConnectOption/W before connecting does not persist after disconnecting
+    * SQL_ATTR_AUTOCOMMIT incorrect default value before connecting
+    * SQL_AUTOCOMMIT set using SQLSetConnectOption/W before connecting does not persist after disconnecting
+    * SQLAllocHandle/SQLFreeHandle with invalid handle type should return SQL_INVALID_HANDLE
+    * SQLAllocHandleStd not setting ODBC version correctly
+    * SQLBindParameter does not ignore BufferLength for DAE parameters
+    * SQLBindParameter does not ignore BufferLength for fixed-length parameters
+    * SQLBindParameter returns "Invalid application buffer type" instead of " Program type out of range"
+    * SQLCancel with 01S05 returned from driver should result in SQL_SUCCESS, not SQL_SUCCESS_WITH_INFO 
+      (see https://msdn.microsoft.com/en-us/library/aa392708(v=vs.85).aspx )
+    * SQLColAttribute/SQLColAttributes should return number of bytes needed for Unicode string when truncating
+    * SQLColumnPrivileges/W differing error message precedence from Windows DM and order in ODBC spec
+    * SQLColumns/W extraneous checks on null string's length
+    * SQLCopyDesc does not copy descriptors across connections correctly
+    * SQLDescribeParam extraneous checks for state
+    * SQLDriverConnect/W adds extraneous DM prefix to diagnostic messages
+    * SQLDriversW before ODBC version set returns incorrect SQLSTATE
+    * SQLFetch in state S7 does not return error from DM
+    * SQLFetchScroll missing check for SQL_FETCH_BOOKMARK
+    * SQLForeignKeys/W missing check for null table names
+    * SQLGetConnectAttr/W erroneously retrieves attributes with no default (SQL_ATTR_PACKET_SIZE, SQL_ATTR_QUIET_MODE)
+    * SQLGetConnectAttr/W fails to get some set attributes before connecting
+    * SQLGetConnectAttr/W fails to retrieve set attributes with no connection
+    * SQLGetConnectAttrW returns incorrect value for SQL_ATTR_TRACE
+    * SQLGetConnectOption/W cannot retrieve SQL_ODBC_CURSORS before connection
+    * SQLGetConnectOption/W fails to retrieve SQL_LOGIN_TIMEOUT before connecting
+    * SQLGetConnectOption/W fails to retrieve SQL_ATTR_ACCESS_MODE set with SQLSetConnectOption/W
+    * SQLGetData and SQLSetPos async states are incorrect
+    * SQLGetData missing check for cursor end indication; SQLSetCursorName/W fails to clear previous diagnostic records
+    * SQLGetDiagField/W does not check record number for SQL_DIAG_ROW_COUNT and SQL_DIAG_DYNAMIC_FUNCTION_CODE
+    * SQLGetDiagField/W missing check for negative buffer length for string fields
+    * SQLGetDiagField/W inconsistent handling of statement-only diagnostic fields
+    * SQLGetInstalledDrivers off-by-one length
+    * SQLGetStmtOption various state handling issues
+    * SQLSetConnectAttr/W SQL_ATTR_CURRENT_CATALOG extraneous check with error 24000
+    * SQLSetConnectAttr/W does not prevent attempts to set ODBC 3.x statement attributes
+    * SQLSetConnectAttr/W with null string attributes causes crash
+    * SQLSetConnectOption passes SQL_ATTR_TRACEFILE to the driver
+    * SQLSetConnectOption/W or SQLSetConnectAttr/W missing validity checks for SQL_ATTR_TXN_ISOLATION
+    * SQLSetConnectOption/W setting SQL_ATTR_TRACEFILE to null results in different error
+    * SQLSetCursorName/W missing checks for negative name length
+    * SQLSetDescField/W missing check for negative SQL_DESC_COUNT
+    * SQLSetParam missing various error checks for invalid data types and buffer 
+    * SQLSetPos does not check for state S5
+    * SQLSetPos missing checks in state S7
+    * SQLSetScrollOptions various state handling issues
+    * SQLSetStmtOption/W missing check for positive rowset sizes
+    * SQLSpecialColumns/W error precedence differs from Windows DM
+    * SQLSpecialColumns/W incorrect check for SQL_NTS string lengths
+    * SQLStatisticsW uniqueness parameter missing validation
+    * SQLTablePrivileges/W extraneous checks on null string's length
+    * Various issues with SQLGetFunctions
+    * Various string conversion and length issues in SQLColAttribute; missing buffer length check in SQLColAttributeW
+    * As above, but for SQLColAttributes and SQLColAttributesW; incorrect check for SQL_COLUMN_COUNT
+    * Setting SQL_ATTR_TRACEFILE to null value results in different error
+    * check_target_type allows driver-specific C data types for ODBC < 3.8
+    * fix empty SQL_DIAG_SERVER_NAME field in DM-supplied diag recs
+    * fix differing behaviour for an empty string DSN in SQLConnect/W
+    * Alter isql to return errors from SQLMoreResults
+    * Handle case of building on mingw-w64
+
+3rd-Aug-2015
+2.3.4
+
+    * Fix typo in the loading of the cursor lib, reports
+
+	internal error, unexpected SHLIBEXT
+
+2nd-Aug-2015
+2.3.3
+
+    * Reporting of logging state was broken in SQLGetConnectAttr
+    * Fix incorrect text against HY007
+    * Add -L option to isql to increase max column data display
+    * Update automake toolset in svn
+    * Add SQLFreeStmt( SQL_CLOSE ) function to SQLCancel
+    * Allow SQL_NTS as a buffer length to SQLBindParameter
+    * More manual pages for the tools
+    * Fix buffer overrun returning long diagnostic from driver
+    * Cross call between wide and ascii error reporting in the driver when needed
+    * Fix some possible unchecked memory references after malloc
+    * Prevent free( NULL ) in SQLGetDiagRecW
+    * Add missing A->W conversion in SQLGetStmtOption
+    * Allow iconv to convert strings into the driver with differing A and W lengthts (UTF)
+    * SQLDataSourcesW takes buffer_lenghts as characters not bytes
+    * Fix memory leak in SQLGetDiagRec
+    * Allow setting custom non standard attributes via DMStmtAttr, format is:
+
+        DMStmtAttr=[xxxx]=\yyy
+        DMStmtAttr=[xxxx]={ssss}
+
+        where xxxx = integer attribute to set, yyy is decimal numeric value and
+        ssss is a string value
+
+    * Add check in SQLGetData for null target value or negative buffer length
+    * Fix memory leak when using the cursor lib
+    * Catch incorrectly expanded SHLIBEXT
+    * There was a bug in the ini caching, now fixed
+    * More ODBC 3.80 additions (streaming parameters)
+    * Check for NULL handle in __validate_xxx()
+    * Avoid potential memory leak in SQLAllocStatement
+    * Avoid buffer overflow via environment variamles
+    * Fix some typos
+
+8th-October-2013
+2.3.2
+
+    * The logging of WStrings was using the incorrect length in some cases
+    * Pass SQLDescribeCol call to driver when in state 2 (not a cursor spec).
+    * Pass SQLMoreResults call to driver when in state 2 (not a cursor spec).
+      Both the last two changes are not as per the original book state table
+      but allign with the current MS driver manager
+    * The -e option to isql got lost somewhere. Back in now
+    * Update install-sh
+    * SQLCancel assumed that the DM was being built with thread support
+    * Try and speed up SQLTransact and SQLEndTran operation
+    * Add missing \ in Postgres7.1 Makefile
+    * Correct some potential buffer overflows
+    * Handle SQL_NEED_DATA from a SQLMoreResults 
+    * Get the local charset via nl_langinfo(CODESET) when asking the DM to do ASCII-UNICODE conversions
+    * Handle (and remove) leading spaces from ini entries
+    * Fixed unicode conversion problems in SQLGetDiagField(W)
+    * missing terminating null in iusql
+    * add to the list of errno states that does not cause a create of the ini file
+    * SQLSetConnactAttr() -> SQLSetConnectAttrW() was passing incorrect string length
+    * Fix double free in SQLGetDiagFieldW
+    * Fix Unicode/Ansi conversion problem in SQLGetDiagFieldW.c
+    * Add support for Driver64 in SQLDriverConnectW
+    * Add missing unicode setting when returning a connection to the pool
+    * Tidy up leaking iconv handles if connect_part_one fails
+    * Fix (and avoid) some out of memory problems
+    * Wrap lt_dlinit and dlerror in the lib mutex
+    * Add slencheck executable to try and find the sizeof(SQLLEN) from a installed driver
+    * SQL_NO_DATA after SQL_STILL_EXECUTING in SQLExtendedFetch was not setting the state correctly
+    * A little more 3.80 stuff being added
+    * Added fixes found by coverity
+    * Added man pages
+    * Patches to update VMS build
+    * Change mutex protection around release_env
+    * Altered strlen to be count of bytes in SQLGetDiagFieldW
+    * Add check for W function support in do_attr
+    * Allow SQLDrivers to return attribute length with no supplied buffer
+
+26th-November-2011
+2.3.1
+    
+    * Change type definition of a integer in SQLConnect.c, just to avoid
+      confusion
+    * Allow setting the DM overrive values in the connection string to SQLDriverConnect
+      for example
+      "DRIVER={Easysoft ODBC-SQL Server};Server=myserver;UID=user;PWD=pass;DMStmtAttr=SQL_QUERY_TIMEOUT=10;"
+    * Error and info message order was being inverted by the driver manager
+    * Fix memory leak in SQLDriverConnect.c (Thanks JM)
+    * The keyword matching for DRIVER=, DSN= etc was case sensitive. Make it insensitive now
+    * Avoid sprintf NULL pointer problem in SQLGetDiagRec
+    * Fix typo affecting the pooling of connections, (thanks Chris)
+    * Fix SunCC _mcount problem
+    * Attempt to stamp version info on the libs generated. There are aps in use linked against other 
+      driver managers that expect VERS_3.52
+    * Fix potential buffer overrun when using SAFEFILE
+    * Fix mutex problem in the exit from __SQLGetInfo (thanks Richard)
+    * Allow getting SQL_DM_VER via SQLGetInfo before connecting to a driver
+    * Generate unixodbc_conf.h using macros to allow cross compiling
+    * Fix some libltdl problems 
+    * Fix some naming problems with the cursor lib
+    * Fix odbcinst problems on systems without pwd.h
+    * Change lib version to 2 to reflect SQLLEN changes in v2.3
+    * Fix threading problem (thanks Petr Vandrovec)
+    * Allow use of lib name in a DRIVER= connection string
+    * Change default threading protection to 0, most drivers should be thread
+      safe by now. If the driver is at all thread safe, allow SQLCancel to bipass the
+      interlock.
+    * Performance change to handle large numbers of connection and statement handles better.
+      Thanks for the change from the folks at Acision.
+    * Add -k option to isql to treat the DSN as a connection string and use SQLDriverConnect
+        isql -k "DSN=server;UID=test;PWD=test"
+    * Couple of the SQLSetConnactAttr values are now SQLULEN instead of SQLUINTEGER
+    * SQLSetConnectAttr was passing a char length instead of a byte length into the 
+      Driver SQLSetConnectAttr when converting from Ansi->Unicode
+    * Driver version was not being held when a second connection was made to the driver
+
+20th-April-2010
+2.3.0
+
+	* Try and rationalise the way the connection process find the driver
+	  version and supported functions
+	* Sort out problem in isql with blank lines
+	* Stop libthread from being used under AIX
+	* Move the GUI parts off into a new project
+		http://sourceforge.net/projects/unixodbc-gui-qt/
+	* Strip out the GUI parts. I have also removed the spec files
+	  as they will need redoing,
+	* Move the Test parts off into a new project
+		http://sourceforge.net/projects/unixodbc-test/
+	* Add interface into odbcinstQ to allow for a dialog if SQLDriverConnect
+	  is called without a DSN= (as the MS spec)
+	* Allow the setting of a default Threading level in the ODBC section
+          of odbcinst.ini
+        * Change double format string in Postgre7.1 driver
+	* Add missing CR to output of odbcinst
+	* add fixes to MiniSQL driver
+	* Add missing .y in nn driver, now I need to get it to work
+    * Assoured bux fixes and format problems, thanks Tom
+	* SQLBindCol on metadata calls was incorrectly going via the cursor lib if it 
+	  was enabled
+	* fix isql problem with nested definitions.
+	* Add configure option to enable building of driver config libs
+	* Shift build to using config.h, the compile lines were so big it was hard to 
+	  see warnings
+	* Fix bug in isql when using -b option.
+    * Check attribute values when setting connection and statement attrs
+    * Check for valid pointers in SQLGetInfo(W) and SQLGetFunctions
+    * Add extra checks for states in SQLCopyDesc
+    * Add --enable-stricterror option to allow compliance with the error reporting
+      definition, driver errors don't have the unixODBC prefix
+    * Check for statements in the NEED_DATA state when calling SQLEndTran
+    * Extra error check for SQLPutData
+    * Check handle type in SQLEndTran
+    * Prevent seg fault if there are no driver error functions
+    * the -n option to isql was not working correctly
+    * Stripped out all the bespoke LDTL configure stull, not just what libtoolize 
+      provides
+    * Fix problem where ansi_to_unicode_alloc didn't leave space for the NULL
+      and could cause memory corruption
+    * Add the ODBC 3.80 additions that MS have produced. I am sure I remember 
+      the standard being given to XOpen, what do I know :-)
+    * Change the file open mode for the ini file from w to w+ just in case the 
+      original open failed but the file did exist
+    * Fix configure problem preventing the CHAR encoding from being passed
+    * Remove white spave from ini write, not all drivers use unixODBC ini functions 
+      and can handle the spaces
+    * Update config.guess to current GNU version including support for AIX6
+    * Create SVN repository at sourceforge
+    * Add cast to fix problem in SQLSetConnectOption
+    * Fix SQLINTEGER<->SQLLEN conversion broblem in SQLNativeSQL
+    * Fix bug that stopped setting SQL_ATTR_CONCURRENCY to SQL_CONCUR_VALUES
+    * Change minor version number because of the SQLLEN change
+    * Remove unintended trailing white space from log generation
+
+
+19th-Nov-2008
+2.2.14
+
+	* missing protype in 2.2.13 made the build fail on some platforms
+
+18th-Nov-2008
+2.2.13
+
+	* There was a mutex around iconv that needed adding. Without this, 
+ 	  there was a potential thread problem
+	* Fix problem with SQLGetDiagRec/Field returning double driver 
+	  errors
+	* odbctest was using the wrong handle for SQLGetConnectOption
+	* remove startup thread race condition
+	* fix descriptor memory leak with UNICODE only drivers (thanks Ian)
+	* Alter the default 64bit build mode, and change the flag to 
+	  BUILD_LEGACY_64_BIT_MODE
+	* Fix a couple of 64bit problems
+	* create unixodbc_conf.h on install to contain compile settings
+	* Allow the GUI parts to build with qt4
+	* try and deal with drivers that call internal W functions and 
+	  end up in the driver manager (informix for example). Enabled
+	  by --enable-handlemap=yes when configuring
+	* Fix leak of iconv handles
+	* Allow the setup API to call through to the wide driver functions
+	* Fix potential seg fault in SQLGetPrivateProfileString
+	* Fix a couple of broken casts, and some MS 64bit changes
+	* Add check for postgres driver getting into a spin wait
+	* Fix logging that reported the setting of env attrs failing
+	* Add isql option to wrap strings with quotes
+	* Add isql option -3 to make isql use ODBC 3 calls instead of 2
+	* Add timestamp to logging output
+	* Pull any errors from driver whern SQLBrowseConnect returns SQL_NEED_DATA
+	* isql now displays any warnings from SQLMoreResults
+	* Add include path to odbc_config --cflags output
+	* Fix some SQLLEN/SQLINTEGER conflicts in the cursor lib
+	* isql now checks if the driver has SQLMoreResults before calling it
+	* A couple of tweeks in the txt driver
+	* Fix More than 1 log msg relevant in odbcinst now
+	* Changed UI plugin technique for odbcinst see... 
+	  ODBCConfig > main.cpp, and 
+	  odbcinst > SQLManageDataSources.c and 
+	  odbcinstQ4 > SQLManageDataSources.cpp 
+	* Add more 64 bit changes, remove SQLROWCOUNT and its frends from 64 bit
+	  land
+	* Couple of descriptor typo's fixed (Thanks Jess)
+	* Add odbcinstQ4 to support pure Qt4 SQLCreateDataSource and 
+	  SQLManageDataSources
+	* Add ODBCCreateDataSourceQ4 as Qt4 based exec to SQLCreateDataSource
+	* Add ODBCManageDataSourcesQ4 as Qt4 based exec to SQLManageDataSources
+	* Add "-c" option to odbcinst to call SQLCreateDataSource
+	* Add "-m" option to odbcinst to call SQLManageDataSources
+	* Add ODBCDataManagerQ4 
+	* Add Wrappers (C++, QtCore 4, QtGui 4 - thin wrappers to ODBC)
+	* Add more complete set of driver config options to GUI config
+	* Fix incorrect export file in odbcinstQ
+	* Added some extra features to isql (thanks to Ron Norman for the
+          ideas)
+	* Add diag support lib for driver development  and possibly DM
+	  This is very 'black-boxed' on purpose.
+	* Fix Replaced diag code in txt driver to use new diag lib.
+	* Add New odbctrac library.
+	* Add Threading can not be config via Qt(4) based GUI
+	* Add New ODBCString library.
+	* Add odbcinst.ini -> ODBC -> TraceLibrary and corresponding GUI Qt(4)
+	  config.
+	* prevent the cursor lib from seg faulting if the query isn't a select
+	* Add SQLULEN size display to the output of odbcinst -j
+	* Add mutexes in odbcinst/_logging.c
+	* Remove the MySQL Driver, its woefully out of date now
+	* Remove incorrect path in vms_odbc.opt
+	* rename trace.h to odbctrace.h to avoid potential name conflicts 
+	  and move to include dir
+	* update unixODBC.spec file
+	* Add README.CYGWIN
+	* Fix build problem with QT4 without QWizard support
+	* Alter how the Ansi-Unicode mapping is done, so a unicode function can be 
+	  passed to the driver (if it supports it) even if a non unicode connect was done
+	* Fix buffer overrun in SQLDriverConnectW and SQLColAttributesW
+	* I have cut back on a lot of the GUI parts that are being added. The goal is to
+	  create a distinct set of files that contains these and other parts that are
+	  not part of the core goal of providing ODBC. Likewise the drivers will go on the 
+	  next release, as most DB's now have their own folk working on their drivers
+	  and they all interoperate with unixODBC so its just adding confusion including them
+	  here (IMHO that is)
+	* Prevent a potential buffer overrun in the DM
+	* The processing of --enable-rtldgroup had been dropped, back now
+	* Allow the cursor lib to handle multiple result sets
+
+
+13th-Oct-2006
+Release 2.2.12
+	
+	* Add missing SQLSetStmtOptionA and SQLSetStmtOptionW 
+	* The config string being passed into ConfigDsn was wrong, removed 
+	  semicolon, and added terminating double null
+	* Add help help to isql
+	* Couple of changes to make the build on OSX work better
+	* Alter odbctest FullConnect to use SQLDriverConnect 
+	* Replace a missed flag for true 64 bit operation
+	* Add ODBC3<->ODBC2 type mapping in SQLSetParam
+	* Add missing SQLSetStmtOptionW.c
+	* Tidy up the search for GUI lib code in SQLManageDatasource
+	* Backport a couple of changes from the Debian build into the 
+	  cursor lib
+	* Add extra config settings to the MaxDB/SapDB setup lib
+	* Fix possible exit from SQLConnect without having closed
+	  in the driver
+	* Fix configure problem on Tru64
+	* Fix a build issue on Sinix
+	* Allow calling metadata functions via the cursor lib
+	* Alter args to SQLParamOptions
+	* Fix bug preventing attribute length from being returned from 
+	  SQLDrivers
+	* Fix broken iusql
+	* SQLTransact via the cursor lib has the args swapped
+	* Remove leak in the postgres driver (error messages were not being
+	  released), and yet a different leak in convert.c
+	* Add code to allow the Cursor lib to call SQLGetDiagRec
+	* Updated libtool, automake and autoconf, so expect problems
+	  for the next few months...
+	* Add new QT detection macros (Thanks Peter)
+	* Removed some unneeded strlen's from the postgres drivers
+	* Small change to the logging in SQLBrowseConnect
+	* Add additional SQLGetInfo value SQL_ATTR_DRIVER_THREADING (1028) that
+	  returns a SQL_USMALLINT containing the level of thread protection
+	  afforded the driver by the driver manager
+	* Fix small bug that prevents SQLDrivers from returning the first entry if
+	  SQL_FETCH_FIRST is not used
+	* Make DataManagerII check the DB's quote char when creating SQL
+	* The cursor lib wasn't correctly returning the last rowset 
+	* Fix problem with the cursor lib, rowsets and SQLExtendedFetch
+	* Fix couple of spelling mistakes in isql
+	* Allow decoupling of SQLHANDLES between application and driver, there is 
+	  a 64bit DB2 where the driver handles are int's but unixODBC uses void *.
+	  There is a define for DRV_SQLHANDLE in DriverManager/drivermanager.h that
+	  allows this choice at build time
+	* Add a few extra checks for only unicode API's from the driver
+	* Check for existance of qt-mt lib before adding to link line
+	* added missing cleanup in Postgres driver
+	* Added a contrib directory with (so far) a new ODBCConfig and ODBCStats 
+	  apps, (Thanks Fizz for those).
+	* Ask the driver when there are no errors left in the DM's store
+	* Add a couple of unicode fixes suppled by Oracle
+	* Small fix for call to SQLGetDiagField
+	* Fix silly typo that was using sizeof( SQL_WCHAR ) instead of SQLWCHAR
+	* Add check for C_TYPE in SQLBindCol, SQLBindParameter, SQLBindParam, 
+	  and SQLGetData
+	* Fix overflow if the LOG_MESSAGE_LENGTH is increased
+	* Save the last arg for SQLSetConnectAttr if called before connection for 
+	  later passing to driver
+	* Fix missing mutex release in SQLFreeHandle (thanks Mark)
+	* Add missing maps from unicode in SQLSetDescFieldW and SQLSetStmtAttrW
+	* Handle resetting statement descriptors to implicit values, 
+	  by passing in NULL or the implicit descrptor  to SQLSetStmtAttr with 
+	  the attribute SQL_ATTR_APP_PARAM_DESC or SQL_ATTR_APP_ROW_DESC
+	* Avoid calling SQLGetInfo for every SQLEndTran/SQLTransact
+	* Remove inconsistency in the return value from SQLGetPrivateProfileString
+	* Fix broken QT_VERSION detection
+	* Add UNICODE wrapper functions in libodbcinst. The ini file is still ascii, so
+	  its not got full support at the moment, but any apps that need the W functions
+	  should build now
+	* Add GUI support for SQLCreateDataSource
+	* More informative error message if a invalid handle is passed to SQLAllocHandle
+	* Add TIMESTAMP_NO_TMZONE to Postgres drivers types
+	* The ANSI to UNICODE mapping in SQLTablePrivilges was broken
+	* Fix incorrect buffer length in SQLGetInfo when calling unicode drivers
+
+4-March-2005
+Release 2.2.11
+	
+	* Fix a couple of typo errors in postgres driver and odbctest
+    * Fix problem where ini files could be truncated under heavy
+      load
+    * Fix potential hang with FILEDSN's if the connect string included 
+      a DSN= entry as well
+    * Don't save the SAVEFILE attribute in the filedsn.
+    * Fixed bug that prevented the setting of some attributes via the 
+      DMConnAttr method
+    * Removed the -module entry from the cursor lib, it prevents it
+      building on HPUX.
+    * Add a couple of extra info types to the pull down in odbctest
+    * SQLGetInfoW was returning the wrong length when converting from 
+      the ANSI call. The same was also going on the other way. Also
+      fixed same thing for other calls.
+    * Fix incorrect value in SQLFetchScroll in odbctest
+    * Fix memory leak in odbcinstQ
+    * Check for MOC being found, before building GUI parts
+    * Add list of export symbols to libodbcinst
+    * Fix a problem in the cursor lib returning blobs
+    * SQL_DIAG_NUMBER was being stored and returned as a SQLINTEGER 
+      instead of a SQLRETURN
+    * Check if we can include sys/stats.h in iniOpen.c
+    * Fix potential buffer overun in SQLConfigDataSource()
+    * Fix problem in odbctest that prevented intervals from being displayed.
+    * Cope with SHLIBEXT not being set when finding the cursor lib
+    * Add a couple of missing Setup64 checks
+    * Small change in __info to conserve memory
+    * Add odbcinst.exp to distrib
+	* Add missing ODBC2 installer stubs
+	* Fix typo in SQLStatistics
+	* Not passing user names and password into isql passes NULLS not empty 
+	  strings into SQLConnect
+	* Add missing SQLPrepareA from the driver manager export file
+	* Make the default for DontDLClose 1, it doesn't do any harm, and fixes
+	  some segfaults
+	* Fix printf format in the postgres driver on 64 platforms
+
+29-Sep-2004
+Release 2.2.10
+
+    * Add additional check in sqltypes.h to detect AIX 64 bit
+    * Fixed minor copypaste error in configure.in
+    * Fixed problem in configure script that prevented it using the 
+      qt-header and qt-lib config args. And allow the QT bin dir 
+      to be set.
+    * Add new spec file (Thanks Stefan)
+    * Alter string initialisation in isql to reduce memory use on 
+      some platforms
+    * Remove the parts of odbcinstext.h that only are needed in 
+      unixODBC builds from outside app builds. (Cheers Stefan)
+    * Small fix to DataManagerII
+    * Protect iconv handle in threaded environments
+    * Extend cursor lib to cope with where clauses
+    * Remove incorrect duplicate function in iniOpen.c
+    * Strip FILEDSN from connection string before passing to driver
+    * If using a cursor lib use "IS NULL" instead of binding nulls
+    * Allow 32 and 64 installations to coexist using a Driver64 entry
+      in odbcinst.ini
+    * Fix uninitialsed value that was causing "Driver does not support 
+      the requested version" warning
+    * Fix typo in sqltypes.h that failed when building Perl DBD::ODBC
+    * INI cacheing is not on by default, it can lead to a memory leak
+    * Alter the Makefile.am's so builds outside the config dir can be
+      done
+    * Fix possible buffer overrun in SQLConnect
+    * Replaced crypt auth in postgres with md5 for 7.1 Postgres driver
+    * Fix memory leak in descriptor thread support
+
+24-Jun-2004
+Release 2.2.9
+
+    * Fix problem so that if SQLGetPrivateProfileString fails because 
+      odbcinst.ini doesn't exist, it copys the default value into the
+      output.
+    * Avoid caling SQLFreeEnv the driver more than once.
+    * Rename lo_xxx func in Postgres driver(s) to avoid clash with
+      postgres lib.
+    * Add odbc-config to find compile time options for use with
+      other build tools
+    * Fix call to SQLParamData in cursor lib
+    * Add SQL_NULL_DESC to include files
+    * Remove -M for unixware builds from libtool
+    * Fix descriptor bug in SQLCopyDesc (Thanks Erik)
+    * Add extra iconv targets
+    * Fix bug that stopped RTLD_GROUP from being added to dlopen
+    * Remove mem leak if libodbc.so is loaded using dlopen instead of
+      linked as is normally done.
+    * Add check for LP64 in sqltypes.h
+    * Remove dlclose from ODBCConfig
+    * Fix typo in the readline detection in configure
+    * Fix potential hang with semaphore allocation in driver manager
+    * Alter how the state is set after a SQLParamData to S5 insted of S4
+    * Stop the driver manager from calling SQLFreeEnv twice in the driver
+    * Add new MySQL source from MyODBC 3.51.07
+    * Update the uo_fopen functions
+    * Add some extra mutex locks around end_tran code.
+    * Alter the flag to build real 64 bit mode to 
+      BUILD_REAL_64_BIT_MODE
+    * Update a couple of prototypes for 64 bit builds
+    * Fix assorted 64 bit warnings and cast issues
+
+17-Feb-2004    
+Release 2.2.8
+    
+    * Fix bug in SQLMoreResults that moves to incorrect state
+    * Fix problem where metadata calls fail if in STATE_S5
+    * Fix bug inserting ini entry with more than one '='
+    * Fix some stupid leaks in the connection pooling code
+    * Allow the driver manager to probe a pooled connection, to
+      see if its valid. Set the query to use in the odbcinst.ini entry
+      by setting CPProbe = SQL, for example this works well for postgres
+
+        [PostgreSQL]
+        Description		    = Postgres SQL Driver
+        Driver		        = /usr/local/lib/libodbcpsql.so.2.0.0
+        Setup		        = /usr/local/lib/libodbcpsqlS.so
+        CPTimeout		    = 1000
+        CPTimeToLive		= 100
+        CPProbe             = select user
+        FileUsage		    = 1
+        DisableGetFunctions	= 0
+        DontDLCLose		    = 1
+
+    * Fix the SQLGetPrivateProfile code when passing NULL sections or
+      names.
+    * Fix SQLGetData to avoid a problem returning unicode from ODBC2 
+      drivers.
+    * Make the header sqlext.h include the unicode header sqlucode.h. This
+      matches the MS header files.
+    * Added DriverConfig lib for Mimer. (From Mimer)
+    * Make connection pooling check using SQLGetConnectOption as well
+      as Attr
+    * Fix leak if iconv is used and a connection fails
+    * Add configure option to disable the use of readline in isql
+
+02-Dec-2003
+Release 2.2.7
+    
+    * Add missing comma in Oracle setup lib
+    * Add -l option to isql to allow setting locale
+    * Fix problem in SQLDriverConnectW that prevented connecting to 
+      UNICODE driver.
+    * Remove a couple of the attribute mappings from SQLColAttribute
+      when going from V2 app to V3 driver. 
+    * Clear SQLError errors in the same was as SQLGetDiagRec (this
+      will help PHP out somewhat).
+    * Add a check to handle driver that don't support SQLGetEnvAttr
+    * Allow ATTR; in set attr lists from ini file
+    * Small change to warning dialogs in odbctest (Thanks Mark).
+    * Fix the cursor lib to work via SQLFetch as well as the other
+      fetches.
+    * Update the README.OSX file to cover building the cursor lib.
+    * Remove the SQLNumResults() call after a execute. This means the
+      DM doesn't know if there is a result set, but it seems to match
+      what the MS one is doing.
+    * Fix a major mistake in the thread protection, it worked fine until
+      the driver returned a error.
+    * Fix write beyond string bound in SQLDriverConnect.c (Thanks Ocke)
+    * Add call to setlocale( LC_ALL, "" ) in isql.c, can also be set using 
+      -l option
+    * Add initial support for Microsoft Interix, details in README.INTERIX
+    * small change to ODBCConfig to have the password field in the driver 
+      properties hide the password
+    * Make both # and ; comments in ini files
+    * Update README.OSX to cover changing driver libs into bundles
+    * Fix a couple of small display problems in odbctest
+    * minor updates to odbctest:
+        Have the gui list match the input order and the ini file
+        Restore the selection after Add/Remove
+    * Expand a text buffer to avoid overflow
+    * Add RTLD_MEMBER to dlopen args if available (AIX)
+    * Fix bug in SQLWritePrivateProfileString
+
+21-July-2003
+Release 2.2.6
+    
+    * Add SQL...A() functions as well as W
+    * Add some 64 Bit changes
+    * Add support for SQL_BIGINT in Postgre7.1 driver
+    * Fix bug in libtool that fixes a call to access
+    * Allow setting of odbcinstQ lib load with either
+      environment variable ODBCINSTQ or in the [ODBC] section
+      of odbcinst.ini with a odbcinstq = /path/to/libodbcinstQ.so
+    * Alter the way SQLDataSources works (again :-)
+    * Add configure option to force the way dlopen works
+    * Fix bug in stats collection 
+    * Add call to endpwent() to avoid a small leak
+    * Allow isql to handle SQLMoreResults
+    * Add option TracePid in [ODBC] section of odbcinst.ini, setting
+      this makes the DM treat the TracePath as a path to a directory, 
+      and creates seperate log file for eack PID in use, mainly of
+      use when used under something like apache.
+    * Add extra unicode string for Solaris, see README.SOLARIS
+    * Sort error messages according to state (as per the spec)
+    * Remove trailing \ from doc/Makefile.am
+    * Fix memory corruption in postgres driver that caused table 
+      creation under OpenOffice to fail
+    * Tidy up gODBCconfig so it builds with current tools (or 
+      so I hope).
+
+26-Feb-2003
+Release 2.2.5
+
+    * On error from SQLMoreResult don't change to S1
+    * Fix build problem with QT 3.1.1
+    * Fix spelling of error message
+    * Fix bug where multiple connections give ODBC version error
+      (thanks Jay Cai)
+    * Increase the TEXT_FIELD_SIZE in the PG drivers
+    * Set output handle to NULL if SQLAllocHandle call fails
+    * Return any errors from the drivers SQLAllocConnect
+    * Update version of automake and autoconf used to produce
+      distributions
+    * rebuild libtools configure to work with new autoconf
+
+24-January-2003
+Release 2.2.4
+    
+    * Make the DM look in libdir for the cursor lib
+    * Additions to DataManagerII
+    * More thread safe issues and fixes
+    * Fix uninitialised pointer in SQLDriverConnect.c
+    * Fix memory leak in SQLGetDiagRec
+    * Add missing SAG conformance SQLGetfo call in odbctest
+    * Fix bug in SQLDriverConnect where warnings were not getting into
+      the error stack
+    * Add quotes to table names in DataManager
+    * update the file "missing"
+    * Add missing SQL_DECIMAL in logging conversions
+    * VMS build changes... (Thanks Craig)
+        * get caught up with changes since the original VMS port
+        * follow the compiler warnings to fix myriad small nits throughout 
+             the sources
+        * change the handling of shareable images so they no longer need to 
+             be placed in SYS$SHARE
+        * improve the installation and set-up process
+    * Make the cursor lib build without needing libodbc, it breaks on HPUX
+    * Fix allocation problem in cursor lib
+    * Fix potential seg fault in cursor lib, when bind is done with null 
+      indicator
+    * Update README.QNX to cope with QNX 6.2
+    * Fix problem with flags to dlopen
+    * Make the exit logging in the driver manager display unknown return 
+      codes
+    * Fix bug in driver manager where a SQLAllocHandle in the driver can
+      cause a seg fault
+    * Add -s option to isql to allow the input buffer size to be set
+        i.e. isql -s32000 dsn
+    * Update some of the autoconf scripts to handle RH 8
+    * Add extra attrs to oracle setup lib
+    * Allow DMEnvAttrs to be set in odbcinst.ini as well
+    * Alter the way the config mode is stored, don't use putenv now, as 
+      it causes trouble if the DM is unloaded. Also malloc the strings
+      if the environment is set via the DM, to avoid the same problem
+      with putenv. This caused a crash of OpenOffice on Solaris
+
+23-August-2002
+
+Release 2.2.3
+    
+    * fix bug in unicode_to_ansi_copy
+    * DataManagerII was missed from the last release, sorry, I thought that it
+      had been moved to DataManager.
+    * DatamanagerII: Remove duplicate rows with drivers such as Postgres which 
+      doesn't work as expected when getting lists of Schemas
+    * Attempt to set permissions for the file dsn directory.
+    * Fix bug with conversion of ODBC 2 values to SQL_C_WCHAR
+    * Make the postgres drivers return a SQL State of 01000 for a warning,
+      not 00000
+    * Add option to isql (-x)  to specify a separator in hex (0x09 is V tab) 
+      or octal (012)
+    * Fix typo in pre 7.1 Postgres driver that broke bound timestamps
+    * Fix what looks like a bug in the libtool dlopen wrapper, its fails
+      to fail, when failing to load a lib.
+    * Only call the ODBC 3 version of SQLGetFuctions if we have requested ODBC3
+      some drivers (SAPDB) that return ODBC 3 API's only return this call if 
+      the connect specified ODBC 3.
+    * Check the attributes being passed into SQLSetConnectAttr, only pas into
+      SQLSetConnectOption if they are ODBC 2 values. The same for SQLSetStmtAttr
+    * Allow double clicks on dsn's to bring up the configure in ODBCConfig
+    * Add extra thread checks for FreeBSD
+    * Add check for SQL_NO_DATA in isql
+    * Add code to make DM cope with SQL_NO_DATA from SQLExec(Direct)
+    * Change UNICODE conversions, remove all inplace converts.
+    * Add support for iconv for the UNICODE to ANSI conversions
+    * Add code to make DM code with SQL_NO_DATA from SQLExec(Direct)
+    * DBFIO: completed basic functionality (DBF file access library)
+    * dbfio: completed basic functionality (test program for DBFIO) 
+    * Add checks for usage counts for loaded libs
+    * Replicate the way the MS DM only calls SQLAllocEnv on a driver once
+    * Add fix from John L Miller for SQLEndTran and SQLTransact
+    * Make it try and find a working iconv set of encodings
+    * Small fix to SQLMoreResults from John L Miller
+    * Alter error state return in SQLCloseCursor
+    * Allow state 07009 to be mapped to S1002 or S1093 depending on the
+      calling function
+    * Fix major ineffiency with text fields and the Postgres drivers
+    * Fix incorrect return state from SQLEndTran/SQLTransact
+    * Make rowcount return a count of -1 if its returns a error
+    * Further AIX linking tweeks
+
+08-July-2002
+
+Release 2.2.2
+    
+    * added -m option to isql
+    * improved row count at end-of-result in isql
+    * allow SQLColAttribute(s)(W) to be called with a column number of 0 
+      to get the descriptor count
+    * Remove -export-symbols from sample, it was causing some 
+      problems on Solaris
+    * Add DataManagerII, this is a updated version from Mark Vanderwiel
+    * Update libtool to escape from AIX build problem
+    * Add fix to avoid file handle limitations
+    * Add more UNICODE changes, it looks like it is native 16 representation
+      after all.  The old way (Fixed at BE) can be reproduced by defining UCS16BE
+    * Add iusql, its just the same as isql but uses the wide functions
+    * Couple of cast warnings cleaned up
+    * Add change to libtool to clean up AIX build
+    * Create README.AIX
+    * Fix small bug in SQLDriverConnectW, I was allocating 1 byte two little
+    * Fix typo in SQLConnect that wasn't allowing the driver manager to supply
+      SQLFreeConnect for drivers that didn't support this.
+    * Fix build on Caldera OpenUnix8 (not sure why anywone would want to
+      go anywhere near this OS IMHO...)
+    * Move DataManagerII to DataManager
+    * Alter what comes back in the second field from SQLDataSources to be the
+      description from the ODBCINST.INI entry, this matches what happens
+      in with the windows DM.
+
+23-Mar-2002
+
+Release 2.2.1
+    
+    * odbcinst: now tries to auto create system odbc.ini
+    * odbcinst: implemented -n, -l, -h for -q -s   
+    * Add option to disable definition of windows types in sqltype.h
+    * Fix small bug in ini uper case routines.
+    * Added STMT and OPTION to MySQL driver setup
+    * Added -j arg for odbcinst (shows INI file names)
+    * Fixed seg fault bug in Text File driver
+    * Fix small bug in SQLBrowseConnect
+    * Fix check for Darwin (OSX)
+    * Fix bug in sqltypes that stopped 64 bit builds
+    * Fix build problem on 32 bit platforms without long long
+    * Add option to set environment (unix) values via SQLSetEnv, 
+      this can also be done in the odbc.ini, for example
+      [sample]
+      Description     = Test to DB2
+      Driver          = DB2
+      DMEnvAttr       = SQL_ATTR_UNIXODBC_ENVATTR={DB2INSTANCE=db2inst1}
+    * Fix some cases where the trace file env value was "Trace File"
+    * Make the readline check make sure there are headers as well as libs
+    * Add check to use RTLD_GROUP in libltdl if present
+    * change DWORD definition to unsigned long where applicable
+    * Fix bug in error reporting that cound crash with multiple errors and ODBC3
+    * Remove C++ comment from exe/odbcinst.c
+    * If we are not building the drivers, dont build sqp
+    * Alter default size of odbctest window
+    * Improve check for stats headers
+    * Add install-data-am section back to Makefile.am to create the 
+      empty ini files
+    * Extend naming of cursor lib to work on non linux platforms 
+      (it expected a .so)
+    * Make Postgres driver(s) handle {oj ... } syntax
+    * Fix some endian issues with 4 byte unicode support
+    * Update the MySQL driver code
+
+30-Jan-2002
+
+Release 2.2.0
+    
+    * Allow SQL_ATTR_LOGIN_TIMEOUT  to be set on a connected 
+      connection doesn't make that much sense, but it mirrors 
+      what the Windows DM does.
+    * Change DWORD in sqltypes to be a unsigned int to work on 
+      64 bit platforms
+    * Fix incorrect diag message in SQLSetStmtOption.c
+    * Hack to the 7.1 postgres driver to enable SQLPrepare
+      to be called BEFORE SQLBindParameter
+    * Reset the stmt->prepared flag when going into a SQLParamData
+      state after SQLExecDirect
+    * Fix silly bug that stops odbctest adding the fidt entry on 
+      the list
+    * Add missing tracing to SQLBrowseConnect
+    * Fix some potential corruption in SQLGetDiagField
+    * Add some simple cacheing to SQLGetPrivateProfileString
+    * check for redefinition of SQL_OL_CAP to stop AIX build breaking
+    * Add missing getGlobalDefaults in PG 7.1 driver (Thanks Rick)
+    * Fix bug in SQLConnectW (Thanks Artiom)
+    * More mods to SQLConnectW and SQLDriverConnectW
+    * More MS generated 64bit changes
+    * Add MyODBC 3.5 driver. Its a separate configure in Drivers/MySQL
+
+Release 2.1.1
+
+2001-12-21
+
+    * started to add mac package/install dirs for PackageMaker
+    * added qmake project files as an optional build process
+    * ODBCConfig can build with a static odbcinstQ
+    * Remove auto text driver setup, this breaks new installs as
+      it can't find odbcinst
+    * Fix mixup in SQLSetScrollOptions
+    * Small portability fix for BSDI
+    * Make UNIX Domain socket settable in postgres driver vua UDP=
+      in odbc.ini dsn entry
+    * Fix bug where some SQLGetConnectAttr values were not coming
+      from the driver, but the driver manager
+    * Alter odbctest to make directory select in Manage Auto Test
+      work better
+    * Fix browser in DataManager so that it works with drivers
+      that don't return values from SQLRowCount
+    * Fix some error retrieval problems
+    * Alter the include files to match MS ODBC 3.52 with 64bit
+      support, fix assorted warnings when building on 64bit 
+      platforms
+    * Add option to force tracing on, this is for use with apps like
+      StarOffice that disable tracing
+    * Add support for MAX_ROWS in postgres drivers
+    * Add fix to cover Darwin 1.5 (OSX)
+    * Add DisableGetFunctions option to driver section of odbcinst.ini
+      to cope with drivers that can't handle the call (Solid 2.2 AFAIK)
+    * Fix 64 bit bug in Postgres driver
+    * Add some ODBC 3 bits to the Postgres driver to make it run with 
+      Star Office 6.0 (beta)
+
+Release 2.1.0
+
+2001-11-27
+
+    * cvs moved to Source Forge
+    * attempts have been made to cleanup GNU auto-stuff to make the
+      cvs code more accessable
+      - added README.cvs
+      - hopefully "make -f Makefile.cvs" works on more platforms
+    * implemented more in SQLManageDataSources()
+      - created odbcinstQ (plugin for Qt GUI support in odbcinst)
+      - moved most code from ODBCConfig to odbcinstQ
+    * stupid mistake on my part(Nick), left a #ifdef in isql.c that prevented
+      displaying a list of tables
+    * Make calls to localtime in Postgres Driver only when required
+    * Made some changes to Postgres prototypes
+    * Add option to get odbcinst info from stdin
+    * Make SQLError errors clean down after each API call for ODBC 3
+      apps
+    * Add mapping from SQLColAttribute attributes to ODBC2 attributes
+    * Fix reported leak in ltdl.c
+    * Make the path for file DSN's come from the odbcinst.ini file
+    * If using a ODBC 3 driver call the one off version of SQLGetFunctions
+    * Now builds better on Darwin
+    * Reinstate conversion from wide to ansi types in SQLGetData if the
+      driver is ODBC2, also adjust the buffer length to prevent buffer
+      overrun.
+    * Stop ODBCConfig setting Trace File in odbcinst.ini it should be
+      TraceFile
+    
+Release 2.0.10
+
+2001-10-14
+
+    * odbctxt : escape special chars when read/write lines into a table
+    * Fix bug where a Execute that errors should return to state S2
+    * Update README.OSX to cover a txt driver problem
+    * Add Drivers/txt/doc to distribution
+    * Add missing text driver setup from spec file
+    * add missing VMS opt files
+    * Add missing include <qmultilineedit.h> from DataManager
+      (Samuel Cote)
+    * Remove LT_GLOBAL from the libtool code. This breaks perl amongst 
+      others.
+    * Allow the display of unicode data in logs
+    * Fix stupid WCHAR bug in SQLGetData
+    * Move ifdef in __stats.c to allow the building of ODBCConfig under
+      Mac OSX
+    * Add missing args to prototype in sqlext.h (Thanks Christian)
+    * Pass on unknown connection attributes to driver after connect
+    * Make SQLGetPrivateProfileString return the actual len read, not + 2
+    * Make the OSX build cleaner, it just needs the dlcompat lib now
+    * Allow ODBCConfig to handle attributes not described in setup libs
+    * Stop the ODBC Version being set when there are open connections
+    * Alter odbcinst error messages to match windows
+    * Fix incorrect installer errors (they were offset by one...)
+    * Create ./odbc.ini if it doesn't exist
+    * Fix typo that stoped odbctest from building on Suns latest
+      compiler
+    * Slightly alter the unicode definitions in sqltypes.h
+    * Add support for FILEDSN in driver manager, odbcinst, and ODBCConfig
+    * Fix buffer overrun in Postgres drivers
+
+Release 2.0.9
+
+2001-08-14
+
+    * odbctxt: tweeked - now works on PowerPC
+    * Add auto register for text driver to Makefile.am
+    * Add check for flex, sqp won't build with lex now
+    * odbctxtS: now supports CaseSensitive property
+    * Add build time option to select wchar_t UNICODE (4 bytes)
+      as opposed to signed short UNICODE (2 byte)
+    * Add build time option to select the length of logged 
+      strings (LOG_MESSAGE_LEN in drivermanager.h)
+    * Fix libtool bug that caused the AIX build to not produce
+      shared libs
+    * Fix couple of typos that caused the build to fail on Solaris
+    * Add conditional for 64 bit application compilation when the 
+      sizeof(long) will not have been done by configure
+    * Fix small bug in postgres driver on debian
+    * Add build instruction for QNX
+    * add Slovak translation of gODBCConfig
+    * Fixes to SQLBrowseConnect in driver manager
+    * Get the DM to check with the driver for the CLI Year
+    * Fix small bug in strncasecmp in extras
+    * Add extra support for SQLSetConnectAttr before connection
+    * rename global structure in Postgres drivers to avoid a colision
+    * Add support for presetting Env,Conn and Stmt attributes via the
+      ini file using the following syntax in the dsn section of odbc.ini
+        DMConnAttr = SQL_ATTR_CONNECTION_TIMEOUT=30
+        DMStmtAttr = SQL_ATTR_NOSCAN=SQL_NOSCAN_OFF;*SQL_ROWSET_SIZE=20
+      the * indicates thats its a override attribute, so any attempt to
+      call SQLSetStmtAttr to set the rowsize, will always set it to 20
+      in this example.
+
+      NOTE: That at the moment, this information will be lost if ODBCConfig
+      is used
+
+
+Release 2.0.8 
+
+2001-06-25
+
+    * Add definition of alphasort and checks for location of dir.h in the txt
+      driver.
+    * Add some missing functions from cur lib
+    * Fix a problem in configure.in that was loosing LIB settings
+    * Remove C++ comment from sqlext.h
+    * sqp: now makes use of check for NOT NULL in CREATE TABLE
+    * sqp: fixed missing pointer assignment (affected CREATE TABLE)
+    * sqp: added more debugging messages (but turned off by default)
+    * odbctxt: removed long log message (would cause seg fault)
+    * odbctxt: now appends a space to each SQL statement; this is to
+      work around a problem in the sqp lexer when last char is close
+      quote
+    * Fixed a bug in the driver manager that would fail if the driver
+      returned a max size error message
+    * sqp: now makes use of IS NULL and IS NOT NULL
+    * sqp: now makes use of INSERT INTO table(col1,...)
+    * sqp: now makes use of LIKE and NOT LIKE (with optional ESCAPE)
+    * sqp: now makes use of any mix of AND, OR, () in WHERE clause
+    * sqp: now makes use of ? for column value (used in SQLBindParameter)
+    * sqp: now makes use of integers for column values (just mapped to string)
+    * odbctxt: basic implementation of SQLBindParameter (only SQL_C_CHAR input allowed)
+    * odbctxt: new syntaxes of sqp parser taken into account
+    * odbctxt: new option CaseSensitive (Yes or No) allowed in .odbc.ini file
+    * odbctxt: fix message length returned in SQLGetDiagRec function
+    * odbctxt: drop statement when freeing it via SQLFreeHandle
+    * sqp: default string length changed to 255
+    * Fix threading problem when multiple ENV's are in use
+
+Release 2.0.7 Peter Harvey <pharvey@codebydesign.com> And
+                Nick Gorham <nick@lurcher.org>
+
+2001-06-06
+
+    * ODBCConfig/DataManager: Updates for Qt 3.0
+    * Add extra decoding of types in the log output
+    * Fix some type problems for 64 bit platforms
+    * Fix rogue logging in SQLGetInfo
+    * Add correlation and alias to sqp
+    * Add some fixes to the txt driver to enable it to work 
+      with StarOffice
+    * Stop Ctrl-D from Segfaulting isql
+    * Add a example autotest to the build
+    * Make isql detect the EOF when not using readline
+    * Tidy up the libs from autoconf
+    * DataManager: refinements such as; logout a DSN, isql history
+    * sqp: CREATE TABLE now supports most data types and some column options
+    * sqp: added DROP TABLE
+    * sqp: added ORDER BY
+    * sqp: enhanced api with sqpOpen, sqpClose...
+    * odbctxt: checked in rewrite (much less code now)
+    * odbctxtS: added setup lib for odbctxt
+    * ODBCConfig: Stats now shows PIDs
+    * Add missing -lpthread in configure (thanks Jon Kåre Hellan)
+    * Remove C++ comments from autotest.h
+    * Fix big in Postgres7.1 with binding a column to a double
+      (thanks Jürgen)
+    * Update libtool to 1.4
+    * Fix problem that looked like a restriction on the size of ini 
+      files, but was actually a problem when the same section appeared
+      twice in a file
+    * Add VMS port (Thanks Jason)
+    * Add extra PG7.1 numeric fix (Thanks Zoltan)
+    * Add fix to PG7.1 to allow the retrieval of more than 8K
+      blobs, adjust the define TEXT_FIELD_SIZE in psqlodbc.h
+      (Thanks Bojnourdi)
+    * Fix small typo in SQLConnect (Thanks Martin)
+    * The postgres drivers didn't recognise "Yes" in the ini files,
+      only 1 or 0, fixed now
+    * Avoid "broken pipe" message with postgres (Thanks Gary)
+    * Alter check if cursor lib needed with ODBC 3 apps
+    * Fix couple of bugs with cursor lib
+    * Get to build on Mac OS X (without GUI bits ATM) 
+      look at README.OSX for help and hints
+    * Fix for use with QT 3
+    * Remove default trace option from ODBCINSTConstructProperties
+    * Stop ODBCConfig from accepting null DSN names
+
+Release 2.0.6 Nick Gorham <nick@lurcher.org>
+
+2001-04-18
+    
+    * Add define for _THREAD_SAFE to help AIX builds
+    * Fix bug in cursor lib introduced by UNICODE addon's
+    * Make the header definitions work on 64 bit platforms
+    * Fix a incorrect return from SQLConnect with pooling
+    * Add support for unicode drivers that have ANSI functions 
+      renamed to the unicode versions (duh!).
+    * If pooling, then set the flag to not close the driver
+      handle (DontDLClose)
+    * Add CPTimeToLive option to restrict the number of times
+      a driver will be reused (useful with leaky drivers)
+    * Alter logging, and support setting logging via 
+      SQLSetConnectAttr call
+    * Add a AutoTest facility to odbctest
+    * Fix incorrect error test in SQLBrowseConnect
+    * Check descriptor is for a open connection
+    * More unicode fixes
+
+Release 2.0.5
+
+2001-03-21 Nick Gorham <nick@lurcher.org>
+
+    * Add extra autoconf checks for -pthread and -mt compiler
+      options
+    * Add Postgres7.1 tree for code from new postgres development
+    * Fix retrieval of errors for SQLTables and SQLColumns call 
+      in isql
+    * Fix mem leak in DM if SQLDisconnect was called with open 
+      statements or descriptors
+    * Fix broken check if readline needs -lcurses
+    * Add setup lib for SAPDB (thanks Holger Schurig)
+    * Added locale fixes to PG7.1 driver (thanks Zoltan)
+    * Fix configure problem on Solaris
+
+Release 2.0.4
+
+2001-02-02 Nick Gorham <nick@lurcher.org>
+
+    * Changes to Postgres driver for operation with PG 7
+      and locale changes (Zoltan Boszormenyi)
+    * Fix problem with SQLSetConnectAttr and unicode 
+      operation
+    * Apply patch to DataManager from Christian.Werner which 
+      fixes truncated query result rows, formatting errors in 
+      HTML output, and adds a leading blank to each where 
+      expression in order to prevent SQL syntax errors in 
+      e.g. LIKE '..' or MATCHES '..'cases.
+    * Add support for SQLDriverLoad and SQLDriverUnload functions
+
+Release 2.0.3
+
+2001-01-13 Peter Harvey <pharvey@codebydesign.com> and
+    Nick Gorham <nick@lurcher.org>
+
+    * sqp: added a yywrap() to eliminate link dependency
+    * sqi: home dir default if no path with database file name
+    * sqi: creates database file if not exists
+    * ini: open fails if existing file appears not be an ini  
+    * Fixed problem where null row status array could be 
+      passed into SQLExtendedFetch
+    * Fixed further bug in unicode_to_ansi 
+      (thanks Martin Edlman)
+    * Fixed bug in UNICODE converison in SQLGetInfo
+    * Added sqi/test to build tree, its moved to exe
+    * Add extra checks for readline to see if -lcurses is needed
+    * Add check for -lpthreads that should be ok on Tru64
+    * Replace printf with puts in isql to cope with columns
+      containing '%'
+
+Release 2.0.2
+
+2001-01-08 Peter Harvey <pharvey@codebydesign.com>
+
+    * ODBCConfig: Repurposed 'Tracing' tab. Now is 'Advanced'
+      and contains both Tracing and Pooling options.
+    * Fixed bug in __info that caused SQLGetDiagRec to fail
+
+Release 2.0.1
+
+2001-01-06 Nick Gorham <nick@lurcher.org> 
+
+    * Fix bug introduced with UNICODE that corrupted the SQLSTATE
+      from SQLError
+
+Release 2.0.0
+
+2001-01-04 Nick Gorham <nick@lurcher.org> 
+
+    * Added table browse for DataManager
+    * Fix problem in template driver with Solaris compiler
+    * Add msql-include option to specify search path
+    * Fix compile problem in MiniSQL code with Solaris compiler
+    * Fix conditional include of strings.h in ODBCConfig build
+    * Fix tracing in SQLConnect
+    * Alter check for DSN length in SQLConnect
+    * Validate input handle before setting output handle
+    * Fix error code from SQLSpecialColumns and null table names
+    * Fix potential deadlock in SQLFreeHandle
+    * Add change to make the Postgres driver look for the
+      local socket in two places to cope with debian distrib
+    * Fiddle with the MiniSQL searching again
+    * Add sqlucode.h to headers
+    * Fix threaded race condition in __handles.c
+    * Revamped Credits page in ODBCConfig.
+    * Show more useful info in DataManager tree-view
+    * Fixed problem with DataManager 'hanging' upon exit
+    * Added -pthread option to gcc calls when needed
+    * Now needs QT 2.2.x, changed configure to check
+    * Add missing identifier_type in SQLSpecialColumns log
+    * Add some checks for long columns in isql and DataManager
+    * Add connection pooling support to driver manager
+    * ODBCConfig; Code cleanup. Removed extra class layer 
+      created by QtArch
+    * ODBCConfig.Drivers.Config; driver specific options
+      now accepted, if already exist in odbcinst.ini, as simple
+      text fields in GUI
+    * ODBCConfig and DataManager now attempt to save and restore
+      state... such as window geometry.
+    * ODBCConfig now supports connection pooling options.
+    * ODBCConfig now has a Stats tab which is similar to CPU 
+      or mem monitor. This will be improved upon and the code
+      will likley make its way into a dock widget
+    * Add UNICODE support
+    * Disable the default building of static libs
+    * Add support for GNU portable threads
+
+Release 1.8.13
+
+2000-11-14  Nick Gorham <nick@lurcher.org>
+
+    * Add missing line continuation char in SQLGetDiagField.c
+    * Add fix to SQLGetDiagField to return the server name on 
+      statements and descriptors
+    * Remove -lcrypt from all but the Postgres driver build
+    * Remove CR/LF expansion in Postgres driver
+    * odbctest was calling SQLPrimaryKeys when it should have been
+      calling SQLTablePrivileges
+    * Add SQL_DRIVER_HDESC support to SQLGetInfo
+    * Add display of returned error text in log file
+    * Take notice of DontDLClose when calling ConfigDataSource.
+    * Fix duplicated log messages on failed connect
+    * Fix incorrect arg to SQLError, change from SQLINTEGER to
+      SQLSMALLINT (Thanks Ralf)
+    * Updated libtool to 1.3.5
+    * Fixed crash in SQLConnect when NULL server and SQL_NTS 
+      passed in (Thanks Venu for the next four changes)
+    * The error code mapping was wrong, it should only map 
+      ODBC 3 errors to ODBC 2, not the other way around
+    * Fixed a incorrect error return in SQLPrepare when a NULL
+      string was passed 
+    * Zero the handles when released, just to avoid reuse of
+      values
+    * Added readline support to isql, (thanks Tomas Zellerin)
+    * Support the setting of SQL_AUTOCOMMIT before connecting
+    * Fixed bug in odbctest's SQLColAttributes call
+    * Add test in configure for localtime_r and use if present
+
+2000-08-18  Nick Gorham <nick@lurcher.org>
+
+Release 1.8.12
+
+    * Fix typo in Postgres driver.
+    * Add i18n support to the Postgres driver (thanks Zoltan)
+    * Remove fix for Postgres driver and large objects, it
+      breaks the SQLColumns call :-(
+
+Release 1.8.11
+
+2000-08-16  Nick Gorham <nick@lurcher.org>
+
+    * Add --enable-fastvalidate option. This reduces the safety of the 
+      handle checking but improves performance when using many handles
+    * If SQLDriverConnect is called with a NULL con_str_in look for
+      the DEFAULT DSN entry
+    * Remove a underscore from odbcinst_system_file_path, it seem's to
+      cause the linker on AIX to have problems
+    * Remove some additional C++ comments from the postgres driver
+    * Call SQLSetConfigMode before calling SQLConfigDataSource
+    * Fix error handling in case of referential integrity violations
+      in Postgres driver
+    * Fix problem with SQLColAttributes swapping its args, and don't
+      check the driver version before mapping to ODBC 3 values.
+      (thanks Tomas)
+    * Make SQLDescribeParam work in state S4 and above, when in ODBC 2
+      mode
+    * Avoid potential buffer overrun in __info.c when reporting errors
+      from SQLConnect/SQLDriverConnect
+    * Fix potential mem corruption in SQLGetDiagField (thanks Jay)
+    * Add fix to allow the Postgres driver to receive large objects
+      (thanks Bill)
+    * Fix buffer overrun in SQLGetDiagField (thanks again Jay)
+    * Fix for SQLGetDiagField(SQL_DIAG_SUBCLASS_ORIGIN) returning a null 
+      string, it now returns something meaningful
+    * The Postgres driver didn't shupdown the connection to the database
+      before dropping the socket
+    * Fix incorrect return from SQLDataSources
+    * Make SQLDriverConnect return all errors from the driver not just 
+      the first one
+    * Add Oracle setup lib for http://www.easysoft.org/projects/oracle
+    * Stop isql calling SQLFetch if the query doesn't generate a result
+      set. This stops the function sequence error
+    * Add missing break in postgres password authentication
+    * Add fix in SQLTables for broken version of EXCEL
+    * Fix a bug that caused SQLTransact to fail if called with a 
+      connection handle in state C4. This caused Corel Paradox to fall 
+      over
+
+Release 1.8.10
+
+2000-06-15  Nick Gorham <nick@lurcher.org>
+
+    * Add some fixes to make it work and compile on IRIX (Murad)
+    * Add a couple of missing casts in odbctest (Michael)
+    * Fix BOOL bug in postgres driver (Dmitriy)
+    * use setenv rather that putenv if available
+    * Fix a couple of bugs in odbctest/attr.cpp
+    * Fix problem where info warnings could be lost
+    * Fix a couple of problems in the Postgres driver
+    * Fix bug that caused a success with info message from SQLExecute 
+      or SQLExecDirect to be lost if used with a ODBC 3 driver and 
+      the application called SQLGetDiagRec
+    * Fix problem where bookmarks were failing for StarOffice 5.2
+    * Stop SQLDriverConnect dumping core when passed a null dsn string
+    * Map ODBC 2 SQLSTATE values to ODBC 3
+    * Add missing odbcconfig.h to the install include in gODBCConfig
+    * Fix incorrect state from Postgres Driver
+    * Fix integer length problem with SQLExtendedFetch that manifested
+      on big endian platforms (Sparc,Aix,HPUX etc) (Alex)
+    * Avoid clash with definition of CHAR in GNOME XML layer
+    * odbctest SQLExtendedFetch was using the wrong orentation value
+    * Add define for SQLTCHAR
+    * Fix problem in setting tracing on, and a core dump when loading
+      the cursor lib failed (Steve)
+
+Release 1.8.9
+
+2000-06-13  Nick Gorham <nick@lurcher.org>
+
+    * Fix a State problem when coming out of a SQLParamData cycle
+    * Fix bug where SQLBrowseConnect may leave a connection in C1
+      not C2
+    * Pass LOGIN_TIMEOUT onto driver if it is set before the connect
+    * Reverse the test to set DIAG_CLASS_ORIGIN
+    * Return SQL_DIAG_SERVER_NAME and SQL_DIAG_RETURNCODE
+    * Allow explicit allocation of Descriptors
+    * Fix a problem with the SQLFetchScroll -> SQLExtendedFetch
+      mapping
+    * Fix a problem in the MiniSQL Makefile.am
+    * Call SQLSetConfigMode before calling ConfigDSN
+    * Fix problem in SQLCopyDesc and complete case when DM does the
+      work
+    * Return SQL_SUCCESS_WITH_INFO messages from SQLConnect
+    * Added MetaDataBlockFetch connection attribute to esoob driver
+    * Fix bug in __info.c that caused a small memory corruption
+      when logging was on
+    * Enable the reporting of errors on descriptors
+    * Fix extra ] in the msql part of configure.in
+    * Add error reporting to DataManager (Tim)
+    * Assorted fixes to text driver (Peter)
+    * odbctest now ready to use (hopefully)
+
+2000-05-03  Nick Gorham <nick@lurcher.org>
+
+    * Fix bug in configure.in where disabling build of drivers 
+      also disabled build of GUI bits.
+    * SQLDataSources should return the Driver Description,
+      not the data source description
+    * Add partly written odbctest GUI to project
+    * Remove conditional around VOID typedef in sqltypes.h by default
+
+Release 1.8.8
+
+2000-04-27  Nick Gorham <nick@lurcher.org>
+
+    * Add extra include for unixware
+    * Added some fixes to the template driver found by
+      Nikolai Afanasiev, and also fix the logging code
+      to recongnise 'On'
+    * Alter distrib to not include moc generated files
+    * Using the env var ODBCHOME was a "real bad idea" for perl
+      I have changed it to ODBCSYSINI
+    * Alter logging so that if the log file fails to open stderr
+      is not used. This caused problems in server processes.
+    * Fix a problem with SQLDrivers
+    * Fix a potential leak, that stopped SQLDisconnect being
+      called
+    * Fix problems with text driver
+    * Improve isql (thanks Ralf)
+    * Make gODBCConfig a proper gtk widget
+    * Remove stray printf in the DM code
+    * Fix a couple of daft bugs, thanks to Tim Roepken
+    * Fix a problem where handles were not being free'd
+    * Fix a problem that stopped StarOffice 5.2 working with a
+      ODBC 2 driver, it failed to set SQLGetDiagRec in the output
+      of SQLGetFunctions
+
+2000-03-11  Nick Gorham <nick@lurcher.org>
+
+    * Adjust configure to check for limits, and use this
+      to find max file path. It was only 14 char before under
+      HP-UX
+    * Make ODBCCOnfig try calling SQLConfigureDSN, for setup 
+      libs that can do it themself
+    * Make the mutex functions static
+    * Remove some unwanted X functions from the lib line
+    * Remove dlfcn.h in ODBCConfig
+    * Rationalise environment vars, ODBCHOME points to
+      where odbc.ini and odbcinst.ini are. ODBCINI points to 
+      the user ini file (normally ~/.odbc.ini)
+    * Fix bug causing all connection errors to be lost after
+      connecting
+    * Add GTK+ Based gODBCConfig
+    
+2000-03-01  Nick Gorham <nick@lurcher.org>
+
+    * Add extra defines to sqltypes.h
+    * Fix bug in the Postgres driver with the use if the
+      SQL_DATA_AT_EXEC value
+    * Replace the ODBCINI with ODBCHOME environment var
+
+2000-02-23  Nick Gorham <nick@lurcher.org>
+
+    * Remove the GLOBAL flag from the dlopen in the libtool
+      lib. This caused problems with perl DBD::ODBC
+    * Fix the support for threads and Solaris
+    * Add odbcinst.ini flag to disable unloading the driver,
+      this enables the IBM DB2 lib to be used
+
+Release 1.8.6
+
+2000-02-21  Nick Gorham <nick@lurcher.org>
+
+    * Fix memory leak in the Postgres driver
+    * Fix a bug in the DM when using threads and ODBC 3 drivers,
+      SQLGetDiagField fails
+    * Fix a situation where PHP can crash the DM by calling 
+      SQLFreeStmt after SQLDisconnect
+    * Add support for Solaris Threada
+    * Make building with thread support the default
+
+2000-02-12  Nick Gorham <nick@lurcher.org>
+
+    * Add option to use ODBCINI to move the odbcinst and odbc ini 
+      file. This was asked for by applix
+    * Add setup lib for Easysoft ODBC-ODBC bridge
+     
+2000-02-02  Nick Gorham <nick@lurcher.org>
+
+    * Add flag in odbcinst.ini to disable the SQLFetch -> 
+      SQLExtendedFetch mapping for broken drivers
+    * Alter the ini file parsing so the right hand side can
+      contain extra ='s
+    * Fix a bug in SQLGetStmtAttr with a missing '&'
+    * Added a couple of patches from Manush to improve working
+      with the solid driver
+
+Release 1.8.4
+
+2000-01-18  Nick Gorham <nick@lurcher.org>
+
+    * Fix bug in SQLAllocHandle where a failed stmt alloc would
+      report a error on the statement not the connection and
+      dump core
+    * Make the default path when adding a driver in ODBCConfig
+      $prefix\lib
+    * Add the missing [unixODBC] prefix to error messages
+    * Fix a problem in template/SQLDriverConnect found by
+      Charles Overbeck
+    * Update to libtool 1.3.4
+    * Fix problem in ODBCConfig where a cast to const char * 
+      was needed
+
+Release 1.8.3
+
+1999-12-28  Nick Gorham <nick@lurcher.org>
+
+    * Fix a bug where a SQLDisconnect was not releasing the 
+      lib handle
+
+1999-12-11  Nick Gorham <nick@lurcher.org>
+
+    * Merge in changes from the Postgres ODBC people to fix a
+      problem with LONGBIN's
+    * Mask out the password fields in log for SQLConnect and 
+      SQLDriverConnect
+    * Change a incorrent HY004 error return to IM004 in SQLConnect
+
+Release 1.8.2 For AlphaLinux Distribution
+
+1999-12-02  Nick Gorham <nick@lurcher.org>
+
+    * Fix some daft mistakes in odbcinst.c, and the template driver
+    * Remove the C++ comments from the Postgres driver so it can
+      be compiled with a C compiler
+    * Add LIBSOCKET to the Postgres driver link line
+    * Add strncasecmp to extras
+    * Make the Postgres driver use the socket lib if needed
+
+1999-11-23  Nick Gorham <nick@lurcher.org>
+
+    * Add support for encrypted passwords in the Postgre driber
+    * Remove some remaining non-libtool dlopen code
+    * Fix some threading problems
+
+1999-11-19  Nick Gorham <nick@lurcher.org>
+
+Release 1.8.1 **********
+
+    * Make the code more portable
+    * Remove CR from Postgres source
+
+1999-11-17  Nick Gorham <nick@lurcher.org>
+
+    * Fix a bug with the ODBC 3 error functions.
+    * Fix a missing function_entry from SQLExecDirect().
+
+Release 1.8 *************
+
+1999-11-13  Nick Gorham <nick@lurcher.org>
+
+    * Fix bug with logging that killed StarOffice
+    * Upgrade the Postgres driver to 6.4.6, this fixes
+      a problem with fields containing cr/lf combinations.
+    * Change the logging so that the logging info comes
+      from a special [ODBC] section in odbcinst.ini. This 
+      means that what goes on before the connect can be logged
+      
+1999-11-10  Nick Gorham <nick@lurcher.org>
+
+    * Make SQLError,SQLGetDiagField and SQLGetDiagRec usable
+      with all versions of application and driver.
+    * Add configure flag to specify where to look for the
+      MiniSQL lib.
+    * Add configure flag to disable the building of the drivers.
+
+1999-11-02  Nick Gorham <nick@lurcher.org>
+
+    * Fix bug in the cursor lib introduced by the fix for the glibc
+      bugs.
+    * Fix bug where SQLSetConnectAttr/Option can return without
+      clearing a connection thread lock.
+
+1999-10-29  Nick Gorham <nick@lurcher.org>
+
+    * Make the postgres driver able to connect via UNIX domain
+      sockets
+
+1999-10-29  Holger Bischoff <holger.bischoff@sap.com>
+
+    * Assorted stupid bugs fixed in the DM
+
+1999-10-26  Nick Gorham <nick@lurcher.org>
+
+    * Started rewrite of the SQLError/SQLGetDiagSupport in the
+      driver manager
+    * Fix isql so that SQL_SUCCESS_WITH_INFO is a success for
+      SQLConnect
+
+1999-10-20  Greg Bentz <greg@freedomintelligence.com>
+
+    * Added fix for SQLTransact, it was checking for a non null henv
+      first, it now checks the hdbc first (Thanks Greg)
+    * The connection_count in the environment handle was only
+      incremented on the first connection, but decremented on all
+      free dbc's, this caused the count to go negative at time.
+
+1999-10-09  Nick Gorham <nick@lurcher.org>
+
+    * Added Manush's patch to map ODBC 3-2 datetime values
+
+1999-10-05  Nick Gorham <nick@lurcher.org>
+
+    * working on getting the build to be more portable
+    * added --enable-gui configure option to turn off all c++ and GUI bits
+    * improved performance by removing logging core when logging is off
+    * added extras dir to contain code for missing functions on certain
+      platforms
+    * first day out for the cursor lib, read only at the moment, a sample
+      program is included in samples/cursor.c
+    * fixed problem that if the user .odbc.ini was not found the
+      code failed to go on to the system odbc.ini
+    * fixed problem caused by some versions of dlsym reporting function
+      that should be in the driver and returning the entry from the DM
+
+Release 1.7 *************
+
+1999-07-26  Nick Gorham <nick@lurcher.org>
+
+    * New config added, now using autoconf.
+    * Thread safe support added.
+    * Assorted Driver Manager bug fixes added.
+    * default location for odbcinst.ini and odbc.ini is now /usr/local/etc
+      to conform to GNU standards.
+
+1999-05-15  Peter Harvey <pharvey@codebydesign.com>
+	
+	* Drivers: nn driver added
+
+1999-05-10  Nick
+
+	* DM: New Dm added.
+
+1999-04-04  Martin Evans <martin@easysoft.com>
+
+	* Makefiles: Some changes to; a) use gcc, and b) build into other than /usr
+
+1999-03-30  Peter Harvey <pharvey@codebydesign.com>
+
+	* ChangeLog: Started ChangeLog
+

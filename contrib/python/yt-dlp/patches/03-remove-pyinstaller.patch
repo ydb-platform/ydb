@@ -1,0 +1,19 @@
+--- contrib/python/yt-dlp/.dist-info/entry_points.txt	(index)
++++ contrib/python/yt-dlp/.dist-info/entry_points.txt	(working tree)
+@@ -1,5 +1,2 @@
+ [console_scripts]
+ yt-dlp = yt_dlp:main
+-
+-[pyinstaller40]
+-hook-dirs = yt_dlp.__pyinstaller:get_hook_dirs
+--- contrib/python/yt-dlp/ya.make	(index)
++++ contrib/python/yt-dlp/ya.make	(working tree)
+@@ -26,8 +26,6 @@ PY_SRCS(
+     yt_dlp/YoutubeDL.py
+     yt_dlp/__init__.py
+     yt_dlp/__main__.py
+-    yt_dlp/__pyinstaller/__init__.py
+-    yt_dlp/__pyinstaller/hook-yt_dlp.py
+     yt_dlp/aes.py
+     yt_dlp/cache.py
+     yt_dlp/compat/__init__.py

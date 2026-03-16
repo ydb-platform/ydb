@@ -1,0 +1,16 @@
+**********************************************************************
+ CCSDS sample data for libaec testing
+**********************************************************************
+
+Thanks to the chairman of CCSDS SLS-MHDC, Aaron Kiely, to let us
+distribute BB121B2 test data with libaec. The data files are used
+during 'make check'.
+
+The most recent version of the data is available from the CCSDS web
+site:
+
+http://cwe.ccsds.org/sls/docs/Forms/AllItems.aspx?RootFolder=%2Fsls%2Fdocs%2FSLS%2DDC%2FBB121B2TestData&
+
+You can also update the data included in the distribution with
+
+    make update-sampledata

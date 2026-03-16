@@ -1,0 +1,227 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     CC0-1.0              1996e9475f623f19cdecd45711a3da23
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 98.25
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        monocypher.c [46:52]
+        monocypher.h [46:52]
+
+KEEP     BSD-2-Clause AND CC0-1.0 346a7a6223d11d147d1e066d7504d8da
+BELONGS ya.make
+    License text:
+        // SPDX-License-Identifier: BSD-2-Clause OR CC0-1.0
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        monocypher.c [10:10]
+        monocypher.h [10:10]
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        monocypher.c [10:10]
+        monocypher.h [10:10]
+
+KEEP     LicenseRef-scancode-unknown-license-reference 37a3b832c7f183e41c98bce98e449c80
+BELONGS ya.make
+    License text:
+        Monocypher as a whole is dual-licensed.  Choose whichever licence you
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE.txt [1:1]
+
+KEEP     LicenseRef-scancode-unknown-license-reference 44afcae2575525b921202a3331b51b49
+BELONGS ya.make
+    License text:
+        // This file is dual-licensed.  Choose whichever licence you want from
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        monocypher.c [3:3]
+        monocypher.h [3:3]
+
+KEEP     Public-Domain        45c4c12de1c16350657290bf2e22facd
+BELONGS ya.make
+    License text:
+        The files in `tests/externals/` were placed in the public domain by
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE.txt [173:173]
+
+KEEP     Public-Domain AND BSD-3-Clause 46334170418fd952c75bec6efe9e3ff8
+BELONGS ya.make
+    License text:
+        to the public domain.  The BSD licence serves as a fallback option.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE.txt [6:6]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [6:6]
+
+KEEP     BSD-2-Clause         59f694fc6ea9c5354cd8d9f3c2bbebf0
+BELONGS ya.make
+    License text:
+        __license__ = 'BSD 2-clause'
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        c_monocypher.pyx [21:21]
+
+KEEP     BSD-2-Clause         5cf294c7f5dc04c1321147300b7b0f56
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [20:42]
+
+KEEP     BSD-2-Clause         67b090b17cb88244c421c58fa5cdf99e
+BELONGS ya.make
+    License text:
+        The first licence is a regular 2-clause BSD licence.  The second licence
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [4:4]
+
+KEEP     BSD-2-Clause         884190ab2f4a8c956abd60e5854e8d8d
+BELONGS ya.make
+    License text:
+        Licence 1 (2-clause BSD)
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [11:11]
+
+KEEP     CC0-1.0              c7f5b37143c84a8a6dbd55e53df08768
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        LICENSE.txt [48:168]
+
+KEEP     Public-Domain AND BSD-3-Clause d7dc849ffbc92899d389b0dfe6c04199
+BELONGS ya.make
+    License text:
+        // to the public domain.  The BSD licence serves as a fallback option.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        monocypher.c [8:8]
+        monocypher.h [8:8]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        monocypher.c [8:8]
+        monocypher.h [8:8]
+
+KEEP     BSD-2-Clause         facb273e264fce22f5bf8b82cf77ee7a
+BELONGS ya.make
+    License text:
+        // The first licence is a regular 2-clause BSD licence.  The second licence
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        monocypher.c [6:6]
+        monocypher.h [6:6]
+
+KEEP     BSD-2-Clause         ff40aa34010ad159a5f5c295d038c199
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        monocypher.c [18:40]
+        monocypher.h [18:40]

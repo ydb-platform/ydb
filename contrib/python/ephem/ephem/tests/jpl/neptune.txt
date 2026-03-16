@@ -1,0 +1,92 @@
+*******************************************************************************
+Ephemeris / WWW_USER Mon May  5 22:13:56 2008  Pasadena, USA     / Horizons    
+*******************************************************************************
+Target body name: Neptune (899)                   {source: NEP076}
+Center body name: Earth (399)                     {source: DE405}
+Center-site name: GEOCENTRIC
+*******************************************************************************
+Start time      : A.D. 2009-Dec-25 00:00:00.0000 UT      
+Stop  time      : A.D. 2010-Jan-08 00:00:00.0000 UT      
+Step-size       : 1440 minutes
+*******************************************************************************
+Target pole/equ : IAU_NEPTUNE                     {East-longitude -}
+Target radii    : 24764.0 x 24764.0 x 24341.0 km  {Equator, meridian, pole}    
+Center geodetic : .000000000,.000000000,.00000000 {E-lon(deg),Lat(deg),Alt(km)}
+Center cylindric: .000000000,.000000000,.00000000 {E-lon(deg),Dxy(km),Dz(km)}
+Center pole/equ : High-precision EOP model        {East-longitude +}
+Center radii    : 6378.1 x 6378.1 x 6356.8 km     {Equator, meridian, pole}    
+Target primary  : Sun                             {source: DE405+DE406}
+Interfering body: MOON (Req= 1737.400) km         {source: DE405}
+Deflecting body : Sun, EARTH                      {source: DE405}
+Deflecting GMs  : 1.3271E+11, 3.9860E+05 km^3/s^2                              
+Atmos refraction: NO (AIRLESS)
+RA format       : HMS
+Time format     : CAL 
+EOP file        : eop.080505.p080727                                           
+EOP coverage    : DATA-BASED 1962-JAN-20 TO 2008-MAY-05. PREDICTS-> 2008-JUL-26
+Units conversion: 1 AU= 149597870.691 km, c= 299792.458 km/s, 1 day= 86400.0 s 
+Table cut-offs 1: Elevation (-90.0deg=NO ),Airmass (>38.000=NO), Daylight (NO )
+Table cut-offs 2: Solar Elongation (  0.0,180.0=NO )                           
+*******************************************************************************
+ Date__(UT)__HR:MN     R.A._(ICRF/J2000.0)_DEC R.A.__(a-apparent)__DEC Ang-diam
+*******************************************************************************
+$$SOE
+ 2009-Dec-25 00:00     21 46 46.75 -13 50 00.6 21 47 19.45 -13 47 14.2    2.229
+ 2009-Dec-26 00:00     21 46 52.98 -13 49 28.6 21 47 25.66 -13 46 42.1    2.228
+ 2009-Dec-27 00:00     21 46 59.31 -13 48 56.0 21 47 31.98 -13 46 09.6    2.227
+ 2009-Dec-28 00:00     21 47 05.73 -13 48 23.0 21 47 38.39 -13 45 36.5    2.226
+ 2009-Dec-29 00:00     21 47 12.24 -13 47 49.6 21 47 44.90 -13 45 03.0    2.225
+ 2009-Dec-30 00:00     21 47 18.84 -13 47 15.6 21 47 51.50 -13 44 29.0    2.225
+ 2009-Dec-31 00:00     21 47 25.54 -13 46 41.2 21 47 58.20 -13 43 54.5    2.224
+ 2010-Jan-01 00:00     21 47 32.32 -13 46 06.4 21 48 04.99 -13 43 19.5    2.223
+ 2010-Jan-02 00:00     21 47 39.19 -13 45 31.0 21 48 11.86 -13 42 44.1    2.222
+ 2010-Jan-03 00:00     21 47 46.14 -13 44 55.3 21 48 18.81 -13 42 08.4    2.221
+ 2010-Jan-04 00:00     21 47 53.18 -13 44 19.1 21 48 25.84 -13 41 32.2    2.220
+ 2010-Jan-05 00:00     21 48 00.30 -13 43 42.5 21 48 32.94 -13 40 55.6    2.219
+ 2010-Jan-06 00:00     21 48 07.49 -13 43 05.5 21 48 40.13 -13 40 18.5    2.219
+ 2010-Jan-07 00:00     21 48 14.77 -13 42 28.0 21 48 47.39 -13 39 41.1    2.218
+ 2010-Jan-08 00:00     21 48 22.13 -13 41 50.2 21 48 54.74 -13 39 03.2    2.217
+$$EOE
+*******************************************************************************
+Column meaning:
+ 
+TIME
+
+  Prior to 1962, times are UT1. Dates thereafter are UTC. Any 'b' symbol in
+the 1st-column denotes a B.C. date. First-column blank (" ") denotes an A.D.
+date. Calendar dates prior to 1582-Oct-15 are in the Julian calendar system.
+Later calendar dates are in the Gregorian system.
+
+  The uniform Coordinate Time scale is used internally. Conversion between
+CT and the selected non-uniform UT output scale has not been determined for
+UTC times after the next July or January 1st.  The last known leap-second
+is used over any future interval.
+
+  NOTE: "n.a." in output means quantity "not available" at the print-time.
+ 
+ R.A._(ICRF/J2000.0)_DEC =
+   J2000.0 astrometric right ascension and declination of target center.
+Corrected for light-time. Units: HMS (HH MM SS.ff) and DMS (DD MM SS.f)
+ 
+ R.A._(a-apparent)__DEC. =
+   Airless apparent right ascension and declination of the target center with
+respect to the Earth true-equator and the meridian containing the Earth true
+equinox of date.  Corrected for light-time, gravitational deflection of light,
+stellar aberration, precession & nutation.
+   Units: HMS (HH MM SS.ff) and DMS (DD MM SS.f)
+ 
+ Ang-diam =
+   The equatorial angular width of the target body full disk, if it were
+fully visible to the observer.  Units: ARCSECONDS
+
+
+ Computations by ...
+     Solar System Dynamics Group, Horizons On-Line Ephemeris System
+     4800 Oak Grove Drive, Jet Propulsion Laboratory
+     Pasadena, CA  91109   USA
+     Information: http://ssd.jpl.nasa.gov/
+     Connect    : telnet://ssd.jpl.nasa.gov:6775  (via browser)
+                  telnet ssd.jpl.nasa.gov 6775    (via command-line)
+     Author     : Jon.Giorgini@jpl.nasa.gov
+
+*******************************************************************************

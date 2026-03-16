@@ -1,0 +1,28 @@
+{% extends '//builtin/bag.ym' %}
+
+{% block ya_module_type %}PY3_LIBRARY{% endblock %}
+
+{% block current_version %}4.0.2.6{% endblock %}
+
+{% block current_url %}
+https://github.com/jetperch/pymonocypher/archive/refs/tags/v{{self.version().strip()}}.tar.gz
+{% endblock %}
+
+{% block ya_make %}
+ADDINCL(contrib/python/pymonocypher)
+PY_REGISTER(c_monocypher)
+INCLUDE(ya.make.inc)
+{% endblock %}
+
+{% block prepare_yamake %}
+{{super()}}
+echo 'SRCS(' > ya.make.inc
+find . \( -name '*.c' -o -name '*.pyx' \) | sed 's|\.\/|    |g' | sort >> ya.make.inc
+echo ')' >> ya.make.inc
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+cp *.c *.h *.pyx ${OUTPUT}/
+cp ya.make.inc ${OUTPUT}/
+{% endblock %}

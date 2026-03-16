@@ -1,0 +1,6 @@
+# Code table 4.105 - Spatial and temporal vicinity missing data
+0 0 Ignore missing data
+1 1 No data
+# 2-189 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

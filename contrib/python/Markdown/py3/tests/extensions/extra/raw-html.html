@@ -1,0 +1,123 @@
+<div>
+<p><em>foo</em></p>
+</div>
+<div class="baz">
+<p><em>bar</em></p>
+</div>
+<div>
+<p><em>blah</em></p>
+</div>
+<div name="Example">
+<p>The text of the <code>Example</code> element.</p>
+<div name="DefaultBlockMode">
+<p>This text gets wrapped in <code>p</code> tags.</p>
+</div>
+<p>The tail of the <code>DefaultBlockMode</code> subelement.</p>
+<p name="DefaultSpanMode">
+This text <em>is not</em> wrapped in additional <code>p</code> tags.
+</p>
+<p>The tail of the <code>DefaultSpanMode</code> subelement.</p>
+<div name="SpanModeOverride">
+This <code>div</code> block is not wrapped in paragraph tags.
+Note: Subelements are not required to have tail text.
+</div>
+<p name="BlockModeOverride">
+<p>This <code>p</code> block <em>is</em> foolishly wrapped in further paragraph tags.</p>
+</p>
+<p>The tail of the <code>BlockModeOverride</code> subelement.</p>
+<div name="RawHtml">
+Raw html blocks may also be nested.
+</div>
+</div>
+<p>This text is after the markdown in html.</p>
+<div name="issue308">
+<p><span>1</span>
+<span>2</span></p>
+</div>
+<div name="issue368">
+<p>Markdown is <em>active</em> here.</p>
+<div name="RawHtml">
+Raw html blocks may also be nested.
+</div>
+<p>Markdown is <em>still</em> active here.</p>
+</div>
+<p>Markdown is <em>active again</em> here.</p>
+<div>
+<p>foo bar</p>
+<p><em>bar</em></p>
+</div>
+<div name="issue584">
+<div>
+<p><a href="http://example.com">link</a></p>
+</div>
+</div>
+<div name="issue584">
+<div>
+<p><abbr title="Abbreviation">abbr</abbr></p>
+</div>
+</div>
+<div name="issue584">
+<div>
+<p>footnote<sup id="fnref:1"><a class="footnote-ref" href="#fn:1">1</a></sup></p>
+</div>
+</div>
+<div name="issue584">
+<div>
+<p><a href="http://example.com">link</a></p>
+</div>
+</div>
+<div name="issue584">
+<div>
+<p><abbr title="Abbreviation">abbr</abbr></p>
+</div>
+</div>
+<div name="issue584">
+<div>
+<p>footnote<sup id="fnref:2"><a class="footnote-ref" href="#fn:2">2</a></sup></p>
+</div>
+</div>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<ol>
+<li>
+<p>The top couple half figure, contrary sides and hands across with bottom couple,</p>
+<p>Half figure back on your own sides, and turn partner to places,</p>
+<p>Swing partners with right hands into straight line long-ways, as in a reel, and</p>
+<p>Set,</p>
+<p>Hey and return to places,</p>
+<p>The other three couples do the same.</p>
+</li>
+<li>
+<p>Top and bottom couples meet and set,</p>
+<p>Then each gentleman leas the opposite lady to the couple on his left, and set,</p>
+<p>Aach four right and left,</p>
+<p>Swing side couples to places, and turn partners all eight,</p>
+<p>The other two couple o the same.</p>
+</li>
+</ol>
+<p><a class="footnote-backref" href="#fnref:1" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<ol>
+<li>
+<p>The top couple half figure, contrary sides and hands across with bottom couple,</p>
+<p>Half figure back on your own sides, and turn partner to places,</p>
+<p>Swing partners with right hands into straight line long-ways, as in a reel, and</p>
+<p>Set,</p>
+<p>Hey and return to places,</p>
+<p>The other three couples do the same.</p>
+</li>
+<li>
+<p>Top and bottom couples meet and set,</p>
+<p>Then each gentleman leas the opposite lady to the couple on his left, and set,</p>
+<p>Aach four right and left,</p>
+<p>Swing side couples to places, and turn partners all eight,</p>
+<p>The other two couple o the same.</p>
+</li>
+</ol>
+<p><a class="footnote-backref" href="#fnref:2" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>

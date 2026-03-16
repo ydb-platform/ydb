@@ -1,0 +1,24 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2009 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2006-2017 Cisco Systems, Inc.  All rights reserved
+# Copyright (c) 2012-2013 Los Alamos National Security, LLC.
+#                         All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for the deprecated "sm" BTL.
+#
+[btl sm is dead]
+As of version 3.0.0, the "sm" BTL is no longer available in Open MPI.
+
+Efficient, high-speed same-node shared memory communication support in
+Open MPI is available in the "vader" BTL.  To use the vader BTL, you
+can re-run your job with:
+
+    mpirun --mca btl vader,self,... your_mpi_application

@@ -1,0 +1,20 @@
+# -*- text -*-
+#
+# Copyright (c) 2010      Cisco Systems, Inc.  All rights reserved.
+#
+# Copyright (c) 2017      Intel, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for the memory usage sensor
+#
+[mem-limit-exceeded]
+A process has exceeded the specified limit on memory usage:
+
+Node:         %s
+Process rank: %s
+Memory used:  %luGbytes
+Memory limit: %luGbytes

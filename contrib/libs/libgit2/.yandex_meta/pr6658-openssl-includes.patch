@@ -1,0 +1,81 @@
+From 908ff8116436be95b54e0773269f1278f08b06d3 Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.com>
+Date: Wed, 15 Nov 2023 16:29:11 +0300
+Subject: [PATCH] Do not include headers bearing OpenSSL copyrights by default
+
+---
+ src/libgit2/streams/openssl.c         |  2 --
+ src/libgit2/streams/openssl.h         | 10 ++++++++--
+ src/libgit2/streams/openssl_dynamic.c |  1 -
+ src/libgit2/streams/openssl_legacy.c  |  5 ++---
+ 4 files changed, 10 insertions(+), 8 deletions(-)
+
+diff --git a/src/libgit2/streams/openssl.c b/src/libgit2/streams/openssl.c
+index 9db911e39b3..3d566843869 100644
+--- a/src/libgit2/streams/openssl.c
++++ b/src/libgit2/streams/openssl.c
+@@ -6,8 +6,6 @@
+  */
+ 
+ #include "streams/openssl.h"
+-#include "streams/openssl_legacy.h"
+-#include "streams/openssl_dynamic.h"
+ 
+ #ifdef GIT_OPENSSL
+ 
+diff --git a/src/libgit2/streams/openssl.h b/src/libgit2/streams/openssl.h
+index 89fb60a82ee..016037f2bdd 100644
+--- a/src/libgit2/streams/openssl.h
++++ b/src/libgit2/streams/openssl.h
+@@ -8,8 +8,14 @@
+ #define INCLUDE_streams_openssl_h__
+ 
+ #include "common.h"
+-#include "streams/openssl_legacy.h"
+-#include "streams/openssl_dynamic.h"
++
++#if defined(GIT_OPENSSL_LEGACY)
++# include "streams/openssl_legacy.h"
++#endif
++
++#if defined(GIT_OPENSSL_DYNAMIC)
++# include "streams/openssl_dynamic.h"
++#endif
+ 
+ #include "git2/sys/stream.h"
+ 
+diff --git a/src/libgit2/streams/openssl_dynamic.c b/src/libgit2/streams/openssl_dynamic.c
+index 222c1099d6b..7dbdba7db6f 100644
+--- a/src/libgit2/streams/openssl_dynamic.c
++++ b/src/libgit2/streams/openssl_dynamic.c
+@@ -6,7 +6,6 @@
+  */
+ 
+ #include "streams/openssl.h"
+-#include "streams/openssl_dynamic.h"
+ 
+ #if defined(GIT_OPENSSL) && defined(GIT_OPENSSL_DYNAMIC)
+ 
+diff --git a/src/libgit2/streams/openssl_legacy.c b/src/libgit2/streams/openssl_legacy.c
+index e61e6efbb5e..7d9e1a18275 100644
+--- a/src/libgit2/streams/openssl_legacy.c
++++ b/src/libgit2/streams/openssl_legacy.c
+@@ -6,7 +6,8 @@
+  */
+ 
+ #include "streams/openssl.h"
+-#include "streams/openssl_legacy.h"
++
++#if defined(GIT_OPENSSL_LEGACY) || defined(GIT_OPENSSL_DYNAMIC)
+ 
+ #include "runtime.h"
+ #include "git2/sys/openssl.h"
+@@ -18,8 +19,6 @@
+ # include <openssl/bio.h>
+ #endif
+ 
+-#if defined(GIT_OPENSSL_LEGACY) || defined(GIT_OPENSSL_DYNAMIC)
+-
+ /*
+  * OpenSSL 1.1 made BIO opaque so we have to use functions to interact with it
+  * which do not exist in previous versions. We define these inline functions so

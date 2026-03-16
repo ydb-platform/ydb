@@ -1,0 +1,9 @@
+# ./public/entities.yaml
+openapi: 3.0.3
+info:
+  title: "Entity Schemas"
+paths: {}
+components:
+  schemas:
+    CatInfo:
+      $ref: "../common/cat.yaml#/CatInfo"

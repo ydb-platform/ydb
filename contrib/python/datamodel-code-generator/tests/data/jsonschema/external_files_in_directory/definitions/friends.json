@@ -1,0 +1,33 @@
+{
+  "$id": "https://example.com/external_files_in_directory/definitions/friends.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Friends",
+  "type": "array",
+  "items": {
+    "properties": {
+      "name": {
+        "type": "string",
+        "example": "John Doe"
+      },
+      "phone_number": {
+        "type": "string",
+        "example": "(555) 555-1234"
+      },
+     "food": {
+      "type": "array",
+      "items": [
+        {
+          "$ref": "food.json#/definitions/noodle"
+        },
+        {
+          "$ref": "food.json#/definitions/soup"
+        }
+      ]
+    }
+    },
+    "additionalProperties": true,
+    "required": [
+      "name"
+    ]
+  }
+}

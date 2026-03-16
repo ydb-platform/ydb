@@ -1,0 +1,3 @@
+[tool.pyperformance]
+name = "sqlglot_v2_parse"
+extra_opts = ["parse"]

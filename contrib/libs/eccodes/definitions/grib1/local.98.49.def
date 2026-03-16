@@ -1,0 +1,32 @@
+# (C) Copyright 2005- ECMWF.
+# 4DVar model errors for ELDA
+
+template mars_labeling "grib1/mars_labeling.def";
+
+#1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=49;
+if (stepType is "instant") {
+  alias productDefinitionTemplateNumber=zero;
+} else {
+  alias productDefinitionTemplateNumber=eight;
+}
+
+constant GRIBEXSection1Problem = 56 - section1Length ;
+
+# Ensemble forecast number: = 0 for a control forecast. Not used for analysis (set to zero)
+unsigned[1] perturbationNumber : dump;
+alias mars.number=perturbationNumber;
+# Total number of forecasts in ensemble (Set to 1 for analysis)
+unsigned[1] numberOfForecastsInEnsemble : dump;
+# Model error type: 1=Full state 2=Forcing 3=Model Bias
+unsigned[1] modelErrorType : dump;
+
+# Hours
+unsigned[2] offsetToEndOf4DvarWindow : dump;
+unsigned[2] lengthOf4DvarWindow : dump;
+alias anoffset=offsetToEndOf4DvarWindow;
+
+alias local.perturbationNumber=perturbationNumber;
+alias local.numberOfForecastsInEnsemble=numberOfForecastsInEnsemble;
+alias local.modelErrorType=modelErrorType;

@@ -1,0 +1,3 @@
+[console_scripts]
+pyppeteer-install=pyppeteer.command:install
+

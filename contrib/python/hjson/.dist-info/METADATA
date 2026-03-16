@@ -1,0 +1,125 @@
+Metadata-Version: 2.1
+Name: hjson
+Version: 3.1.0
+Summary: Hjson, a user interface for JSON.
+Home-page: http://github.com/hjson/hjson-py
+Author: Christian Zangl
+Author-email: laktak@cdak.net
+License: MIT License
+Keywords: json comments configuration
+Platform: any
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: License :: OSI Approved :: Academic Free License (AFL)
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+License-File: LICENSE.txt
+
+hjson-py
+========
+
+`Hjson`_, a user interface for JSON
+
+Hjson works with Python 2.5+ and Python 3.3+ (based on `simplejson`_)
+
+Installation
+============
+
+-  ``pip install hjson``
+
+-  or download from https://pypi.python.org/pypi/hjson
+
+Commandline
+-----------
+
+::
+
+    Usage:
+      hjson [options]
+      hjson [options] <input>
+      hjson (-h | --help)
+      hjson (-V | --version)
+
+    Options:
+      -h --help     Show this screen.
+      -j            Output as formatted JSON.
+      -c            Output as JSON.
+      -V --version  Show version.
+
+E.g. ``echo '{"json":"obj"}' | hjson``
+
+
+Usage
+=====
+
+.. code-block:: python
+
+    import hjson
+
+Decoding Hjson
+--------------
+
+.. code-block:: python
+
+    text = """{
+      foo: a
+      bar: 1
+    }"""
+
+    hjson.loads(text)
+
+Result:
+
+.. code-block:: python
+
+    OrderedDict([('foo', 'a'), ('bar', 1)])
+
+Encoding Python object hierarchies
+----------------------------------
+
+.. code-block:: python
+
+    hjson.dumps({'foo': 'text', 'bar': (1, 2)})
+
+Result:
+
+::
+
+    {
+      foo: text
+      bar:
+      [
+        1
+        2
+      ]
+    }
+
+Encoding as JSON
+----------------
+
+Note that this is probably not as performant as the simplejson version.
+
+.. code-block:: python
+
+    hjson.dumpsJSON(['foo', {'bar': ('baz', None, 1.0, 2)}])
+
+Result: ``'["foo", {"bar": ["baz", null, 1.0, 2]}]'``
+
+API
+===
+
+`hjson-py`_
+
+.. _Hjson: https://hjson.github.io
+.. _simplejson: https://github.com/simplejson/simplejson
+.. _hjson-py: http://hjson.github.io/hjson-py/

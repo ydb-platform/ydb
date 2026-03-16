@@ -1,0 +1,186 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     GPL-3.0-only         0209c2b2c2112f8df189d9bfaa5a35e4
+BELONGS ya.make
+    License text:
+        Classifier: License :: OSI Approved :: GNU General Public License v3 (GPLv3)
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        .dist-info/METADATA [19:19]
+
+KEEP     GPL-3.0-or-later     38047e956d5df901e755a5dcf62e3a6f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 99.09
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        pystan/lookuptable/R.txt [4:16]
+
+KEEP     LicenseRef-scancode-unknown-license-reference 4416269eaa77a4af33c3e14b24e8594c
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: pystan/stanfit4model.pyx at line 7
+FILE_INCLUDE pystan/external/enum/LICENSE found in files: pystan/stanfit4model.pyx at line 7
+    License text:
+        \# License. See LICENSE for a text of the license.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        pystan/stanfit4model.pyx [7:7]
+
+KEEP     GPL-3.0-only         47ab6ebd9f77efd752af9b54e7f35e70
+BELONGS ya.make
+    License text:
+        License: GPLv3
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        .dist-info/METADATA [8:8]
+
+KEEP     GPL-3.0-only         4fe869ee987a340198fb0d54c55c47f1
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 1
+FILE_INCLUDE pystan/external/enum/LICENSE found in files: LICENSE at line 1
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        LICENSE [1:674]
+
+KEEP     BSD-3-Clause         6280dede71ff2d7ebbe6d0ae70f96b01
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.52
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        pystan/external/enum/LICENSE [4:32]
+
+KEEP     Apache-2.0 AND MIT   6b15ee3b56d4eb8ae3c884123cde92c3
+BELONGS ya.make
+    License text:
+        \# License
+        \# =======
+        \#
+        \# PyMC is distributed under the Apache License, Version 2.0
+        \#
+        \# Copyright (c) 2006 Christopher J. Fonnesbeck (Academic Free License)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 61.11
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        pystan/external/pymc/plots.py [3:8]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 61.11
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        pystan/external/pymc/plots.py [3:8]
+
+KEEP     GPL-2.0-only AND GPL-3.0-only AND LGPL-3.0-only 8b23d45b9c06d5dbb716df5c0bd0f8be
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: pystan/_api.pyx at line 7
+FILE_INCLUDE pystan/external/enum/LICENSE found in files: pystan/_api.pyx at line 7
+    License text:
+        \# This file is licensed under Version 3.0 of the GNU General Public
+        \# License. See LICENSE for a text of the license.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 73.33
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        pystan/__init__.py [4:5]
+        pystan/_api.pyx [6:7]
+        pystan/api.py [4:5]
+        pystan/lookup.py [4:5]
+        pystan/misc.py [11:12]
+        pystan/model.py [4:5]
+        pystan/stan_fit.pxd [5:6]
+        pystan/stanc.pxd [5:6]
+        pystan/stanfit4model.pyx [6:7]
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 55.56
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        pystan/__init__.py [4:5]
+        pystan/api.py [4:5]
+        pystan/lookup.py [4:5]
+        pystan/misc.py [11:12]
+        pystan/model.py [4:5]
+        pystan/stan_fit.pxd [5:6]
+        pystan/stanc.pxd [5:6]
+    Scancode info:
+        Original SPDX id: LGPL-3.0-only
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, http://www.gnu.org/licenses/lgpl-3.0.html, https://spdx.org/licenses/LGPL-3.0-only
+    Files with this license:
+        pystan/_api.pyx [6:7]
+
+KEEP     BSD-3-Clause         f2b955b5c60289b70e591ddb9734ba4e
+BELONGS ya.make
+    License text:
+        scipy is distributed under a BSD license
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        pystan/external/scipy/mstats.py [8:8]

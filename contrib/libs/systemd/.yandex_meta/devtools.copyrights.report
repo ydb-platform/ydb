@@ -1,0 +1,162 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b88ae20a0460ad8c5f318ec6b565479
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 Tom Tromey
+         * Copyright (C) 2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/basic/utf8.c [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1fa5b424925025620da721a506c59553
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 Tom Tromey
+         * Copyright (C) 2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/basic/utf8.c [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 226e29b0864e4d8eff654bd81cd23234
+BELONGS ya.make
+    License text:
+          Copyright © 2008 Alan Jenkins <alan.christopher.jenkins@googlemail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/libsystemd/sd-hwdb/sd-hwdb.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 40435cc542230d5ce7fc204228fc4d31
+BELONGS ya.make
+    License text:
+           Copyright (C) 2007-2019 Free Software Foundation, Inc.
+           This file is part of the GNU C Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fundamental/sha256.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8cf91579d8cb4087b6bd775cd2b2bbed
+BELONGS ya.make
+    License text:
+         Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
+         51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.GPL2 [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b3dd2383149b1c7bde9ebaa39e325932
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012 Josh Triplett <josh@joshtriplett.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/basic/sparse-endian.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.GPL2 [251:256]
+        LICENSE.LGPL2.1 [428:433]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9c52cc295b238f1edbf8407bbc09d31
+BELONGS ya.make
+    License text:
+          Copyright © 2016 Michael Karcher
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/basic/raw-clone.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
+BELONGS ya.make
+    License text:
+         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+         51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.LGPL2.1 [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e2cd1cb8a88ffafc649fe9fe0ce646fa
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 1999, 2000 Tom Tromey
+         *  Copyright © 2000, 2005 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/basic/gunicode.c [5:6]
+        src/basic/gunicode.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f58c3e396552b283e8c0359be19ce278
+BELONGS ya.make
+    License text:
+         *  Copyright (C) 1999, 2000 Tom Tromey
+         *  Copyright © 2000, 2005 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/basic/gunicode.c [5:6]
+        src/basic/gunicode.h [4:5]

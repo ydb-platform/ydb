@@ -1,0 +1,29 @@
+#TreeTransformer
+Grammar(str:name str:tree @rules) {{{
+class $name:
+    tree = $tree
+    $rules
+}}}
+Rule(str:name @rules) {{{
+$name = [
+    $rules
+]
+}}}
+
+Ascend() --> t.Ascend(),
+Bind(str:x) --> t.Bind($x),
+Call(str:x) --> t.Call($x),
+Choice(str:x) --> t.Choice($x),
+Commit(str:x) --> t.Commit($x),
+Descend() --> t.Descend(),
+EndSlice() --> t.EndSlice(),
+Fail() --> t.Fail(),
+ForeignCall(str:x str:y) --> t.ForeignCall($x, $y),
+Match(str:x) --> t.Match($x),
+Predicate() --> t.Predicate(),
+Push() --> t.Push(),
+Python(str:x) --> t.Python($x),
+StartSlice() --> t.StartSlice(),
+SuperCall(str:x) --> t.SuperCall($x),
+
+str = anything:s -> str(s.data)

@@ -1,0 +1,74 @@
+[
+  {
+    "country_code": "MD",
+    "primary": true,
+    "bic": "ARLCMD2X",
+    "bank_code": "AR",
+    "name": "'BPAY' SRL",
+    "short_name": "'BPAY' SRL"
+  },
+  {
+    "country_code": "MD",
+    "primary": true,
+    "bic": "DCUMMD2XDPX",
+    "bank_code": "DC",
+    "name": "'Depozitarul Central Unic al valorilor mobiliare'S",
+    "short_name": "'Depozitarul Central Unic al valorilor mobiliare'S"
+  },
+  {
+    "country_code": "MD",
+    "primary": true,
+    "bic": "DNVMMD2X",
+    "bank_code": "DN",
+    "name": "'Depozitarul National de Valori Mobiliare al Moldovei'S",
+    "short_name": "'Depozitarul National de Valori Mobiliare al Moldovei'S"
+  },
+  {
+    "country_code": "MD",
+    "primary": true,
+    "bic": "FGDBMD2X",
+    "bank_code": "FG",
+    "name": "Fondul de garantare a depozitelor in sistemul bancar",
+    "short_name": "Fondul de garantare a depozitelor in sistemul bancar"
+  },
+  {
+    "country_code": "MD",
+    "primary": true,
+    "bic": "NBMDMD2X",
+    "bank_code": "NB",
+    "name": "BANCA NATIONALA A MOLDOVEI",
+    "short_name": "BANCA NATIONALA A MOLDOVEI"
+  },
+  {
+    "country_code": "MD",
+    "primary": true,
+    "bic": "PNETMD2X",
+    "bank_code": "PN",
+    "name": "'Paynet Services' SRL",
+    "short_name": "'Paynet Services' SRL"
+  },
+  {
+    "country_code": "MD",
+    "primary": true,
+    "bic": "PRCBMD22",
+    "bank_code": "PR",
+    "name": "B",
+    "short_name": "B"
+  },
+  {
+    "country_code": "MD",
+    "primary": true,
+    "bic": "QIWIMD2X",
+    "bank_code": "QW",
+    "name": "'QIWI",
+    "short_name": "'QIWI"
+  },
+  {
+    "country_code": "MD",
+    "primary": true,
+    "bic": "TIRCMD2X",
+    "bank_code": "TI",
+    "name": "Centrul de casa si decontari Tiraspol",
+    "short_name": "Centrul de casa si decontari Tiraspol"
+  }
+]

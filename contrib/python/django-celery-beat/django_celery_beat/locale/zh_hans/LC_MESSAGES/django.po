@@ -1,0 +1,486 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-02-19 00:36+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Rainshaw <rxg@live.com>\n"
+"Language-Team: x_zhuo <LL@li.org>\n"
+"Language: zh-hans \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: .\django_celery_beat\admin.py:64
+msgid "Task (registered)"
+msgstr "任务 (已注册的)"
+
+#: .\django_celery_beat\admin.py:68
+msgid "Task (custom)"
+msgstr "任务 (自定义)"
+
+#: .\django_celery_beat\admin.py:85
+msgid "Need name of task"
+msgstr "任务需要一个名称"
+
+#: .\django_celery_beat\admin.py:91 .\django_celery_beat\models.py:589
+msgid "Only one can be set, in expires and expire_seconds"
+msgstr ""
+
+#: .\django_celery_beat\admin.py:101
+#, python-format
+msgid "Unable to parse JSON: %s"
+msgstr "无法解析 JSON: %s"
+
+#: .\django_celery_beat\admin.py:167
+#, python-brace-format
+msgid "{0} task{1} {2} successfully {3}"
+msgstr "{0} 任务{1} {2} 成功 {3}"
+
+#: .\django_celery_beat\admin.py:170 .\django_celery_beat\admin.py:232
+msgid "was,were"
+msgstr "将"
+
+#: .\django_celery_beat\admin.py:179
+msgid "Enable selected tasks"
+msgstr "启用选中的任务"
+
+#: .\django_celery_beat\admin.py:185
+msgid "Disable selected tasks"
+msgstr "禁用选中的任务"
+
+#: .\django_celery_beat\admin.py:197
+msgid "Toggle activity of selected tasks"
+msgstr "切换选中的任务"
+
+#: .\django_celery_beat\admin.py:217
+#, python-brace-format
+msgid "task \"{0}\" not found"
+msgstr ""
+
+#: .\django_celery_beat\admin.py:229
+#, python-brace-format
+msgid "{0} task{1} {2} successfully run"
+msgstr "{0} 任务{1} {2} 启动成功"
+
+#: .\django_celery_beat\admin.py:235
+msgid "Run selected tasks"
+msgstr "运行选中的任务"
+
+#: .\django_celery_beat\apps.py:13
+msgid "Periodic Tasks"
+msgstr "周期任务"
+
+#: .\django_celery_beat\models.py:26
+msgid "Days"
+msgstr "天"
+
+#: .\django_celery_beat\models.py:27
+msgid "Hours"
+msgstr "小时"
+
+#: .\django_celery_beat\models.py:28
+msgid "Minutes"
+msgstr "分钟"
+
+#: .\django_celery_beat\models.py:29
+msgid "Seconds"
+msgstr "秒"
+
+#: .\django_celery_beat\models.py:30
+msgid "Microseconds"
+msgstr "毫秒"
+
+#: .\django_celery_beat\models.py:34
+msgid "Day"
+msgstr "天"
+
+#: .\django_celery_beat\models.py:35
+msgid "Hour"
+msgstr "小时"
+
+#: .\django_celery_beat\models.py:36
+msgid "Minute"
+msgstr "分钟"
+
+#: .\django_celery_beat\models.py:37
+msgid "Second"
+msgstr "秒"
+
+#: .\django_celery_beat\models.py:38
+msgid "Microsecond"
+msgstr "毫秒"
+
+#: .\django_celery_beat\models.py:42
+msgid "Astronomical dawn"
+msgstr "天文黎明"
+
+#: .\django_celery_beat\models.py:43
+msgid "Civil dawn"
+msgstr "民事黎明"
+
+#: .\django_celery_beat\models.py:44
+msgid "Nautical dawn"
+msgstr "航海黎明"
+
+#: .\django_celery_beat\models.py:45
+msgid "Astronomical dusk"
+msgstr "天文黄昏"
+
+#: .\django_celery_beat\models.py:46
+msgid "Civil dusk"
+msgstr "民事黄昏"
+
+#: .\django_celery_beat\models.py:47
+msgid "Nautical dusk"
+msgstr "航海黄昏"
+
+#: .\django_celery_beat\models.py:48
+msgid "Solar noon"
+msgstr "正午"
+
+#: .\django_celery_beat\models.py:49
+msgid "Sunrise"
+msgstr "日出"
+
+#: .\django_celery_beat\models.py:50
+msgid "Sunset"
+msgstr "日落"
+
+#: .\django_celery_beat\models.py:84
+msgid "Solar Event"
+msgstr "日程事件"
+
+#: .\django_celery_beat\models.py:85
+msgid "The type of solar event when the job should run"
+msgstr "当任务应该执行时的日程事件类型"
+
+#: .\django_celery_beat\models.py:89
+msgid "Latitude"
+msgstr "纬度"
+
+#: .\django_celery_beat\models.py:90
+msgid "Run the task when the event happens at this latitude"
+msgstr "当在此纬度发生事件时执行任务"
+
+#: .\django_celery_beat\models.py:95
+msgid "Longitude"
+msgstr "经度"
+
+#: .\django_celery_beat\models.py:96
+msgid "Run the task when the event happens at this longitude"
+msgstr "当在此经度发生事件时执行任务"
+
+#: .\django_celery_beat\models.py:103
+msgid "solar event"
+msgstr "日程事件"
+
+#: .\django_celery_beat\models.py:104
+msgid "solar events"
+msgstr "日程事件"
+
+#: .\django_celery_beat\models.py:153
+msgid "Number of Periods"
+msgstr "周期数"
+
+#: .\django_celery_beat\models.py:154
+msgid "Number of interval periods to wait before running the task again"
+msgstr "再次执行任务之前要等待的间隔周期数"
+
+#: .\django_celery_beat\models.py:160
+msgid "Interval Period"
+msgstr "间隔周期"
+
+#: .\django_celery_beat\models.py:161
+msgid "The type of period between task runs (Example: days)"
+msgstr "任务每次执行之间的时间间隔类型（例如：天）"
+
+#: .\django_celery_beat\models.py:167
+msgid "interval"
+msgstr "间隔"
+
+#: .\django_celery_beat\models.py:168
+msgid "intervals"
+msgstr "间隔"
+
+#: .\django_celery_beat\models.py:196
+msgid "every {}"
+msgstr "每 {}"
+
+#: .\django_celery_beat\models.py:201
+msgid "every {} {}"
+msgstr "每 {} {}"
+
+#: .\django_celery_beat\models.py:212
+msgid "Clock Time"
+msgstr "定时时间"
+
+#: .\django_celery_beat\models.py:213
+msgid "Run the task at clocked time"
+msgstr "在定时时间执行任务"
+
+#: .\django_celery_beat\models.py:219 .\django_celery_beat\models.py:220
+msgid "clocked"
+msgstr "定时"
+
+#: .\django_celery_beat\models.py:260
+msgid "Minute(s)"
+msgstr "分钟"
+
+#: .\django_celery_beat\models.py:262
+msgid "Cron Minutes to Run. Use \"*\" for \"all\". (Example: \"0,30\")"
+msgstr "计划执行的分钟。 将\"*\"用作\"all\"。（例如：\"0,30\"）"
+
+#: .\django_celery_beat\models.py:267
+msgid "Hour(s)"
+msgstr "小时"
+
+#: .\django_celery_beat\models.py:269
+msgid "Cron Hours to Run. Use \"*\" for \"all\". (Example: \"8,20\")"
+msgstr "计划执行的小时。 将\"*\"用作\"all\"。（例如：\"8,20\"）"
+
+#: .\django_celery_beat\models.py:274
+msgid "Day(s) Of The Week"
+msgstr "一个星期的第几天"
+
+#: .\django_celery_beat\models.py:276
+msgid "Cron Days Of The Week to Run. Use \"*\" for \"all\". (Example: \"0,5\")"
+msgstr "计划执行的每周的第几天。将\"*\"用作\"all\"。（例如：\"0,5\"）"
+
+#: .\django_celery_beat\models.py:282
+msgid "Day(s) Of The Month"
+msgstr "一个月的第几天"
+
+#: .\django_celery_beat\models.py:284
+msgid ""
+"Cron Days Of The Month to Run. Use \"*\" for \"all\". (Example: \"1,15\")"
+msgstr "计划执行的每个月的第几天。将\"*\"用作\"all\"。（例如：\"0,5\"）"
+
+#: .\django_celery_beat\models.py:290
+msgid "Month(s) Of The Year"
+msgstr "一年的第几个月"
+
+#: .\django_celery_beat\models.py:292
+msgid ""
+"Cron Months Of The Year to Run. Use \"*\" for \"all\". (Example: \"0,6\")"
+msgstr "计划执行的每一年的第几个月。将\"*\"用作\"all\"。（例如：\"0,5\"）"
+
+#: .\django_celery_beat\models.py:299
+msgid "Cron Timezone"
+msgstr "计划任务的时区"
+
+#: .\django_celery_beat\models.py:301
+msgid "Timezone to Run the Cron Schedule on. Default is UTC."
+msgstr "执行计划任务表的时区。 默认为UTC。"
+
+#: .\django_celery_beat\models.py:307
+msgid "crontab"
+msgstr "计划任务"
+
+#: .\django_celery_beat\models.py:308
+msgid "crontabs"
+msgstr "计划任务"
+
+#: .\django_celery_beat\models.py:393
+msgid "Name"
+msgstr "任务名"
+
+#: .\django_celery_beat\models.py:394
+msgid "Short Description For This Task"
+msgstr "该任务的简短说明"
+
+#: .\django_celery_beat\models.py:399
+msgid ""
+"The Name of the Celery Task that Should be Run.  (Example: \"proj.tasks."
+"import_contacts\")"
+msgstr "被执行的任务的名称。（例如：\"proj.tasks.import_contacts\")"
+
+#: .\django_celery_beat\models.py:407
+msgid "Interval Schedule"
+msgstr "间隔时间表"
+
+#: .\django_celery_beat\models.py:408
+msgid ""
+"Interval Schedule to run the task on.  Set only one schedule type, leave the "
+"others null."
+msgstr "执行任务的间隔时间表。 仅设置一种时间表类型，将其他保留为空。"
+
+#: .\django_celery_beat\models.py:413
+msgid "Crontab Schedule"
+msgstr "计划时间表"
+
+#: .\django_celery_beat\models.py:414
+msgid ""
+"Crontab Schedule to run the task on.  Set only one schedule type, leave the "
+"others null."
+msgstr "执行任务的计划时间表。 仅设置一种时间表类型，将其他保留为空。"
+
+#: .\django_celery_beat\models.py:419
+msgid "Solar Schedule"
+msgstr "日程时间表"
+
+#: .\django_celery_beat\models.py:420
+msgid ""
+"Solar Schedule to run the task on.  Set only one schedule type, leave the "
+"others null."
+msgstr "执行任务的日程时间表。 仅设置一种时间表类型，将其他保留为空。"
+
+#: .\django_celery_beat\models.py:425
+msgid "Clocked Schedule"
+msgstr "定时时间表"
+
+#: .\django_celery_beat\models.py:426
+msgid ""
+"Clocked Schedule to run the task on.  Set only one schedule type, leave the "
+"others null."
+msgstr "执行任务的定时时间表。 仅设置一种时间表类型，将其他保留为空。"
+
+#: .\django_celery_beat\models.py:432
+msgid "Positional Arguments"
+msgstr "位置参数"
+
+#: .\django_celery_beat\models.py:434
+msgid "JSON encoded positional arguments (Example: [\"arg1\", \"arg2\"])"
+msgstr "JSON编码的位置参数(例如: [\"arg1\", \"arg2\"])"
+
+#: .\django_celery_beat\models.py:439
+msgid "Keyword Arguments"
+msgstr "关键字参数"
+
+#: .\django_celery_beat\models.py:441
+msgid "JSON encoded keyword arguments (Example: {\"argument\": \"value\"})"
+msgstr "JSON编码的关键字参数(例如: {\"argument\": \"value\"})"
+
+#: .\django_celery_beat\models.py:447
+msgid "Queue Override"
+msgstr "队列覆盖"
+
+#: .\django_celery_beat\models.py:449
+msgid "Queue defined in CELERY_TASK_QUEUES. Leave None for default queuing."
+msgstr "在 CELERY_TASK_QUEUES 定义的队列。保留空以进行默认排队。"
+
+#: .\django_celery_beat\models.py:458
+msgid "Exchange"
+msgstr "交换机"
+
+#: .\django_celery_beat\models.py:459
+msgid "Override Exchange for low-level AMQP routing"
+msgstr "覆盖交换机以进行低层级AMQP路由"
+
+#: .\django_celery_beat\models.py:463
+msgid "Routing Key"
+msgstr "路由键"
+
+#: .\django_celery_beat\models.py:464
+msgid "Override Routing Key for low-level AMQP routing"
+msgstr "覆盖路由键以进行低层级AMQP路由"
+
+#: .\django_celery_beat\models.py:468
+msgid "AMQP Message Headers"
+msgstr "AMQP消息头"
+
+#: .\django_celery_beat\models.py:469
+msgid "JSON encoded message headers for the AMQP message."
+msgstr "AMQP消息的JSON编码消息头。"
+
+#: .\django_celery_beat\models.py:475
+msgid "Priority"
+msgstr "优先级"
+
+#: .\django_celery_beat\models.py:477
+msgid ""
+"Priority Number between 0 and 255. Supported by: RabbitMQ, Redis (priority "
+"reversed, 0 is highest)."
+msgstr "优先级数字，介于0和255之间。支持者：RabbitMQ，Redis（优先级颠倒，0是最高）。"
+
+#: .\django_celery_beat\models.py:482
+msgid "Expires Datetime"
+msgstr "过期时刻"
+
+#: .\django_celery_beat\models.py:484
+msgid ""
+"Datetime after which the schedule will no longer trigger the task to run"
+msgstr "过期时刻，计划表将在此时刻后不再触发任务执行"
+
+#: .\django_celery_beat\models.py:489
+msgid "Expires timedelta with seconds"
+msgstr "过期时间间隔，以秒为单位"
+
+#: .\django_celery_beat\models.py:491
+msgid ""
+"Timedelta with seconds which the schedule will no longer trigger the task to "
+"run"
+msgstr "再过该秒后，不再触发任务执行"
+
+#: .\django_celery_beat\models.py:497
+msgid "One-off Task"
+msgstr "一次任务"
+
+#: .\django_celery_beat\models.py:499
+msgid "If True, the schedule will only run the task a single time"
+msgstr "如果为True，则计划将仅运行任务一次"
+
+#: .\django_celery_beat\models.py:503
+msgid "Start Datetime"
+msgstr "开始时间"
+
+#: .\django_celery_beat\models.py:505
+msgid "Datetime when the schedule should begin triggering the task to run"
+msgstr "时间表开始触发任务执行的时刻"
+
+#: .\django_celery_beat\models.py:510
+msgid "Enabled"
+msgstr "已启用"
+
+#: .\django_celery_beat\models.py:511
+msgid "Set to False to disable the schedule"
+msgstr "设置为False可禁用时间表"
+
+#: .\django_celery_beat\models.py:516
+msgid "Last Run Datetime"
+msgstr "上次运行时刻"
+
+#: .\django_celery_beat\models.py:518
+msgid ""
+"Datetime that the schedule last triggered the task to run. Reset to None if "
+"enabled is set to False."
+msgstr "最后一次触发任务执行的时刻。 如果enabled设置为False，则重置为None。"
+
+#: .\django_celery_beat\models.py:523
+msgid "Total Run Count"
+msgstr "总运行次数"
+
+#: .\django_celery_beat\models.py:525
+msgid "Running count of how many times the schedule has triggered the task"
+msgstr "任务执行多少次的运行计数"
+
+#: .\django_celery_beat\models.py:530
+msgid "Last Modified"
+msgstr "最后修改"
+
+#: .\django_celery_beat\models.py:531
+msgid "Datetime that this PeriodicTask was last modified"
+msgstr "该周期性任务的最后修改时刻"
+
+#: .\django_celery_beat\models.py:535
+msgid "Description"
+msgstr "描述"
+
+#: .\django_celery_beat\models.py:537
+msgid "Detailed description about the details of this Periodic Task"
+msgstr "有关此周期性任务的详细信息"
+
+#: .\django_celery_beat\models.py:546
+msgid "periodic task"
+msgstr "周期性任务"
+
+#: .\django_celery_beat\models.py:547
+msgid "periodic tasks"
+msgstr "周期性任务"

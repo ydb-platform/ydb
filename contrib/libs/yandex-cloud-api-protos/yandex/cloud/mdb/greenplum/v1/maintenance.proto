@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.greenplum.v1;
+
+import "google/protobuf/timestamp.proto";
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/greenplum/v1;greenplum";
+option java_package = "yandex.cloud.api.mdb.greenplum.v1";
+
+// A Greenplum® cluster maintenance window. Should be defined by either one of the two options.
+
+message MaintenanceWindow {
+  oneof policy {
+    option (exactly_one) = true;
+
+    // An any-time maintenance window.
+    AnytimeMaintenanceWindow anytime = 1;
+
+    // A weekly maintenance window.
+    WeeklyMaintenanceWindow weekly_maintenance_window = 2;
+  }
+}
+
+// An any-time maintenance window.
+message AnytimeMaintenanceWindow {}
+
+// A weekly maintenance window.
+message WeeklyMaintenanceWindow {
+  enum WeekDay {
+    WEEK_DAY_UNSPECIFIED = 0;
+    
+    // Monday
+    MON = 1;
+    
+    // Tuesday
+    TUE = 2;
+
+    // Wednesday
+    WED = 3;
+
+    // Thursday
+    THU = 4;
+
+    // Friday
+    FRI = 5;
+
+    // Saturday
+    SAT = 6;
+
+    // Sunday
+    SUN = 7;
+  }
+
+  // Day of the week.
+  WeekDay day = 1;
+
+  // Hour of the day in the UTC timezone.
+  int64 hour = 2 [(value) = "1-24"];
+}
+
+// The operation to perform during maintenance.
+
+message MaintenanceOperation {
+
+  // The description of the operation.
+  string info = 1 [(length) = "<=256"];
+
+  // Delay time for the maintenance operation.
+  google.protobuf.Timestamp delayed_until = 2;
+}

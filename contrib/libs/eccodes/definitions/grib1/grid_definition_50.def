@@ -1,0 +1,7 @@
+# (C) Copyright 2005- ECMWF.
+
+# GRID DEFINITION Spherical harmonic coefficients
+# grib 1 -> 2
+constant gridDefinitionTemplateNumber     = 50;
+
+template commonBlock "grib1/grid_definition_spherical_harmonics.def";

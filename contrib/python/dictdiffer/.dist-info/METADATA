@@ -1,0 +1,115 @@
+Metadata-Version: 2.1
+Name: dictdiffer
+Version: 0.9.0
+Summary: Dictdiffer is a library that helps you to diff and patch dictionaries.
+Home-page: https://github.com/inveniosoftware/dictdiffer
+Author: Invenio Collaboration
+Author-email: info@inveniosoftware.org
+License: UNKNOWN
+Project-URL: Changelog, https://github.com/inveniosoftware/dictdiffer/blob/master/CHANGES
+Project-URL: Docs, https://dictdiffer.rtfd.io/
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Utilities
+Provides-Extra: all
+Requires-Dist: Sphinx (>=3) ; extra == 'all'
+Requires-Dist: sphinx-rtd-theme (>=0.2) ; extra == 'all'
+Requires-Dist: check-manifest (>=0.42) ; extra == 'all'
+Requires-Dist: mock (>=1.3.0) ; extra == 'all'
+Requires-Dist: pytest-cov (>=2.10.1) ; extra == 'all'
+Requires-Dist: pytest-isort (>=1.2.0) ; extra == 'all'
+Requires-Dist: sphinx (>=3) ; extra == 'all'
+Requires-Dist: tox (>=3.7.0) ; extra == 'all'
+Requires-Dist: numpy (>=1.13.0) ; (python_version < "3.7") and extra == 'all'
+Requires-Dist: numpy (>=1.15.0) ; (python_version < "3.8") and extra == 'all'
+Requires-Dist: numpy (>=1.18.0) ; (python_version < "3.9") and extra == 'all'
+Requires-Dist: pytest (==5.4.3) ; (python_version <= "3.5") and extra == 'all'
+Requires-Dist: pytest-pycodestyle (>=2) ; (python_version <= "3.5") and extra == 'all'
+Requires-Dist: pytest-pydocstyle (>=2) ; (python_version <= "3.5") and extra == 'all'
+Requires-Dist: pytest (>=6) ; (python_version > "3.5") and extra == 'all'
+Requires-Dist: pytest-pycodestyle (>=2.2.0) ; (python_version > "3.5") and extra == 'all'
+Requires-Dist: pytest-pydocstyle (>=2.2.0) ; (python_version > "3.5") and extra == 'all'
+Requires-Dist: numpy (>=1.20.0) ; (python_version >= "3.9") and extra == 'all'
+Provides-Extra: docs
+Requires-Dist: Sphinx (>=3) ; extra == 'docs'
+Requires-Dist: sphinx-rtd-theme (>=0.2) ; extra == 'docs'
+Provides-Extra: numpy
+Requires-Dist: numpy (>=1.13.0) ; (python_version < "3.7") and extra == 'numpy'
+Requires-Dist: numpy (>=1.15.0) ; (python_version < "3.8") and extra == 'numpy'
+Requires-Dist: numpy (>=1.18.0) ; (python_version < "3.9") and extra == 'numpy'
+Requires-Dist: numpy (>=1.20.0) ; (python_version >= "3.9") and extra == 'numpy'
+Provides-Extra: tests
+Requires-Dist: check-manifest (>=0.42) ; extra == 'tests'
+Requires-Dist: mock (>=1.3.0) ; extra == 'tests'
+Requires-Dist: pytest-cov (>=2.10.1) ; extra == 'tests'
+Requires-Dist: pytest-isort (>=1.2.0) ; extra == 'tests'
+Requires-Dist: sphinx (>=3) ; extra == 'tests'
+Requires-Dist: tox (>=3.7.0) ; extra == 'tests'
+Requires-Dist: pytest (==5.4.3) ; (python_version <= "3.5") and extra == 'tests'
+Requires-Dist: pytest-pycodestyle (>=2) ; (python_version <= "3.5") and extra == 'tests'
+Requires-Dist: pytest-pydocstyle (>=2) ; (python_version <= "3.5") and extra == 'tests'
+Requires-Dist: pytest (>=6) ; (python_version > "3.5") and extra == 'tests'
+Requires-Dist: pytest-pycodestyle (>=2.2.0) ; (python_version > "3.5") and extra == 'tests'
+Requires-Dist: pytest-pydocstyle (>=2.2.0) ; (python_version > "3.5") and extra == 'tests'
+
+============
+ Dictdiffer
+============
+
+.. image:: https://github.com/inveniosoftware/dictdiffer/workflows/CI/badge.svg
+        :target: https://github.com/inveniosoftware/dictdiffer/actions
+
+.. image:: https://img.shields.io/coveralls/inveniosoftware/dictdiffer.svg
+        :target: https://coveralls.io/r/inveniosoftware/dictdiffer
+
+.. image:: https://img.shields.io/github/tag/inveniosoftware/dictdiffer.svg
+        :target: https://github.com/inveniosoftware/dictdiffer/releases
+
+.. image:: https://img.shields.io/pypi/dm/dictdiffer.svg
+        :target: https://pypi.python.org/pypi/dictdiffer
+
+.. image:: https://img.shields.io/github/license/inveniosoftware/dictdiffer.svg
+        :target: https://github.com/inveniosoftware/dictdiffer/blob/master/LICENSE
+
+About
+=====
+
+Dictdiffer is a helper module that helps you to diff and patch
+dictionaries.
+
+
+Installation
+============
+
+Dictdiffer is on PyPI so all you need is: ::
+
+    pip install dictdiffer
+
+
+Documentation
+=============
+
+Documentation is readable at https://dictdiffer.readthedocs.io or can be
+built using Sphinx: ::
+
+    pip install dictdiffer[docs]
+    python setup.py build_sphinx
+
+
+Testing
+=======
+
+Running the test suite is as simple as: ::
+
+    ./run-tests.sh
+
+

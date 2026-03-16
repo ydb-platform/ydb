@@ -1,0 +1,124 @@
+Metadata-Version: 2.3
+Name: sh
+Version: 2.2.2
+Summary: Python subprocess replacement
+License: MIT
+Author: Andrew Moffat
+Author-email: arwmoffat@gmail.com
+Maintainer: Andrew Moffat
+Maintainer-email: arwmoffat@gmail.com
+Requires-Python: >=3.8.1,<4.0
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Build Tools
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Project-URL: Documentation, https://sh.readthedocs.io/
+Project-URL: Homepage, https://sh.readthedocs.io/
+Project-URL: Repository, https://github.com/amoffat/sh
+Description-Content-Type: text/x-rst
+
+.. image:: https://raw.githubusercontent.com/amoffat/sh/master/images/logo-230.png
+    :target: https://amoffat.github.com/sh
+    :alt: Logo
+
+**If you are migrating from 1.* to 2.*, please see MIGRATION.md**
+
+|
+
+.. image:: https://img.shields.io/pypi/v/sh.svg?style=flat-square
+    :target: https://pypi.python.org/pypi/sh
+    :alt: Version
+.. image:: https://img.shields.io/pypi/dm/sh.svg?style=flat-square
+    :target: https://pypi.python.org/pypi/sh
+    :alt: Downloads Status
+.. image:: https://img.shields.io/pypi/pyversions/sh.svg?style=flat-square
+    :target: https://pypi.python.org/pypi/sh
+    :alt: Python Versions
+.. image:: https://img.shields.io/coveralls/amoffat/sh.svg?style=flat-square
+    :target: https://coveralls.io/r/amoffat/sh?branch=master
+    :alt: Coverage Status
+
+|
+
+sh is a full-fledged subprocess replacement for Python 3.8 - 3.12, and PyPy
+that allows you to call *any* program as if it were a function:
+
+.. code:: python
+
+    from sh import ifconfig
+    print(ifconfig("eth0"))
+
+sh is *not* a collection of system commands implemented in Python.
+
+sh relies on various Unix system calls and only works on Unix-like operating
+systems - Linux, macOS, BSDs etc. Specifically, Windows is not supported.
+
+`Complete documentation here <https://sh.readthedocs.io/>`_
+
+Installation
+============
+
+::
+
+    $> pip install sh
+
+Support
+=======
+* `Andrew Moffat <https://github.com/amoffat>`_ - author/maintainer
+* `Erik Cederstrand <https://github.com/ecederstrand>`_ - maintainer
+
+
+Developers
+==========
+
+Testing
+-------
+
+Tests are run in a docker container against all supported Python versions. To run, make the following target::
+
+    $> make test
+
+To run a single test::
+
+    $> make test='FunctionalTests.test_background' test_one
+
+Docs
+----
+
+To build the docs, make sure you've run ``poetry install`` to install the dev dependencies, then::
+
+    $> cd docs
+    $> make html
+
+This will generate the docs in ``docs/build/html``. You can open the ``index.html`` file in your browser to view the docs.
+
+Coverage
+--------
+
+First run all of the tests::
+
+    $> SH_TESTS_RUNNING=1 coverage run --source=sh -m pytest
+
+This will aggregate a ``.coverage``.  You may then visualize the report with::
+
+    $> coverage report
+
+Or generate visual html files with::
+
+    $> coverage html
+
+Which will create ``./htmlcov/index.html`` that you may open in a web browser.
+

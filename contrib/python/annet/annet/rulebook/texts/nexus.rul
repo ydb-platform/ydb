@@ -1,0 +1,87 @@
+# Операторы:
+#   *  Один аргумент в undo
+#   ~  Несколько аргументов (минимум один) в undo
+#
+# Параметры:
+#   %global         Команда действует на любом уровне ниже
+#   %logic=...      Кастомная функция обработки правила
+#   %diff_logic=... Кастомная функция построения диффа.
+#                   данная функция работает для подблоков (в отличие от %logic)
+#   %comment=...    Добавить коммент после строки который будет видно с опцией patch --add-comments
+#                   Сделано в основном для того чтобы генерировать специальные команды для наливки
+# -----
+
+ip community-list standard ~
+
+!vrf context management
+vrf context *
+
+vlan group * vlan-list %logic=cisco.vlandb.simple
+vlan */[^\d].*/
+vlan %logic=cisco.vlandb.simple
+    name
+
+ip ssh version 2 %logic=cisco.misc.ssh_key
+
+# ordering of SNMP blocks
+ip access-list ~
+snmp-server view ~
+snmp-server community ~
+snmp-server host ~
+# Deleting a user using either SNMP or the CLI results in the user being deleted for both SNMP and the CLI.
+# User-role mapping changes are synchronized in SNMP and the CLI.
+!snmp-server user admin ~
+!snmp-server user *
+
+ntp distribute %logic=cisco.misc.no_ntp_distribute
+
+!interface */(ipmi|Vlan1$)/
+
+interface mgmt0$
+    !vrf member management
+
+# SVI/Subifs/Lagg
+interface */(Vlan|Ethernet.*\.|port-channel.*\.?)\d+$/ %diff_logic=nexus.iface.diff
+    vrf member
+    ipv6 link-local
+    ipv6 address *
+    ipv6 nd ~                      %logic=cisco.misc.no_ipv6_nd_suppress_ra
+    mtu
+
+# Physical
+interface */\w*Ethernet[0-9\/]+$/     %logic=common.permanent %diff_logic=nexus.iface.diff
+    switchport mode
+    switchport trunk native vlan
+    switchport access vlan
+    switchport trunk allowed vlan %logic=cisco.vlandb.swtrunk
+    vrf member
+    ipv6 link-local
+    ipv6 address *
+    channel-group
+    mtu
+    storm-control * level
+
+router bgp *
+    router-id
+    vrf *
+        router-id
+        address-family ~
+            maximum-paths
+        neighbor ~
+            update-source
+
+policy-map type qos *
+    class *  %ordered
+        ~    %global
+
+# Нельзя сказать no bandwidth пока политика глобально применена
+policy-map type queuing *
+    class type queuing *
+        bandwidth *
+
+description %global
+
+no ~ %global
+~ %global
+
+# vim: set syntax=annrulebook:

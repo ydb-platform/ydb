@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package temporal.api.enums.v1;
+
+option go_package = "go.temporal.io/api/enums/v1;enums";
+option java_package = "io.temporal.api.enums.v1";
+option java_multiple_files = true;
+option java_outer_classname = "ResetProto";
+option ruby_package = "Temporalio::Api::Enums::V1";
+option csharp_namespace = "Temporalio.Api.Enums.V1";
+
+// Event types to exclude when reapplying events beyond the reset point.
+enum ResetReapplyExcludeType {
+    RESET_REAPPLY_EXCLUDE_TYPE_UNSPECIFIED = 0;
+    // Exclude signals when reapplying events beyond the reset point.
+    RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL = 1;
+    // Exclude updates when reapplying events beyond the reset point.
+    RESET_REAPPLY_EXCLUDE_TYPE_UPDATE = 2;
+    // Exclude nexus events when reapplying events beyond the reset point.
+    RESET_REAPPLY_EXCLUDE_TYPE_NEXUS = 3;
+    // Deprecated, unimplemented option.
+    RESET_REAPPLY_EXCLUDE_TYPE_CANCEL_REQUEST = 4 [deprecated=true];
+}
+
+// Deprecated: applications should use ResetReapplyExcludeType to specify
+// exclusions from this set, and new event types should be added to ResetReapplyExcludeType
+// instead of here.
+enum ResetReapplyType {
+    RESET_REAPPLY_TYPE_UNSPECIFIED = 0;
+    // Signals are reapplied when workflow is reset.
+    RESET_REAPPLY_TYPE_SIGNAL = 1;
+    // No events are reapplied when workflow is reset.
+    RESET_REAPPLY_TYPE_NONE = 2;
+    // All eligible events are reapplied when workflow is reset.
+    RESET_REAPPLY_TYPE_ALL_ELIGIBLE = 3;
+}
+
+// Deprecated, see temporal.api.common.v1.ResetOptions.
+enum ResetType {
+    RESET_TYPE_UNSPECIFIED = 0;
+    // Resets to event of the first workflow task completed, or if it does not exist, the event after task scheduled.
+    RESET_TYPE_FIRST_WORKFLOW_TASK = 1;
+    // Resets to event of the last workflow task completed, or if it does not exist, the event after task scheduled.
+    RESET_TYPE_LAST_WORKFLOW_TASK = 2;
+}

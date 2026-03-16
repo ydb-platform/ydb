@@ -1,0 +1,5 @@
+requirements:
+  - contrib/libs/grpc/src/proto/grpc/reflection/v1alpha
+exclude:
+  - '*_pb2.py'
+  - '*_pb2_grpc.py'

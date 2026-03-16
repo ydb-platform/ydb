@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// A set of features, specific to a particular Compute hardware generation.
+// They are not necessary supported by every host OS or distro, thus they are fixed to an image
+// and are applied to all instances created with it as their boot disk image.
+// These features significantly determine how the instance is created, thus cannot be changed after the fact.
+message HardwareGeneration {
+  oneof features {
+    LegacyHardwareFeatures legacy_features = 1;
+    Generation2HardwareFeatures generation2_features = 2;
+  }
+}
+
+// A first hardware generation, by default compatible with all legacy images.
+// Allows switching to PCI_TOPOLOGY_V2 and back.
+message LegacyHardwareFeatures {
+  PCITopology pci_topology = 1;
+}
+
+// A second hardware generation, which by default assumes PCI_TOPOLOGY_V2
+// and UEFI boot (with UEFI related features).
+message Generation2HardwareFeatures {
+}
+
+enum PCITopology {
+  PCI_TOPOLOGY_UNSPECIFIED = 0;
+  PCI_TOPOLOGY_V1 = 1;
+  PCI_TOPOLOGY_V2 = 2;
+}

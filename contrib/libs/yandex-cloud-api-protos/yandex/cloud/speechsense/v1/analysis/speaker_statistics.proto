@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1.analysis;
+
+import "yandex/cloud/speechsense/v1/analysis/statistics_common.proto";
+import "yandex/cloud/speechsense/v1/analysis/utterance_statistics.proto";
+
+option java_package = "yandex.cloud.api.speechsense.v1.analysis";
+option java_outer_classname = "SpeakerStatisticsProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1/analysis;speechsense";
+
+message SpeakerStatistics {
+  // Speaker tag
+  string speaker_tag = 1;
+
+  // analysis of all phrases in format of single utterance
+  UtteranceStatistics complete_statistics = 2;
+
+  // Descriptive statistics for words per utterance distribution
+  DescriptiveStatistics words_per_utterance = 3;
+
+  // Descriptive statistics for letters per utterance distribution
+  DescriptiveStatistics letters_per_utterance = 4;
+
+  // Number of utterances
+  int64 utterance_count = 5;
+
+  // Descriptive statistics for utterance duration distribution
+  DescriptiveStatistics utterance_duration_estimation = 6;
+}

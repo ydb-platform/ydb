@@ -1,0 +1,8 @@
+#assert(local=31)
+
+alias mars.fcmonth = forecastMonth;
+unalias mars.step;
+#unalias mars.total; #TODO: Check who sets it
+
+alias mars.hdate = dataDate;
+alias mars.date  = referenceDate; 

@@ -1,0 +1,2 @@
+class NotSignedInError(Exception):
+    pass

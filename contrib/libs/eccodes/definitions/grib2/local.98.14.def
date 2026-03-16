@@ -1,0 +1,4 @@
+# Local definition 14: Brightness temperature
+
+unsigned[4] channelNumber : dump ;
+alias mars.channel = channelNumber;

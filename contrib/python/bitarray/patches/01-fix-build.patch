@@ -1,0 +1,12 @@
+--- contrib/python/bitarray/bitarray/bitarray.h	(index)
++++ contrib/python/bitarray/bitarray/bitarray.h	(working tree)
+@@ -93,6 +93,9 @@ getbit(bitarrayobject *self, Py_ssize_t i)
+     return self->ob_item[i >> 3] & BITMASK(self, i) ? 1 : 0;
+ }
+ 
++#ifdef setbit
++#undef setbit
++#endif
+ static inline void
+ setbit(bitarrayobject *self, Py_ssize_t i, int vi)
+ {

@@ -1,0 +1,65 @@
+{% extends '//builtin/bag.ym' %}
+
+{% block ya_module_type %}
+PY3_PROGRAM
+{% endblock %}
+
+{% block current_version %}
+f9ff166845a59327eda431af82ee85a9c7532c5d
+{% endblock %}
+
+{% block current_url %}
+https://github.com/yugr/Implib.so/archive/{{self.version().strip()}}.tar.gz
+{% endblock %}
+
+{% block ya_make %}
+NO_LINT()
+
+PEERDIR(
+    library/python/resource
+)
+
+PY_SRCS(
+    MAIN implib-gen.py
+)
+
+RESOURCE_FILES(
+    arch/aarch64/config.ini
+    arch/aarch64/table.S.tpl
+    arch/aarch64/trampoline.S.tpl
+    arch/arm/config.ini
+    arch/arm/table.S.tpl
+    arch/arm/trampoline.S.tpl
+    arch/common/init.c.tpl
+    arch/e2k/config.ini
+    arch/e2k/table.S.tpl
+    arch/e2k/trampoline.S.tpl
+    arch/i386/config.ini
+    arch/i386/table.S.tpl
+    arch/i386/trampoline.S.tpl
+    arch/mips/config.ini
+    arch/mips/table.S.tpl
+    arch/mips/trampoline.S.tpl
+    arch/mips64/config.ini
+    arch/mips64/table.S.tpl
+    arch/mips64/trampoline.S.tpl
+    arch/powerpc64/config.ini
+    arch/powerpc64/table.S.tpl
+    arch/powerpc64/trampoline.S.tpl
+    arch/powerpc64le/config.ini
+    arch/powerpc64le/table.S.tpl
+    arch/powerpc64le/trampoline.S.tpl
+    arch/riscv64/config.ini
+    arch/riscv64/table.S.tpl
+    arch/riscv64/trampoline.S.tpl
+    arch/x86_64/config.ini
+    arch/x86_64/table.S.tpl
+    arch/x86_64/trampoline.S.tpl
+)
+
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+cp -R *.py arch/ ${OUTPUT}/
+{% endblock %}

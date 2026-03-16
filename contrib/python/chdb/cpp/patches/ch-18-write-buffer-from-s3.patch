@@ -1,0 +1,55 @@
+--- contrib/python/chdb/cpp/src/IO/WriteBufferFromS3.cpp	(index)
++++ contrib/python/chdb/cpp/src/IO/WriteBufferFromS3.cpp	(working tree)
+@@ -54,23 +54,17 @@ namespace ErrorCodes
+     extern const int LOGICAL_ERROR;
+ }
+ 
+-struct WriteBufferFromS3::PartData
++std::shared_ptr<std::iostream> WriteBufferFromS3::PartData::createAwsBuffer()
+ {
+-    Memory<> memory;
+-    size_t data_size = 0;
++    auto buffer = std::make_shared<StdIStreamFromMemory>(memory.data(), data_size);
++    buffer->exceptions(std::ios::badbit);
++    return buffer;
++}
+ 
+-    std::shared_ptr<std::iostream> createAwsBuffer()
+-    {
+-        auto buffer = std::make_shared<StdIStreamFromMemory>(memory.data(), data_size);
+-        buffer->exceptions(std::ios::badbit);
+-        return buffer;
+-    }
+-
+-    bool isEmpty() const
+-    {
+-        return data_size == 0;
+-    }
+-};
++bool WriteBufferFromS3::PartData::isEmpty() const
++{
++    return data_size == 0;
++}
+ 
+ BufferAllocationPolicyPtr createBufferAllocationPolicy(const S3::RequestSettings & settings)
+ {
+--- contrib/python/chdb/cpp/src/IO/WriteBufferFromS3.h	(index)
++++ contrib/python/chdb/cpp/src/IO/WriteBufferFromS3.h	(working tree)
+@@ -59,7 +59,16 @@ private:
+     String getVerboseLogDetails() const;
+     String getShortLogDetails() const;
+ 
+-    struct PartData;
++    struct PartData
++    {
++        Memory<> memory;
++        size_t data_size = 0;
++
++        std::shared_ptr<std::iostream> createAwsBuffer();
++
++        bool isEmpty() const;
++    };
++
+     void hidePartialData();
+     void reallocateFirstBuffer();
+     void detachBuffer();

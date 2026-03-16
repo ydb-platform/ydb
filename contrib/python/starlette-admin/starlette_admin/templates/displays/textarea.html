@@ -1,0 +1,11 @@
+{% if data | is_iter %}
+    <ul>
+        {% for value in data %}
+            <li>
+                <div style="white-space: pre-wrap">{{ value }}</div>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <div style="white-space: pre-wrap">{{ data }}</div>
+{% endif %}

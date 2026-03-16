@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Test": {
+      "type": "object",
+      "properties": {
+        "s_duration": {
+          "type": "string",
+          "format": "duration",
+          "example": "PT2H33M3S"
+        }
+      }
+    }
+  }
+}

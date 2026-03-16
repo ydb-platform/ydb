@@ -1,0 +1,35 @@
+Empty/unused groups
+===================
+
+    >>> import re
+    >>> import re2
+    >>> re2.set_fallback_notification(re2.FALLBACK_EXCEPTION)
+
+Unused vs. empty group:
+
+    >>> re.search( '(foo)?((.*).)(bar)?', 'a').groups()
+    (None, 'a', '', None)
+    >>> re2.search('(foo)?((.*).)(bar)?', 'a').groups()
+    (None, 'a', '', None)
+
+    >>> re.search(r'((.*)?.)', 'a').groups()
+    ('a', '')
+    >>> re2.search(r'((.*)?.)', 'a').groups()
+    ('a', '')
+    >>> re.search(r'((.*)+.)', 'a').groups()
+    ('a', '')
+    >>> re2.search(r'((.*)+.)', 'a').groups()
+    ('a', '')
+    >>> re.search(r'((.*)*.)', 'a').groups()
+    ('a', '')
+    >>> re2.search(r'((.*)*.)', 'a').groups()
+    ('a', '')
+
+The following show different behavior for re and re2:
+
+    >>> re.search(r'((.*)*.)', 'Hello').groups()
+    ('Hello', '')
+    >>> re2.search(r'((.*)*.)', 'Hello').groups()
+    ('Hello', 'Hell')
+
+    >>> re2.set_fallback_notification(re2.FALLBACK_QUIETLY)

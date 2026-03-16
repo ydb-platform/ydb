@@ -1,0 +1,6 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.0, Latitude/longitude (or equidistant cylindrical, or Plate Carree)
+
+include "grib2/templates/template.3.shape_of_the_earth.def"
+include "grib2/templates/template.3.latlon.def"

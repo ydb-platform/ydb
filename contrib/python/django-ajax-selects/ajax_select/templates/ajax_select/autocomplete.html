@@ -1,0 +1,15 @@
+<div>
+  <input
+    type="text"
+    name="{{name}}"
+    id="{{html_id}}"
+    value="{{current_repr}}"
+    autocomplete="off"
+    data-ajax-select="autocomplete"
+    data-plugin-options="{{ data_plugin_options }}"
+    {{ extra_attrs }}
+  />
+  {% block extra_script %}{% endblock %} {% block help %}{% if help_text %}
+  <p class="help">{{ help_text }}</p>
+  {% endif %}{% endblock %}
+</div>

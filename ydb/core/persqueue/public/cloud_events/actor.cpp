@@ -23,10 +23,6 @@ std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
     } else if (operation.HasDrop()) {
         return "DeleteTopic";
     }
-    // Fallback: drop uses generic Drop field, detect by OperationType enum
-    if (operation.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropPersQueueGroup) {
-        return "DeleteTopic";
-    }
     return "";
 }
 

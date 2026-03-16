@@ -125,9 +125,8 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
     NYdb::NTopic::TProducerSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
     settings.Path(Params.TopicName);
-    settings.SessionId(SessionId);
     settings.ProducerIdPrefix(producerId);
-    settings.MaxBlock(TDuration::Max());
+    settings.MaxBlockTimeout(TDuration::Max());
     settings.PartitionChooserStrategy(
         isAutoPartitioningEnabled ?
         NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound :

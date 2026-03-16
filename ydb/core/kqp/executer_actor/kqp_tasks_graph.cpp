@@ -1,5 +1,6 @@
 #include "kqp_tasks_graph.h"
 
+#include "kqp_node_quota_manager.h"
 #include "kqp_partition_helper.h"
 
 #include <ydb/core/base/appdata.h>
@@ -476,7 +477,7 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
             LOG_D(stageInfo.DebugString());
 
             THashSet<TTableId> tables;
-            for (auto& op : stage.GetTableOps()) {
+            for (const auto& op : stage.GetTableOps()) {
                 if (!stageInfo.Meta.TableId) {
                     YQL_ENSURE(!stageInfo.Meta.TablePath);
                     stageInfo.Meta.TableId = MakeTableId(op.GetTable());
@@ -505,7 +506,7 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
     }
 }
 
-void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx) {
+void TKqpTasksGraph::BuildResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx) {
     for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
         const auto& result = tx->GetResults(i);
         const auto& connection = result.GetConnection();
@@ -1600,8 +1601,6 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
         return channel;
     };
 
-    const auto internalSinksOrder = BuildInternalSinksPriorityOrder();
-
     for (size_t taskIdx = 0; taskIdx < graphInfo.TasksSize(); ++taskIdx) {
         const auto& task = graphInfo.GetTasks(taskIdx);
         const auto txId = task.GetTxId();
@@ -1813,7 +1812,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
 
         const auto& stage = stageInfo.Meta.GetStage(stageId);
         FillSecureParamsFromStage(newTask.Meta.SecureParams, stage);
-        BuildSinks(stage, stageInfo, internalSinksOrder, newTask);
+        BuildSinks(stage, stageInfo, newTask);
 
         for (const auto& input : stage.GetInputs()) {
             if (input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup) {
@@ -2822,8 +2821,10 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
 
     if (!partitions.empty() && (isSequentialInFlight || singlePartitionedStage)) {
-        // TODO: try to get rid of PartitionPruner here.
-        auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
+        Y_ENSURE(stageInfo.Meta.VirtualPartition);
+
+        auto startShard = stageInfo.Meta.VirtualPartition->ShardId;
+        auto& shardInfo = *stageInfo.Meta.VirtualPartition;
 
         if (stats) {
             for (const auto& [shardId, _] : partitions) {
@@ -2971,7 +2972,9 @@ void TKqpTasksGraph::BuildInternalOutputTransform(const NKqpProto::TKqpOutputTra
 }
 
 
-void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const {
+void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const {
+    const auto internalSinksOrder = BuildInternalSinksPriorityOrder();
+
     for (const auto& sink : stage.GetSinks()) {
         YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());
 
@@ -3024,11 +3027,6 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
         for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
             const auto& stage = tx.Body->GetStages(stageIdx);
             auto& stageInfo = GetStageInfo(NYql::NDq::TStageId(txIdx, stageIdx));
-
-            // TODO:
-            // if (EnableReadsMerge) {
-            //     stageInfo.Introspections.push_back("Using tasks count limit because of enabled reads merge");
-            // }
 
             const bool maybeOlapRead = (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap();
 
@@ -3116,38 +3114,54 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
 
                 task.Meta.ExecuterId = GetMeta().ExecuterId;
                 FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-                BuildSinks(stage, stageInfo, internalSinksOrder, task);
+                BuildSinks(stage, stageInfo, task);
             }
 
             // Not task-related
-            GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
             BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
         }
         GetMeta().DqChannelVersion = tx.Body->DqChannelVersion();
 
         // Not task-related
-        BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
+        BuildResultChannels(tx.Body, txIdx);
     }
 
     return sourceScanPartitionsCount;
+}
+
+void TKqpTasksGraph::BuildLiteralTasks() {
+    for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
+        auto& tx = Transactions.at(txIdx);
+
+        for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+            auto& stageInfo = GetStageInfo(TStageId(txIdx, stageIdx));
+
+            YQL_ENSURE(stageInfo.Meta.ShardOperations.empty());
+            YQL_ENSURE(stageInfo.InputsCount == 0);
+
+            AddTask(stageInfo, TKqpTasksGraph::TTaskType::LITERAL);
+        }
+
+        BuildResultChannels(tx.Body, txIdx);
+    }
 }
 
 TKqpTasksGraph::TKqpTasksGraph(
     const TString& database,
     const TVector<IKqpGateway::TPhysicalTxData>& transactions,
     const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
-    const TPartitionPrunerConfig& partitionPrunerConfig,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
+    const NKikimrConfig::TTableServiceConfig::TResourceManager& channelSettings,
     const TKqpRequestCounters::TPtr& counters,
     TActorId bufferActorId,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-    : PartitionPruner(MakeHolder<TPartitionPruner>(txAlloc->HolderFactory, txAlloc->TypeEnv, std::move(partitionPrunerConfig)))
-    , Transactions(transactions)
+    : Transactions(transactions)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
     , Counters(counters)
     , BufferActorId(bufferActorId)
     , UserToken(std::move(userToken))
+    , QuotaManager(channelSettings.GetMaxTotalChannelBuffersSize(), channelSettings.GetMinChannelBufferSize())
 {
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;
@@ -3166,6 +3180,10 @@ TKqpTasksGraph::TKqpTasksGraph(
 
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
     for (const auto& tx : Transactions) {
+        for (const auto& stage : tx.Body->GetStages()) {
+            GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
+        }
+
         if (txsType) {
             YQL_ENSURE(*txsType == tx.Body->GetType(), "Mixed physical tx types in executer.");
             YQL_ENSURE((*txsType == NKqpProto::TKqpPhyTx::TYPE_DATA)
@@ -3205,7 +3223,7 @@ TKqpTasksGraph::TKqpTasksGraph(
     FillKqpTasksGraphStages();
 }
 
-std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrder() {
+std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrder() const {
     std::vector<std::pair<ui64, i64>> order;
     for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
         const auto& tx = Transactions.at(txIdx);
@@ -3289,6 +3307,9 @@ TVector<TString> TKqpTasksGraph::GetStageIntrospection(const TStageId& stageId) 
                 break;
             case TTaskType::ECreateReason::FORCED:
                 introspections.push_back(ToString(count) + " tasks forced by user override");
+                break;
+            case TTaskType::ECreateReason::FORCED_NODE_QUOTA:
+                introspections.push_back(ToString(count) + " tasks forced by node quota");
                 break;
             case TTaskType::ECreateReason::LEVEL_PREDICTED:
                 introspections.push_back(ToString(count) + " tasks by level prediction");

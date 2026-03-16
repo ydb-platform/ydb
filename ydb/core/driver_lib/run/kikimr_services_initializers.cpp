@@ -3081,17 +3081,27 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
             return TString();
         };
 
-        TString cert = readFile(settings.CertificateFile);
-        // serverCreds.ServerPrivateKey = readFile(settings.PrivateKeyFile);
-        // serverCreds.CAFilePath = Config.GetKafkaProxyConfig().GetCA();
+        TString serverCert = readFile(settings.CertificateFile);
+        TString serverPrivateKey = readFile(settings.PrivateKeyFile);
 
-
-        TSslHolder<BIO> bio(BIO_new_mem_buf(cert.data(), cert.size()));
-        if (bio) {
-            serverCreds->ServerCert = TSslHolder<X509>(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-        // //     // return cert;
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));
+            if (bio) {
+                serverCreds->ServerCert = TSslHolder<X509>(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+            } else {
+                serverCreds->ServerCert = TSslHolder<X509>();
+            }
         }
-        // TSslHolder<X509>();
+
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(serverPrivateKey.data(), serverPrivateKey.size()));
+            if (bio) {
+                serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+            } else {
+                serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>();
+            }
+        }
+        serverCreds->CAFilePath = Config.GetKafkaProxyConfig().GetCA();
 
         setup->LocalServices.emplace_back(
             NKafka::MakeKafkaDiscoveryCacheID(),

@@ -68,7 +68,6 @@ public:
     bool CloseConnection = false;
 
     bool RetryingWriteToSocket = false;
-    std::shared_ptr<TActorContext> SavedCtxHandleConnectedResume = nullptr;
     TEvPollerReady::TPtr PollerEventSaved = nullptr;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
@@ -89,7 +88,7 @@ public:
 
     enum MtlsAuthStages { NO_CERT_YET, PROCESSING_CERT, AUTH_SUCCESSFUL, AUTH_FAILED };
     MtlsAuthStages MtlsAuthStage;
-    std::optional<std::shared_ptr<TInet64SecureStreamSocket::TServerMtlsCreds>> ServerCreds = std::nullopt;
+    std::shared_ptr<TInet64SecureStreamSocket::TServerMtlsCreds> ServerCreds;
 
     enum SslHandshakeErrors {ERROR_NONE = 1, ERROR_WANT_READ = -1, ERROR_WANT_WRITE = -2};
 
@@ -99,7 +98,7 @@ public:
                      TIntrusivePtr<TSocketDescriptor> socket,
                      TNetworkConfig::TSocketAddressType address,
                      const NKikimrConfig::TKafkaProxyConfig& config,
-                     std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds>& serverCreds)
+                     std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds)
         : ListenerActorId(listenerActorId)
         , Socket(std::move(socket))
         , Address(address)
@@ -107,10 +106,12 @@ public:
         , Step(SIZE_READ)
         , Demand(NoDemand)
         , InflightSize(0)
+        , ServerCreds(serverCreds)
         , Context(std::make_shared<TContext>(config))
     {
-        ServerCreds = serverCreds;
+        // KAFKA_LOG_D(ServerCreds.get());
         SetNonBlock();
+        KAFKA_LOG_D(serverCreds.use_count());
         IsSslRequired = Socket->IsSslSupported();
     }
 
@@ -594,7 +595,8 @@ protected:
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         } else {
             MtlsAuthStage = AUTH_SUCCESSFUL;
-            HandleConnected(PollerEventSaved, *SavedCtxHandleConnectedResume);
+            // RequestPoller();
+            HandleConnected(PollerEventSaved, ctx);
         }
     }
 
@@ -724,37 +726,6 @@ protected:
 
     bool UpgradeToSecure() {
         if (IsSslRequired && !IsSslActive) {
-            // std::optional<TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds = std::nullopt;
-            // if (NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
-            //     auto readFile = [](std::optional<TString> path) {
-            //         if (path) {
-            //             try {
-            //                 return TFileInput(*path).ReadAll();
-            //             } catch (const std::exception& ex) {
-            //                 return TString();
-            //             }
-            //         }
-            //         return TString();
-            //     };
-
-            //     TString kafkaServerCertPath = NKikimr::AppData()->KafkaProxyConfig.GetCert();
-            //     TString kafkaServerPrivateKeyPath = NKikimr::AppData()->KafkaProxyConfig.GetKey();
-            //     TString kafkaCAFilePath = AppData()->KafkaProxyConfig.GetCA();
-
-            //     TString serverCert = readFile(kafkaServerCertPath);
-            //     if (!serverCert) {
-            //         KAFKA_LOG_ERROR("Incorrect server certificate file path or empty contents.");
-            //         PassAway();
-            //         return false;
-            //     }
-            //     TString serverKey = readFile(kafkaServerPrivateKeyPath);
-            //     if (!serverKey) {
-            //         KAFKA_LOG_ERROR("Incorrect server key file path or empty contents.");
-            //         PassAway();
-            //         return false;
-            //     }
-            //     serverCreds = TInet64SecureStreamSocket::TServerMtlsCreds(serverCert, serverKey, kafkaCAFilePath);
-            // }
             int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds);
             if (res < 0) {
                 KAFKA_LOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
@@ -950,7 +921,6 @@ protected:
 
                         TString clientCert = Socket->GetStringClientCert(cert.get());
                         MtlsAuthStage = PROCESSING_CERT;
-                        SavedCtxHandleConnectedResume = std::make_shared<TActorContext>(TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ctx.SelfID));
                         PollerEventSaved = event;
 
                         EnsureKafkaSaslAuthActor();
@@ -1039,7 +1009,7 @@ NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
                                        const NKikimrConfig::TKafkaProxyConfig& config,
-                                       std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds>& serverCreds) {
+                                       std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds) {
     return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config, serverCreds);
 }
 

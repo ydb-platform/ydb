@@ -146,7 +146,7 @@ class TInet64SecureStreamSocket : public TInet64StreamSocket, TSslLayer<TStreamS
 public:
     struct TServerMtlsCreds {
         TSslHolder<X509> ServerCert;
-        TString ServerPrivateKey;
+        TSslHolder<EVP_PKEY> ServerPrivateKey;
         TString CAFilePath;
     };
 
@@ -159,10 +159,10 @@ public:
         : TInet64StreamSocket(std::move(socket))
     {
         Service = service;
-        // if (serverCreds) {
+        if (serverCreds.has_value()) {
             ServerCreds = *serverCreds;
-        //     UseMtlsAuth = true;
-        // }
+            UseMtlsAuth = true;
+        }
     }
 
 private:
@@ -182,25 +182,23 @@ public:
         BIO_set_nbio(Bio.get(), 1);
 
         if (UseMtlsAuth) {
+            if (!ServerCreds || !ServerCreds->ServerCert || !ServerCreds->ServerPrivateKey || !ServerCreds->CAFilePath) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Not enough data in MTLS configuration.");
+                return false;
+            }
             SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,&TInet64SecureStreamSocket::Verify);
 
-            // TSslHolder<X509> serverCert = GetServerCert(ServerCreds.ServerCert);
-            // if (!serverCert) {
-            //     LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server certificate, it might be incorrect.");
-            //     return false;
-            // }
             int retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCert.get());
             if (retServerCert != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server certificate to ssl context, it might be incorrect.");
                 return false;
             }
 
-            TSslHolder<EVP_PKEY> privateKey = GetServerPrivateKey(ServerCreds->ServerPrivateKey);
-            if (!privateKey) {
+            if (!ServerCreds->ServerPrivateKey) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server private key, it might be incorrect.");
                 return false;
             }
-            int retPrivateKey = SSL_CTX_use_PrivateKey(ctx, privateKey.get());
+            int retPrivateKey = SSL_CTX_use_PrivateKey(ctx, ServerCreds->ServerPrivateKey.get());
             if (retPrivateKey != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server private key to ssl context, it might be incorrect.");
                 return false;

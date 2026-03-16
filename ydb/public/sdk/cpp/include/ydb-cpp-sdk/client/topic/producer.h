@@ -12,7 +12,7 @@ struct TProducerSettings : public TWriteSessionSettings {
 
     enum class EPartitionChooserStrategy {
         Bound,
-        Hash,
+        KafkaHash,
     };
 
     TProducerSettings() = default;

@@ -875,7 +875,7 @@ TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
         .Path(GetTopicPath(TOPIC_NAME))
         .Codec(ECodec::RAW);
     writeSettings.ProducerIdPrefix(CreateGuidAsString());
-    writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+    writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
     writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
     writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
         return std::string{key};

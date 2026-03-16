@@ -1064,7 +1064,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
         writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
@@ -1110,7 +1110,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         UNIT_ASSERT_EXCEPTION(setup.MakeClient().CreateProducer(writeSettings), TContractViolation);
@@ -1130,7 +1130,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         UNIT_ASSERT_EXCEPTION(federatedLikeClient.CreateProducer(writeSettings), TContractViolation);
@@ -1146,7 +1146,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
         writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
@@ -1183,7 +1183,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
         writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
@@ -1324,7 +1324,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
@@ -1357,7 +1357,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
@@ -1401,7 +1401,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
@@ -1441,7 +1441,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
@@ -1491,7 +1491,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(5));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
@@ -1581,7 +1581,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
         writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
@@ -1817,7 +1817,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
 
         auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(10_KB, 'a');
@@ -1857,7 +1857,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxBlockTimeout(TDuration::Seconds(1));
 
         auto producer = client.CreateTypedProducer<TExample>(writeSettings);
@@ -1914,7 +1914,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::MilliSeconds(500));
         writeSettings.MaxBlockTimeout(TDuration::Seconds(1));
 
@@ -1971,7 +1971,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("simple_blocking_producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxBlockTimeout(TDuration::Seconds(1));
 
         auto producer = client.CreateProducer(writeSettings);
@@ -1997,7 +1997,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("simple_blocking_producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxMemoryUsage(100_KB);
         writeSettings.MaxBlockTimeout(TDuration::MilliSeconds(1));
 

@@ -1459,7 +1459,7 @@ TProducer::TProducer(
         return a.GetPartitionId() < b.GetPartitionId();
     });
 
-    PartitionChooserStrategy = settings.PartitionChooserStrategy_;
+    auto partitionChooserStrategy = settings.PartitionChooserStrategy_;
     auto strategy = topicConfig.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
     auto autoPartitioningEnabled = (strategy != EAutoPartitioningStrategy::Disabled &&
                                 strategy != EAutoPartitioningStrategy::Unspecified);
@@ -1498,7 +1498,7 @@ TProducer::TProducer(
         }
     }
 
-    switch (PartitionChooserStrategy) {
+    switch (partitionChooserStrategy) {
         case TProducerSettings::EPartitionChooserStrategy::Bound:
             PartitioningKeyHasher = settings.PartitioningKeyHasher_;
             PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
@@ -1515,9 +1515,9 @@ TProducer::TProducer(
                 PartitionsIndex[partition.GetFromBound().value_or("")] = partition.GetPartitionId();
             }
             break;
-        case TProducerSettings::EPartitionChooserStrategy::Hash:
+        case TProducerSettings::EPartitionChooserStrategy::KafkaHash:
             if (autoPartitioningEnabled) {
-                throw TContractViolation("Hash partition chooser strategy is not supported with auto partitioning enabled");
+                throw TContractViolation("KafkaHash partition chooser strategy is not supported with auto partitioning enabled");
             }
 
             std::vector<std::uint32_t> partitionsIds;

@@ -433,7 +433,6 @@ private:
 
     TProducerSettings Settings;
     ESeqNoStrategy SeqNoStrategy = ESeqNoStrategy::NotInitialized;
-    TProducerSettings::EPartitionChooserStrategy PartitionChooserStrategy = TProducerSettings::EPartitionChooserStrategy::Hash;
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;

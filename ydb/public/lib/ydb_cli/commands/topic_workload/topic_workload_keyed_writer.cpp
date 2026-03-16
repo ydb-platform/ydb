@@ -130,7 +130,7 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
     settings.PartitionChooserStrategy(
         isAutoPartitioningEnabled ?
         NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound :
-        NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Hash);
+        NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::KafkaHash);
     if (Params.MaxMemoryUsageBytes.has_value()) {
         settings.MaxMemoryUsage(Params.MaxMemoryUsageBytes.value());
     }

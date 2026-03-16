@@ -55,7 +55,12 @@ def verify_queries_served_from_cache_query_api(queries, node, database="/Root", 
     )
 
 
-def verify_queries_served_from_cache_table_api(queries, node, database="/Root"):
+def verify_queries_in_cache_table_api(queries, node, database="/Root"):
+    """Verify Table API queries are present in compile cache on the target node.
+
+    Table API SDK does not expose compilation.from_cache stats, so we check the
+    compile_cache_queries sysview filtered by NodeId to confirm entries exist.
+    """
     driver = ydb.Driver(
         endpoint=f"grpc://localhost:{node.port}",
         database=database,
@@ -64,17 +69,38 @@ def verify_queries_served_from_cache_table_api(queries, node, database="/Root"):
     try:
         pool = ydb.SessionPool(driver)
         try:
+            # Execute queries so they go through the cache path
             for item in queries:
                 if isinstance(item, tuple):
                     query, params = item
                 else:
                     query, params = item, None
                 pool.retry_operation_sync(lambda s, q=query, p=params: _execute_table_api(s, q, p))
-            return len(queries), len(queries)
+
+            # Check sysview for cached entries on this node
+            cached = _get_cached_query_texts(pool, database, node.node_id, "QUERY_TYPE_SQL_DML")
+            from_cache = 0
+            for item in queries:
+                text = item[0] if isinstance(item, tuple) else item
+                if text in cached:
+                    from_cache += 1
+            return from_cache, len(queries)
         finally:
             pool.stop()
     finally:
         driver.stop()
+
+
+def _get_cached_query_texts(pool, database, node_id, query_type):
+    def _do(session):
+        result_sets = session.transaction(ydb.SerializableReadWrite()).execute(
+            f"SELECT Query FROM `{database}/.sys/compile_cache_queries` "
+            f"WHERE NodeId = {node_id} AND QueryType = '{query_type}' AND AccessCount > 0",
+            commit_tx=True,
+            settings=ydb.BaseRequestSettings().with_timeout(10),
+        )
+        return {row["Query"] for row in result_sets[0].rows}
+    return pool.retry_operation_sync(_do)
 
 
 def _execute_table_api(session, query, params):
@@ -88,7 +114,7 @@ def _execute_table_api(session, query, params):
 def verify_queries_served_from_cache_on_node(queries, node, database="/Root", use_query_api=True, nodes_count=None):
     if use_query_api:
         return verify_queries_served_from_cache_query_api(queries, node, database, nodes_count=nodes_count)
-    return verify_queries_served_from_cache_table_api(queries, node, database)
+    return verify_queries_in_cache_table_api(queries, node, database)
 
 
 def get_warmup_counters(node, verbose=False):

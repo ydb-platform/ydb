@@ -241,11 +241,11 @@ namespace {
             float l = FromString<float>(left);
             float r = FromString<float>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Double") {
+        } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
             double l = FromString<double>(left);
             double r = FromString<double>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Date") {
+        } else if (columnType == "Date" || columnType == "Date32") {
             ui16 l = FromString<ui16>(left);
             ui16 r = FromString<ui16>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;

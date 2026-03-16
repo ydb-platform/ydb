@@ -1570,7 +1570,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(30)).IsSuccess(), "Failed to close producer");
     }
 
-    Y_UNIT_TEST(KeyedWriteSession_CloseTimeout) {
+    Y_UNIT_TEST(Producer_CloseTimeout) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 3);
 

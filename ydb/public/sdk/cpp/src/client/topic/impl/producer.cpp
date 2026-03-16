@@ -1630,6 +1630,11 @@ void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
 TProducer::~TProducer() {
     auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
     Settings.EventHandlers_.HandlersExecutor_->Stop();
+
+    if (MainWorkerState.load() == 0) {
+        ShutdownPromise.TrySetValue();
+    }
+
     ShutdownFuture.Wait();
 }
 

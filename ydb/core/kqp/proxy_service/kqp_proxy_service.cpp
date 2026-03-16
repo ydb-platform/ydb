@@ -232,6 +232,7 @@ public:
         LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);
         ExecuterConfig = MakeIntrusive<TExecuterMutableConfig>();
         ExecuterConfig->ApplyFromTableServiceConfig(TableServiceConfig);
+        RebuildKqpConfig();
 
         RandomProvider = AppData()->RandomProvider;
         if (!GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver)) {
@@ -381,6 +382,15 @@ public:
         return TDuration::Seconds(TableServiceConfig.GetSessionIdleDurationSeconds());
     }
 
+    void RebuildKqpConfig() {
+        auto cfg = MakeIntrusive<NYql::TKikimrConfiguration>();
+        cfg->Init(KqpSettings->DefaultSettings.GetDefaultSettings(),
+            TString(DefaultKikimrPublicClusterName), KqpSettings->Settings, false);
+        cfg->ApplyServiceConfig(TableServiceConfig);
+        cfg->FreezeDefaults();
+        KqpConfig = std::move(cfg);
+    }
+
     void ScheduleIdleSessionCheck(const TDuration& scheduleInterval) {
         if (!ShutdownState) {
             Schedule(scheduleInterval, new TEvPrivate::TEvCloseIdleSessions());
@@ -485,6 +495,7 @@ public:
         KQP_PROXY_LOG_D("Updated table service config.");
 
         ExecuterConfig->ApplyFromTableServiceConfig(TableServiceConfig);
+        RebuildKqpConfig();
 
         LogConfig.Swap(event.MutableConfig()->MutableLogConfig());
         UpdateYqlLogLevels();
@@ -1465,10 +1476,8 @@ private:
         TKqpWorkerSettings workerSettings(cluster, database, clientApplicationName, clientUserName, ExecuterConfig, TableServiceConfig, QueryServiceConfig, TliConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
-        auto config = CreateConfig(KqpSettings, workerSettings);
-
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), QueryCache, ResourceManager_, CaFactory_, sessionId, KqpSettings, workerSettings,
-            FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), QueryCache, ResourceManager_, CaFactory_, sessionId, KqpConfig,
+            KqpSettings, workerSettings, FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
             QueryServiceConfig, KqpTempTablesAgentActor, ChannelService, clientSid);
         auto workerId = TActivationContext::Register(sessionActor, SelfId(), TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
@@ -1922,6 +1931,7 @@ private:
     NKikimrConfig::TFeatureFlags FeatureFlags;
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     TKqpSettings::TConstPtr KqpSettings;
+    TIntrusiveConstPtr<NYql::TKikimrConfiguration> KqpConfig;
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;

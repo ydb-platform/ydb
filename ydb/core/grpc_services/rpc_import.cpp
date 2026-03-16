@@ -42,14 +42,14 @@ struct TImportTraits;
 template <>
 struct TImportTraits<TEvImportFromS3Request> {
     using TSettings = Ydb::Import::ImportFromS3Settings;
-    using TItem = Ydb::Import::ImportFromS3Settings::Item;
+    using TItem = TSettings::Item;
     static constexpr TStringBuf SourcePathName = "source prefix";
 
-    static const auto& GetSourcePath(const TSettings& settings) {
+    static const TString& GetCommonSourcePath(const TSettings& settings) {
         return settings.source_prefix();
     }
 
-    static const auto& GetSourcePath(const TItem& item) {
+    static const TString& GetSourcePath(const TItem& item) {
         return item.source_prefix();
     }
 
@@ -61,14 +61,14 @@ struct TImportTraits<TEvImportFromS3Request> {
 template <>
 struct TImportTraits<TEvImportFromFsRequest> {
     using TSettings = Ydb::Import::ImportFromFsSettings;
-    using TItem = Ydb::Import::ImportFromFsSettings::Item;
+    using TItem = TSettings::Item;
     static constexpr TStringBuf SourcePathName = "source path";
 
-    static const auto& GetSourcePath(const TSettings& settings) {
+    static const TString& GetCommonSourcePath(const TSettings& settings) {
         return settings.base_path();
     }
 
-    static const auto& GetSourcePath(const TItem& item) {
+    static const TString& GetSourcePath(const TItem& item) {
         return item.source_path();
     }
 
@@ -81,6 +81,7 @@ template <typename TDerived, typename TEvRequest>
 class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TImportConv {
     static constexpr bool IsS3Import = std::is_same_v<TEvRequest, TEvImportFromS3Request>;
     static constexpr bool IsFsImport = std::is_same_v<TEvRequest, TEvImportFromFsRequest>;
+    using TTraits = TImportTraits<TEvRequest>;
 
     TStringBuf GetLogPrefix() const override {
         return "[CreateImport]";
@@ -136,12 +137,11 @@ public:
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
         }
 
-        using TTraits = TImportTraits<TEvRequest>;
         const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
-        const bool commonSourcePrefixSpecified = !TTraits::GetSourcePath(settings).empty();
+        const bool commonSourcePathSpecified = !TTraits::GetCommonSourcePath(settings).empty();
         if constexpr (IsS3Import) {
             if (!encryptedExportFeatureFlag) {
-                if (commonSourcePrefixSpecified) {
+                if (commonSourcePathSpecified) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source prefix is not supported in current configuration");
                 }
             }
@@ -154,11 +154,11 @@ public:
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
             }
         }
-        if (settings.items().empty() && !commonSourcePrefixSpecified) {
+        if (settings.items().empty() && !commonSourcePathSpecified) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified. Don't know where to import from");
         }
         for (const auto& item : settings.items()) {
-            if (TTraits::GetSourcePath(item).empty() && !commonSourcePrefixSpecified) {
+            if (TTraits::GetSourcePath(item).empty() && !commonSourcePathSpecified) {
                 constexpr TStringBuf msgCommonSourcePrefix = IsS3Import ? " or common source prefix" : "";
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No " << TTraits::SourcePathName << msgCommonSourcePrefix << " specified for item \"" << item.destination_path() << "\"");
             }
@@ -167,7 +167,7 @@ public:
                     if (!encryptedExportFeatureFlag) {
                         return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Item source path is not supported in current configuration");
                     }
-                    if (!commonSourcePrefixSpecified) {
+                    if (!commonSourcePathSpecified) {
                         return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Common source prefix must be specified for filtering by source path");
                     }
                 }
@@ -180,7 +180,7 @@ public:
             if (settings.encryption_settings().symmetric_key().key().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No encryption key specified");
             }
-            if (!commonSourcePrefixSpecified) {
+            if (!commonSourcePathSpecified) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified");
             }
         }

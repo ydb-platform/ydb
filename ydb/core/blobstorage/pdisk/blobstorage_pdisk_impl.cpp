@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_completion_impl.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_request_id.h"
+#include "blobstorage_pdisk_util_space_color.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/control/lib/dynamic_control_board_impl.h>
@@ -74,6 +75,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     // 2 - YellowStop
     SemiStrictSpaceIsolation = TControlWrapper(0, 0, 2);
     SemiStrictSpaceIsolationCached = 0;
+    ForcedPDiskSpaceColor = TControlWrapper(0, 0, 60);
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -621,6 +623,15 @@ NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupTyp
     } else {
         TOwner keeperOwner = (ownerGroupType == EOwnerGroupType::Dynamic ? OwnerSystem : OwnerCommonStaticLog);
         res = Keeper.GetSpaceStatusFlags(keeperOwner, &occupancy_);
+    }
+
+    if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
+            res = SpaceColorToStatusFlag(static_cast<TColor::E>(forcedColor));
+        } else {
+            P_LOG(PRI_ERROR, BPD01, "ForcedPDiskSpaceColor has invalid value, ignoring", (ForcedPDiskSpaceColor, forcedColor));
+        }
     }
 
     if (occupancy) {
@@ -2967,6 +2978,9 @@ bool TPDisk::Initialize() {
             TControlBoard::RegisterSharedControl(UseNoopSchedulerSSD, icb->PDiskControls.UseNoopSchedulerSSD);
             REGISTER_LOCAL_CONTROL(ChunkBaseLimitPerMille);
             TControlBoard::RegisterSharedControl(SemiStrictSpaceIsolation, icb->PDiskControls.SemiStrictSpaceIsolation);
+            if (Cfg->FeatureFlags.GetEnablePDiskSpaceColorOverride()) {
+                REGISTER_LOCAL_CONTROL(ForcedPDiskSpaceColor);
+            }
 
             if (Cfg->SectorMap) {
                 auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();

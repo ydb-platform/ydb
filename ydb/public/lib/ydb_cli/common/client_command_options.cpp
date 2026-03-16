@@ -644,7 +644,14 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             }
         }
     } else {
-        Cerr << "No authentication methods were found. Going without authentication" << Endl;
+        Cerr << "No authentication methods were found; going without authentication";
+        if (const TOptionParseResult* clientCertResult = FindResult("client-cert-file")) {
+            const auto& values = clientCertResult->Values();
+            if (!values.empty() && !values.back().empty()) {
+                Cerr << " (a client certificate is provided and may be used for authentication if the corresponding feature flag is enabled on the server)";
+            }
+        }
+        Cerr << Endl;
     }
 
     return messages;

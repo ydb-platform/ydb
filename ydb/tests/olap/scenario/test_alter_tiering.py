@@ -273,7 +273,6 @@ class TestAlterTiering(TieringTestBase):
             )
             time.sleep((datetime.datetime.now() - begin).total_seconds())
 
-
     def _loop_set_ttl(
         self,
         ctx: TestContext,
@@ -285,7 +284,6 @@ class TestAlterTiering(TieringTestBase):
         sth = ScenarioTestHelper(ctx)
 
         for _ in loop:
-            begin = datetime.datetime.now()
             for source in sources:
                 LOGGER.info(f'setting eviction to `{source}`')
                 sth.execute_scheme_query(

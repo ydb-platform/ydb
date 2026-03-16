@@ -5,7 +5,6 @@
 #include "retry_policy.h"
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Errors.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/http/HttpResponse.h>
 
 namespace NKikimr::NWrappers {
 

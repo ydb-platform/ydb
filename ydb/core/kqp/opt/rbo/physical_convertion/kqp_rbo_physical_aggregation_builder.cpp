@@ -1193,8 +1193,8 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
     for (const auto& aggregationTraits : aggregationTraitsList) {
         const TString originalColName = aggregationTraits.OriginalColName.GetFullName();
         const TString resultColName = aggregationTraits.ResultColName.GetFullName();
-        const auto* inputItemType = inputStructType->FindItemType(originalColName);
-        const auto* outputItemType = outputStructType->FindItemType(resultColName);
+        const TTypeAnnotationNode* inputItemType = inputStructType->FindItemType(originalColName);
+        const TTypeAnnotationNode* outputItemType = outputStructType->FindItemType(resultColName);
         Y_ENSURE(inputItemType && outputItemType, "Cannot find type for item");
         aggColumns[originalColName].push_back(std::make_tuple(aggregationTraits.AggFunction, resultColName, inputItemType, outputItemType));
     }

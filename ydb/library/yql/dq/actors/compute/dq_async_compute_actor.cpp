@@ -787,8 +787,6 @@ private:
                 MetricsReporter.ReportInjectedToOutputsWatermark(*watermark);
                 WatermarksTracker.PopPendingWatermark();
             }
-            // sources or input channels was unpaused, trigger new poll
-            ResumeExecution(EResumeSource::CAWatermarkInject);
         }
 
         ReadyToCheckpointFlag = (bool) ev->Get()->ProgramState;

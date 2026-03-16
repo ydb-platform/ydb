@@ -8,6 +8,7 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
+// old value cannot be used after the next Normalize call
 class TCaseStringNormalizer {
 private:
     const bool CaseSensitive;

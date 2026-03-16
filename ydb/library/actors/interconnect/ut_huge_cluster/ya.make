@@ -5,9 +5,11 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(
         ram:32
+        cpu:4
     )
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
 ENDIF()
 
 IF (BUILD_TYPE == "RELEASE" OR BUILD_TYPE == "RELWITHDEBINFO")

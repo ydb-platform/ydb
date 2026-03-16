@@ -22,12 +22,12 @@ public:
     }
 
     // returns true if cache was used
-    bool Lookup(const TAsyncQueue::TPtr& queue) {
+    bool Lookup(const TAsyncQueue::TWeakPtr& queue) {
         return LookupAsync(queue).GetValueSync();
     }
 
     [[nodiscard]]
-    NThreading::TFuture<bool> LookupAsync(const TAsyncQueue::TPtr& queue) {
+    NThreading::TFuture<bool> LookupAsync(const TAsyncQueue::TWeakPtr& queue) {
         if (Mode == EQueryCacheMode::Disable || Mode == EQueryCacheMode::Refresh) {
             return NThreading::MakeFuture<bool>(false);
         }
@@ -67,7 +67,7 @@ public:
         const TVector<TString>& outputTablePaths, const TMaybe<TString>& singleOutputHash);
 
     // returns true if cache was used
-    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TPtr& queue);
+    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TWeakPtr& queue);
     void StoreImpl();
 
 private:
@@ -85,7 +85,7 @@ public:
         const std::pair<TString, TString>& logCtx);
 
     // returns true if cache was used
-    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TPtr& queue);
+    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TWeakPtr& queue);
     void StoreImpl();
 
 private:

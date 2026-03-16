@@ -142,7 +142,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
         }
     }
 
-    if (listType->GetKind() == ETypeAnnotationKind::EmptyList) {
+    if (listType->GetKind() == ETypeAnnotationKind::EmptyList || listType->GetKind() == ETypeAnnotationKind::Universal) {
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -985,16 +985,34 @@ public:
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        if (!EnsureWorldType(*res.Ref().Child(TResWriteBase::idx_World), ctx)) {
+                        auto world = res.Ref().Child(TResWriteBase::idx_World);
+                        if (world->GetTypeAnn() && world->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                            input->SetTypeAnn(world->GetTypeAnn());
+                            return IGraphTransformer::TStatus::Ok;
+                        }
+
+                        if (!EnsureWorldType(*world, ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        if (!EnsureSpecificDataSink(*res.Ref().Child(TResWriteBase::idx_DataSink), ResultProviderName, ctx)) {
+                        auto datasink = res.Ref().Child(TResWriteBase::idx_DataSink);
+                        if (datasink->GetTypeAnn() && datasink->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                            input->SetTypeAnn(datasink->GetTypeAnn());
+                            return IGraphTransformer::TStatus::Ok;
+                        }
+
+                        if (!EnsureSpecificDataSink(*datasink, ResultProviderName, ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        if (!res.Ref().Child(TResWriteBase::idx_Key)->IsCallable("Key") || res.Ref().Child(TResWriteBase::idx_Key)->ChildrenSize() > 0) {
-                            ctx.AddError(TIssue(ctx.GetPosition(res.Ref().Child(TResWriteBase::idx_Key)->Pos()), "Expected empty key"));
+                        auto key = res.Ref().Child(TResWriteBase::idx_Key);
+                        if (key->GetTypeAnn() && key->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                            input->SetTypeAnn(key->GetTypeAnn());
+                            return IGraphTransformer::TStatus::Ok;
+                        }
+
+                        if (!key->IsCallable("Key") || key->ChildrenSize() > 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Expected empty key"));
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -1003,6 +1021,11 @@ public:
                         }
 
                         auto settings = res.Ref().Child(TResWriteBase::idx_Settings);
+                        if (settings->GetTypeAnn() && settings->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                            input->SetTypeAnn(settings->GetTypeAnn());
+                            return IGraphTransformer::TStatus::Ok;
+                        }
+
                         if (!EnsureTuple(*settings, ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }

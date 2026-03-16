@@ -770,6 +770,11 @@ class KikimrConfigGenerator(object):
                     audit_file.write('')
         self.yaml_config['audit_config'] = cfg
 
+        # Topic cloud events audit uses same file when main audit is enabled
+        # (pq_config.topic_cloud_events_audit for TopicCloudEventsAuditService)
+        if 'pqconfig' in self.yaml_config:
+            self.yaml_config['pqconfig']['topic_cloud_events_audit'] = copy.deepcopy(cfg)
+
     @property
     def metering_file_path(self):
         return self.yaml_config.get('metering_config', {}).get('metering_file_path')

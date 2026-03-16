@@ -665,26 +665,23 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                {
-                    auto& pack = *state.FetchedPack;
-                    i64 idx = 0;
-                    for (TSingleTuple tuple : pack) {
-                        if (idx++ < state.ResumeIndex) {
-                            continue;
-                        }
-                        int bucketIndex = Settings.BucketIndex(tuple);
-                        bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
-                        if (thisBucketSpilled) {
-                            state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
-                        } else {
-                            TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
-                            MKQL_ENSURE(thisTable, "sanity check");
-                            lookupToTable(*thisTable, tuple);
-                        }
-                        if (isFull()) {
-                            state.ResumeIndex = idx;
-                            return EFetchResult::One;
-                        }
+                i64 idx = 0;
+                for (TSingleTuple tuple : *state.FetchedPack) {
+                    if (idx++ < state.ResumeIndex) {
+                        continue;
+                    }
+                    int bucketIndex = Settings.BucketIndex(tuple);
+                    bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
+                    if (thisBucketSpilled) {
+                        state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
+                    } else {
+                        TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
+                        MKQL_ENSURE(thisTable, "sanity check");
+                        lookupToTable(*thisTable, tuple);
+                    }
+                    if (isFull()) {
+                        state.ResumeIndex = idx;
+                        return EFetchResult::One;
                     }
                 }
                 state.FetchedPack = std::nullopt;

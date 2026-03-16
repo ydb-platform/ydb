@@ -1638,12 +1638,12 @@ void TTupleLayout::TupleDeepCopy(
     TTupleData& outTuple, TTupleData& outOverflow) const
 {
     auto appendRange = [](TTupleData& to, std::span<const ui8> range) {
-        ui64 offset = to.size();
-        ui64 writeSize = range.size();
+        ui32 offset = to.size();
+        ui32 writeSize = range.size();
         to.resize(offset + writeSize);
         std::memcpy(to.data() + offset, range.data(), writeSize);
     };
-    ui64 initSize = outTuple.size();
+    ui32 initSize = outTuple.size();
     appendRange(outTuple, {inTuple, TotalRowSize});
     for (const auto& col: VariableColumns) {
         ui32 size = ReadUnaligned<ui8>(inTuple + col.Offset);

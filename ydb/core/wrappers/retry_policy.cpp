@@ -19,9 +19,8 @@ bool ShouldRetry(const Aws::S3::S3Error& error) {
         return true;
     }
 
-    // Unexpected response code (connection failure, DNS, TLS, etc.)
-    const int code = static_cast<int>(error.GetResponseCode());
-    if (code < 200) {
+    // No response (connection failure, DNS, TLS, etc.)
+    if (error.GetResponseCode() == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
         return true;
     }
 

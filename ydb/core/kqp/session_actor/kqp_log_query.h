@@ -7,22 +7,13 @@
 #include <util/stream/output.h>
 #include <functional>
 
-namespace NYql {
-class TIssues; 
-}
-
 namespace NKikimrKqp {
-    class TEvQueryResponse;
+class TEvQueryResponse;
 }
 
 namespace NKikimr::NKqp {
 
-struct TKqpProxyRequest;
 class TKqpQueryState;
-namespace NPrivateEvents {
-    struct TEvQueryRequest;
-    struct TEvQueryResponse;
-}
 
 class TLogQuery {
 public:

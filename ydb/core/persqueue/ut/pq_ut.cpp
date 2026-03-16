@@ -18,7 +18,7 @@
 
 namespace NKikimr::NPQ {
 
-const static TString TOPIC_NAME = "rt3.dc1--topic";
+const static TString TOPIC_NAME = "/Root/LbCommunal/account/topic";
 
 Y_UNIT_TEST_SUITE(TPQTest) {
 

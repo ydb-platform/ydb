@@ -147,7 +147,7 @@ public:
     struct TServerMtlsCreds {
         TSslHolder<X509> ServerCert;
         TSslHolder<EVP_PKEY> ServerPrivateKey;
-        TString CAFilePath;
+        TSslHolder<X509> CACert;
     };
 
     TInet64SecureStreamSocket(const TSocketSettings& socketSettings = {})
@@ -182,7 +182,7 @@ public:
         BIO_set_nbio(Bio.get(), 1);
 
         if (UseMtlsAuth) {
-            if (!ServerCreds || !ServerCreds->ServerCert || !ServerCreds->ServerPrivateKey || !ServerCreds->CAFilePath) {
+            if (!ServerCreds || !ServerCreds->ServerCert || !ServerCreds->ServerPrivateKey || !ServerCreds->CACert) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Not enough data in MTLS configuration.");
                 return false;
             }
@@ -204,8 +204,14 @@ public:
                 return false;
             }
 
-            int retCA = SSL_CTX_load_verify_locations(ctx, ServerCreds->CAFilePath.data(), nullptr);
-            if (retCA != 1) {
+            X509_STORE* store = SSL_CTX_get_cert_store(ctx);
+            if (!store) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't get cert store from SSL context.");
+
+                return false;
+            }
+
+            if (X509_STORE_add_cert(store, ServerCreds->CACert.get()) != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load CA file. Check its correctness.");
                 return false;
             }

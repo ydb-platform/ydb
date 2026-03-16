@@ -3083,6 +3083,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
 
         TString serverCert = readFile(settings.CertificateFile);
         TString serverPrivateKey = readFile(settings.PrivateKeyFile);
+        TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
 
         {
             TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));
@@ -3101,8 +3102,16 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
                 serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>();
             }
         }
-        serverCreds->CAFilePath = Config.GetKafkaProxyConfig().GetCA();
 
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(caCert.data(), caCert.size()));
+            if (bio) {
+                serverCreds->CACert = TSslHolder<X509>(
+                    PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
+            } else {
+                serverCreds->CACert = TSslHolder<X509>();
+            }
+        }
         setup->LocalServices.emplace_back(
             NKafka::MakeKafkaDiscoveryCacheID(),
             TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),

@@ -54,16 +54,9 @@ public:
         return PagesInFlightCount.Val();
     }
 
-    void OnPageCreated() {
-        PagesInFlightCount.Inc();
-    }
+    void OnPageCreated();
 
-    void OnPageSent() {
-        // Only decrement if there are pages in flight (streaming mode)
-        if (PagesInFlightCount.Val() > 0) {
-            PagesInFlightCount.Dec();
-        }
-    }
+    void OnPageSent();
 
     bool HasData() const {
         return DoHasData();

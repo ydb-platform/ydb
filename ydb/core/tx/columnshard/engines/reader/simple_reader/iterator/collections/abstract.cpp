@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <util/string/join.h>
 
@@ -41,6 +42,19 @@ std::shared_ptr<IScanCursor> ISourcesCollection::BuildCursor(
     result->SetTabletId(tabletId);
     AFL_VERIFY(tabletId);
     return result;
+}
+
+void ISourcesCollection::OnPageCreated() {
+    PagesInFlightCount.Inc();
+    NYDBTest::TControllers::GetColumnShardController()->OnPageCreated(PagesInFlightCount.Val());
+}
+
+void ISourcesCollection::OnPageSent() {
+    // Only decrement if there are pages in flight (streaming mode)
+    if (PagesInFlightCount.Val() > 0) {
+        PagesInFlightCount.Dec();
+    }
+    NYDBTest::TControllers::GetColumnShardController()->OnPageSent(PagesInFlightCount.Val());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

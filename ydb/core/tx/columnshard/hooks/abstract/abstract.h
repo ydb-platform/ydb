@@ -312,6 +312,12 @@ public:
 
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
+
+    virtual void OnPageCreated(const ui64 /*pagesInFlight*/) {
+    }
+
+    virtual void OnPageSent(const ui64 /*pagesInFlight*/) {
+    }
     TDuration GetMaxReadStaleness() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
         return DoGetMaxReadStaleness(defaultValue);

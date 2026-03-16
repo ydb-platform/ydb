@@ -62,11 +62,11 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
 void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     AFL_VERIFY(!!ScriptCursor)("source_idx", GetSourceIdx());
 
-    // In streaming mode, check if we need to advance to next page
+    // In streaming mode, HasMorePages() checks StageResult->IsFinished() which tracks
+    // remaining pages internally via PagesToResult deque. No need for separate CurrentPageIndex.
     if (IsStreamingMode() && HasMorePages()) {
-        AdvanceToNextPage();
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
-            "event", "ContinueCursor_NextPage")("page_index", CurrentPageIndex.value_or(0));
+            "event", "ContinueCursor_NextPage")("remaining_pages", StageResult->GetPagesToResultVerified().size());
 
         // Continue with the same cursor to read next page
         if (ScriptCursor->Next()) {
@@ -105,7 +105,6 @@ void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::
     if (sourceSimple->IsStreamingMode() && sourceSimple->HasMorePages()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_page_fetched")(
             "source_idx", sourceSimple->GetSourceIdx())(
-            "page_index", sourceSimple->GetCurrentPageIndex().value_or(0))(
             "has_more_pages", sourceSimple->HasMorePages());
     }
 
@@ -150,7 +149,6 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
 
         // Initialize streaming mode
         StreamingMode = true;
-        CurrentPageIndex = 0;
 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_enabled")(
             "source_idx", GetSourceIdx())("records", GetRecordsCount())(
@@ -182,24 +180,15 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
     // Get page range if in streaming mode
     std::optional<ui32> pageStartRow;
     std::optional<ui32> pageEndRow;
-    auto currentPageIdx = GetCurrentPageIndex();
-    if (IsStreamingMode() && StageResult && currentPageIdx) {
-        const auto& pages = StageResult->GetPagesToResultVerified();
-        if (*currentPageIdx < pages.size()) {
-            const auto& page = pages[*currentPageIdx];
-            pageStartRow = page.GetIndexStart();
-            pageEndRow = page.GetIndexStart() + page.GetRecordsCount();
+    if (IsStreamingMode() && StageResult && !StageResult->GetPagesToResultVerified().empty()) {
+        // Use the front page from the deque - this is the current page to fetch
+        const auto& page = StageResult->GetPagesToResultVerified().front();
+        pageStartRow = page.GetIndexStart();
+        pageEndRow = page.GetIndexStart() + page.GetRecordsCount();
 
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_page_range")(
-                "page_index", *currentPageIdx)("start", *pageStartRow)("end", *pageEndRow);
-        } else {
-            // Current page index is out of range for the available pages.
-            // Treat this as "no more data" for this source in streaming mode
-            // to avoid falling back to fetching the entire portion.
-            AFL_VERIFY(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_index_out_of_range")(
-                "page_index", *currentPageIdx)("pages_count", pages.size());
-            return;
-        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_page_range")(
+            "remaining_pages", StageResult->GetPagesToResultVerified().size())(
+            "start", *pageStartRow)("end", *pageEndRow);
     }
 
     for (auto&& i : columnIds) {
@@ -229,10 +218,6 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
                     reading->SetIsBackgroundProcess(false);
                     reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
                     ++fetchedChunks;
-                    // Log chunk fetch for streaming verification
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunk_fetched")(
-                        "chunk_start", chunkStart)("chunk_end", chunkEnd)(
-                        "streaming", IsStreamingMode())("page_index", GetCurrentPageIndex().value_or(0));
                 } else {
                     // Chunk is within the current page but skipped by filter: use default values
                     defaultBlocks.emplace(
@@ -254,7 +239,8 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)(
         "reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size())(
-        "streaming", IsStreamingMode())("page_index", GetCurrentPageIndex().value_or(0));
+        "streaming", IsStreamingMode())("remaining_pages",
+        StageResult ? StageResult->GetPagesToResultVerified().size() : 0);
 }
 
 bool TPortionDataSource::DoStartFetchingColumns(

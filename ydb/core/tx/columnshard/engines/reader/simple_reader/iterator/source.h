@@ -64,7 +64,6 @@ private:
 
     // Page-based streaming fields
     bool StreamingMode = false;
-    std::optional<ui32> CurrentPageIndex;
 
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
@@ -206,16 +205,6 @@ public:
             return false;
         }
         return !StageResult->IsFinished();
-    }
-
-    std::optional<ui32> GetCurrentPageIndex() const {
-        return CurrentPageIndex;
-    }
-
-    void AdvanceToNextPage() {
-        if (CurrentPageIndex) {
-            ++(*CurrentPageIndex);
-        }
     }
 
     bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {

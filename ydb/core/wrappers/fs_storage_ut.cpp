@@ -186,6 +186,7 @@ class TFsStorageTests : public TFsStorageTestBase {
     UNIT_TEST(ListObjectsReturnsNotImplementedError);
     UNIT_TEST(CheckObjectExistsReturnsNotImplementedError);
     UNIT_TEST(UploadPartCopyReturnsNotImplementedError);
+    UNIT_TEST(ConcurrentMultipartUploadSessionsForSameKey);
     UNIT_TEST_SUITE_END();
 
 public:
@@ -462,6 +463,76 @@ public:
 
         auto result = UploadPartCopy(key, "fake_upload_id", 1, "source_key");
         UNIT_ASSERT(!result.IsSuccess());
+    }
+
+    void ConcurrentMultipartUploadSessionsForSameKey() {
+        const TString key = KeyPath("concurrent_mpu_test.txt");
+        const TString incompleteKey = key + ".incomplete";
+        const TString part1Content = "first_session_data";
+        const TString part2Content = "second_session_data";
+
+        TString uploadId1;
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId1 = result.GetResult().GetUploadId();
+            UNIT_ASSERT(!uploadId1.empty());
+        }
+
+        {
+            auto result = UploadPart(key, uploadId1, 1, part1Content);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(TFsPath(incompleteKey).Exists());
+
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT(result.GetError().ShouldRetry());
+        }
+
+        {
+            auto result = CompleteMultipartUpload(key, uploadId1);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(!TFsPath(incompleteKey).Exists());
+        UNIT_ASSERT(TFsPath(key).Exists());
+
+        TString uploadId2;
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId2 = result.GetResult().GetUploadId();
+            UNIT_ASSERT(!uploadId2.empty());
+        }
+
+        {
+            auto result = UploadPart(key, uploadId2, 1, part2Content);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto result = CompleteMultipartUpload(key, uploadId2);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(TFsPath(key).Exists());
+        UNIT_ASSERT(!TFsPath(incompleteKey).Exists());
+
+        TFileInput f(key);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadAll(), part2Content);
+
+        TVector<TString> files;
+        TFsPath(TempDir->Name()).ListNames(files);
+        int finalFileCount = 0;
+        for (const auto& file : files) {
+            if (file.find("concurrent_mpu_test") != TString::npos) {
+                ++finalFileCount;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(finalFileCount, 1);
     }
 };
 

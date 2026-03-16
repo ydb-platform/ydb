@@ -287,10 +287,10 @@ namespace {
             } else if (columnType == "Int64") {
                 i64 val = FromString<i64>(value);
                 return EstimateInequalityPredicateByType<i64>(eqWidthHistogram, val, predicate);
-            } else if (columnType == "Double") {
+            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
                 double val = FromString<double>(value);
                 return EstimateInequalityPredicateByType<double>(eqWidthHistogram, val, predicate);
-            } else if (columnType == "Date") {
+            } else if (columnType == "Date" || columnType == "Date32") {
                 ui16 val = FromString<ui16>(value);
                 return EstimateInequalityPredicateByType<ui16>(eqWidthHistogram, val, predicate);
             }
@@ -328,11 +328,11 @@ namespace {
                 i64 leftVal = FromString<i64>(leftValue);
                 i64 rightVal = FromString<i64>(rightValue);
                 return EstimateRangePredicateByType<i64>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
-            } else if (columnType == "Double") {
+            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
                 double leftVal = FromString<double>(leftValue);
                 double rightVal = FromString<double>(rightValue);
                 return EstimateRangePredicateByType<double>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
-            } else if (columnType == "Date") {
+            } else if (columnType == "Date" || columnType == "Date32") {
                 ui16 leftVal = FromString<ui16>(leftValue);
                 ui16 rightVal = FromString<ui16>(rightValue);
                 return EstimateRangePredicateByType<ui16>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
@@ -373,10 +373,10 @@ namespace {
             } else if (columnType == "Float") {
                 float val = FromString<float>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
-            } else if (columnType == "Double") {
+            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
                 double val = FromString<double>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
-            } else if (columnType == "Date") {
+            } else if (columnType == "Date" || columnType == "Date32") {
                 ui16 val = FromString<ui16>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
             } else if (columnType == "Datetime") {
@@ -1169,6 +1169,7 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
                 }
             }
         }
+
         // cap at 1.0 to stop error propagation
         return resSelectivity = std::min(1.0, resSelectivity);
     }

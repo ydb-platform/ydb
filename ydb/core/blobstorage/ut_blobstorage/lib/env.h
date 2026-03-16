@@ -1269,4 +1269,10 @@ config:
             it->second = value;
         }
     }
+
+    void SetPDiskStatusFlags(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        auto it = PDiskMockStates.find({nodeId, pdiskId});
+        UNIT_ASSERT_C(it != PDiskMockStates.end(), "PDisk not found: nodeId# " << nodeId << " pdiskId# " << pdiskId);
+        it->second->SetStatusFlags(color);
+    }
 };

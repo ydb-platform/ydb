@@ -535,8 +535,6 @@ public:
 
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider, const TActorContext &ctx);
     ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx, const TString& userSID);
-    void FinalizeDataTxPlan();
-
     // TOperation iface.
     void BuildExecutionPlan(bool loaded) override;
 

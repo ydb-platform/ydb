@@ -3097,7 +3097,6 @@ bool TDataShard::CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransac
 {
     auto* msg = ev->Get();
     switch (msg->GetTxKind()) {
-        case NKikimrTxDataShard::TX_KIND_DATA:
         case NKikimrTxDataShard::TX_KIND_SCAN:
         case NKikimrTxDataShard::TX_KIND_SNAPSHOT:
         case NKikimrTxDataShard::TX_KIND_DISTRIBUTED_ERASE:
@@ -3234,7 +3233,6 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
     IncCounter(COUNTER_PREPARE_REQUEST);
 
     switch (ev->Get()->GetTxKind()) {
-    case NKikimrTxDataShard::TX_KIND_DATA:
     case NKikimrTxDataShard::TX_KIND_SCAN:
     case NKikimrTxDataShard::TX_KIND_SNAPSHOT:
     case NKikimrTxDataShard::TX_KIND_DISTRIBUTED_ERASE:
@@ -3296,11 +3294,6 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
         return;
     }
 
-    if (ev->Get()->GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA) {
-        ProposeTransaction(std::move(ev), ctx);
-        return;
-    }
-
     THolder<TEvDataShard::TEvProposeTransactionResult> result
         = THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(),
                                                         TabletID(),
@@ -3352,27 +3345,13 @@ void TDataShard::CheckDelayedProposeQueue(const TActorContext &ctx) {
 }
 
 void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&ev, const TActorContext &ctx) {
-    auto* msg = ev->Get();
-
-    // This transaction may run in immediate mode
-    bool mayRunImmediate = (msg->GetFlags() & TTxFlags::Immediate) && !(msg->GetFlags() & TTxFlags::ForceOnline) &&
-        msg->GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA;
-
-    if (mayRunImmediate) {
-        // Enqueue immediate transactions so they don't starve existing operations
-        LWTRACK(ProposeTransactionEnqueue, msg->Orbit);
-        ProposeQueue.Enqueue(IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, ctx);
-        UpdateProposeQueueSize();
-    } else {
-        // Prepare planned transactions as soon as possible
-        NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Transaction", NWilson::EFlags::AUTO_END);
-        if (datashardTransactionSpan) {
-            datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
-        }
-
-        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), ev->Get()->Record.GetUserSID()), 
-            ctx );
+    NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Transaction", NWilson::EFlags::AUTO_END);
+    if (datashardTransactionSpan) {
+        datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
     }
+
+    Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), ev->Get()->Record.GetUserSID()), 
+        ctx );
 }
 
 void TDataShard::ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, const TActorContext& ctx) {

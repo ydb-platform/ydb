@@ -293,7 +293,6 @@ NKikimrDataEvents::TEvWriteResult::EStatus NEvWrite::TConvertor::ConvertErrCode(
 
 TOperation::TPtr NEvWrite::TConvertor::MakeOperation(EOperationKind kind, const TBasicOpInfo& info, ui64 tabletId) {
     switch (kind) {
-        case EOperationKind::DataTx:
         case EOperationKind::SchemeTx:
         case EOperationKind::Snapshot:
         case EOperationKind::DistributedErase:

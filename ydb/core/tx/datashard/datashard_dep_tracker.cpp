@@ -352,7 +352,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     TRowVersion snapshot = TRowVersion::Max();
     if (op->IsMvccSnapshotRead()) {
         snapshot = op->GetMvccSnapshot();
-    } else if (op->IsImmediate() && (op->IsReadTable() || (op->IsDataTx() || op->IsWriteTx()) && !haveWrites && !isGlobalWriter && !commitWriteLock)) {
+    } else if (op->IsImmediate() && (op->IsReadTable() || op->IsWriteTx() && !haveWrites && !isGlobalWriter && !commitWriteLock)) {
         snapshot = readVersion;
         op->SetMvccSnapshot(snapshot, /* repeatable */ false);
     }

@@ -1,10 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
-#include <yql/essentials/minikql/mkql_node.h>
-
 using namespace NKikimr;
-using namespace NKikimr::NMiniKQL;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
@@ -1133,106 +1130,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                    {NLs::PartitionKeys({"AAAA", "BBBB", "DDDD", ""})});
             }
         }, true);
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitWithTxInFlightWithReboots, 2, 1, true) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            {
-                TInactiveZone inactive(activeZone);
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
-                                Name: "Table"
-                                Columns { Name: "key1"       Type: "Utf8"}
-                                Columns { Name: "key2"       Type: "Uint32"}
-                                Columns { Name: "Value"      Type: "Utf8"}
-                                KeyColumnNames: ["key1", "key2"]
-                                SplitBoundary { KeyPrefix { Tuple { Optional { Text: "Jack" } }}}
-                                )");
-
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                                   {NLs::PartitionKeys({"Jack", ""})});
-            }
-
-
-            ui64 dataTxId = 20000;
-
-            // Propose cross-shard write Tx1
-            ++dataTxId;
-            TFakeDataReq req1(runtime, dataTxId, "/MyRoot/Table",
-                                R"(
-                                (
-                                    (let row1 '('('key1 (Utf8 'AAA)) '('key2 (Uint32 '111))))
-                                    (let row2 '('('key1 (Utf8 'KKK)) '('key2 (Uint32 '222))))
-                                    (let myUpd '())
-                                    (let ret (AsList
-                                        (UpdateRow '/MyRoot/Table row1 myUpd)
-                                        (UpdateRow '/MyRoot/Table row2 myUpd)
-                                    ))
-                                    (return ret)
-                                )
-                                )");
-            IEngineFlat::EStatus status1 = req1.Propose(false, activeZone);
-            UNIT_ASSERT_VALUES_EQUAL_C(status1, IEngineFlat::EStatus::Unknown, "This Tx should be accepted and wait for Plan");
-            UNIT_ASSERT(req1.GetErrors().empty());
-
-            // Split partition #2 into 2
-            AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
-                            R"(
-                                SourceTabletId: 72075186233409547
-                                SplitBoundary {
-                                    KeyPrefix {
-                                        Tuple { Optional { Text: "Marla" } }
-                                    }
-                                }
-                            )");
-
-            // Wait for split to reach src DS
-            int retries = 3;
-            while (retries--) {
-                {
-                    TDispatchOptions opts;
-                    opts.FinalEvents.emplace_back(TEvDataShard::EvSplit);
-                    runtime.DispatchEvents(opts);
-                }
-
-                ++dataTxId;
-                TFakeDataReq req2(runtime, dataTxId, "/MyRoot/Table",
-                                R"(
-                                (
-                                    (let row1 '('('key1 (Utf8 'AAA)) '('key2 (Uint32 '333))))
-                                    (let row2 '('('key1 (Utf8 'KKK)) '('key2 (Uint32 '444))))
-                                    (let myUpd '())
-                                    (let ret (AsList
-                                        (UpdateRow '/MyRoot/Table row1 myUpd)
-                                        (UpdateRow '/MyRoot/Table row2 myUpd)
-                                    ))
-                                    (return ret)
-                                )
-                                )");
-
-                IEngineFlat::EStatus status2 = req2.Propose(false, activeZone);
-
-                if (status2 == IEngineFlat::EStatus::Unknown) {
-                    req2.Plan(t.CoordinatorTabletId);
-                    continue;
-                }
-
-                UNIT_ASSERT_VALUES_EQUAL_C(status2, IEngineFlat::EStatus::Error, "Write Tx should be rejected while split is pending");
-                break;
-            }
-            UNIT_ASSERT_C(retries >= 0, "New Tx wasn't rejected by splitting datashard");
-
-            // Plan Tx1
-            {
-                TInactiveZone inactive(activeZone);
-                req1.Plan(t.CoordinatorTabletId);
-                // Split should now proceed
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                                   {NLs::PartitionKeys({"Jack", "Marla", ""})});
-            }
-        });
     }
 
 }

@@ -6,9 +6,7 @@ SRCS(
     backup_restore_traits.cpp
     backup_unit.cpp
     build_and_wait_dependencies_unit.cpp
-    build_data_tx_out_rs_unit.cpp
     build_distributed_erase_tx_out_rs_unit.cpp
-    build_kqp_data_tx_out_rs_unit.cpp
     build_scheme_tx_out_rs_unit.cpp
     build_write_out_rs_unit.cpp
     cdc_stream_heartbeat.cpp
@@ -147,9 +145,7 @@ SRCS(
     drop_volatile_snapshot_unit.cpp
     erase_rows_condition.cpp
     execute_commit_writes_tx_unit.cpp
-    execute_data_tx_unit.cpp
     execute_distributed_erase_tx_unit.cpp
-    execute_kqp_data_tx_unit.cpp
     execute_kqp_scan_tx_unit.cpp
     execute_write_unit.cpp
     execution_unit.cpp
@@ -161,7 +157,6 @@ SRCS(
     export_iface.h
     export_scan.cpp
     finalize_build_index_unit.cpp
-    finalize_plan_tx_unit.cpp
     finish_propose_unit.cpp
     finish_propose_write_unit.cpp
     follower_edge.cpp
@@ -183,9 +178,7 @@ SRCS(
     operation.cpp
     operation.h
     plan_queue_unit.cpp
-    prepare_data_tx_in_rs_unit.cpp
     prepare_distributed_erase_tx_in_rs_unit.cpp
-    prepare_kqp_data_tx_in_rs_unit.cpp
     prepare_scheme_tx_in_rs_unit.cpp
     prepare_write_tx_in_rs_unit.cpp
     probes.cpp
@@ -338,7 +331,6 @@ RECURSE_FOR_TESTS(
     ut_kqp_scan
     ut_lock_rows
     ut_locks
-    ut_minikql
     ut_minstep
     ut_object_storage_listing
     ut_order

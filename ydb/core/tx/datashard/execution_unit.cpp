@@ -50,26 +50,16 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateLoadTxDetailsUnit(dataShard, pipeline);
     case EExecutionUnitKind::LoadWriteDetails:
         return CreateLoadWriteDetailsUnit(dataShard, pipeline);
-    case EExecutionUnitKind::FinalizeDataTxPlan:
-        return CreateFinalizeDataTxPlanUnit(dataShard, pipeline);
     case EExecutionUnitKind::ProtectSchemeEchoes:
         return CreateProtectSchemeEchoesUnit(dataShard, pipeline);
-    case EExecutionUnitKind::BuildDataTxOutRS:
-        return CreateBuildDataTxOutRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::BuildDistributedEraseTxOutRS:
-        return CreateBuildDistributedEraseTxOutRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::BuildKqpDataTxOutRS:
-        return CreateBuildKqpDataTxOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildWriteOutRS:
         return CreateBuildWriteOutRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::BuildDistributedEraseTxOutRS:
+        return CreateBuildDistributedEraseTxOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreAndSendOutRS:
         return CreateStoreAndSendOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreAndSendWriteOutRS:
         return CreateStoreAndSendWriteOutRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::PrepareDataTxInRS:
-        return CreatePrepareDataTxInRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::PrepareKqpDataTxInRS:
-        return CreatePrepareKqpDataTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareWriteTxInRS:
         return CreatePrepareWriteTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareDistributedEraseTxInRS:
@@ -80,10 +70,6 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateLoadInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::BlockFailPoint:
         return CreateBlockFailPointUnit(dataShard, pipeline);
-    case EExecutionUnitKind::ExecuteDataTx:
-        return CreateExecuteDataTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::ExecuteKqpDataTx:
-        return CreateExecuteKqpDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteDistributedEraseTx:
         return CreateExecuteDistributedEraseTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteCommitWritesTx:

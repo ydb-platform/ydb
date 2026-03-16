@@ -41,7 +41,7 @@ EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op,
                                            TTransactionContext &txc,
                                            const TActorContext &ctx)
 {
-    Y_ENSURE(op->IsDataTx() || op->IsReadTable());
+    Y_ENSURE(op->IsReadTable());
     Y_ENSURE(!op->IsAborted() && !op->IsInterrupted());
 
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());

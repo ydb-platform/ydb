@@ -43,7 +43,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                                            TTransactionContext &,
                                            const TActorContext &ctx)
 {
-    Y_ENSURE(op->IsDataTx() || op->IsReadTable());
+    Y_ENSURE(op->IsReadTable());
     Y_ENSURE(!op->IsAborted());
 
     if (CheckRejectDataTx(op, ctx)) {
@@ -111,113 +111,6 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
 
             return EExecutionStatus::Executed;
-        }
-    }
-
-    TEngineBay::TSizes txReads;
-
-    if (op->IsDataTx()) {
-        bool hasTotalKeysSizeLimit = !!dataTx->PerShardKeysSizeLimitBytes();
-        txReads = dataTx->CalcReadSizes(hasTotalKeysSizeLimit);
-
-        if (txReads.ReadSize > DataShard.GetTxReadSizeLimit()) {
-            TString err = TStringBuilder()
-                << "Transaction read size " << txReads.ReadSize << " exceeds limit "
-                << DataShard.GetTxReadSizeLimit() << " at tablet " << DataShard.TabletID()
-                << " txId " << op->GetTxId();
-
-            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
-                ->AddError(NKikimrTxDataShard::TError::READ_SIZE_EXECEEDED, err);
-            op->Abort(EExecutionUnitKind::FinishPropose);
-
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-            return EExecutionStatus::Executed;
-        }
-
-        if (hasTotalKeysSizeLimit
-            && txReads.TotalKeysSize > *dataTx->PerShardKeysSizeLimitBytes()) {
-            TString err = TStringBuilder()
-                << "Transaction total keys size " << txReads.TotalKeysSize
-                << " exceeds limit " << *dataTx->PerShardKeysSizeLimitBytes()
-                << " at tablet " << DataShard.TabletID() << " txId " << op->GetTxId();
-
-            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
-                ->AddError(NKikimrTxDataShard::TError::READ_SIZE_EXECEEDED, err);
-            op->Abort(EExecutionUnitKind::FinishPropose);
-
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-            return EExecutionStatus::Executed;
-        }
-
-        for (const auto& key : dataTx->TxInfo().Keys) {
-            if (key.IsWrite && DataShard.IsUserTable(key.Key->TableId)) {
-                ui64 keySize = 0;
-                for (const auto& cell : key.Key->Range.From) {
-                    keySize += cell.Size();
-                }
-                if (keySize > NLimits::MaxWriteKeySize) {
-                    TString err = TStringBuilder()
-                        << "Operation " << *op << " writes key of " << keySize
-                        << " bytes which exceeds limit " << NLimits::MaxWriteKeySize
-                        << " bytes at " << DataShard.TabletID();
-
-                    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
-                        ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
-                    op->Abort(EExecutionUnitKind::FinishPropose);
-
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-                    return EExecutionStatus::Executed;
-                }
-                for (const auto& col : key.Key->Columns) {
-                    if (col.Operation == TKeyDesc::EColumnOperation::Set ||
-                        col.Operation == TKeyDesc::EColumnOperation::InplaceUpdate)
-                    {
-                        if (col.ImmediateUpdateSize > NLimits::MaxWriteValueSize) {
-                            TString err = TStringBuilder()
-                                << "Transaction write column value of " << col.ImmediateUpdateSize
-                                << " bytes is larger than the allowed threshold";
-
-                            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
-                            op->Abort(EExecutionUnitKind::FinishPropose);
-
-                            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-                            return EExecutionStatus::Executed;
-                        }
-                    }
-                }
-
-                if (DataShard.IsSubDomainOutOfSpace()) {
-                    switch (key.Key->RowOperation) {
-                        case TKeyDesc::ERowOperation::Read:
-                        case TKeyDesc::ERowOperation::Erase:
-                            // Read and erase are allowed even when we're out of disk space
-                            break;
-
-                        default: {
-                            // Updates are not allowed when database is out of space
-                            TString err = "Cannot perform writes: database is out of disk space";
-
-                            DataShard.IncCounter(COUNTER_PREPARE_DATABASE_DISK_SPACE_QUOTA_EXCEEDED);
-
-                            BuildResult(op)->AddError(NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED, err);
-                            op->Abort(EExecutionUnitKind::FinishPropose);
-
-                            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
-
-                            return EExecutionStatus::Executed;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!op->IsReadOnly() && op->IsKqpDataTransaction() && op->HasKeysInfo()) {
-            const NMiniKQL::IEngineFlat::TValidationInfo& keys = op->GetKeysInfo();
-            NDataIntegrity::LogIntegrityTrailsKeys(ctx, DataShard.TabletID(), op->GetGlobalTxId(), keys);
         }
     }
 
@@ -296,17 +189,6 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
 
         auto &res = BuildResult(op);
         res->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
-
-        if (op->IsDataTx()) {
-            res->Record.SetReadSize(txReads.ReadSize);
-            res->Record.SetReplySize(txReads.ReplySize);
-
-            for (const auto& rs : txReads.OutReadSetSize) {
-                auto entry = res->Record.AddOutgoingReadSetInfo();
-                entry->SetShardId(rs.first);
-                entry->SetSize(rs.second);
-            }
-        }
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Prepared " << op->GetKind() << " transaction txId " << op->GetTxId()

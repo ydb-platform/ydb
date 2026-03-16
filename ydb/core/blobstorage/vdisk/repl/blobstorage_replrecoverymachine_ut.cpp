@@ -5,6 +5,7 @@
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/stream/output.h>
 #include <util/random/fast.h>
 
 namespace NKikimr {
@@ -86,6 +87,14 @@ namespace NKikimr {
 
         ui64 GetReplicationMem(const std::shared_ptr<TReplCtx>& replCtx) {
             return replCtx->VCtx->Replication.GetCounter()->Val();
+        }
+
+        void PrintAccountingCheck(TStringBuf name, bool counted, ui64 before, ui64 after) {
+            Cerr << "checking " << name << ": "
+                << (counted ? "counted" : "not counted")
+                << " before# " << before
+                << " after# " << after
+                << Endl;
         }
 
         Y_UNIT_TEST(BasicFunctionality) {
@@ -204,6 +213,7 @@ namespace NKikimr {
                 const auto partsToRecover = NMatrix::TVectorType::MakeOneHot(0, groupInfo->Type.TotalPartCount());
 
                 recoveryMachine.AddTask(id, partsToRecover, false, ingress);
+                PrintAccountingCheck("TRecoveryMachine::LostVec", true, base, GetReplicationMem(replCtx));
                 UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
             }
             UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
@@ -211,6 +221,7 @@ namespace NKikimr {
             {
                 NRepl::TVDiskProxy proxy(replCtx, vdisks[1], TActorId());
                 proxy.Put(TLogoBlobID(id, 1), groupInfo->Type.PartSize(TLogoBlobID(id, 1)));
+                PrintAccountingCheck("TVDiskProxy::Ids", true, base, GetReplicationMem(replCtx));
                 UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
             }
             UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
@@ -218,6 +229,7 @@ namespace NKikimr {
             {
                 NRepl::TDataPortion portion(TMemoryConsumer(replCtx->VCtx->Replication));
                 portion.AddError(TLogoBlobID(id, 1), NKikimrProto::ERROR);
+                PrintAccountingCheck("TDataPortion::Items", true, base, GetReplicationMem(replCtx));
                 UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
             }
             UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
@@ -225,12 +237,14 @@ namespace NKikimr {
             {
                 TBlobIdQueue queue;
                 queue.Push(id);
+                PrintAccountingCheck("TBlobIdQueue", false, base, GetReplicationMem(replCtx));
                 UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
             }
 
             {
                 TUnreplicatedBlobRecords records;
                 records.try_emplace(id, TUnreplicatedBlobRecord{});
+                PrintAccountingCheck("TUnreplicatedBlobRecords", false, base, GetReplicationMem(replCtx));
                 UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
             }
         }

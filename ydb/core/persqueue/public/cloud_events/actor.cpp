@@ -20,7 +20,11 @@ std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
         return "CreateTopic";
     } else if (operation.HasAlterPersQueueGroup()) {
         return "AlterTopic";
-    } else if (operation.HasDeallocatePersQueueGroup()) {
+    } else if (operation.HasDrop()) {
+        return "DeleteTopic";
+    }
+    // Fallback: drop uses generic Drop field, detect by OperationType enum
+    if (operation.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropPersQueueGroup) {
         return "DeleteTopic";
     }
     return "";

@@ -20,8 +20,8 @@ void SendTopicCloudEvent(
         name = operation.GetCreatePersQueueGroup().GetName();
     } else if (operation.HasAlterPersQueueGroup()) {
         name = operation.GetAlterPersQueueGroup().GetName();
-    } else if (operation.HasDeallocatePersQueueGroup()) {
-        name = operation.GetDeallocatePersQueueGroup().GetName();
+    } else if (operation.HasDrop()) {
+        name = operation.GetDrop().GetName();
     } else {
         return;
     }

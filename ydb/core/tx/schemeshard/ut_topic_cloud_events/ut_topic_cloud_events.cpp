@@ -143,4 +143,38 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicCloudEvents) {
             "yandex.cloud.events.ydb.topics.AlterTopic",
             "/MyRoot/MyTopic");
     }
+
+    Y_UNIT_TEST(DropTopicCloudEvent) {
+        TTestBasicRuntime runtime;
+        auto logQueue = std::make_shared<TLogQueue>(0);
+
+        TTestEnv env(runtime);
+        AddTopicCloudEventsAuditService(runtime, logQueue);
+        ui64 txId = 1000;
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "MyTopic"
+                TotalGroupCount: 4
+                PartitionPerTablet: 2
+                PQTabletConfig { PartitionConfig { LifetimeSeconds: 10 } }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropPQGroup(runtime, ++txId, "/MyRoot", "MyTopic");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(3));
+
+        auto createLog = logQueue->Pop(TDuration::Seconds(1));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+        auto dropLog = logQueue->Pop(TDuration::Seconds(10));
+        UNIT_ASSERT_C(createLog.Defined(), "Expected CreateTopic cloud event");
+        UNIT_ASSERT_C(dropLog.Defined(), "Expected DeleteTopic cloud event");
+
+        auto dropCloudEvent = ParseCloudEventFromAuditLog(*dropLog);
+        AssertCloudEventFields(dropCloudEvent,
+            "yandex.cloud.events.ydb.topics.DeleteTopic",
+            "/MyRoot/MyTopic");
+    }
 }

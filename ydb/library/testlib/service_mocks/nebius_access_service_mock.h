@@ -52,7 +52,6 @@ public:
             const nebius::iam::v1::AuthorizeRequest* request,
             nebius::iam::v1::AuthorizeResponse* response) override {
         
-        // Capture x-user-ip header
         CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
 
         UNIT_ASSERT_VALUES_EQUAL_C(request->checks_size(), 1, "Nebius access service mock does not support multiple checks yet");
@@ -207,7 +206,6 @@ public:
              << request->Utf8DebugString()
              << Endl;
 
-        // Capture x-user-ip header
         CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
 
         ++AuthorizeCount;

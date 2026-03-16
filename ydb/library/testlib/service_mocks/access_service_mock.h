@@ -78,7 +78,6 @@ public:
             const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
             yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override {
 
-        // Capture x-user-ip header
         CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
 
         const TString& lastResourceId = request->resource_path(request->resource_path_size() - 1).id();
@@ -180,7 +179,6 @@ public:
 
         // Do not use authentication for "Authorize" handler
 
-        // Capture x-user-ip header
         CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
 
         ++AuthorizeCount;
@@ -248,7 +246,6 @@ public:
                                  const ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest* request,
                                  ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse* response) {
 
-        // Capture x-user-ip header
         CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
 
         if (!IsServiceAuthenticated(AllowedServiceAuthTokens, ctx)) {

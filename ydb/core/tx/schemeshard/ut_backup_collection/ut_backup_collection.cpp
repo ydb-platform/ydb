@@ -2231,17 +2231,23 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             NLs::IsTable,
         });
 
-        // Verify index backup table exists in __ydb_backup_meta/indexes/TableForIncremental/ValueIndex
-        TString indexBackupPath = "/MyRoot/.backups/collections/" DEFAULT_NAME_1 "/" + incrBackupDir + 
+        // Verify index backup directory exists in __ydb_backup_meta/indexes/TableForIncremental/ValueIndex
+        TString indexBackupPath = "/MyRoot/.backups/collections/" DEFAULT_NAME_1 "/" + incrBackupDir +
             "/__ydb_backup_meta/indexes/TableForIncremental/ValueIndex";
         TestDescribeResult(DescribePath(runtime, indexBackupPath), {
+            NLs::PathExist,
+            NLs::ChildrenCount(1),
+        });
+
+        // Verify impl table inside the index backup directory
+        TestDescribeResult(DescribePath(runtime, indexBackupPath + "/" + indexImplTableName), {
             NLs::PathExist,
             NLs::IsTable,
         });
 
         Cerr << "SUCCESS: Full backup created CDC streams for both main table and index" << Endl;
         Cerr << "         Incremental backup created backup tables for both main table and index" << Endl;
-        Cerr << "         Index backup table verified at: " << indexBackupPath << Endl;
+        Cerr << "         Index backup table verified at: " << indexBackupPath << "/" << indexImplTableName << Endl;
     }
 
     Y_UNIT_TEST(OmitIndexesFlag) {
@@ -3107,6 +3113,248 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ProtectedTable"), {
             NLs::CheckColumns("ProtectedTable", {"key", "value", "new_column"}, {}, {"key"})
         });
+    }
+
+    Y_UNIT_TEST(IncrementalBackupWithVectorIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithVector"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "category" Type: "Utf8" }
+                Columns { Name: "embedding" Type: "String" }
+                Columns { Name: "data" Type: "String" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "VectorIndex"
+                KeyColumnNames: ["category", "embedding"]
+                DataColumnNames: ["data"]
+                Type: EIndexTypeGlobalVectorKmeansTree
+                VectorIndexKmeansTreeDescription: {
+                    Settings: {
+                        settings: {
+                            metric: DISTANCE_COSINE,
+                            vector_type: VECTOR_TYPE_FLOAT,
+                            vector_dimension: 1024
+                        },
+                        clusters: 4,
+                        levels: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithVector"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/TableWithVector", true, true);
+            const auto& table = desc.GetPathDescription().GetTable();
+            bool foundCdc = false;
+            for (const auto& stream : table.GetCdcStreams()) {
+                if (stream.GetName().EndsWith("_continuousBackupImpl")) {
+                    foundCdc = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundCdc, "Main table should have CDC stream for backup");
+        }
+
+        TVector<TString> implTables = {"indexImplLevelTable", "indexImplPostingTable", "indexImplPrefixTable"};
+        for (const auto& implTable : implTables) {
+            TString implPath = "/MyRoot/TableWithVector/VectorIndex/" + implTable;
+            auto desc = DescribePrivatePath(runtime, implPath, true, true);
+
+            UNIT_ASSERT_C(desc.GetPathDescription().HasTable(),
+                Sprintf("Vector index implementation table %s should exist", implTable.c_str()));
+
+            const auto& table = desc.GetPathDescription().GetTable();
+            bool foundImplCdc = false;
+            for (const auto& stream : table.GetCdcStreams()) {
+                if (stream.GetName().EndsWith("_continuousBackupImpl")) {
+                    foundImplCdc = true;
+                    Cerr << "Found CDC stream on vector impl table " << implTable << ": " << stream.GetName() << Endl;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundImplCdc,
+                Sprintf("Vector index implementation table %s should have CDC stream after full backup", implTable.c_str()));
+        }
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        auto collectionDesc = DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1, true, true);
+        TString incrBackupDir;
+        for (const auto& child : collectionDesc.GetPathDescription().GetChildren()) {
+            if (child.GetName().EndsWith("_incremental")) {
+                incrBackupDir = child.GetName();
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!incrBackupDir.empty(), "Should find incremental backup directory");
+
+        TString backupRoot = "/MyRoot/.backups/collections/" DEFAULT_NAME_1 "/" + incrBackupDir;
+
+        TestDescribeResult(DescribePath(runtime, backupRoot + "/TableWithVector"), {
+            NLs::PathExist,
+            NLs::IsTable,
+        });
+
+        TString indexMetaPath = backupRoot + "/__ydb_backup_meta/indexes/TableWithVector/VectorIndex";
+
+        TestDescribeResult(DescribePath(runtime, indexMetaPath), {
+            NLs::PathExist,
+            NLs::ChildrenCount(3)
+        });
+
+        for (const auto& implTable : implTables) {
+            TestDescribeResult(DescribePath(runtime, indexMetaPath + "/" + implTable), {
+                NLs::PathExist,
+                NLs::IsTable
+            });
+        }
+    }
+
+    Y_UNIT_TEST(RestoreVectorIndexBackup) {
+        TTestBasicRuntime runtime;
+
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithVector"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "category" Type: "Utf8" }
+                Columns { Name: "embedding" Type: "String" }
+                Columns { Name: "data" Type: "String" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "VectorIndex"
+                KeyColumnNames: ["category", "embedding"]
+                DataColumnNames: ["data"]
+                Type: EIndexTypeGlobalVectorKmeansTree
+                VectorIndexKmeansTreeDescription: {
+                    Settings: {
+                        settings: {
+                            metric: DISTANCE_COSINE,
+                            vector_type: VECTOR_TYPE_FLOAT,
+                            vector_dimension: 1024
+                        },
+                        clusters: 4,
+                        levels: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString collectionSettings = Sprintf(R"(
+            Name: "%s"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithVector"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )", DEFAULT_NAME_1);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            Sprintf(R"(Name: ".backups/collections/%s")", DEFAULT_NAME_1));
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            Sprintf(R"(Name: ".backups/collections/%s")", DEFAULT_NAME_1));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "TableWithVector");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithVector"), {NLs::PathNotExist});
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+            Sprintf(R"(Name: "%s")", DEFAULT_NAME_1));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithVector"), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::IndexesCount(1)
+        });
+
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithVector/VectorIndex");
+
+        TestDescribeResult(indexDesc, {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"category", "embedding"}),
+            NLs::IndexDataColumns({"data"})
+        });
+
+        TVector<TString> implTables = {"indexImplLevelTable", "indexImplPostingTable", "indexImplPrefixTable"};
+        for (const auto& implTable : implTables) {
+            TString implPath = "/MyRoot/TableWithVector/VectorIndex/" + implTable;
+            auto implDesc = DescribePrivatePath(runtime, implPath, true, true);
+
+            TestDescribeResult(implDesc, {
+                NLs::PathExist,
+                NLs::IsTable
+            });
+
+            const auto& table = implDesc.GetPathDescription().GetTable();
+            UNIT_ASSERT_C(table.ColumnsSize() > 0,
+                Sprintf("Implementation table %s should have columns restored", implTable.c_str()));
+        }
+
+        const auto& kmeansDesc = indexDesc.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription();
+        const auto& treeSettings = kmeansDesc.GetSettings();
+        const auto& vectorSettings = treeSettings.Getsettings();
+
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.Getmetric(), Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.Getvector_dimension(), 1024);
+        UNIT_ASSERT_VALUES_EQUAL(treeSettings.Getclusters(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(treeSettings.Getlevels(), 2);
     }
 
     Y_UNIT_TEST(InitCopyTableSourceDroppedSurvives) {

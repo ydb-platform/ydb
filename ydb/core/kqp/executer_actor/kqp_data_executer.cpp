@@ -90,11 +90,6 @@ public:
         }
     }
 
-    NACLib::TUserContext::TPtr GetUserCtx() const {
-        const TString userSID = (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID;
-        return NACLib::TUserContextBuilder().WithUserSID(userSID).Build();
-    }
-
     bool CheckExecutionComplete() {
         if (TBase::CheckExecutionComplete()) {
             return true;

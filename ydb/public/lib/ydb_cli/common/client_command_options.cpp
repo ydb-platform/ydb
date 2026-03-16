@@ -570,11 +570,13 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
                     break;
                 }
                 case EOptionValueSource::ActiveProfile: {
-                    TString value;
-                    if (opt->TryParseFromProfile(ActiveProfile, &value, nullptr, &messages, true)) {
-                        TStringBuilder txt;
-                        txt << "active profile \"" << ActiveProfile->GetName() << "\"";
-                        processValue(opt, value, txt, validate);
+                    if (ActiveProfile) {
+                        TString value;
+                        if (opt->TryParseFromProfile(ActiveProfile, &value, nullptr, &messages, true)) {
+                            TStringBuilder txt;
+                            txt << "active profile \"" << ActiveProfile->GetName() << "\"";
+                            processValue(opt, value, txt, validate);
+                        }
                     }
                     break;
                 }
@@ -614,7 +616,9 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             Cerr << " from explicitly specified profile \"" << ExplicitProfile->GetName() << "\"";
             break;
         case EOptionValueSource::ActiveProfile:
-            Cerr << " from current active profile \"" << ActiveProfile->GetName() << "\"";
+            if (ActiveProfile) {
+                Cerr << " from current active profile \"" << ActiveProfile->GetName() << "\"";
+            }
             break;
         case EOptionValueSource::EnvironmentVariable:
             for (const auto& envInfo : opt.Opt->EnvInfo) {
@@ -706,7 +710,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
             continue;
         }
 
-        if (ActiveProfile != ExplicitProfile) {
+        if (ActiveProfile && ActiveProfile != ExplicitProfile) {
             if (TString value; clientOption->TryParseFromProfile(ActiveProfile, &value, &isFileName, &errors, false)) {
                 applyOption(clientOption, value, isFileName, clientOption->HumanReadableFileName, EOptionValueSource::ActiveProfile);
                 continue;
@@ -739,7 +743,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
                 continue;
             }
 
-            if (ActiveProfile != ExplicitProfile) {
+            if (ActiveProfile && ActiveProfile != ExplicitProfile) {
                 bool isFileName = false;
                 if (TString value; clientOption->TryParseFromProfile(ActiveProfile, &value, &isFileName, &errors, false)) {
                     applyOption(clientOption, value, isFileName, clientOption->HumanReadableFileName, EOptionValueSource::ActiveProfile);

@@ -11,7 +11,7 @@ std::shared_ptr<NYdb::NTopic::IProducer> CreateProducer(const std::string& topic
     producerSettings.ProducerIdPrefix("producer_basic");
     producerSettings.PartitionChooserStrategy(NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound);
     producerSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-    producerSettings.MaxBlock(TDuration::Seconds(30));
+    producerSettings.MaxBlockTimeout(TDuration::Seconds(30));
     producerSettings.MaxMemoryUsage(100_MB);
     return topicClient.CreateProducer(producerSettings);
 }
@@ -66,7 +66,7 @@ void WriteWithHandlingResult(std::shared_ptr<NYdb::NTopic::IProducer> producer, 
 
     for (size_t retries = 0; retries < MAX_RETRIES; retries++) {
         auto writeResult = producer->Write(std::move(writeMessage));
-        if (writeResult.IsSuccess()) {
+        if (writeResult.IsQueued()) {
             // if write was successful, we can continue writing messages
             continue;
         }

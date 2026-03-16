@@ -891,7 +891,7 @@ TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
         TWriteMessage msg(data);
         msg.SeqNo(i + 1);
         msg.Key(key);
-        ASSERT_TRUE(producer->Write(std::move(msg)).IsSuccess());
+        ASSERT_TRUE(producer->Write(std::move(msg)).IsQueued());
     }
 
     ASSERT_TRUE(producer->Close(TDuration::Seconds(10)).IsSuccess());

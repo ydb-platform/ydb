@@ -83,7 +83,7 @@ struct TWriteResult {
     //! Value is std::nullopt if the session is not closed.
     std::optional<TCloseDescription> ClosedDescription;
 
-    bool IsSuccess() const {
+    bool IsQueued() const {
         return Status == EWriteStatus::Queued;
     }
 

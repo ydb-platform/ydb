@@ -109,9 +109,7 @@ public:
         , ServerCreds(serverCreds)
         , Context(std::make_shared<TContext>(config))
     {
-        // KAFKA_LOG_D(ServerCreds.get());
         SetNonBlock();
-        KAFKA_LOG_D(serverCreds.use_count());
         IsSslRequired = Socket->IsSslSupported();
     }
 

@@ -9,7 +9,7 @@ using namespace NKikimr::NRawSocket;
 
 inline NActors::IActor* CreateKafkaListener(
         const NActors::TActorId& poller, const TListenerSettings& settings, const NKikimrConfig::TKafkaProxyConfig& config,
-        std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds>& serverCreds
+        std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds = nullptr
 ) {
     return CreateSocketListener(
         poller, settings,

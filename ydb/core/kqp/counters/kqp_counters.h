@@ -364,6 +364,8 @@ public:
     ::NMonitoring::TDynamicCounterPtr WorkloadManagerGroup;
     ::NMonitoring::TDynamicCounterPtr ChannelGroup;
 
+    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
 
     // Lease updates counters

@@ -3,8 +3,10 @@ UNITTEST()
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
+    REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 SRCS(

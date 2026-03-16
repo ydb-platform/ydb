@@ -1651,8 +1651,10 @@ void TTupleLayout::TupleDeepCopy(
             auto overflowOffset = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 0 * sizeof(ui32));
             auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
             ui64 outOverflowOffset = outOverflow.size();
+            Y_ENSURE(outOverflowOffset <= std::numeric_limits<ui32>::max(),
+                "Overflow buffer offset exceeds ui32 range: " << outOverflowOffset);
             appendRange(outOverflow, {inOverflow + overflowOffset, overflowSize});
-            WriteUnaligned<ui32>(outTuple.data() + initSize + col.Offset + 1 + 0 * sizeof(ui32), outOverflowOffset);
+            WriteUnaligned<ui32>(outTuple.data() + initSize + col.Offset + 1 + 0 * sizeof(ui32), static_cast<ui32>(outOverflowOffset));
         }
     }
 }

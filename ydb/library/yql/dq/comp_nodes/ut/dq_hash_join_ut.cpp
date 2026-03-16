@@ -1004,5 +1004,78 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestSmallStrings) { 
         Test(SmallStringsTestData(), true);
     }
+    Y_UNIT_TEST(TestOutputBufferBounded) {
+        TJoinTestData td;
+        auto& setup = *td.Setup;
+
+        constexpr int leftSize = 200;
+        constexpr int rightSize = 200;
+        constexpr int valueSize = 512;
+
+        TVector<ui64> leftKeys(leftSize, 1);
+        TVector<TString> leftValues(leftSize);
+        for (int i = 0; i < leftSize; ++i) {
+            leftValues[i] = TString(valueSize, 'A' + (i % 26));
+        }
+
+        TVector<ui64> rightKeys(rightSize, 1);
+        TVector<TString> rightValues(rightSize);
+        for (int i = 0; i < rightSize; ++i) {
+            rightValues[i] = TString(valueSize, 'a' + (i % 26));
+        }
+
+        td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+        td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+        td.Kind = EJoinKind::Inner;
+
+        TJoinDescription descr;
+        descr.CustomRenames = td.Renames;
+        descr.Setup = td.Setup.get();
+        descr.LeftSource.KeyColumnIndexes = td.LeftKeyColmns;
+        descr.LeftSource.ColumnTypes =
+            AS_TYPE(TTupleType, AS_TYPE(TListType, td.Left.Type)->GetItemType())->GetElements();
+        descr.LeftSource.ValuesList = td.Left.Value;
+        descr.RightSource.KeyColumnIndexes = td.RightKeyColmns;
+        descr.RightSource.ColumnTypes =
+            AS_TYPE(TTupleType, AS_TYPE(TListType, td.Right.Type)->GetItemType())->GetElements();
+        descr.RightSource.ValuesList = td.Right.Value;
+        descr.BlockSize = td.BlockSize;
+        descr.SliceBlocks = td.SliceBlocks;
+        descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+
+        THolder<IComputationGraph> graph = ConstructJoinGraphStream(
+            td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
+
+        const size_t tupleWidth = td.Renames.size() + 1;
+        std::vector<NUdf::TUnboxedValue> buff(tupleWidth);
+        auto stream = graph->GetValue();
+
+        i64 totalRows = 0;
+        i64 maxBlockRows = 0;
+        int blockCount = 0;
+
+        while (true) {
+            auto status = stream.WideFetch(buff.data(), tupleWidth);
+            if (status == NYql::NUdf::EFetchStatus::Finish) {
+                break;
+            }
+            if (status == NYql::NUdf::EFetchStatus::Yield) {
+                continue;
+            }
+            int rows = ArrowScalarAsInt(TArrowBlock::From(buff[tupleWidth - 1]));
+            totalRows += rows;
+            maxBlockRows = std::max(maxBlockRows, static_cast<i64>(rows));
+            ++blockCount;
+        }
+
+        const i64 expectedTotal = leftSize * rightSize;
+        UNIT_ASSERT_VALUES_EQUAL(totalRows, expectedTotal);
+        UNIT_ASSERT_C(blockCount > 1,
+            TStringBuilder() << "Expected multiple output blocks but got " << blockCount
+                             << " (all " << totalRows << " rows in one block)");
+        UNIT_ASSERT_C(maxBlockRows < expectedTotal,
+            TStringBuilder() << "Max block size " << maxBlockRows
+                             << " should be less than total " << expectedTotal);
+    }
 }
 } // namespace NKikimr::NMiniKQL

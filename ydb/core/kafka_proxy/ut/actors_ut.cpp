@@ -526,7 +526,7 @@ namespace NKafka::NTests {
             auto* runtime = server.GetRuntime();
             auto edge = runtime->AllocateEdgeActor();
 
-            auto [actorId, actor] = CreateFetchActor(edge, {NKikimr::JoinPath({"/Root/LbAccount/account", topicName})}, runtime, config);
+            auto [actorId, actor] = CreateFetchActor(edge, {topicName}, runtime, config);
             Sleep(TDuration::MilliSeconds(500)); // wait actor will be created
 
             // emulate timeout
@@ -558,8 +558,7 @@ namespace NKafka::NTests {
             auto* runtime = server.GetRuntime();
             auto edge = runtime->AllocateEdgeActor();
 
-            auto path = NKikimr::JoinPath({"/Root/LbAccount/account", topicName});
-            auto actor = new TKafkaDescribeTopicActor(edge, nullptr, path, "/Root");
+            auto actor = new TKafkaDescribeTopicActor(edge, nullptr, topicName, "/Root");
             auto actorId = runtime->Register(actor);
             runtime->EnableScheduleForActor(actorId);
             auto ev = runtime->GrabEdgeEvent<TEvKafka::TEvTopicDescribeResponse>();

@@ -1,5 +1,0 @@
---- contrib/libs/libpq/src/include/pg_config-linux.h	(index)
-+++ contrib/libs/libpq/src/include/pg_config-linux.h	(working tree)
-@@ -118,1 +118,1 @@
--#define HAVE_DECL_STRCHRNUL 1
-+/* #undef HAVE_DECL_STRCHRNUL */

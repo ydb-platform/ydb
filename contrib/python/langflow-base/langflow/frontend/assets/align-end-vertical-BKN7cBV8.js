@@ -1,1 +1,0 @@
-import{a8 as e}from"./index-Cp3b7MWQ.js";const t=[["rect",{width:"16",height:"6",x:"2",y:"4",rx:"2",key:"10wcwx"}],["rect",{width:"9",height:"6",x:"9",y:"14",rx:"2",key:"4p5bwg"}],["path",{d:"M22 22V2",key:"12ipfv"}]],c=e("align-end-vertical",t);export{t as __iconNode,c as default};

@@ -1,3 +1,0 @@
-[console_scripts]
-weasyprint=weasyprint.__main__:main
-

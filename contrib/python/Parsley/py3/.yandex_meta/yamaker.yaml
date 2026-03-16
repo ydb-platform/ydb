@@ -1,8 +1,0 @@
-mark_as_sources:
-  - ometa/test/helpers.py
-exclude_from_macros:
-  - test_parsley.py
-keep:
-  - test_parsley.py
-  - ometa/*.parsley
-  - terml/*.parsley

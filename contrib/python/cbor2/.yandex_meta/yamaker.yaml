@@ -1,4 +1,0 @@
-exclude:
-  - benchmarks/*
-copy:
-  - source/*

@@ -1,6 +1,0 @@
-requirements:
-  - contrib/libs/double-conversion
-exclude:
-  - ujson/deps/*
-  - ujson/lib/Makefile
-  - ujson/python/version_template.h

@@ -1,2 +1,0 @@
-exclude_from_macros:
-- pyroute2/iproute/remote.py # disabled (https://docs.pyroute2.org/remote.html)

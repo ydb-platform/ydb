@@ -1,3 +1,0 @@
-[mapping]
-method = "jinja2"
-pattern = "**.html"

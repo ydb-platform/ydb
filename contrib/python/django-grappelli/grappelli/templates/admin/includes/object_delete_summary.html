@@ -1,9 +1,0 @@
-{% load i18n %}
-<div class="grp-module grp-collapse grp-open">
-    <h3 class="grp-collapse-handler">{% trans "Summary" %}</h3>
-    <div class="grp-module">
-        {% for model_name, object_count in model_count %}
-            <div class="grp-row">{{ model_name|capfirst }}: {{ object_count }}</div>
-        {% endfor %}
-    </div>
-</div>

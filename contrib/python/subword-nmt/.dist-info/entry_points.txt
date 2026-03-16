@@ -1,3 +1,0 @@
-[console_scripts]
-subword-nmt = subword_nmt.subword_nmt:main
-

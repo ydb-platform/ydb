@@ -1,2 +1,0 @@
-[flask.commands]
-generate-api-schema = flasgger.commands:generate_api_schema

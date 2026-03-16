@@ -1,2 +1,0 @@
-alias mars.number = perturbationNumber;
-alias mars.step   = stepRange;

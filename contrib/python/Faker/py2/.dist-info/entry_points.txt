@@ -1,3 +1,0 @@
-[console_scripts]
-faker = faker.cli:execute_from_command_line
-

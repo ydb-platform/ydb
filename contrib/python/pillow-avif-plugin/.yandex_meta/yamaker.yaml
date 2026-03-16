@@ -1,3 +1,0 @@
-requirements:
-  - Pillow
-  - libavif: contrib/libs/libavif

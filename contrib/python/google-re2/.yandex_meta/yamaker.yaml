@@ -1,5 +1,0 @@
-requirements:
-  - contrib/libs/re2
-  - contrib/libs/pybind11
-copy:
-  - _re2.cc

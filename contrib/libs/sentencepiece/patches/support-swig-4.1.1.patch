@@ -1,6 +1,0 @@
---- contrib/libs/sentencepiece/src/sentencepiece_processor.h	(index)
-+++ contrib/libs/sentencepiece/src/sentencepiece_processor.h	(working tree)
-@@ -143 +140,0 @@ class Normalizer;
--#ifndef SWIGGO
-@@ -150 +146,0 @@ using bytes = TString;
--#endif  // SWIGGO

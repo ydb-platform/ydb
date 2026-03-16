@@ -1,9 +1,0 @@
-[console_scripts]
-logfire = logfire.cli:main
-
-[pydantic]
-logfire-plugin = logfire.integrations.pydantic:plugin
-
-[pytest11]
-logfire = logfire.testing
-pytest_logfire = logfire._internal.integrations.pytest

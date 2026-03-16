@@ -1,5 +1,0 @@
---- contrib/python/pydub/pydub/utils.py	(index)
-+++ contrib/python/pydub/pydub/utils.py	(working tree)
-@@ -16 +16 @@ except ImportError:
--    import pyaudioop as audioop
-+    from . import pyaudioop as audioop

@@ -1,2 +1,0 @@
-[console_scripts]
-pai = pydantic_ai._cli:cli_exit

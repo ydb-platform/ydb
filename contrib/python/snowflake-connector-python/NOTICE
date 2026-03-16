@@ -1,8 +1,0 @@
-Snowflake Python Connector
-Copyright 2020 Snowflake Inc.
-
-This software includes software derived from urllib3, licensed under the MIT license (https://urllib3.readthedocs.io).
-Copyright (c) 2008-2020 Andrey Petrov and contributors
-
-This software includes software derived from Requests: HTTP For Humans, licensed under the Apache license, developed by the Python Software Foundation (https://requests.readthedocs.io/)
-Requests Copyright 2019 Kenneth Reitz

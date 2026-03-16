@@ -1,2 +1,0 @@
-osgeo
-osgeo_utils

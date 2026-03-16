@@ -1,4 +1,0 @@
-copy:
-  - czipfile.pyx
-keep:
-  - tests/test_czipfile.py

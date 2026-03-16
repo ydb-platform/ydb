@@ -1,6 +1,0 @@
-====================WTFPL====================
-This product is released under the terms of the WTFPL. Read
-
-
-====================WTFPL====================
-http://sam.zoy.org/wtfpl for more details.

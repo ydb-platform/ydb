@@ -1,4 +1,0 @@
-requirements:
-  - contrib/libs/crfsuite
-cython_directive:
-  - language_level=3

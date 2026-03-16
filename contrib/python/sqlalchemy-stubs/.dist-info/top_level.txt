@@ -1,3 +1,0 @@
-sqlalchemy-stubs
-sqlmypy
-sqltyping

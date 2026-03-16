@@ -1,5 +1,0 @@
---- contrib/python/adbc-driver-manager/adbc_driver_manager/toml++/toml.hpp	(index)
-+++ contrib/python/adbc-driver-manager/adbc_driver_manager/toml++/toml.hpp	(working tree)
-@@ -716 +716 @@
--#if TOML_HAS_INCLUDE(<CodeAnalysis/Warnings.h>)
-+#if 0

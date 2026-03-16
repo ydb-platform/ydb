@@ -1,8 +1,0 @@
-requirements:
-  - pydantic: contrib/python/pydantic/pydantic-2
-cython_directive:
-  - language_level=-3
-  - embedsignature=True
-  - annotation_typing=False
-mark_as_resources:
-  - thinc/backends/*.cu

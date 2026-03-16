@@ -1,3 +1,0 @@
-[console_scripts]
-spdx-tv2rdf = spdx.tv_to_rdf:main
-

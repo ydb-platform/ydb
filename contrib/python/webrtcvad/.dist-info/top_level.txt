@@ -1,2 +1,0 @@
-webrtcvad
-_webrtcvad

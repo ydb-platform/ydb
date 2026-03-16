@@ -1,5 +1,0 @@
---- a/include/boost/qvm/mat_operations.hpp	(index)
-+++ b/include/boost/qvm/mat_operations.hpp	(working tree)
-@@ -1053,1 +1053,1 @@ boost
--    read_element_idx( int row, int col, this_matrix const & )
-+    read_element_idx( [[maybe_unused]] int row, [[maybe_unused]] int col, this_matrix const & )

@@ -1,5 +1,0 @@
-<!DOCTYPE xmlbomb [
-<!ENTITY a "123 &b;" >
-<!ENTITY b "&a;">
-]>
-<bomb>&a;</bomb>

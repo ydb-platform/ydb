@@ -1,3 +1,0 @@
-[console_scripts]
-webvtt = webvtt.cli:main
-

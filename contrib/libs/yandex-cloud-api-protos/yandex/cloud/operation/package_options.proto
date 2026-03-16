@@ -1,6 +1,0 @@
-syntax = "proto3";
-
-
-package yandex.cloud.operation;
-
-option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/operation;operation";

@@ -1,7 +1,0 @@
-requirements:
-  - contrib/libs/re2
-copy:
-  - src/*
-exclude:
-  - src/.agignore
-  - src/CMakeLists.txt

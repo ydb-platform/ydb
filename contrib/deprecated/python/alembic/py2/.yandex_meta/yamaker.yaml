@@ -1,6 +1,0 @@
-requirements:
-  - setuptools
-mark_as_resources:
- - alembic/templates/*/env.py
-exclude:
-  - README.unittests.rst

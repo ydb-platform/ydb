@@ -1,3 +1,0 @@
-[console_scripts]
-pyvisa-info = pyvisa.cmd_line_tools:visa_info
-pyvisa-shell = pyvisa.cmd_line_tools:visa_shell

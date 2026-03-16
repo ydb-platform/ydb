@@ -1,2 +1,0 @@
-[opentelemetry_instrumentor]
-aiokafka = opentelemetry.instrumentation.aiokafka:AIOKafkaInstrumentor

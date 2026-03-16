@@ -1,5 +1,0 @@
-keep:
-  - tests/*
-  - fix_tests.sh
-exclude_from_macros:
-  - fix_tests.sh

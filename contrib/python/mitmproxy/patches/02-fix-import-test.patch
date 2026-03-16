@@ -1,5 +1,0 @@
---- contrib/python/mitmproxy/mitmproxy/contentviews/grpc.py	(index)
-+++ contrib/python/mitmproxy/mitmproxy/contentviews/grpc.py	(working tree)
-@@ -954 +954 @@ class ViewConfig:
--    parser_options: ProtoParser.ParserOptions = ProtoParser.ParserOptions()
-+    parser_options: ProtoParser.ParserOptions = field(default_factory=ProtoParser.ParserOptions)

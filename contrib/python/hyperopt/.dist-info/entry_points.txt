@@ -1,3 +1,0 @@
-[console_scripts]
-hyperopt-mongo-worker = hyperopt.mongoexp:main
-

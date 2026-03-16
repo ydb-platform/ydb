@@ -1,3 +1,0 @@
-[console_scripts]
-protoc-gen-grpclib_python = grpclib.plugin.main:main
-protoc-gen-python_grpc = grpclib.plugin.main:main

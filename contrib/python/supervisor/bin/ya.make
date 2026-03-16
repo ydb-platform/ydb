@@ -1,5 +1,0 @@
-RECURSE(
-    pidproxy
-    supervisorctl
-    supervisord
-)

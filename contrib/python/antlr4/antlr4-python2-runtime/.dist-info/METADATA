@@ -1,9 +1,0 @@
-Metadata-Version: 2.1
-Name: antlr4-python2-runtime
-Version: 4.13.0
-Summary: ANTLR 4.13.0 runtime for Python 2.7.12
-Home-page: http://www.antlr.org
-Author: Eric Vergnaud, Terence Parr, Sam Harwell
-Author-email: eric.vergnaud@wanadoo.fr
-License: BSD
-

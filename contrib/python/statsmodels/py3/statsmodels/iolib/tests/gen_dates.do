@@ -1,9 +1,0 @@
-insheet using "/home/skipper/statsmodels/statsmodels-skipper/statsmodels/iolib/tests/stata_dates.csv"
-format datetime_c %tc
-format datetime_big_c %tC
-format date %td
-format weekly_date %tw
-format monthly_date %tm
-format quarterly_date %tq
-format half_yearly_date %th
-format yearly_date %ty

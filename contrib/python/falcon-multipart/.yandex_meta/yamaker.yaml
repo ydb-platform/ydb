@@ -1,4 +1,0 @@
-requirements:
-  - standard-cgi
-keep:
-  - tests/*

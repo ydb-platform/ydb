@@ -1,2 +1,0 @@
-[pytest_randomly.random_seeder]
-thinc = thinc.api:fix_random_seed

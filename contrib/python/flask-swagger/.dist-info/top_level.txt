@@ -1,2 +1,0 @@
-build_swagger_spec
-flask_swagger

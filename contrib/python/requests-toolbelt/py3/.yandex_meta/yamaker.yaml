@@ -1,3 +1,0 @@
-keep:
-  - tests/data/*
-  - tests/cassettes/stream_response_to_file_without_content.json

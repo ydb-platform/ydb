@@ -1,5 +1,0 @@
---- contrib/python/tifffile/tests/conftest.py	(index)
-+++ contrib/python/tifffile/tests/conftest.py	(working tree)
-@@ -10,1 +10,1 @@ def pytest_report_header(config):
--        from test_tifffile import config
-+        from .test_tifffile import config

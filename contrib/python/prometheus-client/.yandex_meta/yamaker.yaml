@@ -1,3 +1,0 @@
-keep:
-  - tests/certs/*
-  - tests/proc/*

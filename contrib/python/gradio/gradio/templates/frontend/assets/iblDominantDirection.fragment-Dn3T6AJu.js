@@ -1,8 +1,0 @@
-import{S as i}from"./index-BZt0m9TU.js";import"./helperFunctions-DnKtpQT_.js";import"./hdrFilteringFunctions-JeqIkoOq.js";import"./pbrBRDFFunctions-CzAwJrxS.js";import"./index-xGeN4i2A.js";import"./svelte/svelte_svelte.js";import"./svelte/svelte_animate.js";import"./svelte/svelte_attachments.js";import"./svelte/svelte_easing.js";import"./svelte/svelte_internal_client.js";import"./svelte/svelte_internal_flags_async.js";import"./svelte/svelte_internal_flags_legacy.js";import"./svelte/svelte_internal_flags_tracing.js";import"./svelte/svelte_internal_server.js";import"./svelte/svelte_legacy.js";import"./svelte/svelte_motion.js";import"./svelte/svelte_reactivity.js";import"./svelte/svelte_reactivity_window.js";import"./svelte/svelte_server.js";import"./svelte/svelte_store.js";import"./svelte/svelte_transition.js";import"./svelte/svelte_events.js";const r="iblDominantDirectionPixelShader",e=`#include<helperFunctions>
-#include<importanceSampling>
-#include<pbrBRDFFunctions>
-#include<hdrFilteringFunctions>
-var icdfSamplerSampler: sampler;var icdfSampler: texture_2d<f32>;@fragment
-fn main(input: FragmentInputs)->FragmentOutputs {var lightDir: vec3f=vec3f(0.0,0.0,0.0);for(var i: u32=0u; i<NUM_SAMPLES; i++)
-{var Xi: vec2f=hammersley(i,NUM_SAMPLES);var T: vec2f;T.x=textureSampleLevel(icdfSampler,icdfSamplerSampler,vec2(Xi.x,0.0),0.0).x;T.y=textureSampleLevel(icdfSampler,icdfSamplerSampler,vec2(T.x,Xi.y),0.0).y;var Ls: vec3f=uv_to_normal(vec2f(1.0-fract(T.x+0.25),T.y));lightDir+=Ls;}
-lightDir/=vec3f(f32(NUM_SAMPLES));fragmentOutputs.color=vec4f(lightDir,1.0);}`;i.ShadersStoreWGSL[r]||(i.ShadersStoreWGSL[r]=e);const _={name:r,shader:e};export{_ as iblDominantDirectionPixelShaderWGSL};

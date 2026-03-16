@@ -1,3 +1,0 @@
-[pytest11]
-aresponses = aresponses.main
-

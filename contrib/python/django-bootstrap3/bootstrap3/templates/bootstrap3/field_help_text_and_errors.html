@@ -1,6 +1,0 @@
-{% for error in errors %}
-    {% include "bootstrap3/field_error.html" with field=field error=error only %}
-{% endfor %}
-{% if help_text %}
-    {% include "bootstrap3/field_help_text.html" with field=field help_text=help_text only %}
-{% endif %}

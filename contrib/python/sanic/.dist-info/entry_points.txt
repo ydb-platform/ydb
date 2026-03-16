@@ -1,2 +1,0 @@
-[console_scripts]
-sanic = sanic.__main__:main

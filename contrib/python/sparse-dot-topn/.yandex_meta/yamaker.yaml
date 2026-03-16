@@ -1,8 +1,0 @@
-exclude:
-  - CHANGES.md
-  - MANIFEST.in
-  - example/*
-  - pyproject.toml
-  - requirements.txt
-  - setup.py
-repo_url: https://github.com/ing-bank/sparse_dot_topn

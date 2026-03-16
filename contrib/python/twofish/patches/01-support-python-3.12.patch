@@ -1,7 +1,0 @@
---- contrib/python/twofish/twofish.py	(index)
-+++ contrib/python/twofish/twofish.py	(working tree)
-@@ -11 +10,0 @@ Python module and ctypes bindings
--import imp
-@@ -19 +18 @@ from ctypes import (cdll, Structure,
--_twofish = cdll.LoadLibrary(imp.find_module('_twofish')[1])
-+_twofish = cdll.LoadLibrary(None)

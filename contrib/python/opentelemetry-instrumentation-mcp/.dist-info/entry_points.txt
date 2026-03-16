@@ -1,2 +1,0 @@
-[opentelemetry_instrumentor]
-mcp = opentelemetry.instrumentation.mcp:McpInstrumentor

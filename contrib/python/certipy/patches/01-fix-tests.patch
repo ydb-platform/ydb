@@ -1,5 +1,0 @@
---- contrib/python/certipy/certipy/test/test_certipy.py	(index)
-+++ contrib/python/certipy/certipy/test/test_certipy.py	(working tree)
-@@ -66,1 +66,1 @@ from OpenSSL import crypto
--from ..certipy import (
-+from certipy.certipy import (

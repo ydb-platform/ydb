@@ -1,9 +1,0 @@
---- contrib/python/requests-raw/requests_raw/connection.py	(index)
-+++ contrib/python/requests-raw/requests_raw/connection.py	(working tree)
-@@ -6 +6,5 @@ from urllib3.util.url import parse_url
--from urllib3.connection import HTTPConnection, HTTPSConnection, _TYPE_BODY
-+from urllib3.connection import HTTPConnection, HTTPSConnection
-+try:
-+    from urllib3.connection import _TYPE_BODY
-+except ImportError:
-+    _TYPE_BODY = typing.Union[bytes, typing.IO[typing.Any], typing.Iterable[bytes], str]

@@ -1,5 +1,0 @@
-requirements:
-  - tldextract: null
-  - Protego: null
-mark_as_sources:
-  - scrapy/utils/test.py

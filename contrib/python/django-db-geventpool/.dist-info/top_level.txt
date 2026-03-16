@@ -1,2 +1,0 @@
-django_db_geventpool
-tests

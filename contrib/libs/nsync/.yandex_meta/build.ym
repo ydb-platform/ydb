@@ -1,3 +1,0 @@
-{% extends '//builtin/nix.ym' %}
-
-{% block current_version %}1.30.0{% endblock %}

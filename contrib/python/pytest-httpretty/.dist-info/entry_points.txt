@@ -1,3 +1,0 @@
-[pytest11]
-httpretty = pytest_httpretty
-

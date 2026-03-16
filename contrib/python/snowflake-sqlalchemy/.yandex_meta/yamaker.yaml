@@ -1,4 +1,0 @@
-requirements:
-  - sqlalchemy: contrib/python/sqlalchemy/sqlalchemy-1.4
-keep:
-  - tests/*

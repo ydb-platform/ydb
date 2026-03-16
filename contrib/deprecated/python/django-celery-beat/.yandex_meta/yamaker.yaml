@@ -1,3 +1,0 @@
-requirements:
-  - celery: contrib/deprecated/python/celery
-  - django-timezone-field: contrib/deprecated/python/django-timezone-field

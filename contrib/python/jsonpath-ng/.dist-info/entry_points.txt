@@ -1,3 +1,0 @@
-[console_scripts]
-jsonpath_ng = jsonpath_ng.bin.jsonpath:entry_point
-

@@ -1,5 +1,0 @@
---- contrib/python/jsonobject/py3/tests/tests.py	(index)
-+++ contrib/python/jsonobject/py3/tests/tests.py	(working tree)
-@@ -152,1 +152,1 @@ class JsonObjectTestCase(unittest2.TestCase):
--                "'full_name' on a <class 'test.tests.Person'> "
-+                "'full_name' on a <class '__tests__.tests.Person'> "

@@ -1,3 +1,0 @@
-alias mars.step = endStep;
-alias mars.expoffset = marsExperimentOffset;
-

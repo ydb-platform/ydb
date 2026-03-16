@@ -1,3 +1,0 @@
-alias mars.number    = tubeNumber;
-alias mars.domain    = tubeDomain;
-alias mars.reference = referenceStep;

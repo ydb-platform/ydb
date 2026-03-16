@@ -1,2 +1,0 @@
-annet
-annet_generators

@@ -1,7 +1,0 @@
---- contrib/python/pynini/ya.make	(index)
-+++ contrib/python/pynini/ya.make	(working tree)
-@@ -77,2 +74,2 @@ PY_SRCS(
--    extensions/_pynini.pyx
--    extensions/_pywrapfst.pyx
-+    extensions/_pynini.pyx=_pynini
-+    extensions/_pywrapfst.pyx=_pywrapfst

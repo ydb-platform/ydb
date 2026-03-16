@@ -1,7 +1,0 @@
-mark_as_sources:
-  - pulp/tests/*
-exclude:
-  - pulp/solverdir/cbc/linux/32/cbc
-  - pulp/solverdir/cbc/linux/64/cbc
-  - pulp/solverdir/cbc/linux/arm64/cbc
-  - pulp/solverdir/cbc/osx/64/cbc

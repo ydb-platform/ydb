@@ -1,3 +1,0 @@
-[console_scripts]
-razdel-ctl = razdel.tests.ctl:main
-

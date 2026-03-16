@@ -1,4 +1,0 @@
-requirements:
-  - library/python/resource
-keep:
-  - docx/utils.py

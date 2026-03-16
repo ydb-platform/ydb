@@ -1,9 +1,0 @@
-requirements:
-  - contrib/restricted/llhttp
-  - contrib/deprecated/http-parser
-mark_as_cython_c:
-  - httptools/parser/parser.pyx
-  - httptools/parser/url_parser.pyx
-keep:
-  - httptools/parser/*.pyx
-  - httptools/parser/*.pxd

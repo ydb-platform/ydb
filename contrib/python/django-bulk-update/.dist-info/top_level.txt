@@ -1,2 +1,0 @@
-django_bulk_update
-tests

@@ -1,4 +1,0 @@
-copy:
-  - regex_2/*
-mark_as_tests:
-  - regex_2/test_*

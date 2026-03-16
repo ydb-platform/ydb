@@ -1,4 +1,0 @@
-creedsolo
-dist
-reedsolo
-tests

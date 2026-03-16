@@ -1,4 +1,0 @@
-The coutwildrnp shapefile and all .txt files are extracts from the US National
-Map's 1:2M scale Wilderness Area boundaries [1] and are in the public domain.
-
-[1] http://nationalmap.gov/small_scale/atlasftp.html

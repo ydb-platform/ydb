@@ -1,8 +1,0 @@
-cluecode
-formattedcode
-licensedcode
-packagedcode
-scancode
-scancode_config
-summarycode
-textcode

@@ -1,2 +1,0 @@
-[babel.extractors]
-custom = "mypackage.module:myfunc"

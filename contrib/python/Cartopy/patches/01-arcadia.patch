@@ -1,6 +1,0 @@
---- contrib/python/Cartopy/cartopy/io/srtm.py	(index)
-+++ contrib/python/Cartopy/cartopy/io/srtm.py	(working tree)
-@@ -315,1 +316,2 @@ class SRTMDownloader(Downloader):
--    _SRTM_LOOKUP_CACHE = Path(__file__).parent / 'srtm.npz'
-+    import importlib.resources
-+    _SRTM_LOOKUP_CACHE = (importlib.resources.files(__package__) / 'srtm.npz').open(mode='b')

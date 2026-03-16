@@ -1,1 +1,0 @@
-from .magic import PyinstrumentMagic

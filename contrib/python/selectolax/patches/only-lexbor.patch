@@ -1,5 +1,0 @@
---- contrib/python/selectolax/selectolax/__init__.py	(index)
-+++ contrib/python/selectolax/selectolax/__init__.py	(working tree)
-@@ -5,1 +5,1 @@ __author__ = """Artem Golubin"""
--from . import lexbor, modest, parser
-+from . import lexbor

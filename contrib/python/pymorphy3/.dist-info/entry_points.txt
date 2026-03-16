@@ -1,2 +1,0 @@
-[console_scripts]
-pymorphy = pymorphy3.cli:main

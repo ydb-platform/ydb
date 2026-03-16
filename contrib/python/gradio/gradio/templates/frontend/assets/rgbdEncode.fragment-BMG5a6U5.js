@@ -1,5 +1,0 @@
-import{S as o}from"./index-BZt0m9TU.js";import"./helperFunctions-B2gYs5dd.js";import"./index-xGeN4i2A.js";import"./svelte/svelte_svelte.js";import"./svelte/svelte_animate.js";import"./svelte/svelte_attachments.js";import"./svelte/svelte_easing.js";import"./svelte/svelte_internal_client.js";import"./svelte/svelte_internal_flags_async.js";import"./svelte/svelte_internal_flags_legacy.js";import"./svelte/svelte_internal_flags_tracing.js";import"./svelte/svelte_internal_server.js";import"./svelte/svelte_legacy.js";import"./svelte/svelte_motion.js";import"./svelte/svelte_reactivity.js";import"./svelte/svelte_reactivity_window.js";import"./svelte/svelte_server.js";import"./svelte/svelte_store.js";import"./svelte/svelte_transition.js";import"./svelte/svelte_events.js";const r="rgbdEncodePixelShader",t=`varying vec2 vUV;uniform sampler2D textureSampler;
-#include<helperFunctions>
-#define CUSTOM_FRAGMENT_DEFINITIONS
-void main(void) 
-{gl_FragColor=toRGBD(texture2D(textureSampler,vUV).rgb);}`;o.ShadersStore[r]||(o.ShadersStore[r]=t);const b={name:r,shader:t};export{b as rgbdEncodePixelShader};

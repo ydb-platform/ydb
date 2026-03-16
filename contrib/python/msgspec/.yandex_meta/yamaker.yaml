@@ -1,8 +1,0 @@
-keep:
-  - .idea/*
-exclude_from_macros:
-  - .idea/*
-exclude:
-  - tests/prof/*
-  - tests/typing/*
-  - tests/unit/test_cpylint.py

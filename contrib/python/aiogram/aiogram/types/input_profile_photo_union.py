@@ -1,6 +1,0 @@
-from typing import TypeAlias
-
-from .input_profile_photo_animated import InputProfilePhotoAnimated
-from .input_profile_photo_static import InputProfilePhotoStatic
-
-InputProfilePhotoUnion: TypeAlias = InputProfilePhotoStatic | InputProfilePhotoAnimated

@@ -1,4 +1,0 @@
-[sqlalchemy.dialects]
-asyncpg=gino.dialects.asyncpg:AsyncpgDialect
-postgresql.asyncpg=gino.dialects.asyncpg:AsyncpgDialect
-

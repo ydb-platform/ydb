@@ -1,4 +1,0 @@
-keep:
-  - mitmproxy/contrib/imghdr.py
-mark_as_sources:
-  - mitmproxy/test/*.py

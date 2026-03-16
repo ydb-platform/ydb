@@ -1,8 +1,0 @@
---- contrib/python/clickhouse-driver/py3/clickhouse_driver/compression/zstd.py	(index)
-+++ contrib/python/clickhouse-driver/py3/clickhouse_driver/compression/zstd.py	(working tree)
-@@ -1,4 +1,4 @@
--import zstd
-+import zstandard as zstd
- 
- from .base import BaseCompressor, BaseDecompressor
- from ..protocol import CompressionMethod, CompressionMethodByte

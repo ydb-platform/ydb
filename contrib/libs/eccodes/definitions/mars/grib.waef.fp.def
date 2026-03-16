@@ -1,3 +1,0 @@
-alias mars.number = forecastProbabilityNumber;
-alias mars.step   = stepRange;
-

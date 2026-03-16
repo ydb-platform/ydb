@@ -1,1 +1,0 @@
-import{a8 as a}from"./index-Cp3b7MWQ.js";const o=[["path",{d:"M5 9v6",key:"158jrl"}],["path",{d:"M9 9h3V5l7 7-7 7v-4H9V9z",key:"1sg2xn"}]],t=a("arrow-big-right-dash",o);export{o as __iconNode,t as default};

@@ -1,2 +1,0 @@
-mark_as_tests:
-  - shortuuid/test_*.py

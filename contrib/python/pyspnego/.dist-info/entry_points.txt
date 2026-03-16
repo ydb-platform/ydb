@@ -1,2 +1,0 @@
-[console_scripts]
-pyspnego-parse = spnego.__main__:main

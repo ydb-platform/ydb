@@ -1,6 +1,0 @@
-[console_scripts]
-pytest-bdd = pytest_bdd.scripts:main
-
-[pytest11]
-pytest-bdd = pytest_bdd.plugin
-

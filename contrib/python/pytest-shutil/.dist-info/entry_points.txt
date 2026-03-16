@@ -1,3 +1,0 @@
-[pytest11]
-workspace = pytest_shutil.workspace
-

@@ -1,8 +1,0 @@
-copy:
-  - '*.[ch]'
-exclude:
-  - ReadMe.html
-  - demos/*
-  - prober/*
-keep:
-  - probe_results.h

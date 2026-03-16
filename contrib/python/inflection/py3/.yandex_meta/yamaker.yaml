@@ -1,4 +1,0 @@
-exclude:
-  - inflection.py
-keep:
-  - tests/test_inflection.py

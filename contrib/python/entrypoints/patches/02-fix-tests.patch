@@ -1,6 +1,0 @@
---- contrib/python/entrypoints/tests/test_entrypoints.py	(index)
-+++ contrib/python/entrypoints/tests/test_entrypoints.py	(working tree)
-@@ -8,1 +8,2 @@ from zipfile import ZipFile
--samples_dir = osp.join(osp.dirname(__file__), 'samples')
-+import yatest.common as yc
-+samples_dir = yc.source_path(osp.join(osp.dirname(__file__), 'samples'))

@@ -1,3 +1,0 @@
-[pytest11]
-freezegun = pytest_freezegun
-

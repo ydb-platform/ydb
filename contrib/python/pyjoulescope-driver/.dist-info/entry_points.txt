@@ -1,2 +1,0 @@
-[console_scripts]
-pyjoulescope_driver = pyjoulescope_driver.__main__:run

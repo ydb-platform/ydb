@@ -1,5 +1,0 @@
-alias mars.origin = centre;
-alias mars.number = perturbationNumber;
-alias mars.method = methodNumber;
-if (class is "od") { alias mars.system = systemNumber; }
-if (class is "en") { alias mars.system = systemNumber; }

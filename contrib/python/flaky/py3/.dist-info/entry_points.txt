@@ -1,2 +1,0 @@
-[pytest11]
-flaky = flaky.flaky_pytest_plugin

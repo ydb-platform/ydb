@@ -1,2 +1,0 @@
-[console_scripts]
-yt-dlp = yt_dlp:main

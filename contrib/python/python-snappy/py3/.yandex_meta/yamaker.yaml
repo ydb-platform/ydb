@@ -1,5 +1,0 @@
-requirements:
-  - contrib/libs/snappy
-exclude:
-  - snappy/snappy_cffi.py
-  - snappy/snappy_cffi_builder.py

@@ -1,8 +1,0 @@
---- contrib/python/flake8-commas/flake8_commas/_base.py	(1e15935966d37eb3d22f6a83de38f23bc66e9c06)
-+++ contrib/python/flake8-commas/flake8_commas/_base.py	(fc17e78dfd8e32fa98af38d773855fa8c2acce79)
-@@ -32 +32 @@ PYTHON_2_KWDS = {
--    'return', 'try', 'while', 'with', 'yield', 'case', 'match',
-+    'return', 'try', 'while', 'with', 'yield', 'case', 'match', 'await',
-@@ -39 +39 @@ PYTHON_3_KWDS = {
--    'match',
-+    'match', 'await',

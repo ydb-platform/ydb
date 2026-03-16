@@ -1,6 +1,0 @@
-[console_scripts]
-deepeval=deepeval.cli.main:app
-
-[pytest11]
-deepeval=deepeval.plugins.plugin
-

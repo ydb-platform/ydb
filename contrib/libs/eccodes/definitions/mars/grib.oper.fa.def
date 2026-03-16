@@ -1,3 +1,0 @@
-#TODO assert(localDefinitionNumber == 8);
-
-alias mars.step   = stepRange;

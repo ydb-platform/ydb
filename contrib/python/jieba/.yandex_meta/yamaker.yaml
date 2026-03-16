@@ -1,5 +1,0 @@
-requirements:
-  - setuptools
-exclude:
-  - jieba/analyse/*
-  - jieba/lac_small/*

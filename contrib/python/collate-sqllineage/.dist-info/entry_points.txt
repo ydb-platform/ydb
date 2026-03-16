@@ -1,2 +1,0 @@
-[console_scripts]
-sqllineage = collate_sqllineage.cli:main

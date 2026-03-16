@@ -1,7 +1,0 @@
-Here is a paragraph, followed by a horizontal rule.
-***
-Followed by another paragraph.
-
-Here is another paragraph, followed by:
-*** not an HR.
-Followed by more of the same paragraph.

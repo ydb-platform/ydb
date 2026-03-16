@@ -1,7 +1,0 @@
-#define SIZEOF_INT 4
-#define SIZEOF_LONG 4
-#define SIZEOF_LONG_LONG 8
-#define SIZEOF_VOID_P 8
-
-#define HAVE_STDINT_H 1
-#define HAVE_UINT64_T 1

@@ -1,6 +1,0 @@
-# (C) Copyright 2005- ECMWF.
-
-# TEMPLATE 3.40, Gaussian latitude/longitude
-
-include "grib2/templates/template.3.shape_of_the_earth.def"
-include "grib2/templates/template.3.gaussian.def"

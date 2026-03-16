@@ -1,6 +1,0 @@
---- contrib/python/flask-restx/py3/flask_restx/schemas/__init__.py	(index)
-+++ contrib/python/flask-restx/py3/flask_restx/schemas/__init__.py	(working tree)
-@@ -60 +60,2 @@ class LazySchema(Mapping):
--            ref = importlib_resources.files(__name__) / self.filename
-+            import pkg_resources
-+            ref = pkg_resources.resource_filename(__name__, self.filename)

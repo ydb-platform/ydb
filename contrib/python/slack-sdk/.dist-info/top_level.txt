@@ -1,2 +1,0 @@
-slack
-slack_sdk

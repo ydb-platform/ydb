@@ -1,8 +1,0 @@
---- contrib/python/google-api-core/py3/google/api_core/operations_v1/operations_client.py	(index)
-+++ contrib/python/google-api-core/py3/google/api_core/operations_v1/operations_client.py	(working tree)
-@@ -45,1 +45,1 @@ import functools
--from google.longrunning import operations_pb2
-+from google.longrunning import operations_pb2, operations_pb2_grpc
-@@ -61,1 +61,1 @@ class OperationsClient(object):
--        self.operations_stub = operations_pb2.OperationsStub(channel)
-+        self.operations_stub = operations_pb2_grpc.OperationsStub(channel)

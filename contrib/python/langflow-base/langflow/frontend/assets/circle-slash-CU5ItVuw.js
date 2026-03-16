@@ -1,1 +1,0 @@
-import{a8 as c}from"./index-Cp3b7MWQ.js";const e=[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["line",{x1:"9",x2:"15",y1:"15",y2:"9",key:"1dfufj"}]],l=c("circle-slash",e);export{e as __iconNode,l as default};

@@ -1,2 +1,0 @@
-[opentelemetry_instrumentor]
-aiohttp-server = opentelemetry.instrumentation.aiohttp_server:AioHttpServerInstrumentor

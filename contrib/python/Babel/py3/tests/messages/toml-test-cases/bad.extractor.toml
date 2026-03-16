@@ -1,2 +1,0 @@
-[extractors]
-custom = { module = "mypackage.module", func = "myfunc" }

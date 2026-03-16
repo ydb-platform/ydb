@@ -1,5 +1,0 @@
---- contrib/python/greenlet/py2/greenlet/tests/_test_extension_cpp.cpp	(index)
-+++ contrib/python/greenlet/py2/greenlet/tests/_test_extension_cpp.cpp	(working tree)
-@@ -103,1 +103,1 @@ init_test_extension_cpp(void)
--    module = Py_InitModule("greenlet.tests._test_extension_cpp", test_methods);
-+    module = Py_InitModule("__tests__._test_extension_cpp", test_methods);

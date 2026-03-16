@@ -1,4 +1,0 @@
-requirements:
-  - pytz
-mark_as_sources:
-  - rest_framework/test.py

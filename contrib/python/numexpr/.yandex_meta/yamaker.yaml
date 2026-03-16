@@ -1,6 +1,0 @@
-disable_includes:
-  - mkl_vml.h
-  - mkl_service.h
-exclude_from_macros:
-  - numexpr/interp_body.cpp
-  - numexpr/win32/*

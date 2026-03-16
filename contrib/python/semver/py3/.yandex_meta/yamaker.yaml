@@ -1,3 +1,0 @@
-keep:
-  - tests/test_semver.py
-  - tests/test_typeerror-274.py

@@ -1,6 +1,0 @@
-#include "custompickle/custompickle.c"
-#include "custompickle/pyhelpers.c"
-#include "custompickle/save/savebuffer.c"
-#include "custompickle/save/automaton_save.c"
-#include "custompickle/load/loadbuffer.c"
-#include "custompickle/load/module_automaton_load.c"

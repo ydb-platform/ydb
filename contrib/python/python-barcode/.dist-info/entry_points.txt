@@ -1,2 +1,0 @@
-[console_scripts]
-python-barcode = barcode.pybarcode:main

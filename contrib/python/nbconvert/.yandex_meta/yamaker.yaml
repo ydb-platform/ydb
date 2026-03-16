@@ -1,6 +1,0 @@
-requirements:
-  - tinycss2
-  - setuptools
-keep:
-  # require manual update
-  - nbconvert-6.3.0.data/**

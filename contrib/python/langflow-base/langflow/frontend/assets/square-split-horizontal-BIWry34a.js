@@ -1,1 +1,0 @@
-import{a8 as t}from"./index-Cp3b7MWQ.js";const a=[["path",{d:"M8 19H5c-1 0-2-1-2-2V7c0-1 1-2 2-2h3",key:"lubmu8"}],["path",{d:"M16 5h3c1 0 2 1 2 2v10c0 1-1 2-2 2h-3",key:"1ag34g"}],["line",{x1:"12",x2:"12",y1:"4",y2:"20",key:"1tx1rr"}]],o=t("square-split-horizontal",a);export{a as __iconNode,o as default};

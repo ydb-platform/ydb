@@ -1,8 +1,0 @@
---- contrib/python/scikit-learn/py3/sklearn/utils/_repr_html/estimator.py	(index)
-+++ contrib/python/scikit-learn/py3/sklearn/utils/_repr_html/estimator.py	(working tree)
-@@ -27,2 +27,3 @@ def _get_css_style():
--    estimator_css_file = Path(__file__).parent / "estimator.css"
--    params_css_file = Path(__file__).parent / "params.css"
-+    import importlib.resources
-+    estimator_css_file = importlib.resources.files(__package__) / "estimator.css"
-+    params_css_file = importlib.resources.files(__package__) / "params.css"

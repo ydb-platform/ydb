@@ -1,1 +1,0 @@
-from .migrate import migrate

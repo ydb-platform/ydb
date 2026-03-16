@@ -1,5 +1,0 @@
---- contrib/libs/libpq/src/include/pg_config-linux.h	(index)
-+++ contrib/libs/libpq/src/include/pg_config-linux.h	(working tree)
-@@ -574,1 +574,1 @@
--#define OPENSSL_API_COMPAT 0x10101000L
-+/* #undef OPENSSL_API_COMPAT */

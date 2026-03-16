@@ -1,5 +1,0 @@
---- contrib/python/mpi4py/mpi4py/__init__.py	(index)
-+++ contrib/python/mpi4py/mpi4py/__init__.py	(working tree)
-@@ -50,1 +50,1 @@ def rc(**kargs):  # pylint: disable=invalid-name
--    initialize = True
-+    initialize = 'Y_PYTHON_IMPORT_TEST' not in __import__('os').environ

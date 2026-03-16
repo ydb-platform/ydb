@@ -1,5 +1,0 @@
-exclude:
-  - murmurhash/MurmurHash[23].cpp
-  - murmurhash/include/*
-requirements:
-  - contrib/restricted/murmurhash

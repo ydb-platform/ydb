@@ -1,4 +1,0 @@
-requirements:
-  - marshmallow-union
-keep:
-  - tests/*

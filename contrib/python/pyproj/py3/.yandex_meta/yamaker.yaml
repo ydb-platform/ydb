@@ -1,9 +1,0 @@
-requirements:
-  - contrib/libs/proj/src
-mark_as_cython_c:
-  - pyproj/*.pyx
-cython_directive:
-  - language_level=3
-  - embedsignature=true
-  - c_string_type=str
-  - c_string_encoding=utf-8

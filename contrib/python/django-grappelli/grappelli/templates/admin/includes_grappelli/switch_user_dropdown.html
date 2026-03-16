@@ -1,7 +1,0 @@
-{% spaceless %}
-{% if request.session.original_user %}
-    <li><a href="{% url 'grp_switch_user' request.session.original_user.id %}?redirect={{ request.path }}" class="grp-switch-user-is-original">{{ request.session.original_user.username }}</a></li>
-{% endif %}
-{% for user in object_list %}
-    <li><a href="{% url 'grp_switch_user' user.id %}?redirect={{ request.path }}" class="grp-switch-user-is-target">{% firstof user.get_short_name user.get_username %}</a></li>
-{% endfor %}{% endspaceless %}

@@ -1,3 +1,0 @@
-# TODO: Check me
-alias mars.number = perturbationNumber;
-alias mars.step   = stepRange;

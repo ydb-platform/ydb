@@ -1,4 +1,0 @@
-requirements:
-  - lxml-html-clean
-exclude:
-  - webstruct/model_benchmark.py

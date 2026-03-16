@@ -1,4 +1,0 @@
-requirements:
-  - ujson
-  - simplejson
-  - python-rapidjson

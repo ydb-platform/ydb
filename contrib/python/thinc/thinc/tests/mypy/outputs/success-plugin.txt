@@ -1,6 +1,0 @@
-6: note: Revealed type is "thinc.model.Model[thinc.types.Floats2d, thinc.types.Floats2d]"
-9: note: Revealed type is "thinc.model.Model[thinc.types.Floats2d, thinc.types.Floats2d]"
-12: note: Revealed type is "thinc.model.Model[thinc.types.Floats2d, thinc.types.Floats2d]"
-15: note: Revealed type is "thinc.model.Model[thinc.types.Floats2d, thinc.types.Floats2d]"
-31: error: Need type annotation for "non_combinator_model"  [var-annotated]
-34: note: Revealed type is "thinc.model.Model[Any, Any]"

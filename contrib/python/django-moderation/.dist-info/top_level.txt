@@ -1,3 +1,0 @@
-example_project
-moderation
-tests

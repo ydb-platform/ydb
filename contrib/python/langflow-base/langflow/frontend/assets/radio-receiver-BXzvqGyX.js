@@ -1,1 +1,0 @@
-import{a8 as e}from"./index-Cp3b7MWQ.js";const t=[["path",{d:"M5 16v2",key:"g5qcv5"}],["path",{d:"M19 16v2",key:"1gbaio"}],["rect",{width:"20",height:"8",x:"2",y:"8",rx:"2",key:"vjsjur"}],["path",{d:"M18 12h.01",key:"yjnet6"}]],o=e("radio-receiver",t);export{t as __iconNode,o as default};

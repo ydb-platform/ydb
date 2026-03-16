@@ -1,5 +1,0 @@
-requirements:
-  - enum34
-exclude:
-  - infi/clickhouse_orm/_func_tests.py
-  - infi/clickhouse_orm/func_defs.py

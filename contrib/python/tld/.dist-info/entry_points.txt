@@ -1,2 +1,0 @@
-[console_scripts]
-update-tld-names = tld.utils:update_tld_names_cli

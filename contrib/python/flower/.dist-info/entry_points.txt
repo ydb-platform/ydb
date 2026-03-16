@@ -1,2 +1,0 @@
-[celery.commands]
-flower = flower.command:flower

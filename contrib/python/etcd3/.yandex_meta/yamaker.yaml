@@ -1,5 +1,0 @@
-exclude:
-  - etcd3/**/*_pb2.py
-  - etcd3/**/*_pb2_grpc.py
-keep:
-  - etcd3/**/*.proto

@@ -1,8 +1,0 @@
---- contrib/python/scikit-image/skimage/_shared/fast_exp.h	(index)
-+++ contrib/python/scikit-image/skimage/_shared/fast_exp.h	(working tree)
-@@ -17,1 +17,1 @@
--__inline double _fast_exp (double y)
-+static double _fast_exp (double y)
-@@ -25,1 +25,1 @@
--__inline float _fast_expf (float y)
-+static float _fast_expf (float y)

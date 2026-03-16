@@ -1,5 +1,0 @@
-databases
-databases/backends
-databases/backends/common
-databases/backends/compilers
-databases/backends/dialects

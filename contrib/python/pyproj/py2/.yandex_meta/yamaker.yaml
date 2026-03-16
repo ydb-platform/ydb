@@ -1,9 +1,0 @@
-requirements:
-  - contrib/libs/proj/src
-mark_as_cython_c:
-  - pyproj/_crs.pyx
-  - pyproj/_datadir.pyx
-  - pyproj/_geod.pyx
-  - pyproj/_list.pyx
-  - pyproj/_proj.pyx
-  - pyproj/_transformer.pyx

@@ -1,9 +1,0 @@
-requirements:
-  - library/python/django
-  - library/python/resource
-  - standard-cgi
-  - setuptools
-mark_as_sources:
-  - django/contrib/admin/tests.py
-  - django/core/management/commands/test.py
-  - django/test/*

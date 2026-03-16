@@ -1,1 +1,0 @@
-"""Temporal API protobuf models."""

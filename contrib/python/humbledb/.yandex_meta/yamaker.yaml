@@ -1,2 +1,0 @@
-requirements:
-  - pymongo: contrib/deprecated/python/pymongo

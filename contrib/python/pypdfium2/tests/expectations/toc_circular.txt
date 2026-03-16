@@ -1,3 +1,0 @@
-[*] A Good Beginning -> _
-[*] A Good Ending -> _
-A circular bookmark reference was detected while traversing the table of contents.

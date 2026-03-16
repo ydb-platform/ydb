@@ -1,3 +1,0 @@
-- Peter Bengtsson (@peterbe)
-- Ben Spaulding (@benspaulding)
-- Eleni Lixourioti (@Geekfish)

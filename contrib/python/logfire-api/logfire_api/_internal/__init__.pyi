@@ -1,1 +1,0 @@
-from logfire._internal.utils import platform_is_emscripten as platform_is_emscripten

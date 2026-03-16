@@ -1,6 +1,0 @@
-'IFS' = {
-    backgroundProcess = 255;
-}
-'AIFS' = {
-    backgroundProcess = 1;
-}

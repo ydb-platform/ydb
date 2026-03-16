@@ -1,9 +1,0 @@
-[project]
-name = "pyperformance_bm_bpe_tokeniser"
-requires-python = ">=3.7"
-dependencies = ["pyperf"]
-urls = {repository = "https://github.com/python/pyperformance"}
-dynamic = ["version"]
-
-[tool.pyperformance]
-name = "bpe_tokeniser"

@@ -1,9 +1,0 @@
---- a/horovod/common/basics.py
-+++ b/horovod/common/basics.py
-@@ -1,1 +1,1 @@
--import ctypes
-+import ctypes.util
-@@ -26,2 +26 @@
--        full_path = util.get_extension_full_path(pkg_path, *args)
--        self.MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
-+        self.MPI_LIB_CTYPES = ctypes.CDLL(ctypes.util.find_library(args[-1]))

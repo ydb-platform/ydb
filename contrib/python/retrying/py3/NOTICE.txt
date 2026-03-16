@@ -1,4 +1,0 @@
-Copyright 2013 Ray Holder
-Copyright 2015 the "retrying" Contributors
-
-SPDX-License-Identifier: Apache-2.0

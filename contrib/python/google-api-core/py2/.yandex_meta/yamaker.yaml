@@ -1,9 +1,0 @@
-exclude:
-  - google/api_core/future/async_future.py
-  - google/api_core/gapic_v1/config_async.py
-  - google/api_core/gapic_v1/method_async.py
-  - google/api_core/grpc_helpers_async.py
-  - google/api_core/operation_async.py
-  - google/api_core/operations_v1/operations_async_client.py
-  - google/api_core/page_iterator_async.py
-  - google/api_core/retry_async.py

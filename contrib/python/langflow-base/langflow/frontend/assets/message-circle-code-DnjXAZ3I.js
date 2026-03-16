@@ -1,1 +1,0 @@
-import{a8 as e}from"./index-Cp3b7MWQ.js";const a=[["path",{d:"M10 9.5 8 12l2 2.5",key:"3mjy60"}],["path",{d:"m14 9.5 2 2.5-2 2.5",key:"1bir2l"}],["path",{d:"M7.9 20A9 9 0 1 0 4 16.1L2 22z",key:"k85zhp"}]],o=e("message-circle-code",a);export{a as __iconNode,o as default};

@@ -1,3 +1,0 @@
-[flake8.extension]
-IS = flake8_import_single.linter:Linter
-

@@ -1,6 +1,0 @@
---- contrib/python/py-radix/py3/tests/test_compat.py	(index)
-+++ contrib/python/py-radix/py3/tests/test_compat.py	(working tree)
-@@ -28 +28,2 @@ class LoadRadixPickle(TestCase):
--        self.data_dir = join(dirname(realpath(__file__)), 'data')
-+        import yatest.common as yc
-+        self.data_dir = join(dirname(realpath(yc.source_path(__file__))), 'data')

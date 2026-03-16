@@ -1,5 +1,0 @@
---- contrib/python/mysqlclient/py2/ya.make	(index)
-+++ contrib/python/mysqlclient/py2/ya.make	(working tree)
-@@ -25 +25 @@ CFLAGS(
--    \"-Dversion_info="\"(1,4,6,'final',0)\"\""
-+    "-Dversion_info=\"(1,4,6,'final',0)\""

@@ -1,2 +1,0 @@
-[opentelemetry_instrumentor]
-tornado = opentelemetry.instrumentation.tornado:TornadoInstrumentor

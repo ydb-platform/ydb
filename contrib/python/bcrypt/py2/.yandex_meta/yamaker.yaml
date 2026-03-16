@@ -1,7 +1,0 @@
-copy:
-  - _csrc/*
-  - build_bcrypt.py
-exclude_from_macros:
-  - build_bcrypt.py
-disable_includes:
-  - sys/byteorder.h

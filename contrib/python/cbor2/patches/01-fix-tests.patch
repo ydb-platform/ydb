@@ -1,8 +1,0 @@
---- contrib/python/cbor2/tests/test_tool.py	(index)
-+++ contrib/python/cbor2/tests/test_tool.py	(working tree)
-@@ -116,2 +116,3 @@ def test_embed_bytes(monkeypatch, tmpdir):
--    infile = Path(__file__).with_name("examples.cbor.b64")
--    expected = Path(__file__).with_name("examples.json").read_text()
-+    import yatest.common as yc
-+    infile = Path(yc.source_path(__file__)).with_name("examples.cbor.b64")
-+    expected = Path(yc.source_path(__file__)).with_name("examples.json").read_text()

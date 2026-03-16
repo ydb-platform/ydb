@@ -1,5 +1,0 @@
-asgiref==3.3.4
-django==3.2.4
-pytz==2021.1
-sqlparse==0.4.1
-legacy-cgi==2.6

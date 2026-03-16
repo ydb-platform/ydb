@@ -1,1 +1,0 @@
-import{a8 as a}from"./index-Cp3b7MWQ.js";const e=[["path",{d:"M22 12a10.06 10.06 1 0 0-20 0Z",key:"1teyop"}],["path",{d:"M12 12v8a2 2 0 0 0 4 0",key:"ulpmoc"}],["path",{d:"M12 2v1",key:"11qlp1"}]],t=a("umbrella",e);export{e as __iconNode,t as default};

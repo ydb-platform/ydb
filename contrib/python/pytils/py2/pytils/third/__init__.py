@@ -1,3 +1,0 @@
-"""
-Third-party modules
-"""

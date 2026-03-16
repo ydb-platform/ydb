@@ -1,3 +1,0 @@
-[tool.pyperformance]
-name = "async_tree_io"
-extra_opts = ["io"]

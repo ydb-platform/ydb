@@ -1,3 +1,0 @@
-New {{ content_type }} entry needs to be moderated
-
-You can moderate here: {{ moderated_object.get_admin_moderate_url }}

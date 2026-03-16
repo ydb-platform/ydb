@@ -1,4 +1,0 @@
-keep:
-  - test.py
-exclude_from_macros:
-  - test.py

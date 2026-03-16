@@ -1,3 +1,0 @@
-[console_scripts]
-jupytext = jupytext.cli:jupytext
-jupytext-config = jupytext_config.__main__:main

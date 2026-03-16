@@ -1,7 +1,0 @@
-{
-    "$schema": "http://json-schema.org/draft-07/schema",
-    "$id": "schema.schema.json",
-    "title": "schema",
-    "description": "URI of the JSON schema of this object.",
-    "type": "string"
-}

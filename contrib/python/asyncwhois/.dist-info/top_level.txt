@@ -1,2 +1,0 @@
-asyncwhois
-tests

@@ -1,1 +1,0 @@
-from .run import main

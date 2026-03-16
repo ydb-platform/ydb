@@ -1,9 +1,0 @@
-{% extends '//builtin/nix.ym' %}
-
-{% block current_version %}0.4.9.1{% endblock %}
-
-{% block keep_sources %}
-generator/proto/ya.make
-generator/protoc-gen-nanopb.py
-generator/ya.make
-{% endblock %}

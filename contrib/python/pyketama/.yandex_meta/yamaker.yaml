@@ -1,9 +1,0 @@
-copy:
-  - contrib/*
-exclude_from_macros:
-  - LICENSE
-keep:
-  - LICENSE
-  - tests/test_ketama.py
-mark_as_cython_c:
-  - ketama/ketama.pyx

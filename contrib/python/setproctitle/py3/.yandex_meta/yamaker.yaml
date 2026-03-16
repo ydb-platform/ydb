@@ -1,4 +1,0 @@
-copy:
-  - src/*
-exclude_from_macros:
-  - src/darwin_set_process_name.c

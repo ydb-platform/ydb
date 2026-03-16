@@ -1,7 +1,0 @@
-keep:
-  - .arcignore
-  - .idea/*
-exclude_from_macros:
-  - .arcignore
-  - .idea/*
-

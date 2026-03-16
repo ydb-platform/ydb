@@ -1,2 +1,0 @@
-Arbitrary payload data in an unconstrained format.
-This may be activity input parameters, a workflow result, a memo, etc.

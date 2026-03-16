@@ -1,8 +1,0 @@
---- contrib/python/fido2/fido2/rpid.py	(index)
-+++ contrib/python/fido2/fido2/rpid.py	(working tree)
-@@ -44,2 +44,3 @@ import six
--tld_fname = os.path.join(os.path.dirname(__file__), "public_suffix_list.dat")
--with open(tld_fname, "rb") as f:
-+import io
-+import pkgutil
-+with io.BytesIO(pkgutil.get_data(__package__, "public_suffix_list.dat")) as f:

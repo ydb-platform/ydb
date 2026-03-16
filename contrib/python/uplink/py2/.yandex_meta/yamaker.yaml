@@ -1,5 +1,0 @@
-mark_as_py3_sources:
-  - uplink/clients/aiohttp_.py
-  - uplink/clients/io/asyncio_strategy.py
-requirements:
-  - setuptools

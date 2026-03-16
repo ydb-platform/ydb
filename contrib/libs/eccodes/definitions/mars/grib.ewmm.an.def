@@ -1,5 +1,0 @@
-alias mars.step = startStep;
-alias mars.number=perturbationNumber;
-
-alias monthlyVerificationTime = validityTime;
-alias monthlyVerificationDate = dataDate;

@@ -1,8 +1,0 @@
-requirements:
-  - sqlalchemy: contrib/python/sqlalchemy/sqlalchemy-2
-exclude_from_macros:
-  - a.yaml
-mark_as_tests:
-  - test_dbapi/*
-keep:
-  - a.yaml

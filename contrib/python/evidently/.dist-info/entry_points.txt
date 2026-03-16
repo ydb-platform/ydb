@@ -1,2 +1,0 @@
-[console_scripts]
-evidently = evidently.cli:app

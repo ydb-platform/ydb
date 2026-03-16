@@ -1,2 +1,0 @@
-rangefilter
-rangefilter/templatetags

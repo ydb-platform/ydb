@@ -1,2 +1,0 @@
-[pytest11]
-django_webtest = django_webtest.pytest_plugin

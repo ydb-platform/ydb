@@ -1,1 +1,0 @@
-_MODULE_LOCALES = ["en_US"]

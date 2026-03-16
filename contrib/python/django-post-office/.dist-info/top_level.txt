@@ -1,2 +1,0 @@
-post_office
-post_office_attachments

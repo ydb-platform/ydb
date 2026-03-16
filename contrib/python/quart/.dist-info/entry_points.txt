@@ -1,3 +1,0 @@
-[console_scripts]
-quart=quart.cli:main
-

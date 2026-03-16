@@ -1,5 +1,0 @@
---- a/Eigen/src/Core/Assign_MKL.h
-+++ b/Eigen/src/Core/Assign_MKL.h
-@@ -57 +57 @@ class vml_assign_traits
--      MightEnableVml = StorageOrdersAgree && DstHasDirectAccess && SrcHasDirectAccess && Src::InnerStrideAtCompileTime==1 && Dst::InnerStrideAtCompileTime==1,
-+      MightEnableVml = StorageOrdersAgree && DstHasDirectAccess!=0 && SrcHasDirectAccess!=0 && Src::InnerStrideAtCompileTime==1 && Dst::InnerStrideAtCompileTime==1,

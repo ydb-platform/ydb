@@ -1,4 +1,0 @@
-copy:
-  - clipper.cpp
-  - clipper.hpp
-  - extra_defines.hpp

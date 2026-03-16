@@ -1,1 +1,0 @@
-import{a8 as a}from"./index-Cp3b7MWQ.js";const e=[["path",{d:"M16 3h2a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-2",key:"tum69e"}],["path",{d:"M8 21H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h2",key:"z7wn0n"}]],c=a("brackets",e);export{e as __iconNode,c as default};

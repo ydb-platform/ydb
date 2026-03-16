@@ -1,3 +1,0 @@
-[console_scripts]
-markdown2 = markdown2:main
-

@@ -1,6 +1,0 @@
-requirements:
-  - contrib/libs/openfst
-keep:
-  - fst/*.pyx
-  - fst/*.pxd
-repo_url: https://github.com/vchahun/pyfst

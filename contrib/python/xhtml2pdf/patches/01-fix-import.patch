@@ -1,5 +1,0 @@
---- contrib/python/xhtml2pdf/xhtml2pdf/util.py	(index)
-+++ contrib/python/xhtml2pdf/xhtml2pdf/util.py	(working tree)
-@@ -25 +25 @@ import reportlab.pdfbase._cidfontdata
--from bidi import get_display
-+from bidi.algorithm import get_display

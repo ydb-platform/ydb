@@ -1,6 +1,0 @@
-#assert(local=31)
-
-alias mars.fcmonth = forecastMonth;
-unalias mars.step;
-
-alias mars.date  = referenceDate; 

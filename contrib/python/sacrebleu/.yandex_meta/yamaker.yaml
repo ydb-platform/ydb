@@ -1,2 +1,0 @@
-exclude:
-- sacrebleu.py # Старая версия, которая попала в wheel

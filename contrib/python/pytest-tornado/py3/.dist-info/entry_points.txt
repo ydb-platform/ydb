@@ -1,3 +1,0 @@
-[pytest11]
-tornado = pytest_tornado.plugin
-

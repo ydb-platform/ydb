@@ -1,4 +1,0 @@
-requirements:
-  - setuptools
-  - library/python/resource
-  - backports.functools-lru-cache

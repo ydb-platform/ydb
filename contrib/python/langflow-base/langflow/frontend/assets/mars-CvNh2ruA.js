@@ -1,1 +1,0 @@
-import{a8 as c}from"./index-Cp3b7MWQ.js";const e=[["path",{d:"M16 3h5v5",key:"1806ms"}],["path",{d:"m21 3-6.75 6.75",key:"pv0uzu"}],["circle",{cx:"10",cy:"14",r:"6",key:"1qwbdc"}]],o=c("mars",e);export{e as __iconNode,o as default};

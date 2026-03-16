@@ -1,2 +1,0 @@
-[sqlalchemy.dialects]
-trino = trino.sqlalchemy.dialect:TrinoDialect

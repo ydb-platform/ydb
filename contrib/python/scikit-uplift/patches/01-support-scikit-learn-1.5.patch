@@ -1,5 +1,0 @@
---- contrib/python/scikit-uplift/sklift/viz/base.py	(index)
-+++ contrib/python/scikit-uplift/sklift/viz/base.py	(working tree)
-@@ -4 +4 @@ from sklearn.utils.validation import check_consistent_length
--from sklearn.utils import check_matplotlib_support
-+from sklearn.utils._optional_dependencies import check_matplotlib_support

@@ -1,4 +1,0 @@
-requirements:
-  - pathlib2
-mark_as_tests:
-  - pathy/_tests/*

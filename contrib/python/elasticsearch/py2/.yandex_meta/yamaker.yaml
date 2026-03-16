@@ -1,5 +1,0 @@
-mark_as_py3_sources:
-  - elasticsearch/_async/*.py
-  - elasticsearch/_async/*.pyi
-mark_as_sources:
-  - elasticsearch/helpers/test.py

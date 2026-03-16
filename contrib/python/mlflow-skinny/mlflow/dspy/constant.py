@@ -1,1 +1,0 @@
-FLAVOR_NAME = "dspy"

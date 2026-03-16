@@ -1,2 +1,0 @@
-crossdock
-jaeger_client

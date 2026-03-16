@@ -1,4 +1,0 @@
-benchmarks
-doc
-examples
-pyperformance

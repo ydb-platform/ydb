@@ -1,2 +1,0 @@
-pyscopg2
-tests

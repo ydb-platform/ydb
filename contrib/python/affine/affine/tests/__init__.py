@@ -1,1 +1,0 @@
-"""Affine tests package"""

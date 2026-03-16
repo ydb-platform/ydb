@@ -1,1 +1,0 @@
-import{a8 as e}from"./index-Cp3b7MWQ.js";const n=[["path",{d:"M6 4v6a6 6 0 0 0 12 0V4",key:"9kb039"}],["line",{x1:"4",x2:"20",y1:"20",y2:"20",key:"nun2al"}]],o=e("underline",n);export{n as __iconNode,o as default};

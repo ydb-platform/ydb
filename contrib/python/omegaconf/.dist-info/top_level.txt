@@ -1,2 +1,0 @@
-omegaconf
-pydevd_plugins

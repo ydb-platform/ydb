@@ -1,4 +1,0 @@
-[console_scripts]
-l2m=latex2mathml.converter:main
-latex2mathml=latex2mathml.converter:main
-

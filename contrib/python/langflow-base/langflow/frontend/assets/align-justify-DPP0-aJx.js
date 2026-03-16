@@ -1,1 +1,0 @@
-import{a8 as t}from"./index-Cp3b7MWQ.js";const a=[["path",{d:"M3 12h18",key:"1i2n21"}],["path",{d:"M3 18h18",key:"1h113x"}],["path",{d:"M3 6h18",key:"d0wm0j"}]],i=t("align-justify",a);export{a as __iconNode,i as default};

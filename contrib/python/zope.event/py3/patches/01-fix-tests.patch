@@ -1,5 +1,0 @@
---- contrib/python/zope.event/py3/zope/event/tests.py	(index)
-+++ contrib/python/zope.event/py3/zope/event/tests.py	(working tree)
-@@ -58,1 +58,1 @@ def tearDownClassHandlers(test):
--def test_suite():
-+def _test_suite():

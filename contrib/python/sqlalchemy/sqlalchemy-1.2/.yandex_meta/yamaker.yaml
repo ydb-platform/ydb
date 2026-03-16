@@ -1,4 +1,0 @@
-requirements:
-  - psycopg2
-exclude_from_macros:
-  - sqlalchemy/dialects/type_migration_guidelines.txt

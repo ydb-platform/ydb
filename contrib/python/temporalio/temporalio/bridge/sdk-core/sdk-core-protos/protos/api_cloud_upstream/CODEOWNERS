@@ -1,6 +1,0 @@
-# These owners will be the default owners for everything in
-# the repo. Unless a later match takes precedence,
-# @temporalio/saas will be requested for review when
-# someone opens a pull request.
-
-*       @temporalio/crew-iam-plus

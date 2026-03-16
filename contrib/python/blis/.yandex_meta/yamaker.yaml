@@ -1,8 +1,0 @@
-requirements:
-  - contrib/restricted/blis
-exclude:
-  - blis/_src/*
-  - tests/test_*.py
-mark_as_cython_c:
-  - blis/cy.pyx
-  - blis/py.pyx

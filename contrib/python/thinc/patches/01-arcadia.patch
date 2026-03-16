@@ -1,8 +1,0 @@
---- contrib/python/thinc/thinc/backends/_custom_kernels.py	(index)
-+++ contrib/python/thinc/thinc/backends/_custom_kernels.py	(working tree)
-@@ -9,1 +9,1 @@ def compile_mmh(src):
--KERNELS_SRC = (PWD / "_custom_kernels.cu").read_text(encoding="utf8")
-+KERNELS_SRC = ""  # (PWD / "_custom_kernels.cu").read_text(encoding="utf8")
-@@ -80,1 +80,1 @@ def compile_mmh(src):
--    return cupy.RawKernel((PWD / "_murmur3.cu").read_text(encoding="utf8"), "hash_data")
-+    return cupy.RawKernel("", "hash_data")

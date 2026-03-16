@@ -1,2 +1,0 @@
-[console_scripts]
-ftfy = ftfy.cli:main

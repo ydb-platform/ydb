@@ -1,3 +1,0 @@
-[pytest11]
-flakes = pytest_flakes
-

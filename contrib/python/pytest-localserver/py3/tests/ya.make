@@ -1,5 +1,7 @@
 PY3TEST()
 
+SUBSCRIBER(g:python-contrib)
+
 PEERDIR(
     contrib/python/pytest-localserver
     contrib/python/requests

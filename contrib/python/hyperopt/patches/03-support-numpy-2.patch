@@ -1,8 +1,0 @@
---- contrib/python/hyperopt/hyperopt/tests/test_base.py	(index)
-+++ contrib/python/hyperopt/hyperopt/tests/test_base.py	(working tree)
-@@ -209 +209 @@ class TestTrials(unittest.TestCase):
--        trials.insert_trial_doc(create_fake_trial(0, loss=np.NaN))
-+        trials.insert_trial_doc(create_fake_trial(0, loss=np.nan))
-@@ -216 +216 @@ class TestTrials(unittest.TestCase):
--        trials.insert_trial_doc(create_fake_trial(2, loss=np.NaN))
-+        trials.insert_trial_doc(create_fake_trial(2, loss=np.nan))

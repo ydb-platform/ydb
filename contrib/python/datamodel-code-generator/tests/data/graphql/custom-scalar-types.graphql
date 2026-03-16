@@ -1,6 +1,0 @@
-scalar Long
-
-type A {
-  id: ID!
-  duration: Long!
-}

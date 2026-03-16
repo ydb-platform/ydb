@@ -1,7 +1,0 @@
-{
-    "#all#": {
-        "base_class_kwargs": {
-            "omit_defaults": true
-        }
-    }
-}

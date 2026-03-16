@@ -1,5 +1,0 @@
-jpgrid
-quadtree
-_geohash
-geohash
-jpiarea

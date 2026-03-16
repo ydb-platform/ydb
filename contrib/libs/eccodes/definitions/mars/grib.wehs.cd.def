@@ -1,3 +1,0 @@
-alias mars.step     = stepRange;
-
-include "mars/mars.quantile.def"

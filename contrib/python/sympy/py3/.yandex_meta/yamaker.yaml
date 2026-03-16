@@ -1,7 +1,0 @@
-requirements:
-  - antlr4
-mark_as_tests:
-  - sympy/**/test-examples/*
-exclude:
-  - sympy/parsing/autolev/_antlr/*
-  - sympy/parsing/latex/_antlr/*

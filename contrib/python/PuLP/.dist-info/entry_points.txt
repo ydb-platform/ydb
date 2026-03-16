@@ -1,2 +1,0 @@
-[console_scripts]
-pulptest = pulp.tests.run_tests:pulpTestAll

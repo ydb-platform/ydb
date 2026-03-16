@@ -1,2 +1,0 @@
-mark_as_cython_c:
-  - aiochclient/_types.pyx

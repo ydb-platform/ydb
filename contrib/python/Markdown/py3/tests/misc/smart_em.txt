@@ -1,9 +1,0 @@
-_emphasis_
-
-this_is_not_emphasis
-
-[_punctuation with emphasis_]
-
-[_punctuation_with_emphasis_]
-
-[punctuation_without_emphasis]

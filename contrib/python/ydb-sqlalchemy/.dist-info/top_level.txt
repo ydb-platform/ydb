@@ -1,2 +1,0 @@
-test
-ydb_sqlalchemy

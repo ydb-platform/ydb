@@ -1,5 +1,0 @@
-[console_scripts]
-aerich = aerich.cli:main
-
-[gui_scripts]
-

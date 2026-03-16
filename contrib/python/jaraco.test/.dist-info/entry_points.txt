@@ -1,3 +1,0 @@
-[pytest11]
-jaraco.test.git = jaraco.test.git
-jaraco.test.http = jaraco.test.http

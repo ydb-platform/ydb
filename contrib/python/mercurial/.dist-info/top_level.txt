@@ -1,4 +1,0 @@
-hgdemandimport
-hgext
-hgext3rd
-mercurial

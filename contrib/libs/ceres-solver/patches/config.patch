@@ -1,5 +1,0 @@
---- a/include/ceres/internal/config.h	(index)
-+++ b/include/ceres/internal/config.h	(working tree)
-@@ -74,1 +74,1 @@
--// #define CERES_NO_EIGEN_METIS
-+#define CERES_NO_EIGEN_METIS

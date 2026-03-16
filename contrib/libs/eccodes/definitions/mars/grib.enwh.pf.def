@@ -1,3 +1,0 @@
-alias mars.number = perturbationNumber;
-alias mars.date   = referenceDate;
-alias mars.hdate  = dataDate;

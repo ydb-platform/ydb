@@ -1,2 +1,0 @@
-kernprof
-line_profiler

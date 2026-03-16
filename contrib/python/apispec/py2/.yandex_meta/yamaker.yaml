@@ -1,2 +1,0 @@
-keep:
-  - apispec/yaml_utils.py

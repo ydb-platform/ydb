@@ -1,3 +1,0 @@
-_openmetadata_testutils
-airflow_provider_openmetadata
-metadata

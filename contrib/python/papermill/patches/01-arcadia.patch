@@ -1,6 +1,0 @@
---- contrib/python/papermill/papermill/tests/__init__.py	(index)
-+++ contrib/python/papermill/papermill/tests/__init__.py	(working tree)
-@@ -7,1 +7,2 @@ kernel_name = 'python3'
--    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'notebooks', *args)
-+    import yatest.common as yc
-+    return os.path.join(os.path.dirname(yc.source_path(__file__)), 'notebooks', *args)

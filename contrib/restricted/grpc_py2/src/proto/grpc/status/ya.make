@@ -8,6 +8,11 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+SUBSCRIBER(
+    g:contrib
+    g:cpp-contrib
+)
+
 PROTO_NAMESPACE(
     GLOBAL
     contrib/restricted/grpc_py2

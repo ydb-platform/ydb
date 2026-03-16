@@ -1,3 +1,0 @@
-{ global:
-CLConnect;
-local: *; };

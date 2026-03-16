@@ -1,7 +1,0 @@
-In C++20 "requires" is a keyword. Rename struct field because it is unused.
-
---- a/include/mysql/components/services/dynamic_loader.h
-+++ b/include/mysql/components/services/dynamic_loader.h
-@@ -259,1 +259,1 @@ struct mysql_metadata_ref_t {
--  struct mysql_service_placeholder_ref_t *requires;
-+  struct mysql_service_placeholder_ref_t *requires_;

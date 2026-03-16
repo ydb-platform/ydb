@@ -1,4 +1,0 @@
-alias mars.date = dataDate;
-alias mars.time = dataTime;
-unalias mars.step;
-unalias mars.domain;

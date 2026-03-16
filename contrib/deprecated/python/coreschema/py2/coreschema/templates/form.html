@@ -1,5 +1,0 @@
-{% for key, schema in parent.properties.items() %}
-    {% set template_path = determine_html_template(schema) %}
-    {% set required = key in parent.required %}
-    {% include template_path %}
-{% endfor %}

@@ -1,7 +1,0 @@
-{% load i18n %}
-<div class="grp-module">
-    <h3>{% blocktrans with title|capfirst as filter_title %}{{ filter_title }}{% endblocktrans %}</h3>
-    {% for choice in choices %}
-    	<div class="grp-row {% if choice.selected %}grp-selected{% endif %}"><a href="{{ choice.query_string|iriencode }}">{{ choice.display }}</a></div>
-    {% endfor %}
-</div>

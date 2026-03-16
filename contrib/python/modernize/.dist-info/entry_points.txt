@@ -1,4 +1,0 @@
-[console_scripts]
-modernize = libmodernize.main:main
-python-modernize = libmodernize.main:main
-

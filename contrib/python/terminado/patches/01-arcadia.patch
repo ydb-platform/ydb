@@ -1,6 +1,0 @@
---- contrib/python/terminado/terminado/uimodule.py	(index)
-+++ contrib/python/terminado/terminado/uimodule.py	(working tree)
-@@ -26,1 +26,2 @@ class Terminal(tornado.web.UIModule):
--        file = Path(__file__).parent / "uimod_embed.js"
-+        import importlib.resources
-+        file = importlib.resources.files(__package__) / "uimod_embed.js"

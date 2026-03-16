@@ -1,3 +1,0 @@
-from typing import Any
-
-def inspect(subject: object, raiseerr: bool = ...) -> Any: ...

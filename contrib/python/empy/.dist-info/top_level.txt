@@ -1,4 +1,0 @@
-em
-emdoc
-emhelp
-emlib

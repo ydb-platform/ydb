@@ -1,8 +1,0 @@
-3: error: Need type annotation for "good_model"  [var-annotated]
-4: note: Revealed type is "thinc.model.Model[thinc.types.Floats2d, Any]"
-6: error: Need type annotation for "good_model2"  [var-annotated]
-7: note: Revealed type is "thinc.model.Model[thinc.types.Floats2d, Any]"
-9: error: Need type annotation for "bad_model_undetected"  [var-annotated]
-10: note: Revealed type is "thinc.model.Model[thinc.types.Floats2d, Any]"
-12: error: Need type annotation for "bad_model_undetected2"  [var-annotated]
-13: note: Revealed type is "thinc.model.Model[thinc.types.Floats2d, Any]"

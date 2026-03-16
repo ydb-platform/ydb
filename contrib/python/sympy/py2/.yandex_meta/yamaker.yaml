@@ -1,8 +1,0 @@
-requirements:
-  - antlr4
-mark_as_tests:
-  - sympy/integrals/rubi/rubi_tests/*
-  - sympy/parsing/autolev/test-examples/*
-exclude:
-  - sympy/parsing/autolev/_antlr/*
-  - sympy/parsing/latex/_antlr/*

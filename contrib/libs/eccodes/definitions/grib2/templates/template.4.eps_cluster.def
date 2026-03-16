@@ -1,5 +1,0 @@
-# (C) Copyright 2005- ECMWF.
-
-ensembleForecastNumbersList list(numberOfForecastsInTheCluster) {
-  unsigned[1] ensembleForecastNumbers : dump;
-}

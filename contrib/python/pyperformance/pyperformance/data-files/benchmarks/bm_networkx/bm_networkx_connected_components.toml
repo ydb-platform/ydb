@@ -1,3 +1,0 @@
-[tool.pyperformance]
-name = "networkx_connected_components"
-extra_opts = ["connected_components"]

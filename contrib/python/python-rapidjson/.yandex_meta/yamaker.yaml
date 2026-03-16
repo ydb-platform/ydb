@@ -1,4 +1,0 @@
-copy:
-  - rapidjson.cpp
-exclude:
-  - benchmarks/*

@@ -1,3 +1,0 @@
-RECURSE(
-    pystan_model
-)

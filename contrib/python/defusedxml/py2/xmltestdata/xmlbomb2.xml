@@ -1,4 +1,0 @@
-<!DOCTYPE xmlbomb [
-<!ENTITY a "1234567890">
-]>
-<root>text<bomb>&a;</bomb><tag/></root>

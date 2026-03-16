@@ -1,3 +1,0 @@
-[pytest11]
-django_test_migrations=django_test_migrations.contrib.pytest_plugin
-

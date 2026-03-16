@@ -1,2 +1,0 @@
-[console_scripts]
-pyproj = pyproj.__main__:main

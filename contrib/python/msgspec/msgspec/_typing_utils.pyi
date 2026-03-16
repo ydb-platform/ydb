@@ -1,6 +1,0 @@
-from typing_extensions import TypeGuard
-
-from . import Struct
-
-def is_struct(obj: object) -> TypeGuard[Struct]: ...
-def is_struct_type(tp: object) -> TypeGuard[type[Struct]]: ...

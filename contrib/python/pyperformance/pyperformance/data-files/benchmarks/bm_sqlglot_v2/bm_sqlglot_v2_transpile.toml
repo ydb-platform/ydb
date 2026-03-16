@@ -1,3 +1,0 @@
-[tool.pyperformance]
-name = "sqlglot_v2_transpile"
-extra_opts = ["transpile"]

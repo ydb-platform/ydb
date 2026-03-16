@@ -1,3 +1,0 @@
-[tool.pyperformance]
-name = "asyncio_tcp_ssl"
-extra_opts = ["--ssl"]

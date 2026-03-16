@@ -1,5 +1,0 @@
---- contrib/python/hdbscan/hdbscan/tests/test_branches.py	(index)
-+++ contrib/python/hdbscan/hdbscan/tests/test_branches.py	(working tree)
-@@ -13 +13 @@ from hdbscan import (
--from hdbscan.tests.test_hdbscan import (
-+from .test_hdbscan import (

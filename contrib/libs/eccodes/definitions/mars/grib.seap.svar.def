@@ -1,5 +1,0 @@
-alias mars.number = forecastOrSingularVectorNumber;
-alias mars.origin = centre;
-
-# For  TOST
-if(class == 9) { alias mars.method = methodNumber; }

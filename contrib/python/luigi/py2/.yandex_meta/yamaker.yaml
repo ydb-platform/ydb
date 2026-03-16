@@ -1,5 +1,0 @@
-requirements:
-  - enum34
-  - setuptools
-mark_as_sources:
-  - luigi/static/visualiser/js/test/*

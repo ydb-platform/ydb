@@ -1,4 +1,0 @@
-copy:
-  - edlib.pyx
-  - edlib.bycythong.cpp
-  - cedlib.pxd

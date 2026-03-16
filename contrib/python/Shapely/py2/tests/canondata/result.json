@@ -1,6 +1,0 @@
-{
-    "test_hash.test_collection": true,
-    "test_hash.test_multipoint": true,
-    "test_hash.test_point": true,
-    "test_hash.test_polygon": true
-}

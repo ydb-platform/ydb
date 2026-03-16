@@ -1,4 +1,0 @@
-copy:
-  - src/*
-keep:
-  - tests/test_index.py

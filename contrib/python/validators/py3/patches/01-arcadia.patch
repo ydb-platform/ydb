@@ -1,6 +1,0 @@
---- contrib/python/validators/py3/validators/domain.py	(index)
-+++ contrib/python/validators/py3/validators/domain.py	(working tree)
-@@ -13 +13,2 @@ def _iana_tld():
--        with Path(__file__).parent.joinpath("_tld.txt").open() as tld_f:
-+        import importlib.resources
-+        with importlib.resources.files(__package__).joinpath("_tld.txt").open() as tld_f:

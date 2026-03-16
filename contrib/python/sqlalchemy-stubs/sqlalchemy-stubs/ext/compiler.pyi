@@ -1,6 +1,0 @@
-from typing import Callable, TypeVar, Any
-
-_F = TypeVar('_F', bound=Callable[..., Any])
-
-def compiles(class_, *specs) -> Callable[[_F], _F]: ...
-def deregister(class_) -> None: ...

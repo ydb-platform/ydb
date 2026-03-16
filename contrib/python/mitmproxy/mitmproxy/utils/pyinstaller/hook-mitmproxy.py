@@ -1,1 +1,0 @@
-hiddenimports = ["mitmproxy.script"]

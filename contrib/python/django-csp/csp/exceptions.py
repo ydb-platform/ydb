@@ -1,2 +1,0 @@
-class CSPNonceError(Exception):
-    pass

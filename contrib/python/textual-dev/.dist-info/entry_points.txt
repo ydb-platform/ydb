@@ -1,3 +1,0 @@
-[console_scripts]
-textual=textual_dev.cli:run
-

@@ -1,7 +1,0 @@
-Authors
-=======
-
-- Sean Gillies <sean@mapbox.com>
-- Chris Holden <ceholden@gmail.com>
-- Bas Couwenberg <sebastic@xs4all.nl>
-- Matthew Perry <perrygeo@gmail.com>

@@ -1,3 +1,0 @@
-[console_scripts]
-pglr=parglare.cli:pglr
-

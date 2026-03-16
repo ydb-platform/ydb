@@ -1,2 +1,0 @@
-keep:
-  - gensim/similarities/fastss.pyx

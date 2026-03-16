@@ -1,6 +1,0 @@
-requirements:
-  - alembic: contrib/deprecated/python/alembic
-  - library/python/resource
-mark_as_resources:
-  # Эти файлы должны быть как ресурсы
-  - flask_migrate/templates/*.py

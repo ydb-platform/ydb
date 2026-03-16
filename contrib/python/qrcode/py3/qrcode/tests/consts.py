@@ -1,4 +1,0 @@
-UNICODE_TEXT = "\u03b1\u03b2\u03b3"
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-RED = (255, 0, 0)

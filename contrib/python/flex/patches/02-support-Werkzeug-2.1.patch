@@ -1,8 +1,0 @@
---- contrib/python/flex/flex/http.py	(index)
-+++ contrib/python/flex/flex/http.py	(working tree)
-@@ -261 +255 @@ def _normalize_werkzeug_request(request):
--    if not isinstance(request, (werkzeug.wrappers.BaseRequest, local.LocalProxy)):
-+    if not isinstance(request, (werkzeug.wrappers.Request, local.LocalProxy)):
-@@ -454 +448 @@ def _normalize_werkzeug_response(response, request=None):
--    if not isinstance(response, werkzeug.wrappers.BaseResponse):
-+    if not isinstance(response, werkzeug.wrappers.Response):

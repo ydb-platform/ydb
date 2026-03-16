@@ -1,2 +1,0 @@
-[console_scripts]
-crx3 = crx3.cli.main:main

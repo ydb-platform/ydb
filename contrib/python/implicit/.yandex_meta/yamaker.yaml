@@ -1,3 +1,0 @@
-requirements:
-  - contrib/libs/nvidia/cublas
-  - contrib/libs/nvidia/curand

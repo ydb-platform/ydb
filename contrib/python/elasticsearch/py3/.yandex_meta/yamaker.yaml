@@ -1,2 +1,0 @@
-exclude:
-  - elasticsearch/dsl/_sync/_sync_check/*

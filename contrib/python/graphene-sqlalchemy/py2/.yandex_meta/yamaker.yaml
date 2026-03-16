@@ -1,2 +1,0 @@
-keep:
-  - graphene_sqlalchemy/mutations.py

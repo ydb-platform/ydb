@@ -1,2 +1,0 @@
-exclude:
-  - polyfactory/factories/odmantic_odm_factory.py  # we don't have odmantic in monorepo yet

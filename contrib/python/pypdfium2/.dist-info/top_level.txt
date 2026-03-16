@@ -1,2 +1,0 @@
-pypdfium2
-pypdfium2_raw

@@ -1,8 +1,0 @@
-requirements:
-  - sockjs-tornado
-  - standard-telnetlib
-exclude:
-  - openhtf/examples/*
-  - spintop_openhtf/examples/*
-mark_as_sources:
-  - openhtf/util/test.py

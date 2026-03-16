@@ -1,6 +1,0 @@
---- contrib/python/cookiecutter/cookiecutter/__init__.py	(index)
-+++ contrib/python/cookiecutter/cookiecutter/__init__.py	(working tree)
-@@ -9 +9,2 @@ def _get_version() -> str:
--    return version_file.read_text(encoding="utf-8").strip()
-+    import pkgutil
-+    return pkgutil.get_data(__package__, "VERSION.txt").strip().decode("utf-8")

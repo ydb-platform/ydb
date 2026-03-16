@@ -1,6 +1,0 @@
---- contrib/python/uritemplate/py3/tests/test_from_fixtures.py	(index)
-+++ contrib/python/uritemplate/py3/tests/test_from_fixtures.py	(working tree)
-@@ -5,1 +5,2 @@ import uritemplate
--    absolute_dir = os.path.abspath(os.path.dirname(__file__))
-+    import yatest.common as yc
-+    absolute_dir = os.path.abspath(os.path.dirname(yc.source_path(__file__)))

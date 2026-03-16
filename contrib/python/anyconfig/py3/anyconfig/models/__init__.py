@@ -1,1 +1,0 @@
-"""Provide basic model objects."""

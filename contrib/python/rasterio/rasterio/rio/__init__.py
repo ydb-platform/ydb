@@ -1,3 +1,0 @@
-"""
-Rasterio commandline interface components
-"""

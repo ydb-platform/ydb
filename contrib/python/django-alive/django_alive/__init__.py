@@ -1,2 +1,0 @@
-class HealthcheckFailure(Exception):
-    pass

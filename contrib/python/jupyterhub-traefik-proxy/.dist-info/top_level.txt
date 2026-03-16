@@ -1,1 +1,0 @@
-jupyterhub_traefik_proxy

@@ -1,7 +1,0 @@
-copy:
-  - src/*.[ch]
-  - system_info.sample.h
-exclude:
-  - build_support/*
-  - demos/*
-  - extras/*

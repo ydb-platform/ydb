@@ -1,6 +1,0 @@
-requirements:
-  - contrib/libs/lexbor
-mark_as_cython_c:
-  - selectolax/lexbor.pyx
-exclude:
-  - selectolax/parser.*

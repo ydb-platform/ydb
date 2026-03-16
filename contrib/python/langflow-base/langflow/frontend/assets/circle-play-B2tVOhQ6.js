@@ -1,1 +1,0 @@
-import{a8 as c}from"./index-Cp3b7MWQ.js";const e=[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polygon",{points:"10 8 16 12 10 16 10 8",key:"1cimsy"}]],a=c("circle-play",e);export{e as __iconNode,a as default};

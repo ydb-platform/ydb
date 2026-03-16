@@ -1,2 +1,0 @@
-[console_scripts]
-html2text = html2text.cli:main

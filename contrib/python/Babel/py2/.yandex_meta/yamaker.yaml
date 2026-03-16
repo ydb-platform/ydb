@@ -1,4 +1,0 @@
-requirements:
-  - library/python/resource
-exclude:
-  - tests/messages/data/*

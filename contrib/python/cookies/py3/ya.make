@@ -2,6 +2,8 @@
 
 PY3_LIBRARY()
 
+SUBSCRIBER(g:python-contrib)
+
 VERSION(2.2.1)
 
 LICENSE(MIT)

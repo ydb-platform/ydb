@@ -1,8 +1,0 @@
-requirements:
-  - contrib/libs/systemd
-keep:
-  - define_syslog_names.h
-mark_as_cython_c:
-  - cysystemd/_daemon.pyx
-  - cysystemd/_journal.pyx
-  - cysystemd/reader.pyx

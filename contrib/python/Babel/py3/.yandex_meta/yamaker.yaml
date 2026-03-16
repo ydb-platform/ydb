@@ -1,7 +1,0 @@
-requirements:
-  - setuptools
-  - library/python/resource
-exclude:
-  - tests/messages/data/*
-  - tests/messages/test_frontend.py
-  - tests/messages/test_setuptools_frontend.py

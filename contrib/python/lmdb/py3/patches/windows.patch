@@ -1,8 +1,0 @@
---- a/lmdb/cpython.c
-+++ b/lmdb/cpython.c
-@@ -41,4 +41,5 @@
- #ifdef _WIN32
- #include <windows.h> /* HANDLE */
-+#include <direct.h>
- #endif
- 

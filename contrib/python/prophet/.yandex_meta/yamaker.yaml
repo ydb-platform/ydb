@@ -1,4 +1,0 @@
-copy:
-  - stan/unix/prophet.stan
-exclude_from_macros:
-  - stan/unix/prophet.stan

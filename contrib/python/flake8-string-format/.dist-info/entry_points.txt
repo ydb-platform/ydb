@@ -1,3 +1,0 @@
-[flake8.extension]
-P = flake8_string_format:StringFormatChecker
-

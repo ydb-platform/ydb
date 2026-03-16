@@ -1,7 +1,0 @@
---- contrib/python/pyogrio/pyogrio/_env.py	(index)
-+++ contrib/python/pyogrio/pyogrio/_env.py	(working tree)
-@@ -22,2 +22,2 @@ try:
--    os.environ.setdefault("GDAL_CURL_CA_BUNDLE", ca_bundle)
--    os.environ.setdefault("PROJ_CURL_CA_BUNDLE", ca_bundle)
-+    #os.environ.setdefault("GDAL_CURL_CA_BUNDLE", ca_bundle)
-+    #os.environ.setdefault("PROJ_CURL_CA_BUNDLE", ca_bundle)

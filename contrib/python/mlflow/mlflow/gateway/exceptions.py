@@ -1,2 +1,0 @@
-class AIGatewayConfigException(Exception):
-    pass

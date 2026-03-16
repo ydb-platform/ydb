@@ -1,2 +1,0 @@
-[console_scripts]
-hjson = hjson.tool:main

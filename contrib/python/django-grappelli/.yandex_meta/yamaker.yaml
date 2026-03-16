@@ -1,4 +1,0 @@
-exclude_from_macros:
-  - grappelli/tests/test_settings.py
-keep:
-  - grappelli/tests/test_settings.py

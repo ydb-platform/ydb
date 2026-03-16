@@ -1,4 +1,0 @@
-mark_as_cython_c:
-  - dependency_injector/*.pyx
-cython_directive:
-  - language_level=3

@@ -1,9 +1,0 @@
-maturin
-pytest
-mypy
-
-sphinx
-sphinx-copybutton
-furo
-
-tomli

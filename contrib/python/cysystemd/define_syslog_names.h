@@ -1,1 +1,0 @@
-#define SYSLOG_NAMES 1

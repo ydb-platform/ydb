@@ -1,3 +1,0 @@
-[console_scripts]
-bbpb=blackboxprotobuf.__main__:main
-

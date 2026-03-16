@@ -1,5 +1,0 @@
---- contrib/python/hyperopt/hyperopt/tests/test_base.py	(index)
-+++ contrib/python/hyperopt/hyperopt/tests/test_base.py	(working tree)
-@@ -221 +221 @@ class TestTrials(unittest.TestCase):
--        self.assertEquals(best_trial["tid"], 3)
-+        self.assertEqual(best_trial["tid"], 3)

@@ -1,5 +1,0 @@
---- contrib/python/mlflow/mlflow/cli.py	(index)
-+++ contrib/python/mlflow/mlflow/cli.py	(working tree)
-@@ -356 +356 @@ def _validate_static_prefix(ctx, param, value):  # pylint: disable=unused-argume
--    type=click.Choice([e.name for e in importlib.metadata.entry_points().get("mlflow.app", [])]),
-+    type=click.Choice([e.name for e in importlib.metadata.entry_points().select(group="mlflow.app")]),

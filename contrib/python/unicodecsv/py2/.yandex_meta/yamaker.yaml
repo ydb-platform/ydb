@@ -1,4 +1,0 @@
-mark_as_py2_sources:
-  - unicodecsv/py2.py
-mark_as_py3_sources:
-  - unicodecsv/py3.py

@@ -1,2 +1,0 @@
-sp_api
-tests

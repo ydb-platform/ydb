@@ -1,9 +1,0 @@
---- contrib/python/aiodocker/tests/conftest.py	(index)
-+++ contrib/python/aiodocker/tests/conftest.py	(working tree)
-@@ -15,2 +14,0 @@ from packaging.version import parse as parse_version
--from testcontainers.core.container import DockerContainer as TempContainer
--from testcontainers.core.wait_strategies import HttpWaitStrategy
---- contrib/python/aiodocker/tests/test_images.py	(index)
-+++ contrib/python/aiodocker/tests/test_images.py	(working tree)
-@@ -16 +15,0 @@ from aiohttp import web
--from testcontainers.core.container import DockerContainer as TempContainer

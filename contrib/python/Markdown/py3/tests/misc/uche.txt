@@ -1,6 +1,0 @@
-![asif](http://fourthought.com/images/ftlogo.png "Fourthought logo")
-
-[![Alt text](http://fourthought.com/images/ftlogo.png "Fourthought
-logo")](http://fourthought.com/)
-
-[![text](x)](http://link.com/)

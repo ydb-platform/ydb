@@ -1,9 +1,0 @@
---- a/include/argon2.h
-+++ b/include/argon2.h
-@@ -28,5 +28,5 @@ extern "C" {
- 
- /* Symbols visibility control */
--#ifdef A2_VISCTL
-+#if defined(A2_VISCTL) && !defined(_MSC_VER)
- #define ARGON2_PUBLIC __attribute__((visibility("default")))
- #define ARGON2_LOCAL __attribute__ ((visibility ("hidden")))

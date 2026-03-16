@@ -1,6 +1,0 @@
-scalar DateTime
-
-type DateTimePeriod {
-    from: DateTime!
-    to: DateTime!
-}

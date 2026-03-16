@@ -1,9 +1,0 @@
-requirements:
-  - contrib/libs/eccodes
-mark_as_resources:
-  - gribapi/eccodes.h
-  - gribapi/grib_api.h
-keep:
-  - builder.py
-exclude_from_macros:
-  - builder.py

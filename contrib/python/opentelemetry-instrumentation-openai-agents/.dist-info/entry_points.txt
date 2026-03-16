@@ -1,2 +1,0 @@
-[opentelemetry_instrumentor]
-openai_agents = opentelemetry.instrumentation.openai_agents:OpenAIAgentsInstrumentor

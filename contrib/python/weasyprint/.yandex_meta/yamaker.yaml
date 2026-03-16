@@ -1,6 +1,0 @@
-requirements:
-  - contrib/python/weasyprint/symbols
-keep:
-  - symbols/ya.make
-exclude_from_macros:
-  - symbols/ya.make

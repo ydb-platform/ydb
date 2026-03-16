@@ -1,3 +1,0 @@
-markdownTable
-py_markdown_table
-tests

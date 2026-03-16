@@ -1,9 +1,0 @@
-Backslashed in links:
-
-[q=go:GO\\:0000307](/query?q=go:GO\\:0000307)
-
-[q=go:GO\\:0000308][foo]
-
-[foo]: /query?q=go:GO\:0000308 "/query?q=go:GO\:0000308"
-
-a \non-escaped char.

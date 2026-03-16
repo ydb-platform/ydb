@@ -1,3 +1,0 @@
-[pymorphy3_dicts]
-ru = pymorphy3_dicts_ru
-

@@ -1,8 +1,0 @@
---- contrib/python/python-crfsuite/py3/pycrfsuite/crfsuite_api.pxd	(index)
-+++ contrib/python/python-crfsuite/py3/pycrfsuite/crfsuite_api.pxd	(working tree)
-@@ -1,1 +1,1 @@
--cdef extern from "../crfsuite/include/crfsuite.h":
-+cdef extern from "crfsuite.h":
-@@ -13,1 +13,1 @@ cdef extern from "../crfsuite/include/crfsuite.h":
--cdef extern from "../crfsuite/include/crfsuite_api.hpp" namespace "CRFSuite":
-+cdef extern from "crfsuite_api.hpp" namespace "CRFSuite":

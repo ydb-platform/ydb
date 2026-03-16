@@ -1,3 +1,0 @@
-[pytest11]
-allure_adaptor = allure.pytest_plugin
-

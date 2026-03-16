@@ -1,4 +1,0 @@
---- contrib/python/celery/py3/celery/utils/collections.py	(index)
-+++ contrib/python/celery/py3/celery/utils/collections.py	(working tree)
-@@ -599 +598,0 @@ class LimitedSet:
--        # type: (Any) -> Any

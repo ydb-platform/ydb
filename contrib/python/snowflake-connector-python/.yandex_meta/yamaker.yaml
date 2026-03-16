@@ -1,9 +1,0 @@
-requirements:
-  - contrib/libs/apache/arrow
-  - contrib/python/pyarrow
-exclude_from_macros:
-  - test/*
-  - snowflake/connector/vendored/requests/LICENSE
-  - snowflake/connector/vendored/urllib3/LICENSE.txt
-keep:
-  - test/*

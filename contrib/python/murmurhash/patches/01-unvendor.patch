@@ -1,8 +1,0 @@
---- contrib/python/murmurhash/murmurhash/mrmr.pyx	(index)
-+++ contrib/python/murmurhash/murmurhash/mrmr.pyx	(working tree)
-@@ -1,1 +1,1 @@
--cdef extern from "murmurhash/MurmurHash3.h":
-+cdef extern from "MurmurHash3.h":
-@@ -6,1 +6,1 @@
--cdef extern from "murmurhash/MurmurHash2.h":
-+cdef extern from "MurmurHash2.h":

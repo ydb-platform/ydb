@@ -1,7 +1,0 @@
---- contrib/python/inflect/tests/test_inflections.py	(index)
-+++ contrib/python/inflect/tests/test_inflections.py	(working tree)
- import pytest
-@@ -250,1 +250,2 @@ def test_NameError_in_strings():
--    filename = os.path.join(os.path.dirname(__file__), "inflections.txt")
-+    import yatest.common as yc
-+    filename = os.path.join(os.path.dirname(yc.source_path(__file__)), "inflections.txt")

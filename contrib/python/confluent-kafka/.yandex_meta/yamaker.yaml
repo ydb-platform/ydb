@@ -1,4 +1,0 @@
-exclude:
-  - confluent_kafka/kafkatest/*
-requirements:
-  - contrib/libs/librdkafka

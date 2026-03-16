@@ -1,3 +1,0 @@
-[console_scripts]
-jsonpath.py = jsonpath_rw.bin.jsonpath:entry_point
-

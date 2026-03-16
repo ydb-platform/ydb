@@ -1,3 +1,0 @@
-Polynomial manipulation package.
-It contains support for univariate (upolynomial.*) and multivariate polynomials (polynomial.*).
-Multivariate polynomial factorization does not work yet (polynomial_factorization.*), and it is disabled.

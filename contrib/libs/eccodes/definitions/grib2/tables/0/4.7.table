@@ -1,8 +1,0 @@
-0 0  Unweighted mean of all members
-1 1  Weighted mean of all members
-2 2  Standard deviation with respect to cluster mean
-3 3  Standard deviation with respect to cluster mean, normalized
-4 4  Spread of all members
-5 5  Large anomaly index of all members (see Note)
-6 6  Unweighted mean of the cluster members
-255 255  Missing

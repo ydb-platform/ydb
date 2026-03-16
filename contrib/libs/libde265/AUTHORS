@@ -1,8 +1,0 @@
-Authors of libde265
-See also the files THANKS and ChangeLog
-
-Dirk Farin <farin@struktur.de>
-- designed and implemented libde265
-
-Joachim Bauch <bauch@struktur.de>
-- bugfixes, optimizations and support for Windows

@@ -1,2 +1,0 @@
-cov_core_init
-cov_core

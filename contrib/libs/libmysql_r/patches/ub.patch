@@ -1,5 +1,0 @@
---- a/sql-common/client.cc
-+++ b/sql-common/client.cc
-@@ -6177,1 +6177,1 @@
--    mysql->server_capabilities |= uint2korr((uchar *)end + 5) << 16;
-+    mysql->server_capabilities |= (unsigned long)( ((uint32)uint2korr((uchar *)end + 5)) << 16 );

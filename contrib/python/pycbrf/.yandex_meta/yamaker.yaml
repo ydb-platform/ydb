@@ -1,3 +1,0 @@
-keep:
-  - tests/conftest.py
-  - tests/datafixtures/*

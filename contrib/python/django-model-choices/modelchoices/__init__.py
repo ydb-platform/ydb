@@ -1,1 +1,0 @@
-from .modelchoices import Choices

@@ -1,5 +1,0 @@
---- contrib/python/pgcli/pgcli/pgtoolbar.py	(index)
-+++ contrib/python/pgcli/pgcli/pgtoolbar.py	(working tree)
-@@ -1,1 +1,1 @@
--from pkg_resources import packaging
-+import packaging.version

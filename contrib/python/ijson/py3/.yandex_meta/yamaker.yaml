@@ -1,2 +1,0 @@
-exclude:
-  - ijson/backends/ext/_yajl2/*

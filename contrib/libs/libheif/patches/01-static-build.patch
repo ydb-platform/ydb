@@ -1,7 +1,0 @@
---- contrib/libs/libheif/libheif/api/libheif/heif_library.h	(index)
-+++ contrib/libs/libheif/libheif/api/libheif/heif_library.h	(working tree)
-@@ -48,3 +48,4 @@ extern "C" {
-+#define LIBHEIF_STATIC_BUILD
- #if (defined(_WIN32) || defined __CYGWIN__) && !defined(LIBHEIF_STATIC_BUILD)
- #ifdef LIBHEIF_EXPORTS
- #define LIBHEIF_API __declspec(dllexport)

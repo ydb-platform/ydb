@@ -1,5 +1,0 @@
-{% load i18n admin_urls %}
-
-{% if has_import_permission %}
-<li><a href='{% url opts|admin_urlname:"import" %}' class="grp-state-focus import_link">{% trans "Import" %}</a></li>
-{% endif %}

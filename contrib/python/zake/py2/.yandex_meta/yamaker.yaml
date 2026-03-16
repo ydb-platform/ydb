@@ -1,4 +1,0 @@
-requirements:
-  - setuptools
-exclude:
-  - zake/test.py

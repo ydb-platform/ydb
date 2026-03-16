@@ -1,6 +1,0 @@
----
-$defs:
-  RecursiveObject:
-    type: object
-    additionalProperties:
-      $ref: "#/$defs/RecursiveObject"

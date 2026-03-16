@@ -172,4 +172,114 @@ Y_UNIT_TEST_SUITE(TTestShardTest) {
             )", {NKikimrScheme::StatusInvalidParameter});
         env.TestWaitNotification(runtime, txId);
     }
+
+    Y_UNIT_TEST(DescribeTestShardSet) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet"), {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        auto describeResult = DescribePath(runtime, "/MyRoot/MyTestShardSet");
+        TestDescribeResult(describeResult, {NLs::Finished, NLs::IsTestShardSet});
+
+        const auto& pathDesc = describeResult.GetPathDescription();
+        UNIT_ASSERT(pathDesc.HasTestShardSetDescription());
+        const auto& desc = pathDesc.GetTestShardSetDescription();
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetName(), "MyTestShardSet");
+        UNIT_ASSERT_VALUES_EQUAL(desc.TabletIdsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetVersion(), 1);
+    }
+
+    Y_UNIT_TEST(CreateMultipleShards) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet", 5), {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        auto describeResult = DescribePath(runtime, "/MyRoot/MyTestShardSet");
+        TestDescribeResult(describeResult, {NLs::Finished, NLs::IsTestShardSet});
+
+        const auto& desc = describeResult.GetPathDescription().GetTestShardSetDescription();
+        UNIT_ASSERT_VALUES_EQUAL(desc.TabletIdsSize(), 5);
+        for (size_t i = 0; i < desc.TabletIdsSize(); ++i) {
+            UNIT_ASSERT(desc.GetTabletIds(i) != 0);
+        }
+    }
+
+    Y_UNIT_TEST(ZeroCount) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", R"(
+                Name: "MyTestShardSet"
+                Count: 0
+                StorageConfig {
+                }
+                CmdInitialize {
+                    MaxDataBytes: 1000
+                }
+            )", {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(NoCmdInitialize) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", R"(
+                Name: "MyTestShardSet"
+                Count: 1
+                StorageConfig {
+                }
+            )", {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(NoStorageConfigUsesDefault) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", R"(
+                Name: "MyTestShardSet"
+                Count: 1
+                CmdInitialize {
+                    MaxDataBytes: 1000
+                }
+            )", {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        auto describeResult = DescribePath(runtime, "/MyRoot/MyTestShardSet");
+        TestDescribeResult(describeResult, {NLs::Finished, NLs::IsTestShardSet});
+    }
+
+    Y_UNIT_TEST(CreateInSubdomain) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+                Name: "SubDomain"
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot/SubDomain",
+            CreateTestShardSetConfig("MyTestShardSet"), {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        auto describeResult = DescribePath(runtime, "/MyRoot/SubDomain/MyTestShardSet");
+        TestDescribeResult(describeResult, {NLs::Finished, NLs::IsTestShardSet});
+    }
 }

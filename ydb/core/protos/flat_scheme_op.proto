@@ -323,7 +323,7 @@ message TTableDescription {
     optional bool PartitionRangeEndIsInclusive = 23;
 
     optional string CopyFromTable = 30;
-    repeated TSplitBoundary SplitBoundary = 31; // Boundaries for non-uniform split
+    repeated TSplitBoundary SplitBoundary = 31;     // Boundaries for non-uniform split
 
     repeated TIndexDescription TableIndexes = 32;
 

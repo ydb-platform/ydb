@@ -71,6 +71,7 @@ RECURSE_FOR_TESTS(
     ut_topic_splitmerge
     ut_topic_set_boundaries
     ut_test_shard
+    ut_test_shard_reboots
     ut_transfer
     ut_truncate_table_reboots
     ut_truncate_table_simple

@@ -1164,6 +1164,7 @@ void TPathDescriber::DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pat
     auto& entry = *Result->Record.MutablePathDescription()->MutableTestShardSetDescription();
     entry.SetName(pathEl->Name);
     entry.SetPathId(pathId.LocalPathId);
+    entry.SetVersion(testShardSetInfo->AlterVersion);
 
     for (const auto& [shardIdx, tabletId] : testShardSetInfo->TestShards) {
         entry.AddTabletIds(ui64(tabletId));

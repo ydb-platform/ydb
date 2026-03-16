@@ -1524,7 +1524,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
     }
 
-    Y_UNIT_TEST(KeyedWriteSession_BoundPartitionChooser_SplitPartition_MultiThreadedAcksOrder) {
+    Y_UNIT_TEST(Producer_BoundPartitionChooser_SplitPartition_MultiThreadedAcksOrder) {
         NKikimr::NPQ::NTest::TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
@@ -1604,7 +1604,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // block longer than the timeout and that the session eventually closes successfully.
         UNIT_ASSERT_C(
             result.IsSuccess() || result.IsTimeout(),
-            TStringBuilder() << "Failed to close keyed write session, status: " << static_cast<int>(result.Status)
+            TStringBuilder() << "Failed to close producer, status: " << static_cast<int>(result.Status)
         );
         const TDuration actualDuration = TInstant::Now() - startTime;
         

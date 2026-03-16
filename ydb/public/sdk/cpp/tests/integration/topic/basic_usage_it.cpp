@@ -885,9 +885,10 @@ TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
     auto producer = client.CreateProducer(writeSettings);
     auto keyedSession = std::dynamic_pointer_cast<TProducer>(producer);
 
+    std::string data = "message";
     for (size_t i = 0; i < 100; ++i) {
         auto key = CreateGuidAsString();
-        TWriteMessage msg("msg");
+        TWriteMessage msg(data);
         msg.SeqNo(i + 1);
         msg.Key(key);
         ASSERT_TRUE(producer->Write(std::move(msg)).IsSuccess());

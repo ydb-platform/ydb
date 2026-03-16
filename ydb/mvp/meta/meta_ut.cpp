@@ -157,4 +157,46 @@ meta:
         UNIT_ASSERT_VALUES_EQUAL(output.Errors.front().Source, "unknown/source");
         UNIT_ASSERT(output.Errors.front().Message.Contains("unsupported support_links source"));
     }
+
+    Y_UNIT_TEST(GrafanaDashboardSourceIsRegisteredAndResolves) {
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  support_links:
+    cluster:
+      - source: "grafana/dashboard"
+        title: "Overview"
+        url: "https://grafana.example.test/d/ydb/overview"
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_NO_EXCEPTION(mvp.TryGetMetaOptionsFromConfig(appConfig));
+
+        UNIT_ASSERT_VALUES_EQUAL(mvp.MetaSettings.ClusterLinkSources.size(), 1);
+
+        THashMap<TString, TString> clusterColumns{
+            {"k8s_namespace", "ws"},
+            {"datasource", "ds"},
+        };
+        NHttp::TUrlParameters urlParameters("/meta/support_links?cluster=testing-global&database=%2Froot%2Ftest");
+        const NMVP::ILinkSource::TResolveInput input{
+            .Place = 0,
+            .ClusterColumns = clusterColumns,
+            .UrlParameters = urlParameters,
+            .Parent = NActors::TActorId{},
+            .HttpProxyId = NActors::TActorId{},
+        };
+        const NMVP::TResolveOutput output = mvp.MetaSettings.ClusterLinkSources.front()->Resolve(input);
+        UNIT_ASSERT_VALUES_EQUAL(output.Name, "grafana/dashboard");
+        UNIT_ASSERT_VALUES_EQUAL(output.Errors.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(output.Links.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(output.Links.front().Title, "Overview");
+        UNIT_ASSERT_VALUES_EQUAL(
+            output.Links.front().Url,
+            "https://grafana.example.test/d/ydb/overview?var-workspace=ws&var-ds=ds&var-cluster=testing-global&var-database=/root/test"
+        );
+    }
 }

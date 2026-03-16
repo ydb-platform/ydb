@@ -209,7 +209,6 @@ SecretInfo {
             "mvp_validation_secret_missing",
             "requires either secret or secret_file");
     }
-
     Y_UNIT_TEST(SecretInfoWithUnreadableSecretFileThrows) {
         AssertTokenFileConfigThrows(R"pb(
 AccessServiceType: nebius_v1

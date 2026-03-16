@@ -16,6 +16,7 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 
 #include <google/protobuf/text_format.h>
+#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <yaml-cpp/yaml.h>
 
@@ -25,9 +26,127 @@
 #include <util/system/hostname.h>
 #include <util/system/mlock.h>
 
+#include <mutex>
+
 using namespace NMVP;
 
 NMVP::TMVP* NMVP::InstanceMVP;
+
+namespace {
+
+class TGrafanaDashboardSource final : public NMVP::ILinkSource {
+public:
+    TGrafanaDashboardSource(NMVP::TSupportLinkEntryConfig config, TString grafanaEndpoint)
+        : Config_(std::move(config))
+        , GrafanaEndpoint_(std::move(grafanaEndpoint))
+    {}
+
+    const NMVP::TSupportLinkEntryConfig& Config() const override {
+        return Config_;
+    }
+
+    NMVP::TResolveOutput Resolve(const TResolveInput& input) const override {
+        NMVP::TResolveOutput output{
+            .Name = Config_.GetSource(),
+            .Ready = true,
+        };
+        TString url = ResolveUrl(Config_.GetUrl(), GrafanaEndpoint_);
+
+        static constexpr TStringBuf WorkspaceColumn = "k8s_namespace";
+        static constexpr TStringBuf DatasourceColumn = "datasource";
+
+        const auto workspaceIt = input.ClusterColumns.find(WorkspaceColumn);
+        if (workspaceIt == input.ClusterColumns.end() || workspaceIt->second.empty()) {
+            output.Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+                .Source = "meta",
+                .Message = TStringBuilder() << "Cluster metadata column '" << WorkspaceColumn << "' is missing or empty",
+            });
+        } else {
+            url = AppendQueryParam(url, "var-workspace", workspaceIt->second);
+        }
+
+        const auto datasourceIt = input.ClusterColumns.find(DatasourceColumn);
+        if (datasourceIt == input.ClusterColumns.end() || datasourceIt->second.empty()) {
+            output.Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+                .Source = "meta",
+                .Message = TStringBuilder() << "Cluster metadata column '" << DatasourceColumn << "' is missing or empty",
+            });
+        } else {
+            url = AppendQueryParam(url, "var-ds", datasourceIt->second);
+        }
+
+        for (const auto& [name, _] : input.UrlParameters.Parameters) {
+            url = AppendQueryParam(url, TStringBuilder() << "var-" << name, input.UrlParameters[name]);
+        }
+
+        output.Links.emplace_back(NMVP::NSupportLinks::TResolvedLink{
+            .Title = Config_.GetTitle(),
+            .Url = std::move(url),
+        });
+        return output;
+    }
+
+private:
+    static bool IsAbsoluteUrl(const TString& url) {
+        return url.StartsWith("http://") || url.StartsWith("https://");
+    }
+
+    static TString ResolveUrl(const TString& configuredUrl, const TString& grafanaEndpoint) {
+        if (IsAbsoluteUrl(configuredUrl)) {
+            return configuredUrl;
+        }
+        if (grafanaEndpoint.empty()) {
+            return configuredUrl;
+        }
+
+        const bool endpointHasSlash = grafanaEndpoint.EndsWith('/');
+        const bool urlHasSlash = configuredUrl.StartsWith('/');
+        if (endpointHasSlash && urlHasSlash) {
+            return grafanaEndpoint.substr(0, grafanaEndpoint.size() - 1) + configuredUrl;
+        }
+        if (!endpointHasSlash && !urlHasSlash) {
+            return grafanaEndpoint + "/" + configuredUrl;
+        }
+        return grafanaEndpoint + configuredUrl;
+    }
+
+    static TString AppendQueryParam(const TString& url, TStringBuf key, TStringBuf value) {
+        TStringBuilder result;
+        result << url;
+        result << (url.Contains('?') ? '&' : '?');
+        result << key << "=" << CGIEscapeRet(value);
+        return result;
+    }
+
+private:
+    NMVP::TSupportLinkEntryConfig Config_;
+    TString GrafanaEndpoint_;
+};
+
+std::shared_ptr<NMVP::ILinkSource> MakeGrafanaDashboardSource(NMVP::TSupportLinkEntryConfig config) {
+    if (config.GetUrl().empty()) {
+        ythrow yexception() << "url is required for source=" << config.GetSource();
+    }
+
+    const TString grafanaEndpoint = NMVP::InstanceMVP ? NMVP::InstanceMVP->MetaSettings.GrafanaEndpoint : TString();
+    if (!config.GetUrl().StartsWith("http://")
+        && !config.GetUrl().StartsWith("https://")
+        && grafanaEndpoint.empty())
+    {
+        ythrow yexception() << "grafana.endpoint is required for relative url";
+    }
+
+    return std::make_shared<TGrafanaDashboardSource>(std::move(config), grafanaEndpoint);
+}
+
+void RegisterSupportLinkSourcesOnce() {
+    static std::once_flag once;
+    std::call_once(once, []() {
+        NMVP::RegisterLinkSource("grafana/dashboard", &MakeGrafanaDashboardSource);
+    });
+}
+
+} // namespace
 
 const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");
@@ -199,6 +318,8 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appCon
     }
 
     if (config.HasSupportLinks()) {
+        RegisterSupportLinkSourcesOnce();
+
         const auto& supportLinks = config.GetSupportLinks();
         MetaSettings.ClusterLinkSources.clear();
         MetaSettings.ClusterLinkSources.reserve(supportLinks.GetCluster().size());
@@ -232,6 +353,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
     TryGetMetaOptionsFromConfig();
+
+    if (StartupOptions.AccessServiceType == NMvp::nebius_v1) {
+        MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
+    }
 
     if (MetaApiEndpoint.empty()) {
         MetaApiEndpoint = defaultMetaApiEndpoint;

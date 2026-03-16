@@ -1,5 +1,6 @@
 RECURSE_FOR_TESTS(
     ut
+    support_links
 )
 
 LIBRARY()
@@ -9,11 +10,11 @@ SRCS(
     meta_cache.cpp
     meta_versions.cpp
     mvp.cpp
+    
 )
 
 PEERDIR(
     ydb/mvp/core
-    ydb/mvp/meta/support_links
     ydb/mvp/meta/protos
     ydb/public/api/client/yc_private/resourcemanager
     yql/essentials/public/udf

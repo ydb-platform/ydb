@@ -197,6 +197,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(MemTotalReplicationAccountingBoundaries) {
+            Cerr << "running test: MemTotalReplicationAccountingBoundaries" << Endl;
             TVector<TVDiskID> vdisks;
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
             auto replCtx = CreateReplCtx(vdisks, groupInfo);

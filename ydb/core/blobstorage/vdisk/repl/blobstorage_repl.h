@@ -11,18 +11,47 @@ namespace NKikimr {
         struct TProxyStat;
     };
 
-    struct TBlobIdQueue {
+    class TBlobIdQueue {
         std::deque<TLogoBlobID> Queue;
+        std::optional<TMemoryConsumerWithDropOnDestroy> Consumer;
+        size_t LastBytes = 0;
         ui64 WorkUnits = 0;
+
+        static size_t CalcBytes(const std::deque<TLogoBlobID>& queue) {
+            return queue.size() * sizeof(TLogoBlobID);
+        }
+
+        void Sync() {
+            const size_t bytes = CalcBytes(Queue);
+            if (Consumer) {
+                if (bytes > LastBytes) {
+                    Consumer->Add(bytes - LastBytes);
+                } else {
+                    Consumer->Subtract(LastBytes - bytes);
+                }
+            }
+            LastBytes = bytes;
+        }
+
+    public:
+        using const_iterator = std::deque<TLogoBlobID>::const_iterator;
+
+        TBlobIdQueue() = default;
+
+        explicit TBlobIdQueue(TMemoryConsumer consumer)
+            : Consumer(std::move(consumer))
+        {}
 
         void Push(const TLogoBlobID& id) {
             WorkUnits += id.BlobSize();
             Queue.push_back(id);
+            Sync();
         }
 
         void PopFront() {
             WorkUnits -= Queue.front().BlobSize();
             Queue.pop_front();
+            Sync();
         }
 
         bool IsEmpty() const {
@@ -45,6 +74,14 @@ namespace NKikimr {
             if (!std::is_sorted(Queue.begin(), Queue.end())) {
                 std::sort(Queue.begin(), Queue.end());
             }
+        }
+
+        const_iterator begin() const {
+            return Queue.begin();
+        }
+
+        const_iterator end() const {
+            return Queue.end();
         }
     };
 

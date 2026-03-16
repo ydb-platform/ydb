@@ -197,25 +197,25 @@ def _populate_cache_on_node_table_api(driver, target_node_id, queries, repeat_co
 
 def _populate_cache_on_node_query_api(driver, target_node_id, queries, repeat_count=3):
     """Populate cache via Query API, retrying session creation until it lands on target node."""
-    pool = ydb.QuerySessionPool(driver)
-    try:
-        for attempt in range(30):
-            with pool.checkout() as session:
-                if session.node_id != target_node_id:
-                    continue
-                for query in queries:
-                    for _ in range(repeat_count):
-                        for _ in session.execute(query):
-                            pass
+    for attempt in range(30):
+        session = ydb.QuerySession(driver)
+        try:
+            session.create()
+            if session.node_id != target_node_id:
+                continue
+            for query in queries:
                 for _ in range(repeat_count):
-                    for _ in session.execute(
-                        WARMUP_QUERY_PARAM,
-                        WARMUP_PARAM_VALUES,
-                    ):
+                    for _ in session.execute(query):
                         pass
-                return True
-    finally:
-        pool.stop()
+            for _ in range(repeat_count):
+                for _ in session.execute(
+                    WARMUP_QUERY_PARAM,
+                    WARMUP_PARAM_VALUES,
+                ):
+                    pass
+            return True
+        finally:
+            session.delete()
     return False
 
 

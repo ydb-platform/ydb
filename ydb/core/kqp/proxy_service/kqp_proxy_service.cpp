@@ -664,8 +664,14 @@ public:
         bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
+            // TODO(anely-d): workaround — warmup needs ydb_user in GUCSettings to match
+            // explicit sessions for compile cache key. Pass "" instead of Nothing() so
+            // FillGUCSettings sets ydb_user="". Proper fix: normalize GUCSettings globally.
+            auto userName = ev->Get()->GetIsWarmupCompilation()
+                ? TMaybe<TString>("")
+                : Nothing();
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, false, false, "", "", "", "", "", "", Nothing(), result))
+                database, false, false, "", "", "", "", "", "", userName, result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;

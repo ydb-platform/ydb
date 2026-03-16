@@ -1,5 +1,7 @@
 PY3TEST()
 
+SIZE(MEDIUM)
+
 PEERDIR(
     contrib/python/snowflake-connector-python
 )
@@ -50,6 +52,10 @@ TEST_SRCS(
     # test/unit/test_linux_local_file_cache.py
     # test/unit/test_s3_util.py
     # test/unit/test_ocsp.py
+)
+
+ENV(
+    CLIENT_LOG_DIR_PATH_DOCKER=logs/
 )
 
 NO_LINT()

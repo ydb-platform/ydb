@@ -5,6 +5,7 @@
 #include "retry_policy.h"
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Errors.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/http/HttpResponse.h>
 
 namespace NKikimr::NWrappers {
 
@@ -16,6 +17,23 @@ bool ShouldRetry(const Aws::S3::S3Error& error) {
     const auto& exceptionName = error.GetExceptionName();
     if (exceptionName == "TooManyRequests" ||
         exceptionName == "OperationAborted") {
+        return true;
+    }
+
+    const int code = static_cast<int>(error.GetResponseCode());
+
+    // Unexpected response code (connection failure, DNS, TLS, etc.)
+    if (code < 200) {
+        return true;
+    }
+
+    // Server errors
+    if (code >= 500) {
+        return true;
+    }
+
+    // Request Timeout, Conflict, or Too Many Requests
+    if (code == 408 || code == 409 || code == 429) {
         return true;
     }
 

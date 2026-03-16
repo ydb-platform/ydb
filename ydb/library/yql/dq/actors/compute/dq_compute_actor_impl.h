@@ -787,12 +787,16 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
             channelInfo.ResumeByWatermark(watermark);
         }
+        // sources or input channels was unpaused, trigger new poll
+        ResumeExecution(EResumeSource::CAResumeByWatermark);
     }
 
     void ResumeInputsByCheckpoint() override final {
         for (auto& [id, channelInfo] : InputChannelsMap) {
             channelInfo.ResumeByCheckpoint();
         }
+        // sources or input channels was unpaused, trigger new poll
+        ResumeExecution(EResumeSource::CAResumeByCheckpoint);
     }
 
 protected:

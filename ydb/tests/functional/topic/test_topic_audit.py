@@ -22,6 +22,7 @@ CLUSTER_CONFIG = dict(
         'PERSQUEUE_CLUSTER_TRACKER': LogLevels.CRIT,
     },
     enable_audit_log=True,
+    enable_topic_cloud_events=True,
     default_users=dict((i, '') for i in ('root', 'other-user')),
 )
 

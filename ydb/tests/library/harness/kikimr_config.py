@@ -202,6 +202,7 @@ class KikimrConfigGenerator(object):
             http_proxy_config=None,
             enable_nbs=False,
             nbs_database_name="/Root/NBS",
+            enable_topic_cloud_events=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -249,6 +250,7 @@ class KikimrConfigGenerator(object):
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
         self.monitoring_tls_ca_path = None
+        self.enable_topic_cloud_events = enable_topic_cloud_events
 
         self.__binary_paths = binary_paths
         rings_count = 3 if erasure == Erasure.MIRROR_3_DC else 1
@@ -772,7 +774,7 @@ class KikimrConfigGenerator(object):
 
         # Topic cloud events audit uses same file when main audit is enabled
         # (pq_config.topic_cloud_events_audit for TopicCloudEventsAuditService)
-        if 'pqconfig' in self.yaml_config:
+        if 'pqconfig' in self.yaml_config and self.enable_topic_cloud_events:
             self.yaml_config['pqconfig']['topic_cloud_events_audit'] = copy.deepcopy(cfg)
 
     @property

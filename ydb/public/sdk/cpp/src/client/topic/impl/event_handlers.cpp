@@ -22,7 +22,8 @@ public:
         TDeferredCommit deferredCommit;
         {
             std::lock_guard guard(Lock);
-            auto& offsetSet = PartitionStreamToUncommittedOffsets[event.GetPartitionSession()->GetPartitionSessionId()];
+            const std::string key = GetEventKey(event);
+            auto& offsetSet = PartitionStreamToUncommittedOffsets[key];
             // Messages could contain holes in offset, but later commit ack will tell us right border.
             // So we can easily insert the whole interval with holes included.
             // It will be removed from set by specifying proper right border.
@@ -41,16 +42,16 @@ public:
 
     void OnCommitAcknowledgement(TReadSessionEvent::TCommitOffsetAcknowledgementEvent& event) {
         std::lock_guard guard(Lock);
-        const ui64 partitionStreamId = event.GetPartitionSession()->GetPartitionSessionId();
-        auto& offsetSet = PartitionStreamToUncommittedOffsets[partitionStreamId];
+        const std::string key = GetEventKey(event);
+        auto& offsetSet = PartitionStreamToUncommittedOffsets[key];
         if (offsetSet.EraseInterval(0, event.GetCommittedOffset() + 1)) { // Remove some offsets.
             if (offsetSet.Empty()) { // No offsets left.
-                auto unconfirmedDestroyIt = UnconfirmedDestroys.find(partitionStreamId);
+                auto unconfirmedDestroyIt = UnconfirmedDestroys.find(key);
                 if (unconfirmedDestroyIt != UnconfirmedDestroys.end()) {
                     // Confirm and forget about this partition stream.
                     unconfirmedDestroyIt->second.Confirm();
                     UnconfirmedDestroys.erase(unconfirmedDestroyIt);
-                    PartitionStreamToUncommittedOffsets.erase(partitionStreamId);
+                    PartitionStreamToUncommittedOffsets.erase(key);
                 }
             }
         }
@@ -59,20 +60,21 @@ public:
     void OnCreatePartitionStream(TReadSessionEvent::TStartPartitionSessionEvent& event) {
         {
             std::lock_guard guard(Lock);
-            Y_ABORT_UNLESS(PartitionStreamToUncommittedOffsets[event.GetPartitionSession()->GetPartitionSessionId()].Empty());
+            const std::string key = GetEventKey(event);
+            Y_ABORT_UNLESS(PartitionStreamToUncommittedOffsets[key].Empty());
         }
         event.Confirm();
     }
 
     void OnDestroyPartitionStream(TReadSessionEvent::TStopPartitionSessionEvent& event) {
         std::lock_guard guard(Lock);
-        const ui64 partitionStreamId = event.GetPartitionSession()->GetPartitionSessionId();
-        Y_ABORT_UNLESS(UnconfirmedDestroys.find(partitionStreamId) == UnconfirmedDestroys.end());
-        if (PartitionStreamToUncommittedOffsets[partitionStreamId].Empty()) {
-            PartitionStreamToUncommittedOffsets.erase(partitionStreamId);
+        auto key = GetEventKey(event);
+        Y_ABORT_UNLESS(UnconfirmedDestroys.find(key) == UnconfirmedDestroys.end());
+        if (PartitionStreamToUncommittedOffsets[key].Empty()) {
+            PartitionStreamToUncommittedOffsets.erase(key);
             event.Confirm();
         } else {
-            UnconfirmedDestroys.emplace(partitionStreamId, std::move(event));
+            UnconfirmedDestroys.emplace(key, std::move(event));
         }
     }
 
@@ -82,57 +84,23 @@ public:
 
     void OnPartitionStreamClosed(TReadSessionEvent::TPartitionSessionClosedEvent& event) {
         std::lock_guard guard(Lock);
-        const ui64 partitionStreamId = event.GetPartitionSession()->GetPartitionSessionId();
-        PartitionStreamToUncommittedOffsets.erase(partitionStreamId);
-        UnconfirmedDestroys.erase(partitionStreamId);
+        const std::string key = GetEventKey(event);
+        PartitionStreamToUncommittedOffsets.erase(key);
+        UnconfirmedDestroys.erase(key);
     }
 
 private:
+    template<typename TEvent>
+    std::string GetEventKey(const TEvent& event) {
+        return event.GetPartitionSession()->GetReadSessionId() + "_" + ToString(event.GetPartitionSession()->GetPartitionSessionId());
+    }
+
     TAdaptiveLock Lock; // For the case when user gave us multithreaded executor.
     const std::function<void(TReadSessionEvent::TDataReceivedEvent&)> DataHandler;
     const bool CommitAfterProcessing;
-    std::unordered_map<ui64, TDisjointIntervalTree<ui64>> PartitionStreamToUncommittedOffsets; // Partition stream id -> set of offsets.
-    std::unordered_map<ui64, TReadSessionEvent::TStopPartitionSessionEvent> UnconfirmedDestroys; // Partition stream id -> destroy events.
+    std::unordered_map<std::string, TDisjointIntervalTree<ui64>> PartitionStreamToUncommittedOffsets; // Session id + Partition stream id -> set of offsets.
+    std::unordered_map<std::string, TReadSessionEvent::TStopPartitionSessionEvent> UnconfirmedDestroys; // Session id + Partition stream id -> destroy events.
 };
-
-TReadSessionSettings::TEventHandlers::TEventHandlers(const TEventHandlers& other)
-    : GracefulReleaseAfterCommit_(other.GracefulReleaseAfterCommit_)
-    , CommitDataAfterProcessing_(other.CommitDataAfterProcessing_)
-    , InitialDataReceivedHandler_(other.InitialDataReceivedHandler_)
-    , DataReceivedHandler_(other.DataReceivedHandler_)
-    , CommitOffsetAcknowledgementHandler_(other.CommitOffsetAcknowledgementHandler_)
-    , StartPartitionSessionHandler_(other.StartPartitionSessionHandler_)
-    , StopPartitionSessionHandler_(other.StopPartitionSessionHandler_)
-    , EndPartitionSessionHandler_(other.EndPartitionSessionHandler_)
-    , PartitionSessionClosedHandler_(other.PartitionSessionClosedHandler_)
-    , CommonHandler_(other.CommonHandler_)
-    , HandlersExecutor_(other.HandlersExecutor_)
-{
-    if (other.GracefulReleaseAfterCommit_) {
-        SimpleDataHandlers(other.InitialDataReceivedHandler_, other.CommitDataAfterProcessing_.value_or(false), other.GracefulReleaseAfterCommit_.value());
-    }
-}
-
-TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::operator=(const TEventHandlers& other) {
-    if (this == &other) {
-        return *this;
-    }
-    GracefulReleaseAfterCommit_ = other.GracefulReleaseAfterCommit_;
-    CommitDataAfterProcessing_ = other.CommitDataAfterProcessing_;
-    InitialDataReceivedHandler_ = other.InitialDataReceivedHandler_;
-    DataReceivedHandler_ = other.DataReceivedHandler_;
-    CommitOffsetAcknowledgementHandler_ = other.CommitOffsetAcknowledgementHandler_;
-    StartPartitionSessionHandler_ = other.StartPartitionSessionHandler_;
-    StopPartitionSessionHandler_ = other.StopPartitionSessionHandler_;
-    EndPartitionSessionHandler_ = other.EndPartitionSessionHandler_;
-    PartitionSessionClosedHandler_ = other.PartitionSessionClosedHandler_;
-    CommonHandler_ = other.CommonHandler_;
-    HandlersExecutor_ = other.HandlersExecutor_;
-    if (other.GracefulReleaseAfterCommit_) {
-        SimpleDataHandlers(other.InitialDataReceivedHandler_, other.CommitDataAfterProcessing_.value_or(false), other.GracefulReleaseAfterCommit_.value());
-    }
-    return *this;
-}
 
 TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::SimpleDataHandlers(std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler,
                                                                                                bool commitDataAfterProcessing,
@@ -142,10 +110,6 @@ TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::Simp
     PartitionSessionStatusHandler([](TReadSessionEvent::TPartitionSessionStatusEvent&){});
 
     if (gracefulReleaseAfterCommit) {
-        InitialDataReceivedHandler_ = dataHandler;
-        GracefulReleaseAfterCommit_.emplace(gracefulReleaseAfterCommit);
-        CommitDataAfterProcessing_.emplace(commitDataAfterProcessing);
-
         auto handlers = MakeIntrusive<TGracefulReleasingSimpleDataHandlers>(std::move(dataHandler), commitDataAfterProcessing);
         DataReceivedHandler([handlers](TReadSessionEvent::TDataReceivedEvent& event) {
             handlers->OnDataReceived(event);

@@ -49,16 +49,6 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     using TSelf = TReadSessionSettings;
 
     struct TEventHandlers {
-    private:
-        std::optional<bool> GracefulReleaseAfterCommit_;
-        std::optional<bool> CommitDataAfterProcessing_;
-        std::function<void(TReadSessionEvent::TDataReceivedEvent&)> InitialDataReceivedHandler_;
-
-    public:
-        TEventHandlers() = default;
-        TEventHandlers(const TEventHandlers&);
-        TEventHandlers& operator=(const TEventHandlers&);
-
         using TSelf = TEventHandlers;
 
         //! Set simple handler with data processing and also

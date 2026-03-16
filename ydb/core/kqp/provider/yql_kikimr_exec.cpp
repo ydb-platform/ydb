@@ -2345,8 +2345,7 @@ public:
                                     return SyncError();
                                 }
 
-                                auto* bloomIndex = add_index->mutable_local_bloom_filter_index();
-                                bloomIndex->set_case_sensitive(true);
+                                add_index->mutable_local_bloom_filter_index();
                             } else if (type == "localBloomNgramFilter") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2354,8 +2353,7 @@ public:
                                     return SyncError();
                                 }
 
-                                auto* ngramIndex = add_index->mutable_local_bloom_ngram_filter_index();
-                                ngramIndex->set_case_sensitive(true);
+                                add_index->mutable_local_bloom_ngram_filter_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));

@@ -1,4 +1,5 @@
 #include "blobstorage_replrecoverymachine.h"
+#include "blobstorage_replproxy.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -81,6 +82,10 @@ namespace NKikimr {
                 std::make_unique<std::atomic_uint64_t>());
 
             return replCtx;
+        }
+
+        ui64 GetReplicationMem(const std::shared_ptr<TReplCtx>& replCtx) {
+            return *replCtx->VCtx->Replication;
         }
 
         Y_UNIT_TEST(BasicFunctionality) {
@@ -179,6 +184,54 @@ namespace NKikimr {
                     TRope(v[0]), arena, EBlobHeaderMode::OLD_HEADER, std::nullopt);
 
                 UNIT_ASSERT_EQUAL(item.Data, buf);
+            }
+        }
+
+        Y_UNIT_TEST(MemTotalReplicationAccountingBoundaries) {
+            TVector<TVDiskID> vdisks;
+            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
+            auto replCtx = CreateReplCtx(vdisks, groupInfo);
+            const TLogoBlobID id(1, 1, 1, 0, 100, 0);
+
+            const ui64 base = GetReplicationMem(replCtx);
+
+            {
+                auto info = MakeIntrusive<TEvReplFinished::TInfo>();
+                NRepl::TRecoveryMachine recoveryMachine(replCtx, info);
+
+                TIngress ingress;
+                ingress = ingress.CopyWithoutLocal(groupInfo->Type);
+                const auto partsToRecover = NMatrix::TVectorType::MakeOneHot(0, groupInfo->Type.TotalPartCount());
+
+                recoveryMachine.AddTask(id, partsToRecover, false, ingress);
+                UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
+
+            {
+                NRepl::TVDiskProxy proxy(replCtx, vdisks[1], TActorId());
+                proxy.Put(TLogoBlobID(id, 1), groupInfo->Type.PartSize(TLogoBlobID(id, 1)));
+                UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
+
+            {
+                NRepl::TDataPortion portion(TMemoryConsumer(replCtx->VCtx->Replication));
+                portion.AddError(TLogoBlobID(id, 1), NKikimrProto::ERROR);
+                UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
+
+            {
+                TBlobIdQueue queue;
+                queue.Push(id);
+                UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
+            }
+
+            {
+                TUnreplicatedBlobRecords records;
+                records.try_emplace(id, TUnreplicatedBlobRecord{});
+                UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
             }
         }
     }

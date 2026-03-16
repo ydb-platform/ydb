@@ -570,10 +570,9 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     if (Config.GetEnableCompactification()) {
         return false;
     }
+
     const auto& partConfig = Config.GetPartitionConfig();
-
-    const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
-
+    const auto lifetimeLimit = TDuration::Seconds(partConfig.GetLifetimeSeconds());
     const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
     const auto now = ctx.Now();
 
@@ -581,6 +580,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     while (CompactionBlobEncoder.DataKeysBody.size() > 1) {
         const auto& nextKey = CompactionBlobEncoder.DataKeysBody[1];
         const auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
+
         if (ImportantConsumersNeedToKeepCurrentKey(firstKey, nextKey, now)) {
             break;
         }

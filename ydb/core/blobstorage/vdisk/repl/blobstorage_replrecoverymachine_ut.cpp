@@ -85,7 +85,7 @@ namespace NKikimr {
         }
 
         ui64 GetReplicationMem(const std::shared_ptr<TReplCtx>& replCtx) {
-            return *replCtx->VCtx->Replication;
+            return replCtx->VCtx->Replication.GetCounter()->Val();
         }
 
         Y_UNIT_TEST(BasicFunctionality) {

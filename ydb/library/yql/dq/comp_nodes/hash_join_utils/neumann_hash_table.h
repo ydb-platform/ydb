@@ -176,7 +176,8 @@ class TNeumannHashTable {
     TNeumannHashTable(TNeumannHashTable &&) = default;
     TNeumannHashTable &operator=(TNeumannHashTable &&) = default;
 
-    static ui32 EstimateLogSize(int nItems) {
+    static ui32 EstimateLogSize(ui32 nItems) {
+        if (nItems == 0) return 1;
         int estimated = 32 - std::countl_zero<ui32>(nItems);
         return std::max(1, std::min(24, estimated > 2 ? estimated - 2 : estimated));
     }
@@ -184,11 +185,11 @@ class TNeumannHashTable {
 
 
 
-    int64_t RequiredMemoryForBuild(int nItems) const {
-        return sizeof(TDirectory)*EstimateLogSize(nItems)+BufferSlotSize_ * nItems;
+    int64_t RequiredMemoryForBuild(ui32 nItems) const {
+        return sizeof(TDirectory)*EstimateLogSize(nItems)+ static_cast<size_t>(BufferSlotSize_) * nItems;
     }
 
-    void Build(const ui8 *const tuples, const ui8 *const overflow, int nItems,
+    void Build(const ui8 *const tuples, const ui8 *const overflow, ui32 nItems,
                std::optional<ui32> estimatedLogSize = std::nullopt) {
         MKQL_ENSURE_S(Layout_ != nullptr);
         MKQL_ENSURE_S(Directories_.empty() && Buffer_.empty() &&
@@ -215,9 +216,9 @@ class TNeumannHashTable {
             directory = {};
         }
 
-        for (int ind = 0; ind != nItems; ++ind) {
+        for (ui32 ind = 0; ind != nItems; ++ind) {
             const THash thash =
-                ReadUnaligned<THash>(tuples + Layout_->TotalRowSize * ind);
+                ReadUnaligned<THash>(tuples + static_cast<size_t>(Layout_->TotalRowSize) * ind);
             auto &dir = *Directories_[getDirectorySlot(thash)];
             dir += 1ul << TDirectory::kBufferSlotShift;
             dir |= kBloomTags[thash.BloomTagSlot];
@@ -233,13 +234,13 @@ class TNeumannHashTable {
             }
         }
 
-        Buffer_.resize(BufferSlotSize_ * nItems);
+        Buffer_.resize(static_cast<size_t>(BufferSlotSize_) * nItems);
 
-        constexpr int prefetchInAdvance = 16;
+        constexpr ui32 prefetchInAdvance = 16;
 
         if constexpr (Prefetch) {
-            for (int ind = 0; ind != std::min(prefetchInAdvance, nItems); ++ind) {
-                const ui8 *row = tuples + Layout_->TotalRowSize * ind;
+            for (ui32 ind = 0; ind != std::min(prefetchInAdvance, nItems); ++ind) {
+                const ui8 *row = tuples + static_cast<size_t>(Layout_->TotalRowSize) * ind;
                 const THash thash = ReadUnaligned<THash>(row);
                 auto &dir = *Directories_[getDirectorySlot(thash)];
                 const ui32 dataSlot = (dir >> TDirectory::kBufferSlotShift) - 1;
@@ -249,10 +250,10 @@ class TNeumannHashTable {
         }
 
         const ui8 *row = tuples;
-        int ind = 0;
+        ui32 ind = 0;
         for (; ind + prefetchInAdvance < nItems; ++ind, row += Layout_->TotalRowSize) {
             if constexpr (Prefetch) {
-                const ui8 *prow = row + Layout_->TotalRowSize * prefetchInAdvance;
+                const ui8 *prow = row + static_cast<size_t>(Layout_->TotalRowSize) * prefetchInAdvance;
                 const THash thash = ReadUnaligned<THash>(prow);
                 auto &dir = *Directories_[getDirectorySlot(thash)];
                 const ui32 dataSlot = (dir >> TDirectory::kBufferSlotShift) - 1;

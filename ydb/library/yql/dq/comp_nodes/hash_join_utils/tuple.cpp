@@ -1667,6 +1667,8 @@ void TTupleLayout::Concat(
     if (srcCount == 0) {
         return;
     }
+    MKQL_ENSURE(dstOverflow.size() <= std::numeric_limits<ui32>::max(),
+                "overflow buffer exceeds ui32 offset range");
     ui32 dstOverflowOffset = dstOverflow.size();
     if (srcOverflowSize > 0) {
         dstOverflow.resize(dstOverflow.size() + srcOverflowSize);
@@ -1674,8 +1676,8 @@ void TTupleLayout::Concat(
     }
 
     constexpr ui32 blockRows = 128;
-    dst.resize((dstCount + srcCount) * TotalRowSize);
-    ui8 *dstRow = dst.data() + dstCount * TotalRowSize;
+    dst.resize(static_cast<size_t>(dstCount + srcCount) * TotalRowSize);
+    ui8 *dstRow = dst.data() + static_cast<size_t>(dstCount) * TotalRowSize;
     ui32 blockSize;
     
     for (ui32 rowInd = 0; rowInd < srcCount; rowInd += blockRows, 
@@ -1716,12 +1718,15 @@ TPackResult TTupleLayout::Flatten(TArrayRef<TPackResult> tuples) const {
     flattened.Overflow.reserve(totalOverflowSize);
 
 
-    int tupleSize = TotalRowSize;
+    ui32 tupleSize = TotalRowSize;
     for (const TPackResult& tupleBatch : tuples) {
+        ui32 dstCount = flattened.PackedTuples.size() / tupleSize;
+        ui32 srcCount = tupleBatch.PackedTuples.size() / tupleSize;
+        ui32 srcOverflowSize = tupleBatch.Overflow.size();
         Concat(flattened.PackedTuples, flattened.Overflow,
-                                std::ssize(flattened.PackedTuples) / tupleSize, tupleBatch.PackedTuples.data(),
-                                tupleBatch.Overflow.data(), tupleBatch.PackedTuples.size() / tupleSize,
-                                tupleBatch.Overflow.size());
+                                dstCount, tupleBatch.PackedTuples.data(),
+                                tupleBatch.Overflow.data(), srcCount,
+                                srcOverflowSize);
     }
     return flattened;
 

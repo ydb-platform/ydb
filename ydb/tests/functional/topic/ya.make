@@ -14,9 +14,14 @@ TEST_SRCS(
     test_topic_audit.py
 )
 
+DATA(
+    arcadia/ydb/tests/functional/topic/canondata
+)
+
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/fixtures
+    ydb/tests/oss/canonical
 )
 
 END()

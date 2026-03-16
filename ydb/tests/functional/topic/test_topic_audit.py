@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-import json
-import logging
+"""
+Topic cloud events audit tests.
+Compare captured events with canondata/*/topic_cloud_events.json.
+"""
 import os
-import sys
 import time
 
 import pytest
@@ -10,9 +11,11 @@ import pytest
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.fixtures import ydb_database_ctx
 
-from helpers import CaptureFileOutput, ydbcli_db_schema_exec, ydbcli_db_schema_exec_allow_failure
-
-logger = logging.getLogger(__name__)
+from helpers import (
+    CanonicalCaptureCloudEventOutput,
+    ydbcli_db_schema_exec,
+    ydbcli_db_schema_exec_allow_failure,
+)
 
 
 CLUSTER_CONFIG = dict(
@@ -66,18 +69,6 @@ def drop_topic(cluster, database_path, topic_name):
     ydbcli_db_schema_exec(cluster, proto)
 
 
-@pytest.fixture(scope='module')
-def _database(ydb_cluster, ydb_root, request):
-    database_path = os.path.join(ydb_root, 'TopicAuditTest')
-    with ydb_database_ctx(ydb_cluster, database_path):
-        yield database_path
-
-
-@pytest.fixture(scope='module')
-def topic_audit_file_path(ydb_cluster):
-    return ydb_cluster.config.audit_file_path
-
-
 def create_topic_invalid(cluster, database_path, topic_name):
     """Create topic with invalid params (TotalGroupCount: 0) to provoke error."""
     proto = r'''ModifyScheme {
@@ -108,180 +99,82 @@ def alter_topic_invalid_params(cluster, database_path, topic_name):
     return ydbcli_db_schema_exec_allow_failure(cluster, proto)
 
 
-def _parse_cloud_event_from_audit(captured, event_type_suffix):
-    """Extract and parse cloud event JSON from audit log output."""
-    full_type = f'yandex.cloud.events.ydb.topics.{event_type_suffix}'
-    for line in captured.strip().split('\n'):
-        if full_type not in line or 'cloud_event_json' not in line:
-            continue
-        json_start = line.find(': ')
-        if json_start == -1:
-            continue
-        outer = json.loads(line[json_start + 2:])
-        inner_json = outer.get('cloud_event_json')
-        assert inner_json, f'No cloud_event_json in line: {line[:200]}'
-        return json.loads(inner_json)
-    assert False, f'No audit line with {full_type} found in: {captured[:500]}'
+@pytest.fixture(scope='module')
+def _database(ydb_cluster, ydb_root):
+    database_path = os.path.join(ydb_root, 'TopicAuditTest')
+    with ydb_database_ctx(ydb_cluster, database_path):
+        yield database_path
 
 
-def test_create_topic_error_cloud_event_logged(ydb_cluster, _database, topic_audit_file_path):
-    """Create topic with invalid params and verify CreateTopic cloud event has event_status ERROR."""
-    topic_name = 'InvalidTopic'
-    topic_path = os.path.join(_database, topic_name)
-    capture_audit = CaptureFileOutput(topic_audit_file_path)
-
-    with capture_audit:
-        create_topic_invalid(ydb_cluster, _database, topic_name)
-    time.sleep(2)
-
-    print(capture_audit.captured, file=sys.stderr)
-    assert 'cloud_event_json' in capture_audit.captured
-    assert 'yandex.cloud.events.ydb.topics.CreateTopic' in capture_audit.captured
-
-    ev = _parse_cloud_event_from_audit(capture_audit.captured, 'CreateTopic')
-    assert ev.get('event_status') == 'ERROR', f'Expected event_status ERROR, got {ev.get("event_status")}'
-    # request_parameters should contain the attempted path
-    req = ev.get('request_parameters', {})
-    assert req.get('path') == topic_path
-    # error field contains the failure message (google.rpc.Status)
-    if ev.get('error'):
-        assert 'message' in ev['error'] or 'code' in ev['error']
+@pytest.fixture(scope='module')
+def topic_audit_file_path(ydb_cluster):
+    return ydb_cluster.config.audit_file_path
 
 
-def test_alter_topic_error_cloud_event_logged(ydb_cluster, _database, topic_audit_file_path):
-    """Alter topic with invalid params (TotalGroupCount < current) and verify AlterTopic cloud event has event_status ERROR."""
-    topic_name = 'AlterErrorTopic'
-    topic_path = os.path.join(_database, topic_name)
-    capture_audit = CaptureFileOutput(topic_audit_file_path)
+def test_create_topic(ydb_cluster, _database, topic_audit_file_path):
+    """Create topic and compare cloud event with canondata."""
+    topic_name = 'CanonicalTopic'
+    capture = CanonicalCaptureCloudEventOutput(topic_audit_file_path, _database)
 
-    create_topic(ydb_cluster, _database, topic_name)
-    time.sleep(1)
-
-    with capture_audit:
-        alter_topic_invalid_params(ydb_cluster, _database, topic_name)
-    time.sleep(2)
-
-    print(capture_audit.captured, file=sys.stderr)
-    assert 'cloud_event_json' in capture_audit.captured
-    assert 'yandex.cloud.events.ydb.topics.AlterTopic' in capture_audit.captured
-
-    ev = _parse_cloud_event_from_audit(capture_audit.captured, 'AlterTopic')
-    assert ev.get('event_status') == 'ERROR', f'Expected event_status ERROR, got {ev.get("event_status")}'
-    req = ev.get('request_parameters', {})
-    assert req.get('path') == topic_path
-
-
-def test_create_topic_cloud_event_logged(ydb_cluster, _database, topic_audit_file_path):
-    """Create topic and verify CreateTopic cloud event is written to audit file."""
-    topic_name = 'TestTopic'
-    topic_path = os.path.join(_database, topic_name)
-    capture_audit = CaptureFileOutput(topic_audit_file_path)
-
-    with capture_audit:
+    with capture:
         create_topic(ydb_cluster, _database, topic_name)
     time.sleep(2)
 
-    print(capture_audit.captured, file=sys.stderr)
-    assert 'cloud_event_json' in capture_audit.captured
-    assert 'yandex.cloud.events.ydb.topics.CreateTopic' in capture_audit.captured
-    assert topic_path in capture_audit.captured
-
-    ev = _parse_cloud_event_from_audit(capture_audit.captured, 'CreateTopic')
-    # details (TopicDetails)
-    details = ev.get('details', {})
-    assert details.get('path') == topic_path
-    assert 'retention_period' in details
-    assert details.get('retention_period') == '10s'
-    # request_parameters
-    req = ev.get('request_parameters', {})
-    assert req.get('path') == topic_path
-    assert req.get('retention_period') == '10s'
-    # event_metadata
-    meta = ev.get('event_metadata', {})
-    assert meta.get('event_type') == 'yandex.cloud.events.ydb.topics.CreateTopic'
-    assert 'event_id' in meta
-    assert 'created_at' in meta
-    assert 'cloud_id' in meta
-    assert 'folder_id' in meta
-    # event_status
-    assert ev.get('event_status') == 'DONE'
-    # authentication, authorization
-    assert ev.get('authentication', {}).get('authenticated') is True
-    assert ev.get('authorization', {}).get('authorized') is True
+    return capture.canonize()
 
 
-def test_alter_topic_cloud_event_logged(ydb_cluster, _database, topic_audit_file_path):
-    """Create, alter topic and verify AlterTopic cloud event is written to audit file."""
-    topic_name = 'AlterTopic'
-    topic_path = os.path.join(_database, topic_name)
-    capture_audit = CaptureFileOutput(topic_audit_file_path)
+def test_alter_topic(ydb_cluster, _database, topic_audit_file_path):
+    """Create, alter topic and compare AlterTopic cloud event with canondata."""
+    topic_name = 'CanonicalAlterTopic'
+    capture = CanonicalCaptureCloudEventOutput(topic_audit_file_path, _database)
 
     create_topic(ydb_cluster, _database, topic_name)
     time.sleep(1)
 
-    with capture_audit:
+    with capture:
         alter_topic(ydb_cluster, _database, topic_name)
     time.sleep(2)
 
-    print(capture_audit.captured, file=sys.stderr)
-    assert 'cloud_event_json' in capture_audit.captured
-    assert 'yandex.cloud.events.ydb.topics.AlterTopic' in capture_audit.captured
-    assert topic_path in capture_audit.captured
-
-    ev = _parse_cloud_event_from_audit(capture_audit.captured, 'AlterTopic')
-    # details (TopicDetails)
-    details = ev.get('details', {})
-    assert details.get('path') == topic_path
-    assert 'retention_period' in details
-    assert details.get('retention_period') == '42s'
-    # request_parameters
-    req = ev.get('request_parameters', {})
-    assert req.get('path') == topic_path
-    assert req.get('retention_period') == '42s'
-    # event_metadata
-    meta = ev.get('event_metadata', {})
-    assert meta.get('event_type') == 'yandex.cloud.events.ydb.topics.AlterTopic'
-    assert 'event_id' in meta
-    assert 'created_at' in meta
-    # event_status
-    assert ev.get('event_status') == 'DONE'
-    # authentication, authorization
-    assert ev.get('authentication', {}).get('authenticated') is True
-    assert ev.get('authorization', {}).get('authorized') is True
+    return capture.canonize()
 
 
-def test_drop_topic_cloud_event_logged(ydb_cluster, _database, topic_audit_file_path):
-    """Create, drop topic and verify DeleteTopic cloud event is written to audit file."""
-    topic_name = 'DropTopic'
-    topic_path = os.path.join(_database, topic_name)
-    capture_audit = CaptureFileOutput(topic_audit_file_path)
+def test_drop_topic(ydb_cluster, _database, topic_audit_file_path):
+    """Create, drop topic and compare DeleteTopic cloud event with canondata."""
+    topic_name = 'CanonicalDropTopic'
+    capture = CanonicalCaptureCloudEventOutput(topic_audit_file_path, _database)
 
     create_topic(ydb_cluster, _database, topic_name)
     time.sleep(1)
 
-    with capture_audit:
+    with capture:
         drop_topic(ydb_cluster, _database, topic_name)
     time.sleep(3)
 
-    print(capture_audit.captured, file=sys.stderr)
-    assert 'cloud_event_json' in capture_audit.captured
-    assert 'yandex.cloud.events.ydb.topics.DeleteTopic' in capture_audit.captured
-    assert topic_path in capture_audit.captured
+    return capture.canonize()
 
-    ev = _parse_cloud_event_from_audit(capture_audit.captured, 'DeleteTopic')
-    # details (EventDetails for DeleteTopic - only path)
-    details = ev.get('details', {})
-    assert details.get('path') == topic_path
-    # request_parameters (only path for DeleteTopic)
-    req = ev.get('request_parameters', {})
-    assert req.get('path') == topic_path
-    # event_metadata
-    meta = ev.get('event_metadata', {})
-    assert meta.get('event_type') == 'yandex.cloud.events.ydb.topics.DeleteTopic'
-    assert 'event_id' in meta
-    assert 'created_at' in meta
-    # event_status
-    assert ev.get('event_status') == 'DONE'
-    # authentication, authorization
-    assert ev.get('authentication', {}).get('authenticated') is True
-    assert ev.get('authorization', {}).get('authorized') is True
+
+def test_create_topic_error(ydb_cluster, _database, topic_audit_file_path):
+    """Create topic with invalid params, compare ERROR cloud event with canondata."""
+    topic_name = 'InvalidCanonicalTopic'
+    capture = CanonicalCaptureCloudEventOutput(topic_audit_file_path, _database)
+
+    with capture:
+        create_topic_invalid(ydb_cluster, _database, topic_name)
+    time.sleep(2)
+
+    return capture.canonize()
+
+
+def test_alter_topic_error(ydb_cluster, _database, topic_audit_file_path):
+    """Alter topic with invalid params, compare ERROR cloud event with canondata."""
+    topic_name = 'AlterErrorCanonicalTopic'
+    capture = CanonicalCaptureCloudEventOutput(topic_audit_file_path, _database)
+
+    create_topic(ydb_cluster, _database, topic_name)
+    time.sleep(1)
+
+    with capture:
+        alter_topic_invalid_params(ydb_cluster, _database, topic_name)
+    time.sleep(2)
+
+    return capture.canonize()

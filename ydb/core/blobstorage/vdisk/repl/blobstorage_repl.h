@@ -133,10 +133,27 @@ namespace NKikimr {
         using const_iterator = TUnreplicatedBlobRecordsMap::const_iterator;
 
         TUnreplicatedBlobRecords() = default;
+        TUnreplicatedBlobRecords(const TUnreplicatedBlobRecords&) = delete;
+        TUnreplicatedBlobRecords& operator=(const TUnreplicatedBlobRecords&) = delete;
 
         explicit TUnreplicatedBlobRecords(TMemoryConsumer consumer)
             : Consumer(std::move(consumer))
         {}
+
+        TUnreplicatedBlobRecords(TUnreplicatedBlobRecords&& other) noexcept
+            : Records(std::move(other.Records))
+            , Consumer(std::move(other.Consumer))
+            , LastBytes(std::exchange(other.LastBytes, 0))
+        {}
+
+        TUnreplicatedBlobRecords& operator=(TUnreplicatedBlobRecords&& other) noexcept {
+            if (this != &other) {
+                Records = std::move(other.Records);
+                Consumer = std::move(other.Consumer);
+                LastBytes = std::exchange(other.LastBytes, 0);
+            }
+            return *this;
+        }
 
         std::pair<iterator, bool> try_emplace(const TLogoBlobID& id, const TUnreplicatedBlobRecord& record) {
             auto res = Records.try_emplace(id, record);

@@ -616,7 +616,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
         ctx.Runtime.FilterFunction = [&](ui32 _, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NDDisk::TEvWritePersistentBuffer::EventType) {
-                return expected[ev->Cookie] != TReplyStatus::ERROR;
+                // first cookie is for TEvWritePersistentBuffers, so we do decrement
+                return expected[ev->Cookie - 1] != TReplyStatus::ERROR;
             }
             if (ev->GetTypeRewrite() == NDDisk::TEvWritePersistentBufferResult::EventType) {
                 okCnt--;
@@ -641,10 +642,19 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto writeResult = ctx.Runtime.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBuffersResult>(
             ctx.Edge, false);
         UNIT_ASSERT(writeResult->Get()->Record.ResultSize() == 3);
+        UNIT_ASSERT(okCnt == 0);
+        for (auto s : expected) {
+            if (s == TReplyStatus::OK) {
+                okCnt++;
+            }
+        }
         for (ui32 i = 0; i < writeResult->Get()->Record.ResultSize(); i++) {
             auto& wr = writeResult->Get()->Record.GetResult(i);
-            UNIT_ASSERT(wr.GetResult().GetStatus() == expected[i]);
+            if (wr.GetResult().GetStatus() == TReplyStatus::OK) {
+                okCnt--;
+            }
         }
+        UNIT_ASSERT(okCnt == 0);
     }
 
     Y_UNIT_TEST(PersistentBufferWriteTunnel_Mixed1) {

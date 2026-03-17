@@ -2374,6 +2374,658 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.RestoreLastBackup(TestTabletFlags);
         assertState();
     }
+
+    Y_UNIT_TEST(CorruptedChangelogChecksum) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json, true);
+
+        json["prev_sha256"] = "0000000000000000000000000000000000000000000000000000000000000000";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogInvalidJSON) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        lines.back() = "this is not valid json{{{";
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogInvalidOp) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json, true);
+
+        json["data_changes"][0]["op"] = "unknown_op";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogUnknownTable) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["table"] = "UnknownTable";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogUnknownColumn) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["UnknownColumn"] = 42;
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogMissingKey) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0].EraseValue("Key");
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogNullKey) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["Key"] = NJson::TJsonValue(NJson::JSON_NULL);
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogInvalidBase64) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteBinaryValue(2, "abcdef");
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["BinaryValue"] = "!!!not-valid-base64!!!";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogWrongType) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines.back(), &json);
+        json["data_changes"][0]["Value"] = "not-a-number";
+
+        lines.back() = NJson::WriteJson(json, false);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogReordering) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+        env.WriteValue(3, 30);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+
+        std::swap(lines[2], lines[3]);
+
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 3);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogMissing) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+        env.WriteValue(3, 30);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+
+        lines.erase(lines.begin() + 2);
+
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogTruncated) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing two values" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT(!lines.empty());
+        lines.pop_back();
+
+        WriteFileContent(changelog, JoinSeq("\n", lines) + "\n");
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogMeta) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        WriteFileContent(backup.Child("changelog_meta.json"), "this is not valid json{{{");
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(MissingChangelogMeta) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        backup.Child("changelog_meta.json").DeleteIfExists();
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(CorruptedChangelogMetaChecksum) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelogMeta = backup.Child("changelog_meta.json");
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(TFileInput(changelogMeta).ReadAll(), &json, true);
+
+        json["last_sha256"] = "0000000000000000000000000000000000000000000000000000000000000000";
+
+        WriteFileContent(changelogMeta, NJson::WriteJson(json, false));
+
+        env.RestoreBackupExpectFail(backup);
+
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+    }
+
+    Y_UNIT_TEST(BackupFromDifferentTablet) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+
+        auto manifestPath = backup.Child("snapshot").Child("manifest.json");
+        NJson::TJsonValue manifest;
+        NJson::ReadJsonTree(TFileInput(manifestPath).ReadAll(), &manifest, true);
+        manifest["tablet_id"] = 999;
+        WriteFileContent(manifestPath, NJson::WriteJson(manifest, false));
+
+        auto metaPath = backup.Child("changelog_meta.json");
+        NJson::TJsonValue meta;
+        NJson::ReadJsonTree(TFileInput(metaPath).ReadAll(), &meta, true);
+        meta["tablet_id"] = 999;
+        WriteFileContent(metaPath, NJson::WriteJson(meta, false));
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(SnapshotChangelogMismatch) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+
+        auto metaPath = backup.Child("changelog_meta.json");
+        NJson::TJsonValue meta;
+        NJson::ReadJsonTree(TFileInput(metaPath).ReadAll(), &meta, true);
+        meta["generation"] = 999;
+        WriteFileContent(metaPath, NJson::WriteJson(meta, false));
+
+        env.RestoreLastBackupExpectFail();
+    }
+
+    Y_UNIT_TEST(DeleteIncompleteBackups) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        auto incompleteDir1 = tabletIdDir.Child("backup_20200101000000Z_g0_s0");
+        incompleteDir1.MkDirs();
+        auto snapshotTmp = incompleteDir1.Child("snapshot.tmp");
+        snapshotTmp.MkDirs();
+        TFile(snapshotTmp.Child("some_file"), EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
+
+        auto incompleteDir2 = tabletIdDir.Child("backup_20200101000001Z_g0_s10");
+        incompleteDir2.MkDirs();
+        TFile(incompleteDir2.Child("changelog.json"), EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        UNIT_ASSERT_C(!incompleteDir1.Exists(), "Incomplete backup dir must be deleted after restart");
+        UNIT_ASSERT_C(!incompleteDir2.Exists(), "Incomplete backup dir must be deleted after restart");
+    }
+
+    Y_UNIT_TEST(DeleteSuccessfulBackups) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        for (int i = 0; i < 10; ++i) {
+            Cerr << "...restarting tablet (iteration " << i << ")" << Endl;
+            env.RestartTablet(TestTabletFlags);
+            env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        }
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        UNIT_ASSERT_VALUES_EQUAL(genDirs.size(), 1);
+    }
+
+    Y_UNIT_TEST(DeleteBackupsRace) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        // next generation already making backup
+        auto nextGenDir = tabletIdDir.Child("backup_20200101000000Z_g10_s0");
+        nextGenDir.MkDirs();
+        auto snapshotTmp = nextGenDir.Child("snapshot.tmp");
+        snapshotTmp.MkDirs();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        UNIT_ASSERT_C(nextGenDir.Exists(), "Next generation backup dir must not be deleted after restart");
+
+        snapshotTmp.RenameTo(nextGenDir.Child("snapshot"));
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        UNIT_ASSERT_VALUES_EQUAL(genDirs.size(), 1);
+        UNIT_ASSERT_C(nextGenDir.Exists(), "Next generation backup dir must not be deleted after restart");
+    }
 }
 
 } // namespace NKikimr::NTabletFlatExecutor::NBackup

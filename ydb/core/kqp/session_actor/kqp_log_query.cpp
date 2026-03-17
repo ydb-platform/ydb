@@ -12,7 +12,7 @@ namespace {
 
 constexpr size_t SQL_TEXT_MAX_SIZE = 4000;
 
-#define _KQP_REQ_LOG(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_REQUEST, "[REQ_JSON] " << stream)
+#define _KQP_REQ_LOG(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_REQUEST, "[REQ_JSON] " << stream)
 
 void WriteJsonChunks(TStringBuf poolId, TString reqId, TStringBuf sessionId, TStringBuf userSID,
                      TStringBuf eventName, TStringBuf requestText, 

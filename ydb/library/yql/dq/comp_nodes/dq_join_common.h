@@ -701,6 +701,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 return WaitWhileSpilling();
             }
         } else if (auto* s = std::get_if<JoinPairsOfPartitions>(&State_)) {
+            // TODO: Implement repartitioning logic here to handle cases where a single partition is too large and may cause out-of-memory (OOM) errors.
             JoinPairsOfPartitions& state = *s;
             if (!state.SelectedPair.has_value()) {
                 std::optional bucket = GetFrontOrNull(state.Pairs);

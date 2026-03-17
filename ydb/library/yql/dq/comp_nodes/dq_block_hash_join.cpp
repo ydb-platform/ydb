@@ -125,8 +125,8 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         return Output_.Probe.NTuples;
     }
 
-    i64 AllocatedBytes() const {
-        i64 bytes = 0;
+    ui64 AllocatedBytes() const {
+        ui64 bytes = 0;
         for (ESide side : EachSide) {
             bytes += Output_.SelectSide(side).AllocatedBytes();
         }
@@ -285,10 +285,10 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             if (Finished_) {
                 return NYql::NUdf::EFetchStatus::Finish;
             }
-            const i64 bytesLimit = TlsAllocState->IsMemoryYellowZoneEnabled()
-                ? OutputBytesLimitYellowZone_
-                : OutputBytesLimit_;
-            auto outputIsFull = [&]() {
+            auto outputIsFull = [this]() {
+                const ui64 bytesLimit = TlsAllocState->IsMemoryYellowZoneEnabled()
+                    ? OutputBytesLimitYellowZone_
+                    : OutputBytesLimit_;
                 return Output_.AllocatedBytes() >= bytesLimit;
             };
             while (!outputIsFull()) {
@@ -316,8 +316,8 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         JoinType Join_;
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Kind> Output_;
-        static constexpr i64 OutputBytesLimit_ = 50LL * 1024 * 1024;
-        static constexpr i64 OutputBytesLimitYellowZone_ = 5LL * 1024 * 1024;
+        static constexpr ui64 OutputBytesLimit_ = 50ULL * 1024 * 1024;
+        static constexpr ui64 OutputBytesLimitYellowZone_ = 5ULL * 1024 * 1024;
         bool Finished_ = false;
     };
 

@@ -177,7 +177,6 @@ class TNeumannHashTable {
     TNeumannHashTable &operator=(TNeumannHashTable &&) = default;
 
     static int EstimateLogSize(int nItems) {
-        if (nItems == 0) return 1;
         int estimated = 32 - std::countl_zero<ui32>(nItems);
         return std::max(1, std::min(24, estimated > 2 ? estimated - 2 : estimated));
     }

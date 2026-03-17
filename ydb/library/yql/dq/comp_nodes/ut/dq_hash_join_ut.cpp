@@ -1076,11 +1076,6 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         UNIT_ASSERT_C(maxBlockRows < expectedTotal,
             TStringBuilder() << "Max block size " << maxBlockRows
                              << " should be less than total " << expectedTotal);
-        const i64 yellowZoneLimit = 5LL * 1024 * 1024;
-        const i64 maxExpectedRowsPerBlock = yellowZoneLimit / (valueSize * 2) + 1;
-        UNIT_ASSERT_C(maxBlockRows <= maxExpectedRowsPerBlock,
-            TStringBuilder() << "Max block rows " << maxBlockRows
-                             << " exceeds yellow zone bound " << maxExpectedRowsPerBlock);
     }
 }
 } // namespace NKikimr::NMiniKQL

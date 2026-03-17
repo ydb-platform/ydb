@@ -165,7 +165,7 @@ public:
             }
 
             for (const auto& item : settings.items()) {
-                if (item.destination_path().empty() && item.source_path().empty()) {
+                if (item.destination_path().empty() && item.source_path().empty() && item.source_path_db().empty()) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty item is not allowed");
                 }
 

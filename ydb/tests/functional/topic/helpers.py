@@ -103,6 +103,15 @@ class CanonicalCaptureCloudEventOutput:
                 topic_name = path[len(self.database_path):].lstrip('/')
                 obj['path'] = f'<database_path>/{topic_name}'
 
+        # authorization.permissions[].resource_id (contains database path + topic)
+        auth = event.get('authorization') or {}
+        for perm in auth.get('permissions') or []:
+            if isinstance(perm, dict):
+                rid = perm.get('resource_id')
+                if rid and isinstance(rid, str) and self.database_path and rid.startswith(self.database_path):
+                    topic_name = rid[len(self.database_path):].lstrip('/')
+                    perm['resource_id'] = f'<database_path>/{topic_name}'
+
         # request_metadata.remote_address (port varies per run)
         req_meta = event.get('request_metadata') or {}
         if req_meta.get('remote_address'):

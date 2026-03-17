@@ -171,6 +171,19 @@ void FillTopicRequestParameters(TRequestParameters* params, const TString& path,
     }
 }
 
+static void FillRequestedPermission(
+    google::protobuf::RepeatedPtrField<yandex::cloud::events::RequestedPermissions>* permissions,
+    const TString& action,
+    const TCloudEventInfo& info)
+{
+    auto* permission = permissions->Add();
+    permission->set_permission("ydb.topic." + action);
+    permission->set_resource_type("ydb.topic");
+    TString resourceId = info.DatabaseId.empty() ? info.TopicPath : info.DatabaseId + "/" + info.TopicPath;
+    permission->set_resource_id(resourceId);
+    permission->set_authorized(true);
+}
+
 static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
     // Authentication
     ev.mutable_authentication()->set_authenticated(true);
@@ -180,6 +193,7 @@ static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
 
     // Authorization
     ev.mutable_authorization()->set_authorized(true);
+    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), "CreateTopic", info);
 
     // EventMetadata
     ev.mutable_event_metadata()->set_event_id(CreateGuidAsString());
@@ -218,6 +232,7 @@ static void Fill(TAlterTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_authentication()->set_subject_type(
         yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
     ev.mutable_authorization()->set_authorized(true);
+    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), "AlterTopic", info);
 
     ev.mutable_event_metadata()->set_event_id(CreateGuidAsString());
     ev.mutable_event_metadata()->set_event_type("yandex.cloud.events.ydb.topics." + GetOperationType(info.ModifyScheme));
@@ -254,6 +269,7 @@ static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_authentication()->set_subject_type(
         yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
     ev.mutable_authorization()->set_authorized(true);
+    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), "DeleteTopic", info);
 
     ev.mutable_event_metadata()->set_event_id(CreateGuidAsString());
     ev.mutable_event_metadata()->set_event_type("yandex.cloud.events.ydb.topics." + GetOperationType(info.ModifyScheme));

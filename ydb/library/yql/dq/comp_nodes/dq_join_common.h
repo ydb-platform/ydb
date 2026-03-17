@@ -313,24 +313,24 @@ template <typename Source> class TInMemoryHashJoin {
         }
 
         if (!Sources_.Probe.Finished()) {
-            const FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
+            FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
             const NKikimr::NMiniKQL::EFetchResult resEnum = AsResult(var);
 
             if (resEnum == EFetchResult::One) {
-                const IBlockLayoutConverter::TPackResult& thisPackResult =
-                    std::get<One<IBlockLayoutConverter::TPackResult>>(var).Data;
+                FetchedPack_ = std::move(GetPayload(var));
+                ResumeIndex_ = 0;
                 ui32 idx = 0;
-                for (TSingleTuple probeTuple : thisPackResult) {
+                for (TSingleTuple probeTuple : *FetchedPack_) {
                     idx++;
                     Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                         consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                     });
                     if (isFull()) {
-                        FetchedPack_ = thisPackResult;
                         ResumeIndex_ = idx;
                         return EFetchResult::One;
                     }
                 }
+                FetchedPack_ = std::nullopt;
             }
 
             return resEnum;

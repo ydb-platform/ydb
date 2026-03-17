@@ -3,7 +3,7 @@
 
 namespace NKikimr::NMiniKQL {
 
-ui64 TPackResult::AllocatedBytes() const {
+i64 TPackResult::AllocatedBytes() const {
     return PackedTuples.size() + Overflow.size();
 }
 

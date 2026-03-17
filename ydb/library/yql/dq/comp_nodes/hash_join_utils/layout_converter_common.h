@@ -12,7 +12,7 @@ struct TPackResult {
     std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;
     std::vector<ui8, TMKQLAllocator<ui8>> Overflow;
     i64 NTuples{ 0 };
-    ui64 AllocatedBytes() const;
+    i64 AllocatedBytes() const;
     TPackResult() = default;
     ~TPackResult() = default;
 

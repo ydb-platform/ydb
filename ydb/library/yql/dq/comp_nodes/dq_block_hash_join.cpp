@@ -125,14 +125,6 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         return Output_.Probe.NTuples;
     }
 
-    ui64 AllocatedBytes() const {
-        ui64 bytes = 0;
-        for (ESide side : EachSide) {
-            bytes += Output_.SelectSide(side).AllocatedBytes();
-        }
-        return bytes;
-    }
-
 
 
     using TuplePairs = TSides<TPackResult>;

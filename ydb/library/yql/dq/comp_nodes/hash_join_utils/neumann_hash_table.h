@@ -271,7 +271,7 @@ class TNeumannHashTable {
                 std::memcpy(bufRow, row,
                             RowIndexSize_);
             } else {
-                TOutplace row {.Hash = *thash, .Index = ind};
+                TOutplace row {.Hash = *thash, .Index = static_cast<ui32>(ind)};
             
                 WriteUnaligned<TOutplace>(bufRow, row);
             }
@@ -292,7 +292,7 @@ class TNeumannHashTable {
                 std::memcpy(bufRow, row,
                             RowIndexSize_);
             } else {
-                TOutplace val{.Hash = *thash, .Index = ind};
+                TOutplace val{.Hash = *thash, .Index = static_cast<ui32>(ind)};
                 WriteUnaligned<TOutplace>(bufRow, val);
             }
             

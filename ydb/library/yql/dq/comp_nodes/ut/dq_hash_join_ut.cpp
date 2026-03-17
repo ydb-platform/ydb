@@ -826,6 +826,32 @@ TJoinTestData BigStringsTestData() {
     return td;
 }
 
+TJoinTestData OutputBufferBoundedTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = 200;
+    constexpr int rightSize = 200;
+    constexpr int valueSize = 512;
+
+    TVector<ui64> leftKeys(leftSize, 1);
+    TVector<TString> leftValues(leftSize);
+    for (int i = 0; i < leftSize; ++i) {
+        leftValues[i] = TString(valueSize, 'A' + (i % 26));
+    }
+
+    TVector<ui64> rightKeys(rightSize, 1);
+    TVector<TString> rightValues(rightSize);
+    for (int i = 0; i < rightSize; ++i) {
+        rightValues[i] = TString(valueSize, 'a' + (i % 26));
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
 void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     FilterRenamesForSemiAndOnlyJoins(testData);
     TJoinDescription descr;
@@ -1005,28 +1031,8 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(SmallStringsTestData(), true);
     }
     Y_UNIT_TEST(TestOutputBufferBounded) {
-        TJoinTestData td;
-        auto& setup = *td.Setup;
-
-        constexpr int leftSize = 200;
-        constexpr int rightSize = 200;
-        constexpr int valueSize = 512;
-
-        TVector<ui64> leftKeys(leftSize, 1);
-        TVector<TString> leftValues(leftSize);
-        for (int i = 0; i < leftSize; ++i) {
-            leftValues[i] = TString(valueSize, 'A' + (i % 26));
-        }
-
-        TVector<ui64> rightKeys(rightSize, 1);
-        TVector<TString> rightValues(rightSize);
-        for (int i = 0; i < rightSize; ++i) {
-            rightValues[i] = TString(valueSize, 'a' + (i % 26));
-        }
-
-        td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
-        td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
-        td.Kind = EJoinKind::Inner;
+        auto td = OutputBufferBoundedTestData();
+        FilterRenamesForSemiAndOnlyJoins(td);
 
         TJoinDescription descr;
         descr.CustomRenames = td.Renames;
@@ -1068,7 +1074,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
             ++blockCount;
         }
 
-        const i64 expectedTotal = leftSize * rightSize;
+        constexpr i64 expectedTotal = 200 * 200;
         UNIT_ASSERT_VALUES_EQUAL(totalRows, expectedTotal);
         UNIT_ASSERT_C(blockCount > 1,
             TStringBuilder() << "Expected multiple output blocks but got " << blockCount

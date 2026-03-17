@@ -46,12 +46,7 @@ public:
         CreateTargetCountersForCounterType<
             TSimpleCountersOpts,
             decltype(SimpleCounters),
-            [](
-                const TSimpleCountersOpts* /* counterOptions */,
-                NMonitoring::TDynamicCounterPtr targetCounterGroup,
-                size_t /* index */,
-                const char* name
-            ) {
+            [](auto /* counterOptions */, auto targetCounterGroup, auto /* index */, auto name) {
                 return targetCounterGroup->GetNamedCounter(
                     "name",
                     name,
@@ -68,12 +63,7 @@ public:
         CreateTargetCountersForCounterType<
             TCumulativeCountersOpts,
             decltype(CumulativeCounters),
-            [](
-                const TCumulativeCountersOpts* /* counterOptions */,
-                NMonitoring::TDynamicCounterPtr targetCounterGroup,
-                size_t /* index */,
-                const char* name
-            ) {
+            [](auto /* counterOptions */, auto targetCounterGroup, auto /* index */, auto name) {
                 return targetCounterGroup->GetNamedCounter(
                     "name",
                     name,
@@ -90,29 +80,7 @@ public:
         CreateTargetCountersForCounterType<
             TPercentileCountersOpts,
             decltype(PercentileCounters),
-            [](
-                const TPercentileCountersOpts* counterOptions,
-                NMonitoring::TDynamicCounterPtr targetCounterGroup,
-                size_t index,
-                const char* name
-            ) {
-                // Use the specified range boundaries for the histogram buckets
-                const auto& allRanges = counterOptions->GetRanges(index);
-
-                NMonitoring::TBucketBounds bucketBounds;
-                bucketBounds.reserve(allRanges.size());
-
-                for (const auto& range : allRanges) {
-                    bucketBounds.push_back(range.RangeVal);
-                }
-
-                return targetCounterGroup->GetNamedHistogram(
-                    "name",
-                    name,
-                    NMonitoring::ExplicitHistogram(bucketBounds),
-                    false /* derivative */
-                );
-            }
+            CreateExplicitHistogram
         >(
             PercentileCountersOpts(),
             targetCounterGroup,
@@ -149,6 +117,57 @@ public:
     }
 
 private:
+    using TSimpleCountersOpts = NAux::TAppParsedOpts<SimpleDesc, true>;
+    using TCumulativeCountersOpts = NAux::TAppParsedOpts<CumulativeDesc, true>;
+    using TPercentileCountersOpts = NAux::TAppParsedOpts<PercentileDesc, true>;
+
+    static const TSimpleCountersOpts* SimpleCountersOpts() {
+        return NAux::GetAppOpts<SimpleDesc, true>();
+    }
+
+    static const TCumulativeCountersOpts* CumulativeCountersOpts() {
+        return NAux::GetAppOpts<CumulativeDesc, true>();
+    }
+
+    static const TPercentileCountersOpts* PercentileCountersOpts() {
+        return NAux::GetAppOpts<PercentileDesc, true>();
+    }
+
+    /**
+     * Create an explicit histogram with the bucket boundaries defined
+     * in the corresponding protobuf enum definition.
+     *
+     * @param[in] counterOptions The parsed enum options for the target counters
+     * @param[in] targetCounterGroup The counter group where the target (mapped) counters are created
+     * @param[in] index The index for the corresponding enum value in the protobuf file
+     * @param[in] name The name of the histogram to create
+     *
+     * @return The corresponding explicit histogram counter
+     */
+    static NMonitoring::THistogramPtr CreateExplicitHistogram(
+        const TPercentileCountersOpts* counterOptions,
+        NMonitoring::TDynamicCounterPtr targetCounterGroup,
+        size_t index,
+        const char* name
+    ) {
+        // Use the specified range boundaries for the histogram buckets
+        const auto& allRanges = counterOptions->GetRanges(index);
+
+        NMonitoring::TBucketBounds bucketBounds;
+        bucketBounds.reserve(allRanges.size());
+
+        for (const auto& range : allRanges) {
+            bucketBounds.push_back(range.RangeVal);
+        }
+
+        return targetCounterGroup->GetNamedHistogram(
+            "name",
+            name,
+            NMonitoring::ExplicitHistogram(bucketBounds),
+            false /* derivative */
+        );
+    }
+
     /**
      * Create all target counters of the given counter type (simple, cumulative, percentile).
      *
@@ -196,8 +215,7 @@ private:
      * @tparam FindSourceCounter The function, which looks up the given source counter
      *
      * @param[in] counterOptions The parsed enum options for the target counters
-     * @param[in] executorCounterGroup The counter group for the source counters (executor)
-     * @param[in] applicationCounterGroup The counter group for the source counters (application)
+     * @param[in] parentCounterGroups The counter groups for the all source counter categories
      * @param[in,out] targetCounters The container where the source counters will be saved
      *
      * @return Indicates if all source counters were looked up successfully
@@ -213,8 +231,10 @@ private:
     >
     bool FindSourceCountersForCounterType(
         const TCounterOptions* counterOptions,
-        NMonitoring::TDynamicCounterPtr executorCounterGroup,
-        NMonitoring::TDynamicCounterPtr applicationCounterGroup,
+        const std::unordered_map<
+            ESourceCounterCategory,
+            NMonitoring::TDynamicCounterPtr
+        >& parentCounterGroups,
         TTargetCounters& targetCounters
     ) {
         for (size_t i = 0; i < counterOptions->Size; ++i) {
@@ -224,10 +244,12 @@ private:
             targetCounters[i].SourceCounters.reserve(allSourceCounters.size());
 
             for (const auto& sourceCounterInfo : allSourceCounters) {
-                auto chosenCounterGroup =
-                    (sourceCounterInfo.GetExecutorCounter())
-                        ? executorCounterGroup
-                        : applicationCounterGroup;
+                auto counterGroupIt = parentCounterGroups.find(sourceCounterInfo.GetCategory());
+                NMonitoring::TDynamicCounterPtr chosenCounterGroup;
+
+                if (counterGroupIt != parentCounterGroups.end()) {
+                    chosenCounterGroup = counterGroupIt->second;
+                }
 
                 if (!chosenCounterGroup) {
                     return false;
@@ -256,7 +278,7 @@ private:
                 //          counter explicitly in unit tests.
                 auto sourceCounter = (chosenCounterGroup.Get()->*FindSourceCounter)(
                     "sensor", // Low level counters use "sensor" instead of "name"!
-                    sourceCounterInfo.GetCounterName()
+                    sourceCounterInfo.GetName()
                 );
 
                 if (!sourceCounter) {
@@ -320,8 +342,19 @@ private:
         }
 
         // Look up the counter groups for all application and executor counters
-        auto executorCounterGroup = tabletCountersGroup->FindSubgroup("category", "executor");
-        auto applicationCounterGroup = tabletCountersGroup->FindSubgroup("category", "app");
+        const std::unordered_map<
+            ESourceCounterCategory,
+            NMonitoring::TDynamicCounterPtr
+        > parentCounterGroups = {
+            {
+                ESourceCounterCategory::SCC_TABLET,
+                tabletCountersGroup->FindSubgroup("category", "app"),
+            },
+            {
+                ESourceCounterCategory::SCC_EXECUTOR,
+                tabletCountersGroup->FindSubgroup("category", "executor"),
+            },
+        };
 
         // Look up source counters for all simple counters
         //
@@ -356,8 +389,7 @@ private:
                 &NMonitoring::TDynamicCounters::FindNamedCounter
             >(
                 SimpleCountersOpts(),
-                executorCounterGroup,
-                applicationCounterGroup,
+                parentCounterGroups,
                 SimpleCounters
             )
         ) {
@@ -371,8 +403,7 @@ private:
                 &NMonitoring::TDynamicCounters::FindNamedCounter
             >(
                 CumulativeCountersOpts(),
-                executorCounterGroup,
-                applicationCounterGroup,
+                parentCounterGroups,
                 CumulativeCounters
             )
         ) {
@@ -386,8 +417,7 @@ private:
                 &NMonitoring::TDynamicCounters::FindNamedHistogram
             >(
                 PercentileCountersOpts(),
-                executorCounterGroup,
-                applicationCounterGroup,
+                parentCounterGroups,
                 PercentileCounters
             )
         ) {
@@ -454,22 +484,6 @@ private:
      * @note The size matches the number of percentile counters from TPercentileCountersOpts.
      */
     std::vector<TMappedHistogram> PercentileCounters;
-
-    using TSimpleCountersOpts = NAux::TAppParsedOpts<SimpleDesc, true>;
-    using TCumulativeCountersOpts = NAux::TAppParsedOpts<CumulativeDesc, true>;
-    using TPercentileCountersOpts = NAux::TAppParsedOpts<PercentileDesc, true>;
-
-    static const TSimpleCountersOpts* SimpleCountersOpts() {
-        return NAux::GetAppOpts<SimpleDesc, true>();
-    }
-
-    static const TCumulativeCountersOpts* CumulativeCountersOpts() {
-        return NAux::GetAppOpts<CumulativeDesc, true>();
-    }
-
-    static const TPercentileCountersOpts* PercentileCountersOpts() {
-        return NAux::GetAppOpts<PercentileDesc, true>();
-    }
 };
 
 TYdbMetricsMapperPtr CreateYdbMetricsMapperByTabletType(

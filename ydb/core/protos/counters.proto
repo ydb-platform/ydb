@@ -13,6 +13,21 @@ message TRange {
 }
 
 /**
+ * The type of the counter category, which contains the given source counter.
+ */
+enum ESourceCounterCategory {
+    /**
+     * The given source counter is provided by the tablet itself.
+     */
+    SCC_TABLET = 0;
+
+    /**
+     * The given source counter is provided by the tablet executor.
+     */
+    SCC_EXECUTOR = 1;
+}
+
+/**
  * The description of the source counter, which is used for calculating
  * the value of a high-level mapped counter.
  */
@@ -20,7 +35,7 @@ message TSourceCounter {
     /**
      * The name of the counter, which is used as the source for high level metrics.
      *
-     * @note If the ExecutorCounter field is set to false, then the counter group
+     * @note If the Category field is set to SCC_TABLET, then the counter group
      *       with the label "category" == "app" is used for looking up this counter.
      *       Otherwise, the counter group with the label "category" == "executor"
      *       is used.
@@ -29,12 +44,12 @@ message TSourceCounter {
      *       equal to the name of the tablet, which must be set in
      *       the SourceCountersTabletTypeName extension in the same .proto file.
      */
-    optional string CounterName = 1;
+    optional string Name = 1;
 
     /**
-     * Indicates if the source counter is an executor or an application counter.
+     * The category for the given source counter (the tablet or the executor).
      */
-    optional bool ExecutorCounter = 2;
+    optional ESourceCounterCategory Category = 2;
 }
 
 message TCounterOptions {
@@ -99,7 +114,7 @@ extend google.protobuf.FileOptions {
     /**
      * The tablet type, which contains all source counters in the given file.
      */
-    optional string SourceCountersTabletTypeName = 56676;
+    optional string SourceCountersTabletTypeName = 56678;
 }
 
 //

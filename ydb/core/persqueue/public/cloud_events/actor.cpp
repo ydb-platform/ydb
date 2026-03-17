@@ -198,7 +198,6 @@ static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
 
     // RequestMetadata
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
-    ev.mutable_request_metadata()->set_user_agent(info.UserAgent);
 
     if (info.OperationStatus == NKikimrScheme::StatusSuccess) {
         ev.set_event_status(EStatus::DONE);
@@ -235,7 +234,6 @@ static void Fill(TAlterTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_event_metadata()->set_folder_id(info.FolderId);
 
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
-    ev.mutable_request_metadata()->set_user_agent(info.UserAgent);
 
     if (info.OperationStatus == NKikimrScheme::StatusSuccess) {
         ev.set_event_status(EStatus::DONE);
@@ -272,7 +270,6 @@ static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_event_metadata()->set_folder_id(info.FolderId);
 
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
-    ev.mutable_request_metadata()->set_user_agent(info.UserAgent);
 
     if (info.Issue.empty()) {
         ev.set_event_status(EStatus::DONE);

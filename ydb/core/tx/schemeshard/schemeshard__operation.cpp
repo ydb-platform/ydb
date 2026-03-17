@@ -365,7 +365,6 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
     THolder<TProposeResponse> Response = nullptr;
 
     TString PeerName;
-    TString UserAgent;
     TString UserSID;
     TString SanitizedToken;
 
@@ -404,15 +403,10 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         }
         PeerName = record.GetPeerName();
 
-        if (record.HasApplicationName()) {
-            UserAgent = record.GetApplicationName();
-        }
-
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
         TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
         context.PeerName = PeerName;
-        context.UserAgent = UserAgent;
 
         //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.
         // Unsuccessful IgniteOperation will leave no operation and context will also be clean.

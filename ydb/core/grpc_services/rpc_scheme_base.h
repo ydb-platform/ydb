@@ -34,7 +34,6 @@ protected:
         SetAuthToken(proposeRequest, *this->Request_);
         SetDatabase(proposeRequest.get(), *this->Request_);
         SetPeerName(proposeRequest.get(), *this->Request_);
-        SetApplicationName(proposeRequest.get(), *this->Request_);
         SetRequestType(proposeRequest.get(), *this->Request_);
         return proposeRequest;
     }

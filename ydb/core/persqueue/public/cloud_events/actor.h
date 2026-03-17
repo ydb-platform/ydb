@@ -29,7 +29,6 @@ struct TCloudEventInfo {
     TString TopicPath;
     TString Issue;
     TString UserSID;
-    TString UserAgent;
     TString RemoteAddress;
 
     TInstant CreatedAt;

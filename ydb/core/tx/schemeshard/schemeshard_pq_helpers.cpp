@@ -39,7 +39,6 @@ bool BuildTopicCloudEventInfo(
     info.RemoteAddress = context.PeerName;
     info.UserSID = context.UserToken ? context.UserToken->GetUserSID() : TString();
     info.Issue = reason;
-    info.UserAgent = context.UserAgent;
     info.CreatedAt = TInstant::Now();
     info.ModifyScheme = operation;
     info.OperationStatus = status;

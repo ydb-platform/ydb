@@ -80,10 +80,6 @@ inline void SetPeerName(TEvTxUserProxy::TEvProposeTransaction* ev, const IReques
     ev->Record.SetPeerName(ctx.GetPeerName());
 }
 
-inline void SetApplicationName(TEvTxUserProxy::TEvProposeTransaction* ev, const IRequestCtx& ctx) {
-    ev->Record.SetApplicationName(ctx.GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME).GetOrElse("<empty>"));
-}
-
 inline bool CheckSession(const TString& sessionId, IRequestCtxBase* ctx) {
     static const auto err = TString("Empty session id");
     if (sessionId.empty()) {

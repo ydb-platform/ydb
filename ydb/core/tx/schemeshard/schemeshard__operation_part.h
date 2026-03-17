@@ -101,7 +101,6 @@ public:
 
     TMaybe<NACLib::TUserToken> UserToken;
     TString PeerName;
-    TString UserAgent;
     bool IsAllowedPrivateTables = false;
 
 private:

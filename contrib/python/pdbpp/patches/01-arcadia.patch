@@ -1,0 +1,12 @@
+--- contrib/python/pdbpp/pdbpp.py	(index)
++++ contrib/python/pdbpp/pdbpp.py	(working tree)
+@@ -48,6 +48,10 @@ else:
+ 
+ 
+ def import_from_stdlib(name):
++    if getattr(sys, 'frozen', False):
++        from importlib import import_module
++        return import_module(name)
++
+     import code  # arbitrary module which stays in the same dir as pdb
+ 

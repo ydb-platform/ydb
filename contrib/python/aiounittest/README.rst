@@ -1,0 +1,78 @@
+aiounittest
+===========
+
+|image0|_ |image1|_
+
+.. |image0| image:: https://api.travis-ci.com/kwarunek/aiounittest.svg?branch=master
+.. _image0: https://travis-ci.com/kwarunek/aiounittest
+
+.. |image1| image:: https://badge.fury.io/py/aiounittest.svg
+.. _image1: https://badge.fury.io/py/aiounittest
+
+Info
+====
+
+The `aiounittest` is a helper library to ease of your pain (and boilerplate), when writing a test of the asynchronous code (:code:`asyncio`). You can test:
+
+* synchronous code (same as the :code:`unittest.TestCase`)
+* asynchronous code, it supports syntax with :code:`async`/:code:`await` (Python 3.5+) and :code:`asyncio.coroutine`/:code:`yield from` (Python 3.4)
+
+
+In the Python 3.8 (`release note <https://docs.python.org/3/whatsnew/3.8.html#unittest>`_) and newer consider to use the `unittest.IsolatedAsyncioTestCase <https://docs.python.org/3/library/unittest.html#unittest.IsolatedAsyncioTestCase>`_. Builtin :code:`unittest` module is now asyncio-featured.
+
+
+Installation
+============
+
+Use pip:
+
+::
+
+    pip install aiounittest
+
+
+Usage
+=====
+
+It's as simple as use of :code:`unittest.TestCase`. Full docs at http://aiounittest.readthedocs.io.
+
+.. code-block:: python
+
+    import asyncio
+    import aiounittest
+
+
+    async def add(x, y):
+        await asyncio.sleep(0.1)
+        return x + y
+
+    class MyTest(aiounittest.AsyncTestCase):
+
+        async def test_async_add(self):
+            ret = await add(5, 6)
+            self.assertEqual(ret, 11)
+
+        # or 3.4 way
+        @asyncio.coroutine
+        def test_sleep(self):
+            ret = yield from add(5, 6)
+            self.assertEqual(ret, 11)
+
+        # some regular test code
+        def test_something(self):
+            self.assertTrue(True)
+
+Library provides some additional tooling:
+
+* async_test_,
+* AsyncMockIterator_ mocking for `async for`,
+* futurized_ mock for coroutines.
+
+.. _futurized: http://aiounittest.readthedocs.io/en/latest/futurized.html
+.. _async_test: http://aiounittest.readthedocs.io/en/latest/async_test.html
+.. _AsyncMockIterator: http://aiounittest.readthedocs.io/en/latest/asyncmockiterator.html
+
+License
+=======
+
+MIT

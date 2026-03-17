@@ -1,0 +1,2 @@
+alias mars.number = clusterNumber;
+alias mars.domain = clusteringDomain;

@@ -1,0 +1,15 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.200, Grid point data - Run length packing with level values
+
+# added for conversion from other packing
+transient referenceValue=0 : hidden;
+transient binaryScaleFactor=0 : hidden;
+
+unsigned[1]  bitsPerValue : dump;
+unsigned[2]  maxLevelValue : dump;
+unsigned[2]  numberOfLevelValues : dump;
+unsigned[1]  decimalScaleFactor : dump;
+level_value_list list(numberOfLevelValues) {
+  unsigned[2]  levelValues : dump;
+}

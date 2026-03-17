@@ -1,0 +1,5 @@
+#assert(local=30)
+alias mars.step   = stepRange;
+alias mars.date   = referenceDate;
+alias mars.hdate  = dataDate;
+alias mars.number = perturbationNumber;

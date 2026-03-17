@@ -1,0 +1,6 @@
+[console_scripts]
+dhcp-server-detector = pyroute2.dhcp.server_detector:run
+pyroute2-decoder = pyroute2.decoder.main:run
+pyroute2-dhcp-client = pyroute2.dhcp.cli:run
+pyroute2-test-platform = pyroute2.config.test_platform:run
+ss2 = pyroute2.netlink.diag.ss2:run [psutil]

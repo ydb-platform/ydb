@@ -1,0 +1,24 @@
+{% load i18n %}
+
+{% for db_alias, invalidations in invalidations_per_db %}
+  <h4>{% blocktrans %}Database '{{ db_alias }}'{% endblocktrans %}</h4>
+
+  <table>
+    <thead>
+      <tr>
+        <th>{% trans 'Application' %}</th>
+        <th>{% trans 'Model' %}</th>
+        <th>{% trans 'Last invalidation' %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for app_label, model, datetime in invalidations %}
+        <tr class="djDebug{% cycle 'Odd' 'Even' %}">
+          <td>{{ app_label }}</td>
+          <td>{{ model }}</td>
+          <td>{{ datetime }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endfor %}

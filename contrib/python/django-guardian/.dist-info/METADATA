@@ -1,0 +1,149 @@
+Metadata-Version: 2.4
+Name: django-guardian
+Version: 3.2.0
+Summary: Per object permissions for Django
+Author: Chris Maggiuli, Bona Fide IT GmbH, Columbia University, SIS Development and Application Services
+Author-email: Lukasz Balcerzak <lukaszbalcerzak@gmail.com>, Cesar Canassa <cesar.canassa@gmail.com>, Vincent Driessen <vincent@datafox.nl>, John Hensley <john@fairviewcomputing.com>, Ramanan Sivaranjan <ramanan@funkaoshi.com>, Woosuk Suh <pipoket88@gmail.com>, Bojan Mihelac <bmihelac@mihelac.org>, Rafael Ponieman <rafadev@gmail.com>, Daniel Sokolowski <daniel.sokolowski@danols.com>, Ali Lozano <alilozanoc@gmail.com>, BJ Dierkes <derks@bjdierkes.com>, Rach Belaid <rachid.belaid@gmail.com>, Michael Crosby <crosby.michael@gmail.com>, Greg Hinch <greg@greghinch.com>, Aram Dulyan <aram@dulyan.com>, Florian Hahn <flo@fhahn.com>, Piotr Kilczuk <piotr@tymaszweb.pl>, Reavis Sutphin-Gray <reavis@sutphin-gray.com>, Adrián López <adrianlopezcalvo@hotmail.com>, Jameel Al-Aziz <me@jalaziz.net>, "John P. Neumann" <arrantsquid@gmail.com>, Andreas Madsack <andreas@madflex.de>, Ivan Kharlamov <the.paper.men@gmail.com>, Miguel de Val-Borro <miguel.deval@gmail.com>, Jan Nakladal <mojeto1@gmail.com>, Yonel Ceruto <yceruto@abalt.org>, Luke Faraone <lfaraone@humbughq.com>, John Wegis <john@presencelearning.com>, Florentin Sardan <florentin.sardan@gmail.com>, Geoff Greer <geoff@greer.fm>, Hans Larsen <hans@hansl.ca>, "Fabio C. Barrionuevo da Luz" <bnafta@gmail.com>, Tomasz Wsuł <2nickers@gmail.com>, Xavier Ordoquy <xordoquy@linovia.com>, Joshua Bonnett <joshua.bonnett@gmail.com>, Jernej Kos <jernej@kos.mx>, Bruno Ribeiro da Silva <bruno@e3c.com.br>, Cezar Jenkins <emperorcezar@gmail.com>, Warren Volz <warren@warrenvolz.com>, Omer Katz <omer.drow@gmail.com>, Vishal Lal <vish61@gmail.com>, Steven DeMartini <sjd@yelp.com>, zauddelig <zauddelig@gmail.com>, Remco Wendt <remco.wendt@gmail.com>, Kevin London <kevinlondon@gmail.com>, Kouhei Maeda <mkouhei@gmail.com>, Samuel Sutch <sam@sutch.net>, Morgan Aubert <morgan.aubert@zoho.com>, Brian May <brian@microcomaustralia.com.au>, Troy Grosfield <troy.grosfield@gmail.com>, Michael Drescher <kaesemeister@gmail.com>, Verena Jaspersen <verena.jaspersen@gmail.com>, Bertrand Svetchine <bertrand.svetchine@gmail.com>, Frank Wickström <frank@bambuser.com>, George Karakostas <gckarakostas@gmail.com>, Adam Dobrawy <guardian@jawnosc.tk>, Jeff Hackshaw <intrepidevio@gmail.com>, Chase Bennett <ch@se.gd>, Jonny Arnold <jonny.arnold89@gmail.com>, Davis Raymond Muro <davisraymondmuro@gmail.com>, Richard de Wit <henk.exe@gmail.com>, Pedro Rojas Gavidia <pedrorojas.gavidia@gmail.com>, Rainshaw Gao <rxg@live.com>, Tom Clark <guardian@octue.com>, Meredith Hoo <meredith.hoo1@gmail.com>, Cornelius Hoffmann <coding@volucra.de>, Sezer BOZKIR <admin@sezerbozkir.com>
+Maintainer: Michael K., Chris Maggiuli, Bona Fide IT GmbH
+Maintainer-email: Tom Clark <django-guardian@octue.com>, Brian May <brian@microcomaustralia.com.au>, Lukasz Balcerzak <lukaszbalcerzak@gmail.com>, Adam Dobrawy <guardian@jawnosc.tk>, David Graham <dpgraham4401@gmail.com>, Sezer BOZKIR <admin@sezerbozkir.com>
+License: BSD-2-Clause
+Project-URL: Homepage, https://github.com/django-guardian/django-guardian
+Project-URL: Documentation, https://django-guardian.readthedocs.io/
+Project-URL: Repository, https://github.com/django-guardian/django-guardian
+Project-URL: Issues, https://github.com/me/spam/issues
+Project-URL: Changelog, https://github.com/django-guardian/django-guardian/releases
+Keywords: django,permissions,authorization,object,row,level
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Environment :: Web Environment
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 3.2
+Classifier: Framework :: Django :: 4.1
+Classifier: Framework :: Django :: 4.2
+Classifier: Framework :: Django :: 5.0
+Classifier: Framework :: Django :: 5.1
+Classifier: Framework :: Django :: 5.2
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Security
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: django>=3.2
+Requires-Dist: typing_extensions>=4.12.0; python_version < "3.13"
+Dynamic: license-file
+
+# django-guardian
+
+[![Tests](https://github.com/django-guardian/django-guardian/actions/workflows/tests.yml/badge.svg)](https://github.com/django-guardian/django-guardian/actions/workflows/tests.yml)
+[![PyPI version](https://img.shields.io/pypi/v/django-guardian.svg)](https://pypi.python.org/pypi/django-guardian)
+[![Python versions](https://img.shields.io/pypi/pyversions/django-guardian.svg)](https://pypi.python.org/pypi/django-guardian)
+[![Published on Django Packages](https://img.shields.io/badge/Published%20on-Django%20Packages-0c3c26)](https://djangopackages.org/packages/p/django-guardian/)
+
+`django-guardian` is an implementation of _per-object permissions_ on top
+of Django’s authorization backend. Read an introduction to per-object permissions [on djangoadvent articles](https://github.com/djangoadvent/djangoadvent-articles/blob/master/1.2/06_object-permissions.rst).
+
+## Documentation
+
+Online documentation is available at [https://django-guardian.readthedocs.io/](https://django-guardian.readthedocs.io/).
+
+
+## Installation
+
+To install `django-guardian` into your project run:
+
+```bash
+uv add django-guardian
+```
+> **TIP**: Not using a package manager like `uv` or `poetry` for your django project? You probably should try them :). In the meantime, `pip install django-guardian` works just fine too.
+
+
+## Configuration
+
+We need to hook `django-guardian` into our project.
+
+1. Put `guardian` into your `INSTALLED_APPS` at settings module:
+
+```python
+INSTALLED_APPS = (
+    ...
+    'guardian',
+)
+```
+
+2. Add extra authorization backend to your `settings.py`:
+
+```py
+AUTHENTICATION_BACKENDS = (
+    'django.contrib.auth.backends.ModelBackend',
+    'guardian.backends.ObjectPermissionBackend',
+)
+```
+
+3. Create `guardian` database tables by running:
+
+```
+python manage.py migrate
+```
+
+## Usage
+
+After installation and project hooks we can finally use object permissions
+with Django.
+
+Lets start really quickly:
+
+```py
+>>> from django.contrib.auth.models import User, Group
+>>> jack = User.objects.create_user('jack', 'jack@example.com', 'topsecretagentjack')
+>>> admins = Group.objects.create(name='admins')
+>>> jack.has_perm('change_group', admins)
+False
+>>> from guardian.shortcuts import assign_perm
+>>> assign_perm('change_group', jack, obj=admins)
+<UserObjectPermission: admins | jack | change_group>
+>>> jack.has_perm('change_group', admins)
+True
+```
+
+Of course our agent jack here would not be able to _change_group_ globally:
+
+```py
+>>> jack.has_perm('change_group')
+False
+```
+
+## Admin integration
+
+Replace `admin.ModelAdmin` with `GuardedModelAdmin` for those models
+which should have object permissions support within admin panel.
+
+For example:
+
+```py
+from django.contrib import admin
+from myapp.models import Author
+from guardian.admin import GuardedModelAdmin
+
+# Old way:
+#class AuthorAdmin(admin.ModelAdmin):
+#    pass
+
+# With object permissions support
+class AuthorAdmin(GuardedModelAdmin):
+    pass
+
+admin.site.register(Author, AuthorAdmin)
+```
+
+## Django Unfold integration
+
+Users of [`django-unfold`](https://unfoldadmin.com/) will find that `guardian` is [supported out of the box via a `contrib` module](https://unfoldadmin.com/docs/integrations/django-guardian/).

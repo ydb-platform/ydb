@@ -1,0 +1,73 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Swagger Petstore
+  license:
+    name: MIT
+  description: |
+    This description is for testing
+    multi-line
+    description
+
+servers:
+  - url: http://petstore.swagger.io/v1
+paths:
+  /{supiOrSuci}/security-information-rg:
+    get:
+      summary: Get authentication data for the FN-RG
+      operationId: GetRgAuthData
+      tags:
+        - Get Auth Data for FN-RG
+      responses:
+        '200':
+          description: Null response
+      parameters:
+        - name: plmn-id
+          in: query
+          description: serving PLMN ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+components:
+  parameters:
+    MyParam:
+      name: foo
+      in: query
+      schema:
+        type: string
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Pet:
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        tag:
+          type: string
+    Error:
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+    PetForm:
+      title: PetForm
+      type: object
+      properties:
+        name:
+          type: string
+        age:
+          type: integer

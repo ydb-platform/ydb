@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Track with small values for floats: scientific notation is illegal -->
+<gpx
+  version="1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  creator="Wolfgang Rohdewald"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+<trk>
+  <name>Untitled Path</name>
+<trkseg>
+<trkpt lat="0.000091697" lon="0.007589780">
+  <ele>10.000000</ele>
+</trkpt>
+<trkpt lat="0.084886217" lon="0.000081658">
+  <ele>12.000000</ele>
+</trkpt>
+<trkpt lat="0.084886217" lon="0.000081658">
+  <ele>0.000005</ele>
+</trkpt>
+</trkseg>
+</trk>
+</gpx>

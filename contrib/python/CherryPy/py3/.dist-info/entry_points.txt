@@ -1,0 +1,2 @@
+[console_scripts]
+cherryd = cherrypy.__main__:run

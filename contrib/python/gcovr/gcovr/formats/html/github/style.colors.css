@@ -1,0 +1,28 @@
+.theme-green, .theme-blue, .theme-dark-blue, .theme-dark-green {
+  --unknown_color: var(--color-neutral-emphasis-plus);
+  --low_color: var(--color-danger-emphasis);
+  --low_color_fg: var(--color-danger-fg);
+  --medium_color: var(--color-attention-emphasis);
+  --medium_color_fg: var(--color-attention-fg);
+  --uncovered_color: var(--color-danger-subtle);;
+  /* TODO choose colors */
+  --excluded_color: var(--color-severe-subtle);
+  --warning_color: orangered;
+  --invokedCall_color: var(--color-success-fg);
+}
+
+.theme-green, .theme-dark-green {
+  --high_color: var(--color-success-emphasis);
+  --high_color_fg: var(--color-success-fg);
+  --covered_color: var(--color-success-muted);
+  --partial_covered_color: var(--color-success-subtle);
+  --taken_color: var(--color-success-fg);
+}
+
+.theme-blue, .theme-dark-blue  {
+  --high_color: var(--color-accent-emphasis);
+  --high_color_fg: var(--color-accent-fg);
+  --covered_color: var(--color-accent-muted);
+  --partial_covered_color: var(--color-accent-subtle);
+  --taken_color: var(--color-accent-fg);
+}

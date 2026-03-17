@@ -1,0 +1,9 @@
+openapi: 3.0.0
+info:
+  title: Minimal test for refs in sequences
+  version: 0.0.1
+servers:
+  - url: https://localhost/
+paths:
+  /api/v2/vms:
+    $ref: ./issue_38_b.yaml#/paths/~1api~1v2~1vms

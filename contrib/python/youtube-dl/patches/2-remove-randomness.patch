@@ -1,0 +1,11 @@
+--- contrib/python/youtube-dl/youtube_dl/extractor/youtube.py	(index)
++++ contrib/python/youtube-dl/youtube_dl/extractor/youtube.py	(working tree)
+@@ -260,7 +260,7 @@ class YoutubeBaseInfoExtractor(InfoExtractor):
+             consent_id = self._search_regex(
+                 r'PENDING\+(\d+)', consent.value, 'consent', default=None)
+         if not consent_id:
+-            consent_id = random.randint(100, 999)
++            consent_id = 999
+         self._set_cookie('.youtube.com', 'CONSENT', 'YES+cb.20210328-17-p0.en+FX+%s' % consent_id)
+ 
+     def _real_initialize(self):

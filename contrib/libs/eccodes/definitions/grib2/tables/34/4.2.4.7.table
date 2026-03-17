@@ -1,0 +1,8 @@
+# Product discipline 4 - Space weather products, parameter category 7: terrestrial electromagnetic emissions
+0 0 Limb intensity (J m-2 s-1)
+1 1 Disk intensity (J m-2 s-1)
+2 2 Disk intensity day (J m-2 s-1)
+3 3 Disk intensity night (J m-2 s-1)
+# 4-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,47 @@
+{% if table %}<table>{% endif %}
+{% if field_name %}
+    <tr>
+        <th colspan="2">{{ field_name }}</th>
+    </tr>
+{% endif %}
+
+
+{% for field in fields %}
+<tr class="export_table">
+    <td class="export_table">
+        <input
+            type="checkbox"
+            class="check_field" {% if check_default %} checked="checked" {% endif %}
+            name="{{ path }}{{ field.name }}"
+        />
+    </td>
+    <td class="export_table">
+        {% if field.verbose_name %}
+            {{ field.verbose_name }}
+        {% else %}
+            {{ field }}
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}
+
+{% for field in related_fields %}
+<tr class="export_table">
+    <td class="export_table">
+    </td>
+    <td class="export_table">
+        <a href="javascript:void(0);"
+
+           onclick="show_fields(event, '{{ model_ct }}', '{% if field.field_name_override %}{{ field.field_name_override }}{% else %}{{ field.field_name }}{% endif %}','{{ path }}');">
+        {% if field.verbose_name %}
+            {{ field.verbose_name }}
+            [{{ field.description }}]
+        {% else %}
+            {{ field.get_accessor_name }}
+        {% endif %}
+        &rarr;
+        </a>
+    </td>
+</tr>
+{% endfor %}
+{% if table %}</table>{% endif %}

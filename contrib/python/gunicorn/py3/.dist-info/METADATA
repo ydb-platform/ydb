@@ -1,0 +1,127 @@
+Metadata-Version: 2.4
+Name: gunicorn
+Version: 25.1.0
+Summary: WSGI HTTP Server for UNIX
+Author-email: Benoit Chesneau <benoitc@gunicorn.org>
+License-Expression: MIT
+Project-URL: Homepage, https://gunicorn.org
+Project-URL: Documentation, https://gunicorn.org
+Project-URL: Issue tracker, https://github.com/benoitc/gunicorn/issues
+Project-URL: Source code, https://github.com/benoitc/gunicorn
+Project-URL: Changelog, https://gunicorn.org/news/
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Other Environment
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Internet
+Classifier: Topic :: Utilities
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI :: Server
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: packaging
+Provides-Extra: gevent
+Requires-Dist: gevent>=24.10.1; extra == "gevent"
+Provides-Extra: eventlet
+Requires-Dist: eventlet>=0.40.3; extra == "eventlet"
+Provides-Extra: tornado
+Requires-Dist: tornado>=6.5.0; extra == "tornado"
+Provides-Extra: gthread
+Provides-Extra: setproctitle
+Requires-Dist: setproctitle; extra == "setproctitle"
+Provides-Extra: http2
+Requires-Dist: h2>=4.1.0; extra == "http2"
+Provides-Extra: testing
+Requires-Dist: gevent>=24.10.1; extra == "testing"
+Requires-Dist: eventlet>=0.40.3; extra == "testing"
+Requires-Dist: h2>=4.1.0; extra == "testing"
+Requires-Dist: coverage; extra == "testing"
+Requires-Dist: pytest; extra == "testing"
+Requires-Dist: pytest-cov; extra == "testing"
+Requires-Dist: pytest-asyncio; extra == "testing"
+Requires-Dist: uvloop>=0.19.0; extra == "testing"
+Requires-Dist: httpx[http2]; extra == "testing"
+Dynamic: license-file
+
+# Gunicorn
+
+<p align="center">
+  <strong>Gunicorn is maintained by volunteers. If it powers your production, please consider supporting us:</strong><br>
+  <a href="https://github.com/sponsors/benoitc"><img src="https://img.shields.io/badge/GitHub_Sponsors-❤-ea4aaa?style=for-the-badge&logo=github" alt="GitHub Sponsors"></a>
+  <a href="https://opencollective.com/gunicorn"><img src="https://img.shields.io/badge/Open_Collective-Support-7FADF2?style=for-the-badge&logo=opencollective" alt="Open Collective"></a>
+  <a href="https://checkout.revolut.com/pay/c934e028-3a71-44eb-b99c-491342df2044"><img src="https://img.shields.io/badge/Revolut-Donate-191c20?style=for-the-badge" alt="Revolut"></a>
+</p>
+
+[![PyPI version](https://img.shields.io/pypi/v/gunicorn.svg?style=flat)](https://pypi.python.org/pypi/gunicorn)
+[![Supported Python versions](https://img.shields.io/pypi/pyversions/gunicorn.svg)](https://pypi.python.org/pypi/gunicorn)
+[![Build Status](https://github.com/benoitc/gunicorn/actions/workflows/tox.yml/badge.svg)](https://github.com/benoitc/gunicorn/actions/workflows/tox.yml)
+
+Gunicorn 'Green Unicorn' is a Python WSGI HTTP Server for UNIX. It's a pre-fork
+worker model ported from Ruby's [Unicorn](https://bogomips.org/unicorn/) project. The Gunicorn server is broadly
+compatible with various web frameworks, simply implemented, light on server
+resource usage, and fairly speedy.
+
+**New in v25**: Per-app worker allocation for dirty arbiters, HTTP/2 support (beta)!
+
+## Quick Start
+
+```bash
+pip install gunicorn
+gunicorn myapp:app --workers 4
+```
+
+For ASGI applications (FastAPI, Starlette):
+
+```bash
+gunicorn myapp:app --worker-class asgi
+```
+
+## Features
+
+- WSGI support for Django, Flask, Pyramid, and any WSGI framework
+- **ASGI support** for FastAPI, Starlette, Quart
+- **HTTP/2 support** (beta) with multiplexed streams
+- **Dirty Arbiters** (beta) for heavy workloads (ML models, long-running tasks)
+- uWSGI binary protocol for nginx integration
+- Multiple worker types: sync, gthread, gevent, eventlet, asgi
+- Graceful worker process management
+- Compatible with Python 3.9+
+
+## Documentation
+
+Full documentation at https://gunicorn.org
+
+- [Quickstart](https://gunicorn.org/quickstart/)
+- [Configuration](https://gunicorn.org/configure/)
+- [Deployment](https://gunicorn.org/deploy/)
+- [Settings Reference](https://gunicorn.org/reference/settings/)
+
+## Community
+
+- Report bugs on [GitHub Issues](https://github.com/benoitc/gunicorn/issues)
+- Chat in [#gunicorn](https://web.libera.chat/?channels=#gunicorn) on [Libera.chat](https://libera.chat/)
+- See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines
+
+## Support
+
+Powering Python apps since 2010. Support continued development.
+
+[![Become a Sponsor](https://img.shields.io/badge/Become_a_Sponsor-❤-ff69b4)](https://gunicorn.org/sponsor/)
+
+## License
+
+Gunicorn is released under the MIT License. See the [LICENSE](https://github.com/benoitc/gunicorn/blob/master/LICENSE) file for details.

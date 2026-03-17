@@ -1,0 +1,31 @@
+Metadata-Version: 2.1
+Name: demjson
+Version: 2.2.4
+Summary: encoder, decoder, and lint/validator for JSON (JavaScript Object Notation) compliant with RFC 7159
+Home-page: http://deron.meranda.us/python/demjson/
+Author: Deron Meranda
+Author-email: deron.meranda@gmail.com
+License: GNU LGPL 3.0
+Download-URL: http://deron.meranda.us/python/demjson/dist/demjson-2.2.4.tar.gz
+Keywords: JSON,jsonlint,JavaScript,UTF-32
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+
+The "demjson" module, and the included "jsonlint" script, provide methods
+for encoding and decoding JSON formatted data, as well as checking JSON
+data for errors and/or portability issues.  The jsonlint command/script
+can be used from the command line without needing any programming.
+
+Although the standard Python library now includes basic JSON support
+(which it did not when demjson was first written), this module
+provides a much more comprehensive implementation with many features
+not found elsewhere.  It is especially useful for error checking or
+for parsing JavaScript data which may not strictly be valid JSON data.
+

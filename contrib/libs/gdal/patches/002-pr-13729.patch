@@ -1,0 +1,22 @@
+From 926b80fc29fa77b8cc82bca084d0290c47c4606f Mon Sep 17 00:00:00 2001
+From: Aleksandr Mikhnenko <mikhnenko@yandex-team.com>
+Date: Mon, 19 Jan 2026 20:56:01 +0300
+Subject: [PATCH] Add explicit include for std::strtoull
+
+---
+ apps/gdalalg_vsi_sozip.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/apps/gdalalg_vsi_sozip.cpp b/apps/gdalalg_vsi_sozip.cpp
+index 47b2401eb1ff..c4097b756561 100644
+--- a/apps/gdalalg_vsi_sozip.cpp
++++ b/apps/gdalalg_vsi_sozip.cpp
+@@ -16,6 +16,7 @@
+ #include "cpl_string.h"
+ #include "cpl_time.h"
+ 
++#include <cstdlib>
+ #include <limits>
+ 
+ //! @cond Doxygen_Suppress
+ 

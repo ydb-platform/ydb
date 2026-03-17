@@ -1,0 +1,4 @@
+# (C) Copyright 2005- ECMWF.
+
+#  Type of original field values
+codetable[1] typeOfOriginalFieldValues ('5.1.table',masterDir,localDir) = 0; # Default set to floating

@@ -1,0 +1,45 @@
+--- contrib/python/semantic-version/py3/semantic_version/base.py	(index)
++++ contrib/python/semantic-version/py3/semantic_version/base.py	(working tree)
+@@ -24,6 +24,16 @@ class MaxIdentifier(object):
+         return isinstance(other, self.__class__)
+ 
+ 
++class OptionalIdentifier(object):
++    __slots__ = []
++
++    def __repr__(self):
++        return 'OptionalIdentifier()'
++
++    def __eq__(self, other):
++        return True
++
++
+ @functools.total_ordering
+ class NumericIdentifier(object):
+     __slots__ = ['value']
+@@ -431,13 +441,24 @@ class Version(object):
+             )
+ 
+         if not with_build:
+-            return (
++            key = (
+                 self.major,
+                 self.minor,
+                 self.patch,
+                 prerelease_key,
+             )
+ 
++            if self.partial:
++                def replace_none_on_optional(value):
++                    if value is None:
++                        return OptionalIdentifier()
++                    else:
++                        return value
++
++                key = tuple(replace_none_on_optional(value) for value in key)
++
++            return key
++
+         build_key = tuple(
+             NumericIdentifier(part) if part.isdigit() else AlphaIdentifier(part)
+             for part in self.build or ()

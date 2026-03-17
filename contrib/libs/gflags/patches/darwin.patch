@@ -1,0 +1,34 @@
+commit d75f2330f68d2b0d67738711e6fa0eff1e1bd4f7
+merge: 52ea100f55a94416b831b27558452bb2ae1c6991 44c8c6c8c90f7cb37409be9a634a1392cc55aeec
+author: spreis
+date: 2020-07-28T08:03:35+03:00
+revision: 7151646
+
+    [DEVTOOLS-6626] Enable building grpc_cli for mac
+    
+    - Fix issue with defferent types in protobuf and gflags for macOS
+    - Add grpc_cli to Darwin autocheck
+    
+    REVIEW: 1361859
+
+--- a/include/gflags/gflags_declare.h
++++ b/include/gflags/gflags_declare.h
+@@ -77,4 +77,6 @@
+ #include <string>
+ #if 1
++#include   <util/system/types.h>        // i32 etc.
++#elif 1
+ #  include <stdint.h>                   // the normal place uint32_t is defined
+ #elif 1
+@@ -86,5 +88,10 @@
+ namespace GFLAGS_NAMESPACE {
+ 
+-#if 1 // C99
++#if 1 // Yandex
++typedef i32              int32;
++typedef ui32             uint32;
++typedef i64              int64;
++typedef ui64             uint64;
++#elif 0 // C99
+ typedef int32_t          int32;
+ typedef uint32_t         uint32;

@@ -1,0 +1,13 @@
+Make compilation fail if TCP_USER_TIMEOUT is not defined
+--- a/src/interfaces/libpq/fe-connect.c	(rev 0)
++++ b/src/interfaces/libpq/fe-connect.c	(working copy)
+@@ -2015,7 +2015,8 @@ setTCPUserTimeout(PGconn *conn)
+ 	if (timeout < 0)
+ 		timeout = 0;
+
+-#ifdef TCP_USER_TIMEOUT
++// Compilation must fail on linux if TCP_USER_TIMEOUT is not defined
++#ifdef __linux__
+ 	if (setsockopt(conn->sock, IPPROTO_TCP, TCP_USER_TIMEOUT,
+ 				   (char *) &timeout, sizeof(timeout)) < 0)
+ 	{

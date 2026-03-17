@@ -1,0 +1,2 @@
+mark_as_sources:
+  - beartype/_conf/conftest.py

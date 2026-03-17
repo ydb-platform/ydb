@@ -1,0 +1,5 @@
+# Code table 4.223 - Fire detection indicator
+0 0 No fire detected
+1 1 Possible fire detected
+2 2 Probable fire detected
+3 3 Missing value

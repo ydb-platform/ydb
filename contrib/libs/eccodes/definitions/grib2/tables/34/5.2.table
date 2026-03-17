@@ -1,0 +1,8 @@
+# Code table 5.2 - Matrix coordinate value function definition
+0 0 Explicit coordinate values set
+1 1 Linear coordinates f(1) = C1, f(n) = f(n-1) + C2
+# 2-10 Reserved
+11 11 Geometric coordinates f(1) = C1, f(n) = C2 * f(n-1)
+# 12-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

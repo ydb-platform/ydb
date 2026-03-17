@@ -1,0 +1,163 @@
+From e7ad4a43820bd37838f65dfb41abfb7dc5436499 Mon Sep 17 00:00:00 2001
+From: Arkadii Yakovets <ark@cho.red>
+Date: Mon, 27 Feb 2023 12:37:24 -0800
+Subject: [PATCH 1/4] Update python-holidays integration.
+
+Bump python-holidays version to 0.20.
+Migrate to python-holidays as a single source of country holidays:
+  - Add Belarus holidays
+  - Add Bulgaria holidays
+  - Add Japan holidays
+  - Add Russia holidays
+  - Add Serbia holidays
+  - Add Urkaine holidays
+  - Add other ascii compatible countries holidays.
+Update existing countries holidays.
+Refactor `make_holidays.py`.
+Refactor `generate_holidays_file.py`.
+Generate new `generated_holidays.csv`.
+---
+ R/data-raw/generated_holidays.csv        | 37312 +++++++++++++++------
+ python/prophet/hdays.py                  |  1096 -
+ python/prophet/make_holidays.py          |    59 +-
+ python/pyproject.toml                    |     2 +-
+ python/scripts/generate_holidays_file.py |    45 +-
+ python_shim/fbprophet/hdays.py           |     6 -
+ 6 files changed, 26883 insertions(+), 11637 deletions(-)
+ delete mode 100644 python/prophet/hdays.py
+ delete mode 100644 python_shim/fbprophet/hdays.py
+
+diff --git a/prophet/make_holidays.py b/prophet/make_holidays.py
+index 39f0175de..d9ab4c503 100644
+--- a/prophet/make_holidays.py
++++ b/prophet/make_holidays.py
+@@ -6,13 +6,32 @@
+ 
+ from __future__ import absolute_import, division, print_function
+ 
+-import warnings
+-
+ import numpy as np
+ import pandas as pd
+ 
+-import prophet.hdays as hdays_part2
+-import holidays as hdays_part1
++import holidays
++
++
++def get_country_holidays_class(country):
++    """Get class for a supported country.
++
++    Parameters
++    ----------
++    country: country code
++
++    Returns
++    -------
++    A valid country holidays class
++    """
++    substitutions = {
++        'TU': 'TR',  # For compatibility with Turkey as 'TU' cases.
++    }
++
++    country = substitutions.get(country, country)
++    if not hasattr(holidays, country):
++        raise AttributeError(f'Holidays in {country} are not currently supported!')
++
++    return getattr(holidays, country)
+ 
+ 
+ def get_holiday_names(country):
+@@ -26,18 +45,8 @@ def get_holiday_names(country):
+     -------
+     A set of all possible holiday names of given country
+     """
+-    years = np.arange(1995, 2045)
+-    try:
+-        with warnings.catch_warnings():
+-            warnings.simplefilter("ignore")
+-            holiday_names = getattr(hdays_part2, country)(years=years).values()
+-    except AttributeError:
+-        try:
+-            holiday_names = getattr(hdays_part1, country)(years=years).values()
+-        except AttributeError as e:
+-            raise AttributeError(
+-                "Holidays in {} are not currently supported!".format(country)) from e
+-    return set(holiday_names)
++    country_holidays = get_country_holidays_class(country)
++    return set(country_holidays(language='en_US', years=np.arange(1995, 2045)).values())
+ 
+ 
+ def make_holidays_df(year_list, country, province=None, state=None):
+@@ -53,16 +62,14 @@ def make_holidays_df(year_list, country, province=None, state=None):
+     Dataframe with 'ds' and 'holiday', which can directly feed
+     to 'holidays' params in Prophet
+     """
+-    try:
+-        holidays = getattr(hdays_part2, country)(years=year_list, expand=False)
+-    except AttributeError:
+-        try:
+-            holidays = getattr(hdays_part1, country)(prov=province, state=state, years=year_list, expand=False)
+-        except AttributeError as e:
+-            raise AttributeError(
+-                "Holidays in {} are not currently supported!".format(country)) from e
+-    holidays_df = pd.DataFrame([(date, holidays.get_list(date)) for date in holidays], columns=['ds', 'holiday'])
++    country_holidays = get_country_holidays_class(country)
++    holidays = country_holidays(expand=False, language='en_US', subdiv=province, years=year_list)
++
++    holidays_df = pd.DataFrame(
++        [(date, holidays.get_list(date)) for date in holidays], columns=['ds', 'holiday'],
++    )
+     holidays_df = holidays_df.explode('holiday')
+     holidays_df.reset_index(inplace=True, drop=True)
+     holidays_df['ds'] = pd.to_datetime(holidays_df['ds'])
+-    return (holidays_df)
++
++    return holidays_df
+diff --git a/prophet/make_holidays.py b/prophet/make_holidays.py
+index d9ab4c503..44da48fbe 100644
+--- a/prophet/make_holidays.py
++++ b/prophet/make_holidays.py
+@@ -24,12 +24,12 @@ def get_country_holidays_class(country):
+     A valid country holidays class
+     """
+     substitutions = {
+-        'TU': 'TR',  # For compatibility with Turkey as 'TU' cases.
++        "TU": "TR",  # For compatibility with Turkey as 'TU' cases.
+     }
+ 
+     country = substitutions.get(country, country)
+     if not hasattr(holidays, country):
+-        raise AttributeError(f'Holidays in {country} are not currently supported!')
++        raise AttributeError(f"Holidays in {country} are not currently supported!")
+ 
+     return getattr(holidays, country)
+ 
+@@ -46,7 +46,7 @@ def get_holiday_names(country):
+     A set of all possible holiday names of given country
+     """
+     country_holidays = get_country_holidays_class(country)
+-    return set(country_holidays(language='en_US', years=np.arange(1995, 2045)).values())
++    return set(country_holidays(language="en_US", years=np.arange(1995, 2045)).values())
+ 
+ 
+ def make_holidays_df(year_list, country, province=None, state=None):
+@@ -63,13 +63,14 @@ def make_holidays_df(year_list, country, province=None, state=None):
+     to 'holidays' params in Prophet
+     """
+     country_holidays = get_country_holidays_class(country)
+-    holidays = country_holidays(expand=False, language='en_US', subdiv=province, years=year_list)
++    holidays = country_holidays(expand=False, language="en_US", subdiv=province, years=year_list)
+ 
+     holidays_df = pd.DataFrame(
+-        [(date, holidays.get_list(date)) for date in holidays], columns=['ds', 'holiday'],
++        [(date, holidays.get_list(date)) for date in holidays],
++        columns=["ds", "holiday"],
+     )
+-    holidays_df = holidays_df.explode('holiday')
++    holidays_df = holidays_df.explode("holiday")
+     holidays_df.reset_index(inplace=True, drop=True)
+-    holidays_df['ds'] = pd.to_datetime(holidays_df['ds'])
++    holidays_df["ds"] = pd.to_datetime(holidays_df["ds"])
+ 
+     return holidays_df

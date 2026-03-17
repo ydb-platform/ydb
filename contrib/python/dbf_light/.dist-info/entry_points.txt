@@ -1,0 +1,3 @@
+[console_scripts]
+dbf_light = dbf_light.cli:main
+

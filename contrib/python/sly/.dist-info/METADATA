@@ -1,0 +1,12 @@
+Metadata-Version: 2.1
+Name: sly
+Version: 0.5
+Summary: "SLY - Sly Lex Yacc"
+Home-page: https://github.com/dabeaz/sly
+Author: David Beazley
+Author-email: "David Beazley" <dave@dabeaz.com>
+License: MIT
+Classifier: License :: OSI Approved :: MIT License
+License-File: LICENSE
+
+"SLY is an implementation of lex and yacc. No longer maintained on PyPI. Latest version on GitHub."

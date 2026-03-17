@@ -4,8 +4,6 @@ PROGRAM()
 
 WITHOUT_LICENSE_TEXTS()
 
-SUBSCRIBER(g:cpp-contrib)
-
 VERSION(1.54.3)
 
 LICENSE(Apache-2.0)

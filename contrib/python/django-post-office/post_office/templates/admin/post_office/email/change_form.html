@@ -1,0 +1,5 @@
+{% extends "admin/change_form.html" %}{% load i18n %}
+{% block object-tools-items %}
+    {{ block.super }}
+    <li><a href="{% url 'admin:resend' original.pk %}" class="btn btn-high btn-success">{% trans "Resend" %}</a></li>
+{% endblock object-tools-items %}

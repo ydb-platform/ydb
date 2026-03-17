@@ -1,0 +1,10 @@
+# Code table 4.2 - Parameter number by product discipline and parameter category
+0 0 Volcanic ash probability (%)
+1 1 Volcanic ash cloud top temperature (K)
+2 2 Volcanic ash cloud top pressure (Pa)
+3 3 Volcanic ash cloud top height (m)
+4 4 Volcanic ash cloud emissivity (Numeric)
+5 5 Volcanic ash effective absorption optical depth ratio (Numeric)
+6 6 Volcanic ash cloud optical depth (Numeric)
+7 7 Volcanic ash column density (kg m-2)
+8 8 Volcanic ash particle effective radius (m)

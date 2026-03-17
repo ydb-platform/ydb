@@ -1,0 +1,8 @@
+http://www.example.org/index
+https://example.org/path
+https://www.test.org/a-longer-path.html
+https://www.test.org/a-longer-path2.html
+https://www.test.org/de/a-longer-path2.html
+https://www.test.org/en/a-longer-path1.html
+https://www.test.org/es/a-longer-path3.html
+https://www.obviouslyspam.org/video/check-this-video.mp4

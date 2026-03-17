@@ -1,0 +1,50 @@
+Metadata-Version: 2.4
+Name: opentelemetry-instrumentation-aiopg
+Version: 0.60b1
+Summary: OpenTelemetry aiopg instrumentation
+Project-URL: Homepage, https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-aiopg
+Project-URL: Repository, https://github.com/open-telemetry/opentelemetry-python-contrib
+Author-email: OpenTelemetry Authors <cncf-opentelemetry-contributors@lists.cncf.io>
+License-Expression: Apache-2.0
+License-File: LICENSE
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.9
+Requires-Dist: opentelemetry-api~=1.12
+Requires-Dist: opentelemetry-instrumentation-dbapi==0.60b1
+Requires-Dist: opentelemetry-instrumentation==0.60b1
+Requires-Dist: wrapt<2.0.0,>=1.0.0
+Provides-Extra: instruments
+Requires-Dist: aiopg<2.0.0,>=0.13.0; extra == 'instruments'
+Description-Content-Type: text/x-rst
+
+OpenTelemetry aiopg instrumentation
+===================================
+
+|pypi|
+
+.. |pypi| image:: https://badge.fury.io/py/opentelemetry-instrumentation-aiopg.svg
+   :target: https://pypi.org/project/opentelemetry-instrumentation-aiopg/
+
+Installation
+------------
+
+::
+
+    pip install opentelemetry-instrumentation-aiopg
+
+
+References
+----------
+
+* `OpenTelemetry aiopg Instrumentation <https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/aiopg/aiopg.html>`_
+* `OpenTelemetry Project <https://opentelemetry.io/>`_
+* `OpenTelemetry Python Examples <https://github.com/open-telemetry/opentelemetry-python/tree/main/docs/examples>`_

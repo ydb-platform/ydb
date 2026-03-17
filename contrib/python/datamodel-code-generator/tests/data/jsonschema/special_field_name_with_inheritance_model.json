@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SpecialField",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "string"
+    },
+    "with": {
+      "type": "string"
+    },
+    "class": {
+      "type": "integer"
+    },
+    "class's": {
+      "type": "integer"
+    },
+    "class-s": {
+      "type": "string"
+    },
+    "#": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/definitions/base"
+    }
+  ],
+  "definitions": {
+    "base": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/nestedBase"
+        }
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "nestedBase": {
+      "properties": {
+        "age": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

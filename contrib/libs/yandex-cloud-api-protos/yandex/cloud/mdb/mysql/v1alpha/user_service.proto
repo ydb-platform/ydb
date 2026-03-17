@@ -1,0 +1,195 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mysql.v1alpha;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/mysql/v1alpha/user.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mysql/v1alpha;mysql";
+option java_package = "yandex.cloud.api.mdb.mysql.v1alpha";
+
+// A set of methods for managing MySQL users.
+service UserService {
+  // Returns the specified MySQL user.
+  //
+  // To get the list of available MySQL users, make a [List] request.
+  rpc Get (GetUserRequest) returns (User) {
+    option (google.api.http) = { get: "/managed-mysql/v1alpha/clusters/{cluster_id}/users/{user_name}" };
+  }
+
+  // Retrieves a list of MySQL users in the specified cluster.
+  rpc List (ListUsersRequest) returns (ListUsersResponse) {
+    option (google.api.http) = { get: "/managed-mysql/v1alpha/clusters/{cluster_id}/users" };
+  }
+
+  // Creates a MySQL user in the specified cluster.
+  rpc Create (CreateUserRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-mysql/v1alpha/clusters/{cluster_id}/users" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateUserMetadata"
+      response: "User"
+    };
+  }
+
+  // Modifies the specified MySQL user.
+  rpc Update (UpdateUserRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/managed-mysql/v1alpha/clusters/{cluster_id}/users/{user_name}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateUserMetadata"
+      response: "User"
+    };
+  }
+
+  // Deletes the specified MySQL user.
+  rpc Delete (DeleteUserRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/managed-mysql/v1alpha/clusters/{cluster_id}/users/{user_name}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteUserMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Grants a permission to the specified MySQL user.
+  rpc GrantPermission (GrantUserPermissionRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-mysql/v1alpha/clusters/{cluster_id}/users/{user_name}:grantPermission" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "GrantUserPermissionMetadata"
+      response: "User"
+    };
+  }
+
+  // Revokes a permission from the specified MySQL user.
+  rpc RevokePermission (RevokeUserPermissionRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-mysql/v1alpha/clusters/{cluster_id}/users/{user_name}:revokePermission" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RevokeUserPermissionMetadata"
+      response: "User"
+    };
+  }
+}
+
+message GetUserRequest {
+  // ID of the MySQL cluster.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the user.
+  string user_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_]*"];
+}
+
+message ListUsersRequest {
+  // ID of the cluster to list MySQL users in. To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available results is larger than [page_size], the service returns a [ListUsersResponse.next_page_token] that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the [ListUsersResponse.next_page_token] returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListUsersResponse {
+  // Requested list of MySQL users.
+  repeated User users = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results is larger than [ListUsersRequest.page_size], use the [next_page_token] as the value for the [ListUsersRequest.page_token] parameter in the next list request. Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateUserRequest {
+  // ID of the MySQL cluster to create a user for. To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Properties of the user to be created.
+  UserSpec user_spec = 2 [(required) = true];
+}
+
+message CreateUserMetadata {
+  // ID of the MySQL cluster the user is being created for.
+  string cluster_id = 1;
+
+  // Name of the user that is being created.
+  string user_name = 2;
+}
+
+message UpdateUserRequest {
+  // ID of the MySQL cluster the user belongs to. To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the user to be updated. To get the name of the user, use a [UserService.List] request.
+  string user_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_]*"];
+
+  // Field mask that specifies which settings of the MySQL user should be updated.
+  google.protobuf.FieldMask update_mask = 3;
+
+  // New password for the user.
+  string password = 4 [(length) = "8-128"];
+
+  // New set of permissions for the user.
+  repeated Permission permissions = 5;
+}
+
+message UpdateUserMetadata {
+  // ID of the MySQL cluster the user belongs to.
+  string cluster_id = 1;
+
+  // Name of a user that is being updated.
+  string user_name = 2;
+}
+
+message DeleteUserRequest {
+  // ID of the MySQL cluster the user belongs to. To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the user to delete. To get the name of the user, use a [UserService.List] request.
+  string user_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_]*"];
+}
+
+message DeleteUserMetadata {
+  // ID of the MySQL cluster the user belongs to.
+  string cluster_id = 1;
+
+  // Name of the user that is being deleted.
+  string user_name = 2;
+}
+
+message GrantUserPermissionRequest {
+  // ID of the MySQL cluster the user belongs to. To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the user to grant the permission to. To get the name of the user, use a [UserService.List] request.
+  string user_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_]*"];
+
+  // Permission that should be granted to the specified user.
+  Permission permission = 3 [(required) = true];
+}
+
+message GrantUserPermissionMetadata {
+  // ID of the MySQL cluster the user belongs to. To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1;
+
+  // Name of the user that is being granted a permission.
+  string user_name = 2;
+}
+
+message RevokeUserPermissionRequest {
+  // ID of the MySQL cluster the user belongs to. To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the user to revoke a permission from. To get the name of the user, use a [UserService.List] request.
+  string user_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_]*"];
+
+  // Name of the database that the user should lose access to.
+  string database_name = 3 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message RevokeUserPermissionMetadata {
+  // ID of the MySQL cluster the user belongs to.
+  string cluster_id = 1;
+
+  // Name of the user whose permission is being revoked.
+  string user_name = 2;
+}

@@ -1,0 +1,3 @@
+[console_scripts]
+msoffcrypto-tool=msoffcrypto.__main__:main
+

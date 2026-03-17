@@ -1,0 +1,22 @@
+# First Comment
+# Edit this line to test for mistaken checks
+
+# m h dom mon dow user command
+
+*/30 * * * * firstcommand
+* 10-20/3 * * * range
+# Middle Comment
+* * * 10 * byweek # Comment One
+## * * * * * disabled
+ 00 5  *   *   *      spaced    # Comment  Two
+
+# monitorCron
+*/59 * * * * python /example_app/testing.py
+
+@reboot rebooted # re-id
+# Last Comment @has this # extra
+
+# percent_one
+* * * * * echo \% escaped
+# percent_two
+* * * * * cat \%\% % stdin%with%lines

@@ -1,0 +1,13 @@
+# Code table 4.240 - Type of distribution function
+0 0 No specific distribution function given
+1 1 Delta functions with spatially variable concentration and fixed diameters Dl (p1) in metre
+2 2 Delta functions with spatially variable concentration and fixed masses Ml (p1) in kg
+3 3 Gaussian (normal) distribution with spatially variable concentration and fixed mean diameter Dl(p1) and variance(p2)
+4 4 Gaussian (normal) distribution with spatially variable concentration, mean diameter and variance
+5 5 Log-normal distribution with spatially variable number density, mean diameter and variance
+6 6 Log-normal distribution with spatially variable number density, mean diameter and fixed variance(p1)
+7 7 Log-normal distribution with spatially variable number density and mass density and fixed variance(p1) and fixed particle density(p2)
+8 8 No distribution function. The encoded variable is derived from variables characterized by type of distribution function of type No. 7 (see above) with fixed variance(p1) and fixed particle density(p2)
+# 9-49151 Reserved
+# 49152-65534 Reserved for local use
+65535 65535 Missing value

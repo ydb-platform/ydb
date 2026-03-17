@@ -1,0 +1,17 @@
+"Employee shift status"
+enum EmployeeShiftStatus {
+  "not on shift"
+  NOT_ON_SHIFT
+  "on shift"
+  ON_SHIFT
+}
+
+enum Color {
+  RED
+  GREEN
+  BLUE
+}
+
+enum EnumWithOneField {
+    FIELD
+}

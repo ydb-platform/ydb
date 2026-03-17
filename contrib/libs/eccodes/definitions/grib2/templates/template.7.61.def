@@ -1,0 +1,38 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.61, Grid point data - simple packing with logarithm pre-processing
+
+# Note from WMO document:
+# This template is experimental, was not validated at the time of publication and should be used only for bilateral previously agreed tests
+transient template_is_experimental = 1 : hidden;
+
+meta codedValues data_g2simple_packing_with_preprocessing(
+    section7Length,
+    offsetBeforeData,
+    offsetSection7,
+    unitsFactor,
+    unitsBias,
+    changingPrecision,
+    numberOfValues,
+    bitsPerValue,
+    referenceValue,
+    binaryScaleFactor,
+    decimalScaleFactor,
+    optimizeScaleFactor,
+    typeOfPreProcessing,
+    preProcessingParameter
+): read_only;
+
+meta values data_apply_bitmap(
+    codedValues,
+    bitmap,
+    missingValue,
+    binaryScaleFactor,
+    numberOfDataPoints,
+    numberOfValues
+) : dump;
+
+alias data.packedValues = codedValues;
+
+template statistics "common/statistics_grid.def";
+template missing_values "common/missing_values_grid.def";

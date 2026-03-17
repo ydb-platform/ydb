@@ -1,0 +1,26 @@
+Metadata-Version: 2.1
+Name: asyncio-pool
+Version: 0.6.0
+Summary: Pool of asyncio coroutines with familiar interface
+Home-page: https://github.com/gistart/asyncio-pool
+Author: gistart
+Author-email: gistart@yandex.ru
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Framework :: AsyncIO
+Requires-Python: >=3.5
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+
+# asyncio-pool
+
+Pool of asyncio coroutines with familiar interface. Supports python 3.5+ (including PyPy 6+, which is also 3.5 atm)
+
+AioPool makes sure _no more_ and _no less_ (if possible) than `size` spawned coroutines are active at the same time. _spawned_ means created and scheduled with one of the pool interface methods, _active_ means coroutine function started executing it's code, as opposed to _waiting_ -- which waits for pool space without entering coroutine function.
+
+Read more at [github page](https://github.com/gistart/asyncio-pool).

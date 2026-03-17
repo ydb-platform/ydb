@@ -1,0 +1,6 @@
+# Code table 4.248 - Method used to derive data values for a given local time
+0 0 Nearest forecast or analysis time to specified local time
+1 1 Interpolated to be valid at the specified local time
+# 2-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

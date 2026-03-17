@@ -1,0 +1,3 @@
+mark_as_tests:
+  - slicer/test_slicer.py
+  - slicer/utils_testing.py

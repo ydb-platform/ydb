@@ -1,0 +1,8 @@
+--- a/horovod/tensorflow/__init__.py
++++ b/horovod/tensorflow/__init__.py
+@@ -22,5 +21,0 @@
+-
+-from horovod.common.util import check_extension
+-
+-check_extension('horovod.tensorflow', 'HOROVOD_WITH_TENSORFLOW', __file__, 'mpi_lib')
+-

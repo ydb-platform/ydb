@@ -1,0 +1,29 @@
+<div {% if not widget.attrs.style %}style="height:{{widget.height|default:'500px'}};width:{{widget.width|default:'90%'}};display:inline-block;"{% endif %}{% include "django/forms/widgets/attrs.html" %}></div>
+
+<textarea id="{{widget.attrs.id}}_textarea" name="{{ widget.name }}" required="" style="display: none"></textarea>
+
+{% with script_id=widget.name|add:"_data" %}
+{{ widget.value|json_script:script_id }}
+{% endwith %}
+
+<script>
+    (function() {
+        var container = document.getElementById("{{ widget.attrs.id }}");
+        var textarea = document.getElementById("{{widget.attrs.id}}_textarea");
+
+        var options = {{ widget.options|safe }};
+        options.onChange = function () {
+            var json = editor.get();
+            textarea.value = JSON.stringify(json);
+        }
+
+        var editor = new JSONEditor(container, options);
+        var content = document.getElementById("{{ widget.name }}_data").textContent;
+        textarea.value = content;
+        editor.set(JSON.parse(content));
+        
+        // Expose editor instance for external access
+        window['{{ widget.attrs.id }}_editor'] = editor;
+        container.jsonEditor = editor;
+    })();
+</script>

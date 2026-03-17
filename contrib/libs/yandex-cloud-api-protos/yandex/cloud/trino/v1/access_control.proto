@@ -1,0 +1,556 @@
+syntax = "proto3";
+
+package yandex.cloud.trino.v1;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/trino/v1;trino";
+option java_package = "yandex.cloud.api.trino.v1";
+
+
+message AccessControlConfig {
+  // Catalog access control rules.
+  repeated CatalogAccessRule catalogs = 1;
+
+  // Schema access control rules.
+  repeated SchemaAccessRule schemas = 2;
+
+  // Table access control rules.
+  repeated TableAccessRule tables = 3;
+
+  // Function access control rules.
+  repeated FunctionAccessRule functions = 4;
+
+  // Procedures access control rules.
+  repeated ProcedureAccessRule procedures = 5;
+
+  // Queries access control rules.
+  repeated QueryAccessRule queries = 6;
+
+  // System session property access control rules.
+  repeated SystemSessionPropertyAccessRule system_session_properties = 7;
+
+  // Catalog session property access control rules.
+  repeated CatalogSessionPropertyAccessRule catalog_session_properties = 8;
+}
+
+message CatalogAccessRuleMatcher {
+  message CatalogIds {
+    repeated string any = 1 [
+      (yandex.cloud.size) = "<=128",
+      (length) = "<=63",
+      (unique) = true
+    ];
+  }
+
+  message CatalogNames {
+    repeated string any = 1 [
+      (yandex.cloud.size) = "<=128",
+      (length) = "<=63",
+      (unique) = true
+    ];
+  }
+
+  reserved 1, 2;
+
+  oneof match_by {
+    option (exactly_one) = true;
+
+    // Catalog name regexp the rule is applied to.
+    string name_regexp = 3 [(length) = "<=256"];
+
+    // Catalog IDs rule is applied to.
+    CatalogIds ids = 4;
+
+    // Catalog names rule is applied to.
+    CatalogNames names = 5;
+  }
+}
+
+message SchemaAccessRuleMatcher {
+  message SchemaNames {
+    repeated string any = 1 [
+      (yandex.cloud.size) = "<=128",
+      (length) = "<=63",
+      (pattern) = "[a-z0-9_-]+",
+      (unique) = true
+    ];
+  }
+
+  reserved 1;
+
+  oneof match_by {
+    option (exactly_one) = true;
+
+    // Schema name regexp the rule is applied to.
+    string name_regexp = 2 [(length) = "<=256"];
+
+    // Schema names the rule is applied to.
+    SchemaNames names = 3;
+  }
+}
+
+message TableAccessRuleMatcher {
+  message TableNames {
+    repeated string any = 1 [
+      (yandex.cloud.size) = "<=128",
+      (length) = "<=63",
+      (pattern) = "[a-z0-9_-]+",
+      (unique) = true
+    ];
+  }
+
+  reserved 1;
+
+  oneof match_by {
+    option (exactly_one) = true;
+
+    // Table name regexp the rule is applied to.
+    string name_regexp = 2 [(length) = "<=256"];
+
+    // Table names the rule is applied to.
+    TableNames names = 3;
+  }
+}
+
+message FunctionAccessRuleMatcher {
+  message FunctionNames {
+    repeated string any = 1 [
+      (yandex.cloud.size) = "<=128",
+      (length) = "<=63",
+      (pattern) = "[a-z0-9_-]+",
+      (unique) = true
+    ];
+  }
+
+  reserved 1;
+
+  oneof match_by {
+    option (exactly_one) = true;
+
+    // Function name regexp the rule is applied to.
+    string name_regexp = 2 [(length) = "<=256"];
+
+    // Function names the rule is applied to.
+    FunctionNames names = 3;
+  }
+}
+
+message ProcedureAccessRuleMatcher {
+  message ProcedureNames {
+    repeated string any = 1 [
+      (yandex.cloud.size) = "<=128",
+      (length) = "<=63",
+      (pattern) = "[a-z0-9_-]+",
+      (unique) = true
+    ];
+  }
+
+  reserved 1;
+
+  oneof match_by {
+    option (exactly_one) = true;
+
+    // Procedure name regexp the rule is applied to.
+    string name_regexp = 2 [(length) = "<=256"];
+
+    // Procedure names the rule is applied to.
+    ProcedureNames names = 3;
+  }
+}
+
+message PropertyAccessRuleMatcher {
+  message PropertyNames {
+    repeated string any = 1 [
+      (yandex.cloud.size) = "<=128",
+      (length) = "<=63",
+      (pattern) = "[a-z_]+",
+      (unique) = true
+    ];
+  }
+
+  reserved 1;
+
+  oneof match_by {
+    option (exactly_one) = true;
+
+    // Property name regexp the rule is applied to.
+    string name_regexp = 2 [(length) = "<=256"];
+
+    // Property names the rule is applied to.
+    PropertyNames names = 3;
+  }
+}
+
+message CatalogAccessRule {
+  enum Permission {
+    PERMISSION_UNSPECIFIED = 0;
+    // Denies all operations on the catalog entities.
+    NONE = 1;
+    // Allows all operations on catalog entities.
+    ALL = 2;
+    // Allows only read operations on catalog entities.
+    READ_ONLY = 3;
+  }
+
+  // IAM user IDs the rule is applied to.
+  repeated string users = 1 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  reserved 2; // roles
+
+  // IAM group IDs the rule is applied to.
+  repeated string groups = 3 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  // Catalog matcher specifying what catalogs the rule is applied to.
+  CatalogAccessRuleMatcher catalog = 4;
+
+  // Permission granted by the rule.
+  Permission permission = 5 [(required) = true];
+
+  // Rule description.
+  string description = 6 [(length) = "<=128"];
+}
+
+message SchemaAccessRule {
+  enum Owner {
+    OWNER_UNSPECIFIED = 0;
+    // User is not considered an owner of the schema.
+    NO = 1;
+    // User is considered an owner of the schema.
+    YES = 2;
+  }
+
+  // IAM user IDs the rule is applied to.
+  repeated string users = 1 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  reserved 2; // roles
+
+  // IAM group IDs the rule is applied to.
+  repeated string groups = 3 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  // Catalog matcher specifying what catalogs the rule is applied to.
+  CatalogAccessRuleMatcher catalog = 4;
+
+  // Schema matcher specifying what schemas the rule is applied to.
+  SchemaAccessRuleMatcher schema = 5;
+
+  // Ownership granted by the rule.
+  Owner owner = 6 [
+    (required) = true
+  ];
+
+  // Rule description.
+  string description = 7 [(length) = "<=128"];
+}
+
+message TableAccessRule {
+  enum Privilege {
+    PRIVILEGE_UNSPECIFIED = 0;
+    // Allows SELECT statements on the table.
+    SELECT = 1;
+    // Allows INSERT statements on the table.
+    INSERT = 2;
+    // Allows DELETE statements on the table.
+    DELETE = 3;
+    // Allows UPDATE statements on the table.
+    UPDATE = 4;
+    // Allows CREATE, DROP, COMMENT ON and ALTER statements on the table.
+    OWNERSHIP = 5;
+    // Allows SELECT statements on the table while creating view.
+    GRANT_SELECT = 6;
+  }
+
+  message Column {
+    enum AccessMode {
+      ACCESS_MODE_UNSPECIFIED = 0;
+      // Access to column is denied.
+      NONE = 1;
+      // Access to column is allowed.
+      ALL = 2;
+    }
+
+    // Column name.
+    string name = 1 [
+      (required) = true,
+      (length) = "<=63",
+      (pattern) = "[a-z0-9_-]+"
+    ];
+
+    // Column access mode.
+    AccessMode access = 2 [(required) = true];
+
+    // SQL expression mask to evaluate instead of original column values.
+    // Mask should have the same type as original column.
+    string mask = 3 [(length) = "<=128"];
+  }
+
+  // IAM user IDs the rule is applied to.
+  repeated string users = 1 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  reserved 2;
+
+  // IAM group IDs the rule is applied to.
+  repeated string groups = 3 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  // Catalog matcher specifying what catalogs the rule is applied to.
+  CatalogAccessRuleMatcher catalog = 4;
+
+  // Schema matcher specifying what schemas the rule is applied to.
+  SchemaAccessRuleMatcher schema = 5;
+
+  // Table matcher specifying what tables the rule is applied to.
+  TableAccessRuleMatcher table = 6;
+
+  // Permission granted by the rule.
+  repeated Privilege privileges = 7 [(unique) = true];
+
+  // Column rules.
+  repeated Column columns = 8;
+
+  // Boolean SQL expression to filter table rows for particular user.
+  string filter = 9 [(length) = "<=128"];
+
+  reserved 10; // filter_environment
+
+  // Rule description.
+  string description = 11 [(length) = "<=128"];
+}
+
+message FunctionAccessRule {
+  enum Privilege {
+    PRIVILEGE_UNSPECIFIED = 0;
+    // Allows to execute the function.
+    EXECUTE = 1;
+    // Allows to use the function while view creation.
+    GRANT_EXECUTE = 2;
+    // Allows to CREATE and DROP the function.
+    OWNERSHIP = 3;
+  }
+
+  // IAM user IDs the rule is applied to.
+  repeated string users = 1 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  reserved 2; // roles
+
+  // IAM group IDs the rule is applied to.
+  repeated string groups = 3 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  // Catalog matcher specifying what catalogs the rule is applied to.
+  CatalogAccessRuleMatcher catalog = 4;
+
+  // Schema matcher specifying what schema the rule is applied to.
+  SchemaAccessRuleMatcher schema = 5;
+
+  // Function matcher specifying what functions the rule is applied to.
+  FunctionAccessRuleMatcher function = 6;
+
+  // Privileges granted by the rule.
+  repeated Privilege privileges = 7 [(unique) = true];
+
+  // Rule description.
+  string description = 8 [(length) = "<=128"];
+}
+
+message ProcedureAccessRule {
+  enum Privilege {
+    PRIVILEGE_UNSPECIFIED = 0;
+    // Allows to execute the procedure.
+    EXECUTE = 1;
+    reserved 2; // GRANT_EXECUTE
+  }
+
+  // IAM user IDs the rule is applied to.
+  repeated string users = 1 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  reserved 2; // roles
+
+  // IAM group IDs the rule is applied to.
+  repeated string groups = 3 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  // Catalog matcher specifying what catalogs the rule is applied to.
+  CatalogAccessRuleMatcher catalog = 4;
+
+  // Schema matcher specifying what schema the rule is applied to.
+  SchemaAccessRuleMatcher schema = 5;
+
+  // Procedure matcher specifying what functions the rule is applied to.
+  ProcedureAccessRuleMatcher procedure = 6;
+
+  // Privileges granted by the rule.
+  repeated Privilege privileges = 7 [(unique) = true];
+
+  // Rule description.
+  string description = 8 [(length) = "<=128"];
+}
+
+message QueryAccessRule {
+  enum Privilege {
+    PRIVILEGE_UNSPECIFIED = 0;
+    // Allows to view the query.
+    VIEW = 1;
+    // Allows to execute the query.
+    EXECUTE = 2;
+    // Allows to kill the query.
+    KILL = 3;
+  }
+
+  // IAM user IDs the rule is applied to.
+  repeated string users = 1 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  reserved 2; // roles
+
+  // IAM group IDs the rule is applied to.
+  repeated string groups = 3 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  // Owners of queries the rule is applied to.
+  // Cannot be combined with EXECUTE privilege.
+  repeated string query_owners = 4 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  // Privileges granted by the user.
+  repeated Privilege privileges = 5 [(unique) = true];
+
+  // Rule description.
+  string description = 6 [(length) = "<=128"];
+}
+
+message SystemSessionPropertyAccessRule {
+  enum Allow {
+    ALLOW_UNSPECIFIED = 0;
+    // Denies setting the system session property.
+    NO = 1;
+    // Allows to set the system session property.
+    YES = 2;
+  }
+
+  // IAM user IDs the rule is applied to.
+  repeated string users = 1 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  reserved 2; // roles
+
+  // IAM group IDs the rule is applied to.
+  repeated string groups = 3 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  // Property matcher specifying what properties the rule is applied to.
+  PropertyAccessRuleMatcher property = 4;
+
+  // Whether the rule allows setting the property.
+  Allow allow = 5 [(required) = true];
+
+  // Rule description.
+  string description = 6 [(length) = "<=128"];
+}
+
+message CatalogSessionPropertyAccessRule {
+  enum Allow {
+    ALLOW_UNSPECIFIED = 0;
+    // Denies setting the catalog session property.
+    NO = 1;
+    // Allows to set the catalog session property.
+    YES = 2;
+  }
+
+  // IAM user IDs the rule is applied to.
+  repeated string users = 1 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  reserved 2; // roles
+
+  // IAM group IDs the rule is applied to.
+  repeated string groups = 3 [
+    (yandex.cloud.size) = "<=128",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]+",
+    (unique) = true
+  ];
+
+  // Catalog matcher specifying what catalogs the rule is applied to.
+  CatalogAccessRuleMatcher catalog = 4;
+
+  // Property matcher specifying what properties the rule is applied to.
+  PropertyAccessRuleMatcher property = 5;
+
+  // Whether the rule allows setting the property.
+  Allow allow = 6 [(required) = true];
+
+  // Rule description.
+  string description = 7 [(length) = "<=128"];
+}

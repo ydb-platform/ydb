@@ -1,0 +1,20 @@
+Metadata-Version: 2.4
+Name: minijinja
+Version: 2.16.0
+Classifier: Programming Language :: Rust
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Environment :: Web Environment
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Topic :: Text Processing :: Markup :: HTML
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Typing :: Typed
+License-File: LICENSE
+Summary: An experimental Python binding of the Rust MiniJinja template engine.
+Keywords: jinja,template-engine
+Author-email: Armin Ronacher <armin.ronacher@active-4.com>
+Maintainer-email: Armin Ronacher <armin.ronacher@active-4.com>
+Requires-Python: >=3.8
+Project-URL: Donate, https://github.com/sponsors/mitsuhiko
+Project-URL: Issue Tracker, https://github.com/mitsuhiko/minijinja/issues
+Project-URL: Repository, https://github.com/mitsuhiko/minijinja

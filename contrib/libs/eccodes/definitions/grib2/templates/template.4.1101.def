@@ -1,0 +1,27 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.1101, Hovmoller-type grid with averaging or other statistical processing
+
+# This template is experimental, was not validated at the time of publication and should be used only for bilateral previously agreed tests.
+# (Octets 35-50 are very similar to octets 43-58 of product definition template 4.8, but the meaning of some fields differs slightly)
+transient template_is_experimental = 1 : hidden;
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.horizontal.def"
+
+unsigned[4] numberOfMissingInStatisticalProcess = 0  : edition_specific;
+alias totalNumberOfDataValuesMissingInStatisticalProcess=numberOfMissingInStatisticalProcess;
+
+codetable[1] typeOfStatisticalProcessing ('4.10.table',masterDir,localDir) : edition_specific;
+
+codetable[1] typeOfTimeIncrement ('4.11.table',masterDir,localDir) = 2 : edition_specific;
+alias typeOfTimeIncrementBetweenSuccessiveFieldsUsedInTheStatisticalProcessing=typeOfTimeIncrement;
+
+codetable[1] indicatorOfUnitForTimeRange ('4.4.table',masterDir,localDir) =1 ;
+unsigned[4] lengthOfTimeRange=0 ;
+codetable[1] indicatorOfUnitForTimeIncrement ('4.4.table',masterDir,localDir)=255 ;
+unsigned[4] timeIncrement=0 ;
+alias timeIncrementBetweenSuccessiveFields=timeIncrement;
+

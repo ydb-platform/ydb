@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<schema xmlns="http://www.w3.org/2001/XMLSchema" targetNamespace="http://test.python-zeep.org/recursive/main/b">
+    <import namespace="http://test.python-zeep.org/recursive/main/c" schemaLocation="recursive_schema_c.xsd"/>
+</schema>

@@ -1,0 +1,19 @@
+# (C) Copyright 2005- ECMWF.
+
+# Number of mode(N) of distribution
+unsigned[2] numberOfModeOfDistribution : dump;
+
+# Mode number (l)
+unsigned[2] modeNumber : dump;
+
+# Type of distribution function
+codetable[2] typeOfDistributionFunction ('4.240.table',masterDir,localDir) : dump;
+
+# Number of following function parameters (Np), defined by type given in octet 18-19
+unsigned[1] numberOfDistributionFunctionParameters : dump;
+alias NP = numberOfDistributionFunctionParameters;
+
+listOfDistributionFunctionParameter list(numberOfDistributionFunctionParameters) {
+    signed[1]   scaleFactorOfDistributionFunctionParameter = missing() : can_be_missing,dump;
+    unsigned[4] scaledValueOfDistributionFunctionParameter = missing() : can_be_missing,dump;
+}

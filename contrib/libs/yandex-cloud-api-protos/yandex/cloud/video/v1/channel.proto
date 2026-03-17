@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package yandex.cloud.video.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/video/v1;video";
+option java_package = "yandex.cloud.api.video.v1";
+
+// Root entity for content organization and separation within the video platform.
+// A channel serves as a container for videos and streams, providing a way to
+// group related content and apply common settings and access controls.
+// Each channel belongs to a specific organization and can have its own
+// configuration for advertisements, content cleanup, and embedding restrictions.
+message Channel {
+  // Reserved for future use.
+  reserved 6 to 99, 102 to 199;
+
+  // Unique identifier of the channel.
+  // This ID is used to reference the channel in API calls and URLs.
+  string id = 1;
+
+  // Identifier of the organization to which this channel belongs.
+  // Each channel must be associated with exactly one organization.
+  string organization_id = 2;
+
+  // Title of the channel displayed in interfaces.
+  // This is the primary display name shown to users.
+  string title = 3;
+
+  // Detailed description of the channel's purpose and content.
+  // This optional field provides additional context about the channel.
+  string description = 4;
+
+  // Identifier of the default style preset applied to videos in this channel.
+  // Videos, episodes, and playlists created in this channel
+  // inherit this preset unless explicitly overridden.
+  string default_style_preset_id = 5;
+
+  // Timestamp when the channel was initially created.
+  // This value is set automatically by the system and cannot be modified.
+  google.protobuf.Timestamp created_at = 100;
+
+  // Timestamp of the last modification to the channel or its settings.
+  // This value is updated automatically whenever the channel is modified.
+  google.protobuf.Timestamp updated_at = 101;
+
+  // Custom user-defined labels as `key:value` pairs.
+  // Maximum 64 labels per channel.
+  // Labels can be used for organization, filtering, and metadata purposes.
+  map<string, string> labels = 200;
+
+  // Configuration settings for the channel's behavior and features.
+  // These settings control advertisements, content cleanup policies,
+  // and embedding restrictions for all content in the channel.
+  ChannelSettings settings = 201;
+}
+
+// Configuration settings for the channel's behavior and features.
+// These settings apply to all content in the channel and control
+// various aspects of how the channel and its content behave.
+message ChannelSettings {
+  // Reserved for future use.
+  reserved 2;
+
+  // Settings for advertisement display and behavior.
+  // Controls whether and how advertisements are shown with content in this channel.
+  // If not specified, default advertisement settings are applied.
+  AdvertisementSettings advertisement = 1;
+
+  // Settings for HTTP Referer verification to control content embedding.
+  // Restricts which domains can embed content from this channel.
+  // If not specified or disabled, content can be embedded on any domain.
+  RefererVerificationSettings referer_verification = 3;
+}
+
+// Settings for advertisement display and behavior in the channel.
+// These settings control whether and how advertisements are shown
+// with content in this channel, including both videos and streams.
+message AdvertisementSettings {
+  // Reserved for future use.
+  reserved 1 to 99;
+
+  // Specifies the advertisement provider to use.
+  // Only one provider can be active at a time.
+  oneof provider {
+    // Yandex.Direct advertisement provider settings.
+    // When specified, advertisements will be served through Yandex.Direct.
+    YandexDirect yandex_direct = 100;
+  }
+
+  // Configuration for the Yandex.Direct advertisement provider.
+  // These settings are specific to the Yandex.Direct advertising platform.
+  message YandexDirect {
+    // Enables or disables Partner Ad for both Live and VOD content.
+    // When set to true, advertisements will be shown with content.
+    // When set to false, no advertisements will be shown.
+    bool enable = 1;
+
+    // Yandex.Direct page identifier.
+    // This ID is used to associate the channel with a specific page
+    // in the Yandex.Direct system for targeting and reporting.
+    int64 page_id = 2;
+
+    // Yandex.Direct category identifier.
+    // This ID is used to categorize the channel's content for
+    // appropriate advertisement targeting and compliance.
+    int64 category = 3;
+  }
+}
+
+// Settings for HTTP Referer verification to control where content can be embedded.
+// When enabled, the system checks the HTTP Referer request header to ensure
+// that content is only embedded on allowed domains.
+message RefererVerificationSettings {
+  // Enables or disables Referer verification for this channel.
+  // When set to true, only requests from allowed domains will be permitted.
+  // When set to false, content can be embedded on any domain.
+  bool enable = 1;
+
+  // List of domains allowed to embed content from this channel.
+  // Only relevant when enable is set to true.
+  // Supports wildcard notation (e.g., "*.example.com") to allow all subdomains.
+  repeated string allowed_domains = 2 [(pattern) = "^(?:\\*\\.)?(?:[a-zA-Z0-9-]*\\.)+[a-zA-Z]{2,}$|^\\*\\.[a-zA-Z]{2,}$", (length) = "4-255", (size) = "<=100"];
+}

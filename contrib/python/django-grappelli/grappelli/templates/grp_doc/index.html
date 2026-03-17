@@ -1,0 +1,62 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static admin_modify grp_tags %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li>Grappelli Documentation</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Grappelli Documentation</h1>
+    <div class="g-d-c">
+        <div class="grp-module">
+            <h2>Basics</h2>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Basic Page Structure</strong></span> <a href="{% url 'grp_doc_basic_page_structure' %}">How a custom template is built</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Mueller Grid System</strong></span> <a href="{% url 'grp_doc_mueller_grid_system' %}">The grid system we use</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Predefined Layouts</strong></span> <a href="{% url 'grp_doc_mueller_grid_system_layouts' %}">Layouts based on the Mueller Grid System</a></p></div>
+        </div>
+        <div class="grp-module">
+            <h2>Header</h2>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Navigation</strong></span> <a href="{% url 'grp_doc_navigation' %}">Admin-Title &amp; User-Tools</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Context Navigation</strong></span> <a href="{% url 'grp_doc_context_navigation' %}">Breadcrumbs &amp; Page-Tools</a></p></div>
+        </div>
+        <div class="grp-module">
+            <h2>Modules &amp; Groups</h2>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Modules</strong></span> <a href="{% url 'grp_doc_modules' %}">Modules, Rows &amp; Cells, Collapsible Modules</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Groups</strong></span> <a href="{% url 'grp_doc_groups' %}">Stacked &amp; Tabular Groups, Collapsible Groups</a></p></div>
+        </div>
+        <div class="grp-module">
+            <h2>Tools</h2>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Object-Tools</strong></span> <a href="{% url 'grp_doc_object_tools' %}">Tools for Objects</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Tools</strong></span> <a href="{% url 'grp_doc_tools' %}">Tools for Modules, Rows &amp; Groups</a></p></div>
+        </div>
+        <div class="grp-module">
+            <h2>Forms</h2>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Form Fields</strong></span> <a href="{% url 'grp_doc_form_fields' %}">Labels, Form Fields &amp; Widths</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Errors in Forms</strong></span> <a href="{% url 'grp_doc_errors' %}">Non-Form-, Non-Field- and Field-Errors</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Fieldsets</strong></span> <a href="{% url 'grp_doc_fieldsets' %}">Modules in Forms</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Submit-Rows</strong></span> <a href="{% url 'grp_doc_submit_rows' %}">Defining Submit-Rows</a></p></div>
+        </div>
+        <div class="grp-module">
+            <h2>Limiting Results</h2>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Pagination</strong></span> <a href="{% url 'grp_doc_pagination' %}">How a pagination is built</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Search-Form</strong></span> <a href="{% url 'grp_doc_search_form' %}">How a search-form is built</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Filter</strong></span> <a href="{% url 'grp_doc_filter' %}">How a filter is built</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Date-Hierarchy</strong></span> <a href="{% url 'grp_doc_date_hierarchy' %}">How a date-hierarchy is built</a></p></div>
+        </div>
+        <div class="grp-module">
+            <h2>Tables</h2>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Tables</strong></span> <a href="{% url 'grp_doc_tables' %}">Tables, Sortable Tables &amp; Forms in Tables</a></p></div>
+        </div>
+        <div class="grp-module">
+            <h2>Pages</h2>
+            {#<div class="grp-row"><p><span class="g-d-4"><strong>Admin Index</strong></span> <a href="{% url 'grp_doc_admin_index' %}">How the admin index is built</a></p></div>#}
+            <div class="grp-row"><p><span class="g-d-4"><strong>Change-List</strong></span> <a href="{% url 'grp_doc_change_list' %}">How a change-list is built</a></p></div>
+            <div class="grp-row"><p><span class="g-d-4"><strong>Change-Form</strong></span> <a href="{% url 'grp_doc_change_form' %}">How a change-form is built</a></p></div>
+        </div>
+    </div>
+{% endblock %}

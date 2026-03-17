@@ -1,0 +1,15 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.35, satellite product with or without associated quality values
+
+include "grib2/templates/template.4.parameter.def"
+
+codetable[1] typeOfGeneratingProcess ('4.3.table',masterDir,localDir) : dump;
+
+#  Observation generating process identifier (defined by originating centre)
+unsigned[1] observationGeneratingProcessIdentifier  : dump;
+alias generatingProcessIdentifier=observationGeneratingProcessIdentifier;
+
+codetable[1] qualityValueAssociatedWithParameter('4.16.table',masterDir,localDir) : dump;
+
+include "grib2/templates/template.4.satellite.def"

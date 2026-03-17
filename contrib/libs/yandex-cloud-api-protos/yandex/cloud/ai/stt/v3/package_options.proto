@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+package speechkit.stt.v3;
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/stt/v3;stt";

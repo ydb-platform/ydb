@@ -1,0 +1,38 @@
+[package]
+name = "temporal-sdk-core-test-utils"
+version = "0.1.0"
+authors = ["Spencer Judge <spencer@temporal.io>"]
+edition = "2024"
+license-file = { workspace = true }
+
+[[bin]]
+name = "histfetch"
+path = "src/histfetch.rs"
+
+[features]
+default = ["ephemeral-server"]
+ephemeral-server = ["temporal-sdk-core/ephemeral-server"]
+
+[dependencies]
+anyhow = "1.0"
+assert_matches = "1"
+async-trait = "0.1"
+futures-util = { version = "0.3", default-features = false }
+parking_lot = "0.12"
+prost = { workspace = true }
+rand = "0.9"
+semver = "1.0"
+temporal-client = { path = "../client" }
+temporal-sdk = { path = "../sdk" }
+temporal-sdk-core = { path = "../core" }
+temporal-sdk-core-api = { path = "../core-api" }
+tokio = "1.1"
+tracing = "0.1"
+url = "2.2"
+
+[dependencies.temporal-sdk-core-protos]
+path = "../sdk-core-protos"
+version = "0.1"
+
+[lints]
+workspace = true

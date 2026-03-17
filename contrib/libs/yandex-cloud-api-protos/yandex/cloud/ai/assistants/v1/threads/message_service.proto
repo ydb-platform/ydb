@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.assistants.v1.threads;
+
+import "yandex/cloud/ai/assistants/v1/threads/message.proto";
+import "yandex/cloud/validation.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/assistants/v1/threads;threads";
+option java_package = "yandex.cloud.api.ai.assistants.v1.threads";
+
+// MessageService provides operations for managing messages.
+service MessageService {
+  // Create a new message.
+  rpc Create(CreateMessageRequest) returns (Message) {
+    option (google.api.http) = {post: "/assistants/v1/messages" body: "*"};
+  }
+
+  // Retrieve details of a specific message by its ID.
+  rpc Get(GetMessageRequest) returns (Message) {
+    option (google.api.http) = {get: "/assistants/v1/messages/{message_id}"};
+  }
+
+  // List messages in a specific thread.
+  // By default, messages are listed in reverse chronological order, i.e., from the newest to the oldest.
+  rpc List(ListMessagesRequest) returns (stream Message) {
+    option (google.api.http) = {get: "/assistants/v1/messages"};
+  }
+}
+
+// Request to create a new message in a specific thread.
+message CreateMessageRequest {
+  // ID of the thread to which the message will be added.
+  string thread_id = 1 [(required) = true];
+
+  // Author of the message, containing details about the message's creator.
+  // If not provided, the default author ID specified in the corresponding thread will be used.
+  Author author = 2;
+
+  // Set of key-value pairs to label the message.
+  map<string, string> labels = 3;
+
+  // Content of the message.
+  MessageContent content = 4 [(required) = true];
+}
+
+// Request message for retrieving a message from a thread.
+message GetMessageRequest {
+  // ID of the thread that contains the message.
+  string thread_id = 1 [(required) = true];
+
+  // ID of the message to retrieve.
+  string message_id = 2 [(required) = true];
+}
+
+// Request message for listing messages in a specific thread.
+message ListMessagesRequest {
+  // ID of the thread whose messages will be listed.
+  string thread_id = 1 [(required) = true];
+}

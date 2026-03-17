@@ -1,0 +1,64 @@
+#!/bin/sh
+
+. "$TESTSUITE_LIB_UTILS"
+. "$(dirname "$0")/find-pg.sh"
+
+if [ "x$POSTGRESQL_CONFIGS_DIR" = "x" ]; then
+    die "POSTGRESQL_CONFIGS_DIR must be set"
+fi
+if [ "x$POSTGRESQL_PORT" = "x" ]; then
+    die "POSTGRESQL_PORT must be set"
+fi
+if [ "x$POSTGRESQL_TMPDIR" = "x" ]; then
+    die "POSTGRESQL_TMPDIR must be set"
+fi
+
+# Use ramdisk for postgresql if available
+RAMDISK=/mnt/ramdisk/$USER
+if mkdir -p $RAMDISK 2> /dev/null; then
+    POSTGRESQL_DATADIR=$RAMDISK/_postgresql${WORKER_SUFFIX_PATH}/data
+else
+    POSTGRESQL_DATADIR=$POSTGRESQL_TMPDIR/data
+fi
+
+POSTGRESQL_LOGSDIR=$POSTGRESQL_TMPDIR/logs
+
+mkdir -p "$POSTGRESQL_DATADIR"
+
+start() {
+    echo "Postgresql data directory: $POSTGRESQL_DATADIR"
+    echo "Postgresql version: $($POSTGRESQL_BINPATH/pg_config --version)"
+
+    mkdir -p "$POSTGRESQL_TMPDIR"
+    mkdir -p "$POSTGRESQL_LOGSDIR"
+
+    set -e
+    "$POSTGRESQL_BINPATH/initdb" \
+        --encoding=UTF-8 \
+        --locale=en_US.UTF-8 \
+        --lc-collate=C \
+        --lc-ctype=C \
+        -U testsuite \
+        -D "$POSTGRESQL_DATADIR"
+
+    cp "$POSTGRESQL_CONFIGS_DIR"/*.conf "$POSTGRESQL_DATADIR"
+    # disable jit for PostgreSQL 12+
+    if [ $($POSTGRESQL_BINPATH/pg_config --version | awk -F '[^0-9]+' '{ print $2 }') -gt 11 ]; then
+        echo "jit = off" >> "$POSTGRESQL_DATADIR/postgresql.conf"
+    fi
+
+    $POSTGRESQL_BINPATH/pg_ctl \
+        -s -D $POSTGRESQL_DATADIR -w start \
+        -o "-c listen_addresses=*" \
+        -o "-c port=$POSTGRESQL_PORT" \
+        -o "-c unix_socket_directories=" \
+        -o "-c log_directory=$POSTGRESQL_LOGSDIR"
+}
+
+stop() {
+    "$POSTGRESQL_BINPATH/pg_ctl" -s -D "$POSTGRESQL_DATADIR" \
+                               -m immediate stop
+    rm -rf "$POSTGRESQL_DATADIR"
+}
+
+script_main "$@"

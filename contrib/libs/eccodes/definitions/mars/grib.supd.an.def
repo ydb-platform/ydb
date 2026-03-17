@@ -1,0 +1,21 @@
+if (localDefinitionNumber ==35) {
+	alias mars.date   = dataDate;
+	alias mars.time   = dataTime;
+} else {
+	# era 40
+	alias mars.date   = dateOfAnalysis;
+	alias mars.time   = timeOfAnalysis;
+}
+
+if (class is "od") { alias mars.origin = centre; }
+
+# Special rule for Grib 2 local definition 11:
+# Key "centre" should be set to ECMWF and key "originatingCentreOfAnalysis"
+# should be the original centre
+if (editionNumber == 2 && localDefinitionNumber == 11) {
+  alias mars.origin = originatingCentreOfAnalysis;
+}
+
+# We need this because 'jDirectionIncrementInDegrees,iDirectionIncrementInDegrees,' is defined later
+meta marsGrid sprintf("%g/%g",iDirectionIncrementInDegrees,jDirectionIncrementInDegrees) : dump;
+alias mars.grid = marsGrid;

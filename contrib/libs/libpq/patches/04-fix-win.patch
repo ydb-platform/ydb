@@ -1,0 +1,23 @@
+--- a/src/include/c.h
++++ b/src/include/c.h
+@@ -940,6 +940,12 @@
+ #endif							/* __cpp_static_assert */
+ #endif							/* C++ */
+ 
++#ifdef _MSC_VER
++#undef StaticAssertStmt
++#undef StaticAssertDecl
++#define StaticAssertStmt(condition, errmessage)
++#define StaticAssertDecl(condition, errmessage)
++#endif
+ 
+ /*
+  * Compile-time checks that a variable (or expression) has the specified type.
+--- a/src/include/port/win32.h
++++ b/src/include/port/win32.h
+@@ -1,4 +1,5 @@
+ /* src/include/port/win32.h */
++#pragma once
+ 
+ /*
+  * We always rely on the WIN32 macro being set by our build system,

@@ -1,0 +1,45 @@
+# (C) Copyright 2005- ECMWF.
+
+# Cluster identifier
+unsigned[1] clusterIdentifier  : dump;
+alias number=clusterIdentifier;
+
+# Number of cluster to which the high resolution control belongs
+unsigned[1] numberOfClusterHighResolution : dump;
+
+# Number of cluster to which the low resolution control belongs
+unsigned[1] numberOfClusterLowResolution : dump;
+
+# Total number of clusters
+unsigned[1] totalNumberOfClusters : dump;
+alias totalNumber=totalNumberOfClusters;
+
+# Clustering method
+codetable[1] clusteringMethod ('4.8.table',masterDir,localDir) : dump;
+
+# Latitude of central point in cluster domain
+unsigned[4] latitudeOfCentralPointInClusterDomain : dump;
+
+# Longitude of central point in cluster domain
+unsigned[4] longitudeOfCentralPointInClusterDomain : dump;
+
+# Radius of cluster domain
+unsigned[4] radiusOfClusterDomain : dump ;
+
+# NC - Number of forecasts in the cluster
+unsigned[1] numberOfForecastsInTheCluster : dump;
+
+alias NC = numberOfForecastsInTheCluster;
+# Scale factor of standard deviation in the cluster
+unsigned[1] scaleFactorOfStandardDeviation : edition_specific ;
+alias scaleFactorOfStandardDeviationInTheCluster=scaleFactorOfStandardDeviation;
+
+# Scaled value of standard deviation in the cluster
+unsigned[4] scaledValueOfStandardDeviation : dump ;
+alias scaledValueOfStandardDeviationInTheCluster=scaledValueOfStandardDeviation;
+
+# Scale factor of distance of the cluster from ensemble mean
+unsigned[1] scaleFactorOfDistanceFromEnsembleMean : dump;
+
+# Scaled value of distance of the cluster from ensemble mean
+unsigned[4] scaledValueOfDistanceFromEnsembleMean : dump;

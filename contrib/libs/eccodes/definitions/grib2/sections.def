@@ -1,0 +1,70 @@
+# (C) Copyright 2005- ECMWF.
+
+meta headersOnly headers_only();
+
+lookup[1] sectionNumber(4) ;
+
+if(sectionNumber == 1 or new() ){
+   position sectionPosition;
+   template section_1 "grib2/section.1.def";
+}
+
+lookup[1] sectionNumber(4);
+
+transient grib2LocalSectionPresent=0;
+alias section2Used=zero;
+alias setLocalDefinition=grib2LocalSectionPresent;
+transient deleteLocalDefinition=0;
+
+if ( (sectionNumber == 2 or grib2LocalSectionPresent>0) and deleteLocalDefinition == 0 ) {
+  position sectionPosition;
+  template section_2 "grib2/section.2.def";
+}
+alias localUsePresent=section2Used;
+
+lookup[1] sectionNumber(4) ;
+
+if (sectionNumber == 3 or new() ){
+  position sectionPosition;
+  template section_3 "grib2/section.3.def";
+}
+
+lookup[1] sectionNumber(4) ;
+
+if (sectionNumber == 4 or new() ) {
+  position sectionPosition;
+  template section_4 "grib2/section.4.def";
+}
+
+# Used to mark end of headers. Can be accessed with grib_get_offset()
+position endOfHeadersMarker;
+
+meta lengthOfHeaders evaluate( endOfHeadersMarker-startOfHeaders);
+meta md5Headers md5(startOfHeaders,lengthOfHeaders);
+
+lookup[1] sectionNumber(4) ;
+
+template_nofail hook_post_meta_data "grib2/post_meta_data.hook.products_[productionStatusOfProcessedData].def";
+
+if (!headersOnly) {
+  if (sectionNumber == 5 or new() ) {
+    position sectionPosition;
+    template section_5 "grib2/section.5.def";
+  }
+
+  lookup[1] sectionNumber(4) ;
+
+  if (sectionNumber == 6 or new() ) {
+    position sectionPosition;
+    template section_6 "grib2/section.6.def";
+  }
+
+  lookup[1] sectionNumber(4) ;
+
+  if (sectionNumber == 7 or new() ) {
+    position sectionPosition;
+    template section_7 "grib2/section.7.def";
+  }
+
+  #template metas "grib2/meta.def";
+}

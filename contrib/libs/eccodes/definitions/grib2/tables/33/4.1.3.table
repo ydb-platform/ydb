@@ -1,0 +1,11 @@
+# Product discipline 3 - Satellite remote sensing products (formerly Space products)
+0 0 Image format products
+1 1 Quantitative products
+2 2 Cloud properties
+3 3 Flight rule conditions
+4 4 Volcanic ash
+5 5 Sea-surface temperature
+6 6 Solar radiation
+# 7-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

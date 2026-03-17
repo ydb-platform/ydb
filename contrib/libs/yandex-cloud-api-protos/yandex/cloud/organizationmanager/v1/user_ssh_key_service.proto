@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/organizationmanager/v1/user_ssh_key.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1;organizationmanager";
+option java_package = "yandex.cloud.api.organizationmanager.v1";
+
+service UserSshKeyService {
+  rpc Get (GetUserSshKeyRequest) returns (UserSshKey) {
+    option (google.api.http) = { get: "/organization-manager/v1/userSshKeys/{user_ssh_key_id}" };
+  }
+
+  rpc List (ListUserSshKeysRequest) returns (ListUserSshKeysResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/userSshKeys" };
+  }
+
+  rpc Create (CreateUserSshKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/userSshKeys" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateUserSshKeyMetadata"
+      response: "UserSshKey"
+    };
+  }
+
+  rpc Update(UpdateUserSshKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/userSshKeys/{user_ssh_key_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateUserSshKeyMetadata"
+      response: "UserSshKey"
+    };
+  }
+
+  rpc Delete (DeleteUserSshKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/organization-manager/v1/userSshKeys/{user_ssh_key_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteUserSshKeyMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetUserSshKeyRequest {
+  string user_ssh_key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListUserSshKeysRequest {
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+  string subject_id = 2 [(length) = "<=50"]; // if empty, list all organization keys
+  int64 page_size = 3 [(value) = "0-1000"];
+  string page_token = 4 [(length) = "<=2000"];
+}
+
+message ListUserSshKeysResponse {
+  repeated UserSshKey ssh_keys = 1;
+  string next_page_token = 2;
+}
+
+message CreateUserSshKeyRequest {
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+  string subject_id = 2 [(required) = true, (length) = "<=50"];
+  string name = 3 [(length) = "<=255"];
+  string data = 4 [(required) = true, (length) = "<=20000"];
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message CreateUserSshKeyMetadata {
+  string user_ssh_key_id = 1;
+  string organization_id = 2;
+}
+
+message UpdateUserSshKeyRequest {
+  string user_ssh_key_id = 1 [(required) = true, (length) = "<=50"];
+  string name = 2 [(length) = "<=255"];
+  google.protobuf.FieldMask update_mask = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+message UpdateUserSshKeyMetadata {
+  string user_ssh_key_id = 1;
+}
+
+message DeleteUserSshKeyRequest {
+  string user_ssh_key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteUserSshKeyMetadata {
+  string user_ssh_key_id = 1;
+}

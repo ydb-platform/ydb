@@ -1,0 +1,166 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b7a675028aeea00dc07dc1026752198
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015 Southern Oregon University
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [217:217]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ced92923d1e428b0f898a62b36c4418
+BELONGS ya.make
+    License text:
+         * Copyright 2016-2019 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        h3lib/include/faceijk.h [2:2]
+        h3lib/lib/algos.c [2:2]
+        h3lib/lib/h3Index.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3a3b66c5c9223a904cb4cb12d57bc3b6
+BELONGS ya.make
+    License text:
+         * Copyright 2016-2017 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        h3lib/include/bbox.h [2:2]
+        h3lib/include/constants.h [2:2]
+        h3lib/include/vec2d.h [2:2]
+        h3lib/lib/vec2d.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 53de680a8e164db26f3e3795b53b1a5a
+BELONGS ya.make
+    License text:
+         * Copyright 2020 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        h3lib/include/alloc.h [2:2]
+        h3lib/include/vertex.h [2:2]
+        h3lib/lib/vertex.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 62bb560fd5d7b986a86d29ca50b4380a
+BELONGS ya.make
+    License text:
+           Copyright 2017 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [189:189]
+        h3lib/include/vertexGraph.h [2:2]
+        h3lib/lib/mathExtensions.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8ead15fe5571186bdd05bbef4c75f0db
+BELONGS ya.make
+    License text:
+         * Copyright 2018-2019 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        h3lib/lib/localij.c [2:2]
+        h3lib/lib/polygon.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8fe1e42d267e2996fca478f289951163
+BELONGS ya.make
+    License text:
+         * Copyright 2017-2018 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        h3lib/include/linkedGeo.h [2:2]
+        h3lib/include/mathExtensions.h [2:2]
+        h3lib/lib/h3UniEdge.c [2:2]
+        h3lib/lib/linkedGeo.c [2:2]
+        h3lib/lib/vertexGraph.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c54e795b93e832c895ba07bf65549be
+BELONGS ya.make
+    License text:
+         * Copyright 2016-2018 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        h3lib/include/algos.h [2:2]
+        h3lib/include/baseCells.h [2:2]
+        h3lib/include/coordijk.h [2:2]
+        h3lib/include/h3Index.h [2:2]
+        h3lib/lib/coordijk.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c875a2342cd747ad1dd544836d148e34
+BELONGS ya.make
+    License text:
+         * Copyright 2018 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        h3lib/include/polygon.h [2:2]
+        h3lib/include/polygonAlgos.h [2:2]
+        h3lib/include/vec3d.h [2:2]
+        h3lib/lib/vec3d.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ea320f322dfab3db36c0e59289f8904b
+BELONGS ya.make
+    License text:
+         * Copyright 2016-2020 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        h3lib/include/geoCoord.h [2:2]
+        h3lib/include/h3api.h [2:2]
+        h3lib/lib/baseCells.c [2:2]
+        h3lib/lib/bbox.c [2:2]
+        h3lib/lib/faceijk.c [2:2]
+        h3lib/lib/geoCoord.c [2:2]

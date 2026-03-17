@@ -1,0 +1,126 @@
+--- contrib/libs/opencv/modules/core/src/cuda_info.cpp	(index)
++++ contrib/libs/opencv/modules/core/src/cuda_info.cpp	(working copy)
+@@ -424,8 +424,14 @@ int cv::cuda::DeviceInfo::clockRate() const
+ #ifndef HAVE_CUDA
+     throw_no_cuda();
+ #else
++#if CUDA_VERSION >= 13000
++    int clockRate;
++    cudaSafeCall(cudaDeviceGetAttribute(&clockRate, cudaDevAttrClockRate, device_id_));
++    return clockRate;
++#else
+     return deviceProps().get(device_id_)->clockRate;
+ #endif
++#endif
+ }
+ 
+ size_t cv::cuda::DeviceInfo::totalConstMem() const
+@@ -487,8 +493,14 @@ bool cv::cuda::DeviceInfo::kernelExecTimeoutEnabled() const
+ #ifndef HAVE_CUDA
+     throw_no_cuda();
+ #else
++#if CUDA_VERSION >= 13000
++    int kernelExecTimeoutEnabled;
++    cudaSafeCall(cudaDeviceGetAttribute(&kernelExecTimeoutEnabled, cudaDevAttrKernelExecTimeout, device_id_));
++    return kernelExecTimeoutEnabled != 0;
++#else
+     return deviceProps().get(device_id_)->kernelExecTimeoutEnabled != 0;
+ #endif
++#endif
+ }
+ 
+ bool cv::cuda::DeviceInfo::integrated() const
+@@ -521,9 +533,14 @@ DeviceInfo::ComputeMode cv::cuda::DeviceInfo::computeMode() const
+         ComputeModeProhibited,
+         ComputeModeExclusiveProcess
+     };
+-
++#if CUDA_VERSION >= 13000
++    int computeMode;
++    cudaSafeCall(cudaDeviceGetAttribute(&computeMode, cudaDevAttrComputeMode, device_id_));
++    return tbl[computeMode];
++#else
+     return tbl[deviceProps().get(device_id_)->computeMode];
+ #endif
++#endif
+ }
+ 
+ int cv::cuda::DeviceInfo::maxTexture1D() const
+@@ -554,8 +571,15 @@ int cv::cuda::DeviceInfo::maxTexture1DLinear() const
+ #ifndef HAVE_CUDA
+     throw_no_cuda();
+ #else
++#if CUDA_VERSION >= 13000
++    size_t maxWidthInElements;
++    cudaChannelFormatDesc fmtDesc = cudaCreateChannelDesc<float4>();
++    cudaSafeCall(cudaDeviceGetTexture1DLinearMaxWidth(&maxWidthInElements, &fmtDesc, device_id_));
++    return maxWidthInElements;
++#else
+     return deviceProps().get(device_id_)->maxTexture1DLinear;
+ #endif
++#endif
+ }
+ 
+ Vec2i cv::cuda::DeviceInfo::maxTexture2D() const
+@@ -793,8 +817,14 @@ int cv::cuda::DeviceInfo::memoryClockRate() const
+ #ifndef HAVE_CUDA
+     throw_no_cuda();
+ #else
++#if CUDA_VERSION >= 13000
++    int memoryClockRate;
++    cudaSafeCall(cudaDeviceGetAttribute(&memoryClockRate, cudaDevAttrMemoryClockRate, device_id_));
++    return memoryClockRate;
++#else
+     return deviceProps().get(device_id_)->memoryClockRate;
+ #endif
++#endif
+ }
+ 
+ int cv::cuda::DeviceInfo::memoryBusWidth() const
+@@ -933,7 +963,13 @@ void cv::cuda::printCudaDeviceInfo(int device)
+         if (cores > 0)
+             printf("  (%2d) Multiprocessors x (%2d) CUDA Cores/MP:     %d CUDA Cores\n", prop.multiProcessorCount, cores, cores * prop.multiProcessorCount);
+ 
++#if CUDA_VERSION >= 13000
++        int clockRate;
++        cudaSafeCall(cudaDeviceGetAttribute(&clockRate, cudaDevAttrClockRate, dev));
++        printf("  GPU Clock Speed:                               %.2f GHz\n", clockRate * 1e-6f);
++#else
+         printf("  GPU Clock Speed:                               %.2f GHz\n", prop.clockRate * 1e-6f);
++#endif
+ 
+         printf("  Max Texture Dimension Size (x,y,z)             1D=(%d), 2D=(%d,%d), 3D=(%d,%d,%d)\n",
+             prop.maxTexture1D, prop.maxTexture2D[0], prop.maxTexture2D[1],
+@@ -952,8 +988,16 @@ void cv::cuda::printCudaDeviceInfo(int device)
+         printf("  Maximum memory pitch:                          %u bytes\n", (int)prop.memPitch);
+         printf("  Texture alignment:                             %u bytes\n", (int)prop.textureAlignment);
+ 
++#if CUDA_VERSION >= 13000
++        printf("  Concurrent copy and execution:                 %s with %d copy engine(s)\n", (prop.asyncEngineCount ? "Yes" : "No"), prop.asyncEngineCount);
++
++        int kernelExecTimeoutEnabled;
++        cudaSafeCall(cudaDeviceGetAttribute(&kernelExecTimeoutEnabled, cudaDevAttrKernelExecTimeout, dev));
++        printf("  Run time limit on kernels:                     %s\n", kernelExecTimeoutEnabled ? "Yes" : "No");
++#else
+         printf("  Concurrent copy and execution:                 %s with %d copy engine(s)\n", (prop.deviceOverlap ? "Yes" : "No"), prop.asyncEngineCount);
+         printf("  Run time limit on kernels:                     %s\n", prop.kernelExecTimeoutEnabled ? "Yes" : "No");
++#endif
+         printf("  Integrated GPU sharing Host Memory:            %s\n", prop.integrated ? "Yes" : "No");
+         printf("  Support host page-locked memory mapping:       %s\n", prop.canMapHostMemory ? "Yes" : "No");
+ 
+@@ -963,8 +1007,15 @@ void cv::cuda::printCudaDeviceInfo(int device)
+         printf("  Device is using TCC driver mode:               %s\n", prop.tccDriver ? "Yes" : "No");
+         printf("  Device supports Unified Addressing (UVA):      %s\n", prop.unifiedAddressing ? "Yes" : "No");
+         printf("  Device PCI Bus ID / PCI location ID:           %d / %d\n", prop.pciBusID, prop.pciDeviceID );
++#if CUDA_VERSION >= 13000
++        int propComputeMode;
++        cudaSafeCall(cudaDeviceGetAttribute(&propComputeMode, cudaDevAttrComputeMode, dev));
++        printf("  Compute Mode:\n");
++        printf("      %s \n", computeMode[propComputeMode]);
++#else
+         printf("  Compute Mode:\n");
+         printf("      %s \n", computeMode[prop.computeMode]);
++#endif
+     }
+ 
+     printf("\n");

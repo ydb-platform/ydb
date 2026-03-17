@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.vision.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/vision/v1;vision";
+option java_package = "yandex.cloud.api.ai.vision.v1";
+
+message Polygon {
+  // The bounding polygon vertices.
+  repeated Vertex vertices = 1;
+}
+
+message Vertex {
+  // X coordinate in pixels.
+  int64 x = 1;
+
+  // Y coordinate in pixels.
+  int64 y = 2;
+}

@@ -1,0 +1,166 @@
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <95adriano@gmail.com>, 2020.
+msgid ""
+msgstr ""
+"Project-Id-Version: djangorestframework_simplejwt\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-02-28 15:09-0300\n"
+"PO-Revision-Date: \n"
+"Last-Translator: Adriano Di Dio <95adriano@gmail.com>\n"
+"Language-Team: \n"
+"Language: it_IT\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 2.0.6\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: authentication.py:89
+msgid "Authorization header must contain two space-delimited values"
+msgstr ""
+"L'header di autorizzazione deve contenere due valori delimitati da uno spazio"
+
+#: authentication.py:115
+msgid "Given token not valid for any token type"
+msgstr "Il token dato non è valido per qualsiasi tipo di token"
+
+#: authentication.py:128 authentication.py:166
+msgid "Token contained no recognizable user identification"
+msgstr "Il token non conteneva nessuna informazione riconoscibile dell'utente"
+
+#: authentication.py:135
+msgid "User not found"
+msgstr "Utente non trovato"
+
+#: authentication.py:139
+msgid "User is inactive"
+msgstr "Utente non attivo"
+
+#: authentication.py:146
+msgid "The user's password has been changed."
+msgstr ""
+
+#: backends.py:90
+msgid "Unrecognized algorithm type '{}'"
+msgstr "Algoritmo di tipo '{}' non riconosciuto"
+
+#: backends.py:96
+msgid "You must have cryptography installed to use {}."
+msgstr "Devi avere installato cryptography per usare '{}'."
+
+#: backends.py:111
+msgid ""
+"Unrecognized type '{}', 'leeway' must be of type int, float or timedelta."
+msgstr ""
+
+#: backends.py:125 backends.py:177 tokens.py:69
+#, fuzzy
+#| msgid "Token is invalid or expired"
+msgid "Token is invalid"
+msgstr "Il token non è valido o è scaduto"
+
+#: backends.py:173
+msgid "Invalid algorithm specified"
+msgstr "L'algoritmo specificato non è valido"
+
+#: backends.py:175 tokens.py:67
+#, fuzzy
+#| msgid "Token is invalid or expired"
+msgid "Token is expired"
+msgstr "Il token non è valido o è scaduto"
+
+#: exceptions.py:55
+msgid "Token is invalid or expired"
+msgstr "Il token non è valido o è scaduto"
+
+#: serializers.py:35
+msgid "No active account found with the given credentials"
+msgstr "Nessun account attivo trovato con queste credenziali"
+
+#: serializers.py:108
+#, fuzzy
+#| msgid "No active account found with the given credentials"
+msgid "No active account found for the given token."
+msgstr "Nessun account attivo trovato con queste credenziali"
+
+#: serializers.py:178 tokens.py:280
+msgid "Token is blacklisted"
+msgstr "Il token è stato inserito nella blacklist"
+
+#: settings.py:74
+msgid ""
+"The '{}' setting has been removed. Please refer to '{}' for available "
+"settings."
+msgstr ""
+"L'impostazione '{}' è stata rimossa. Per favore utilizza '{}' per "
+"visualizzare le impostazioni valide."
+
+#: token_blacklist/admin.py:79
+msgid "jti"
+msgstr "jti"
+
+#: token_blacklist/admin.py:85
+msgid "user"
+msgstr "utente"
+
+#: token_blacklist/admin.py:91
+msgid "created at"
+msgstr "creato il"
+
+#: token_blacklist/admin.py:97
+msgid "expires at"
+msgstr "scade il"
+
+#: token_blacklist/apps.py:7
+msgid "Token Blacklist"
+msgstr "Blacklist dei token"
+
+#: token_blacklist/models.py:19
+msgid "Outstanding Token"
+msgstr ""
+
+#: token_blacklist/models.py:20
+msgid "Outstanding Tokens"
+msgstr ""
+
+#: token_blacklist/models.py:32
+#, python-format
+msgid "Token for %(user)s (%(jti)s)"
+msgstr ""
+
+#: token_blacklist/models.py:45
+msgid "Blacklisted Token"
+msgstr ""
+
+#: token_blacklist/models.py:46
+msgid "Blacklisted Tokens"
+msgstr ""
+
+#: token_blacklist/models.py:57
+#, python-format
+msgid "Blacklisted token for %(user)s"
+msgstr ""
+
+#: tokens.py:53
+msgid "Cannot create token with no type or lifetime"
+msgstr "Impossibile creare un token senza tipo o durata"
+
+#: tokens.py:127
+msgid "Token has no id"
+msgstr "Il token non ha un id"
+
+#: tokens.py:139
+msgid "Token has no type"
+msgstr "Il token non ha un tipo"
+
+#: tokens.py:142
+msgid "Token has wrong type"
+msgstr "Il token ha un tipo sbagliato"
+
+#: tokens.py:201
+msgid "Token has no '{}' claim"
+msgstr "Il token non contiene il parametro '{}'"
+
+#: tokens.py:206
+msgid "Token '{}' claim has expired"
+msgstr "Il parametro '{}' del token è scaduto"

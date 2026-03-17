@@ -1,0 +1,2 @@
+exclude:
+  - tests/test_imports.py

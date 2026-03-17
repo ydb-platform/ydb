@@ -1,0 +1,8 @@
+--- contrib/python/srsly/srsly/ujson/lib/ultrajsonenc.c	(index)
++++ contrib/python/srsly/srsly/ujson/lib/ultrajsonenc.c	(working tree)
+@@ -169,1 +169,1 @@ void Buffer_Realloc (JSONObjectEncoder *enc, size_t cbNeeded)
+-FASTCALL_ATTR INLINE_PREFIX void FASTCALL_MSVC Buffer_AppendShortHexUnchecked (char *outputOffset, unsigned short value)
++FASTCALL_ATTR INLINE_PREFIX static void FASTCALL_MSVC Buffer_AppendShortHexUnchecked (char *outputOffset, unsigned short value)
+@@ -538,1 +538,1 @@ int Buffer_EscapeStringValidated (JSOBJ obj, JSONObjectEncoder *enc, const char
+-FASTCALL_ATTR INLINE_PREFIX void FASTCALL_MSVC strreverse(char* begin, char* end)
++FASTCALL_ATTR INLINE_PREFIX static void FASTCALL_MSVC strreverse(char* begin, char* end)

@@ -1,0 +1,7 @@
+# author: Sebastien Villaume
+# created: 6 Oct 2011
+# modified: 13 May 2013
+#
+82 82 standard operational SMHI 
+83 83 MATCH data (standard operational SMHI + extra MATCH keywords)
+255 255 MISSING

@@ -1,0 +1,1 @@
+__this_is_strong__

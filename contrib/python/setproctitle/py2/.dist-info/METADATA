@@ -1,0 +1,277 @@
+Metadata-Version: 2.1
+Name: setproctitle
+Version: 1.1.10
+Summary: A Python module to customize the process title
+Home-page: https://github.com/dvarrazzo/py-setproctitle
+Author: Daniele Varrazzo
+Author-email: daniele.varrazzo@gmail.com
+License: BSD
+Download-URL: http://pypi.python.org/pypi/setproctitle/
+Platform: GNU/Linux
+Platform: BSD
+Platform: MacOS X
+Platform: Windows
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: C
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: POSIX :: BSD
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Topic :: Software Development
+
+A Python module to customize the process title
+==============================================
+
+:author: Daniele Varrazzo
+
+The ``setproctitle`` module allows a process to change its title (as displayed
+by system tools such as ``ps`` and ``top``).
+
+Changing the title is mostly useful in multi-process systems, for example
+when a master process is forked: changing the children's title allows to
+identify the task each process is busy with.  The technique is used by
+PostgreSQL_ and the `OpenSSH Server`_ for example.
+
+The procedure is hardly portable across different systems.  PostgreSQL provides
+a good `multi-platform implementation`__:  this module is a Python wrapper
+around PostgreSQL code.
+
+- `Homepage <https://github.com/dvarrazzo/py-setproctitle>`__
+- `Download <http://pypi.python.org/pypi/setproctitle/>`__
+- `Bug tracker <https://github.com/dvarrazzo/py-setproctitle/issues>`__
+
+
+.. _PostgreSQL: http://www.postgresql.org
+.. _OpenSSH Server: http://www.openssh.com/
+.. __: http://doxygen.postgresql.org/ps__status_8c_source.html
+
+
+Installation
+------------
+
+``setproctitle`` is a C extension: in order to build it you will need a C
+compiler and the Python development support (the ``python-dev`` package in
+most Linux distributions). No further external dependencies are required.
+
+You can use ``pip`` to install the module::
+
+    pip install setproctitle
+
+You can use ``pip -t`` or ``virtualenv`` for local installations, ``sudo pip``
+for a system-wide one... the usual stuff. Read pip_ or virtualenv_ docs for
+all the details.
+
+.. _pip: https://pip.readthedocs.org/
+.. _virtualenv: https://virtualenv.readthedocs.org/
+
+
+Python 3 support
+~~~~~~~~~~~~~~~~
+
+As of version 1.1 the module works with Python 3. Just use
+``pip``/``virtualenv`` for Python 3.
+
+In order to build from the source package and test the module under Python 3,
+the ``Makefile`` contains some helper targets.
+
+
+Usage
+-----
+
+The ``setproctitle`` module exports the following functions:
+
+``setproctitle(title)``
+    Set *title* as the title for the current process.
+
+``getproctitle()``
+    Return the current process title.
+
+
+Environment variables
+~~~~~~~~~~~~~~~~~~~~~
+
+A few environment variables can be used to customize the module behavior:
+
+``SPT_NOENV``
+    Avoid clobbering ``/proc/PID/environ``.
+
+    On many platforms, setting the process title will clobber the
+    ``environ`` memory area. ``os.environ`` will work as expected from within
+    the Python process, but the content of the file ``/proc/PID/environ`` will
+    be overwritten.  If you require this file not to be broken you can set the
+    ``SPT_NOENV`` environment variable to any non-empty value: in this case
+    the maximum length for the title will be limited to the length of the
+    command line.
+
+``SPT_DEBUG``
+    Print debug information on ``stderr``.
+
+    If the module doesn't work as expected you can set this variable to a
+    non-empty value to generate information useful for debugging.  Note that
+    the most useful information is printed when the module is imported, not
+    when the functions are called.
+
+
+Module status
+-------------
+
+The module can be currently compiled and effectively used on the following
+platforms:
+
+- GNU/Linux
+- BSD
+- MacOS X
+- Windows
+
+Note that on Windows there is no way to change the process string:
+what the module does is to create a *Named Object* whose value can be read
+using a tool such as `Process Explorer`_ (contribution of a more useful tool
+to be used together with ``setproctitle`` would be well accepted).
+
+The module can probably work on HP-UX, but I haven't found any to test with.
+It is unlikely that it can work on Solaris instead.
+
+.. _Process Explorer: http://technet.microsoft.com/en-us/sysinternals/bb896653.aspx
+
+
+Other known implementations and discussions
+-------------------------------------------
+
+- `procname`_: a module exposing the same functionality, but less portable
+  and not well packaged.
+- `Issue 5672`_: where the introduction of such functionality into the stdlib
+  is being discussed.
+
+.. _procname: http://code.google.com/p/procname/
+.. _Issue 5672: http://bugs.python.org/issue5672
+
+Releases history
+----------------
+
+Version 1.1.10
+~~~~~~~~~~~~~~
+
+- Fixed building with certain ``prctl.h`` implementations (issue #44).
+- Use ``setuptools`` if available (issue #48).
+
+
+Version 1.1.9
+~~~~~~~~~~~~~
+
+- Fixed build on VC (issues #20, #33).
+- Added ``MANIFEST.in`` to the source distribution to help with RPM building
+  (issue #30).
+
+
+Version 1.1.8
+~~~~~~~~~~~~~
+
+- Added support for Python "diehard" 2.4 (pull request #3).
+- Fixed build on Mac OS X 10.9 Maverick (issue #27).
+
+
+Version 1.1.7
+~~~~~~~~~~~~~
+
+- Added PyPy support, courtesy of Ozan Turksever - http://www.logsign.net
+  (pull request #2).
+
+
+Version 1.1.6
+~~~~~~~~~~~~~
+
+- The module can be compiled again on Windows (issue #21).
+
+
+Version 1.1.5
+~~~~~~~~~~~~~
+
+- No module bug, but a packaging issue: files ``README`` and ``HISTORY``
+  added back into the distribution.
+
+
+Version 1.1.4
+~~~~~~~~~~~~~
+
+- The module works correctly in embedded Python.
+- ``setproctitle()`` accepts a keyword argument.
+- Debug output support always compiled in: the variable ``SPT_DEBUG`` can be
+  used to emit debug log.
+
+
+Version 1.1.3
+~~~~~~~~~~~~~
+
+- Don't clobber environ if the variable ``SPT_NOENV`` is set (issue #16).
+
+
+Version 1.1.2
+~~~~~~~~~~~~~
+
+- Find the setproctitle include file on OpenBSD (issue #11).
+- Skip test with unicode if the file system encoding wouldn't make it pass
+  (issue #13).
+
+
+Version 1.1.1
+~~~~~~~~~~~~~
+
+- Fixed segfault when the module is imported under mod_wsgi (issue #9).
+
+
+Version 1.1
+~~~~~~~~~~~
+
+- The module works correctly with Python 3.
+
+
+Version 1.0.1
+~~~~~~~~~~~~~
+
+- ``setproctitle()`` works even when Python messes up with argv, e.g. when run
+  with the -m option (issue #8).
+
+
+Version 1.0
+~~~~~~~~~~~
+
+No major change since the previous version.  The module has been heavily used
+in production environment without any problem reported, so it's time to declare
+it stable.
+
+
+Version 0.4
+~~~~~~~~~~~
+
+- Module works on BSD (tested on FreeBSD 7.2).
+
+- Module works on Windows. Many thanks to `Develer`_ for providing a neat `GCC
+  package for Windows with Python integration`__ that made the Windows porting
+  painless.
+
+  .. _Develer: http://www.develer.com/
+  .. __: http://www.develer.com/oss/GccWinBinaries
+
+
+Version 0.3
+~~~~~~~~~~~
+
+- Module works on Mac OS X 10.2. Reported working on OS X 10.6 too.
+
+
+Version 0.2
+~~~~~~~~~~~
+
+- Added ``prctl()`` call on Linux >= 2.6.9 to update ``/proc/self/status``.
+
+
+Version 0.1
+~~~~~~~~~~~
+
+- Initial public release.
+
+

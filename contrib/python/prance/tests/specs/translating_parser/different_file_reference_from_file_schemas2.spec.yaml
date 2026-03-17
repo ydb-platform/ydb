@@ -1,0 +1,4 @@
+---
+$defs:
+  PlainObject:
+    type: object

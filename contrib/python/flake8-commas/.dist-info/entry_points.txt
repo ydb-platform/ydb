@@ -1,0 +1,2 @@
+[flake8.extension]
+C81 = flake8_commas:CommaChecker

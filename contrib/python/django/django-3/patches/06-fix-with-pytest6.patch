@@ -1,0 +1,31 @@
+commit f713bfb3b8918210490029c2e404f4334f3605a7
+merge: 29c8faed99eb15cdc73775abb2c94ba1fd9aaba1 3824e6531ebddff9747182eeb3d6a9847119dc20
+author: danila-eremin
+date: 2022-02-08T22:16:08+03:00
+revision: 9122219
+
+    IGNIETFERRO-1976 Check settings in setUp
+    
+    REVIEW: 2311875
+
+--- contrib/python/django/django-3/django/test/testcases.py	(29c8faed99eb15cdc73775abb2c94ba1fd9aaba1)
++++ contrib/python/django/django-3/django/test/testcases.py	(f713bfb3b8918210490029c2e404f4334f3605a7)
+@@ -171,6 +171,18 @@ class SimpleTestCase(unittest.TestCase):
+         ('chunked_cursor', 'queries'),
+     ]
+ 
++    def setUp(self):
++        super().setUp()
++        cls = type(self)
++        if cls._overridden_settings and not hasattr(self, 'wrapped'):
++            cls._cls_overridden_context = override_settings(**cls._overridden_settings)
++            cls._cls_overridden_context.enable()
++            cls.addClassCleanup(cls._cls_overridden_context.disable)
++        if cls._modified_settings and not self.options:
++            cls._cls_modified_context = modify_settings(cls._modified_settings)
++            cls._cls_modified_context.enable()
++            cls.addClassCleanup(cls._cls_modified_context.disable)
++
+     @classmethod
+     def setUpClass(cls):
+         super().setUpClass()

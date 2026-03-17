@@ -1,0 +1,2 @@
+mark_as_tests:
+  - iso8601/test_iso8601.py

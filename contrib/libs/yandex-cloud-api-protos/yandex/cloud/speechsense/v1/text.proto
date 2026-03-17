@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1;
+
+option java_package = "yandex.cloud.api.speechsense.v1";
+option java_outer_classname = "TextProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1;speechsense";
+
+import "google/protobuf/timestamp.proto";
+
+message TextContent {
+  repeated Message messages = 1;
+}
+
+message Message {
+  string user_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  oneof payload {
+    TextPayload text = 3;
+  }
+}
+
+message TextPayload {
+  string text = 1;
+}

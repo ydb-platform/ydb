@@ -1,0 +1,111 @@
+<!-- 
+
+     File isopub.ent produced by the dsssl script ent.dsl
+     from input data in unicode.xml.
+
+     Please report any errors to 
+     David Carlisle <davidc@nag.co.uk>.
+
+     The numeric character values assigned to each entity
+     (should) match either official Unicode assignments
+     or assignments in the STIX proposal for characters
+     for Mathematics.
+
+     The STIX assignments are temporary and will change if
+     the proposal or some variant of it is adopted by the
+     Unicode Consortium.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1986
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+-->
+
+<!ENTITY blank      "&#9251;"  ><!--U2423 =significant blank symbol -->
+<!ENTITY blk12      "&#9618;"  ><!--U2592 =50% shaded block -->
+<!ENTITY blk14      "&#9617;"  ><!--U2591 =25% shaded block -->
+<!ENTITY blk34      "&#9619;"  ><!--U2593 =75% shaded block -->
+<!ENTITY block      "&#9608;"  ><!--U2588 =full block -->
+<!ENTITY bull       "&#8226;"  ><!--U2022 /bullet B: =round bullet, filled -->
+<!ENTITY caret      "&#8257;"  ><!--U2041 =caret (insertion mark) -->
+<!ENTITY check      "&#10003;" ><!--U2713 /checkmark =tick, check mark -->
+<!ENTITY cir        "&#9675;"  ><!--U25CB /circ B: =circle, open -->
+<!ENTITY clubs      "&#9827;"  ><!--U2663 /clubsuit =club suit symbol  -->
+<!ENTITY copysr     "&#8471;"  ><!--U2117 =sound recording copyright sign -->
+<!ENTITY cross      "&#10007;" ><!--U2717 =ballot cross -->
+<!ENTITY dagger     "&#8224;"  ><!--U2020 /dagger B: =dagger -->
+<!ENTITY dash       "&#8208;"  ><!--U2010 =hyphen (true graphic) -->
+<!ENTITY diams      "&#9830;"  ><!--U2666 /diamondsuit =diamond suit symbol  -->
+<!ENTITY dlcrop     "&#8973;"  ><!--U230D downward left crop mark  -->
+<!ENTITY drcrop     "&#8972;"  ><!--U230C downward right crop mark  -->
+<!ENTITY dtri       "&#9663;"  ><!--U25BF /triangledown =down triangle, open -->
+<!ENTITY dtrif      "&#9662;"  ><!--U25BE /blacktriangledown =dn tri, filled -->
+<!ENTITY Dagger     "&#8225;"  ><!--U2021 /ddagger B: =double dagger -->
+<!ENTITY emsp       "&#8195;"  ><!--U2003 =em space -->
+<!ENTITY emsp14     "&#8197;"  ><!--U2005 =1/4-em space -->
+<!ENTITY emsp13     "&#8196;"  ><!--U2004 =1/3-em space -->
+<!ENTITY ensp       "&#8194;"  ><!--U2002 =en space (1/2-em) -->
+<!ENTITY female     "&#9792;"  ><!--U2640 =female symbol -->
+<!ENTITY ffilig     "&#64259;" ><!--UFB03 small ffi ligature -->
+<!ENTITY fflig      "&#64256;" ><!--UFB00 small ff ligature -->
+<!ENTITY ffllig     "&#64260;" ><!--UFB04 small ffl ligature -->
+<!ENTITY filig      "&#64257;" ><!--UFB01 small fi ligature -->
+<!ENTITY fjlig      "&#58290;" ><!--UE3B2 small fj ligature -->
+<!ENTITY flat       "&#9837;"  ><!--U266D /flat =musical flat -->
+<!ENTITY fllig      "&#64258;" ><!--UFB02 small fl ligature -->
+<!ENTITY frac13     "&#8531;"  ><!--U2153 =fraction one-third -->
+<!ENTITY frac15     "&#8533;"  ><!--U2155 =fraction one-fifth -->
+<!ENTITY frac16     "&#8537;"  ><!--U2159 =fraction one-sixth -->
+<!ENTITY frac23     "&#8532;"  ><!--U2154 =fraction two-thirds -->
+<!ENTITY frac25     "&#8534;"  ><!--U2156 =fraction two-fifths -->
+<!ENTITY frac45     "&#8536;"  ><!--U2158 =fraction four-fifths -->
+<!ENTITY frac35     "&#8535;"  ><!--U2157 =fraction three-fifths -->
+<!ENTITY frac56     "&#8538;"  ><!--U215A =fraction five-sixths -->
+<!ENTITY hairsp     "&#8202;"  ><!--U200A =hair space -->
+<!ENTITY hearts     "&#9825;"  ><!--U2661 /heartsuit =heart suit symbol  -->
+<!ENTITY hellip     "&#8230;"  ><!--U2026 =ellipsis (horizontal) -->
+<!ENTITY hybull     "&#8259;"  ><!--U2043 rectangle, filled (hyphen bullet) -->
+<!ENTITY incare     "&#8453;"  ><!--U2105 =in-care-of symbol -->
+<!ENTITY ldquor     "&#8222;"  ><!--U201E =rising dbl quote, left (low) -->
+<!ENTITY lhblk      "&#9604;"  ><!--U2584 =lower half block -->
+<!ENTITY loz        "&#9674;"  ><!--U25CA /lozenge - lozenge or total mark -->
+<!ENTITY lozf       "&#59403;" ><!--UE80B /blacklozenge - lozenge, filled -->
+<!ENTITY lsquor     "&#8218;"  ><!--U201A =rising single quote, left (low) -->
+<!ENTITY ltri       "&#9667;"  ><!--U25C3 /triangleleft B: l triangle, open -->
+<!ENTITY ltrif      "&#9666;"  ><!--U25C2 /blacktriangleleft R: =l tri, filled -->
+<!ENTITY male       "&#9794;"  ><!--U2642 =male symbol -->
+<!ENTITY malt       "&#10016;" ><!--U2720 /maltese =maltese cross -->
+<!ENTITY marker     "&#9646;"  ><!--U25AE =histogram marker -->
+<!ENTITY mdash      "&#8212;"  ><!--U2014 =em dash  -->
+<!ENTITY mldr       "&#8230;"  ><!--U2026 em leader -->
+<!ENTITY natur      "&#9838;"  ><!--U266E /natural - music natural -->
+<!ENTITY ndash      "&#8211;"  ><!--U2013 =en dash -->
+<!ENTITY nldr       "&#8229;"  ><!--U2025 =double baseline dot (en leader) -->
+<!ENTITY numsp      "&#8199;"  ><!--U2007 =digit space (width of a number) -->
+<!ENTITY phone      "&#9742;"  ><!--U260E =telephone symbol  -->
+<!ENTITY puncsp     "&#8200;"  ><!--U2008 =punctuation space (width of comma) -->
+<!ENTITY rdquor     "&#8221;"  ><!--U201D rising dbl quote, right (high) -->
+<!ENTITY rect       "&#9645;"  ><!--U25AD =rectangle, open -->
+<!ENTITY rsquor     "&#8217;"  ><!--U2019 rising single quote, right (high) -->
+<!ENTITY rtri       "&#9657;"  ><!--U25B9 /triangleright B: r triangle, open -->
+<!ENTITY rtrif      "&#9656;"  ><!--U25B8 /blacktriangleright R: =r tri, filled -->
+<!ENTITY rx         "&#8478;"  ><!--U211E pharmaceutical prescription (Rx) -->
+<!ENTITY sext       "&#10038;" ><!--U2736 sextile (6-pointed star) -->
+<!ENTITY sharp      "&#9839;"  ><!--U266F /sharp =musical sharp -->
+<!ENTITY spades     "&#9824;"  ><!--U2660 /spadesuit =spades suit symbol  -->
+<!ENTITY squ        "&#9633;"  ><!--U25A1 =square, open -->
+<!ENTITY squf       "&#9642;"  ><!--U25AA /blacksquare =sq bullet, filled -->
+<!ENTITY star       "&#8902;"  ><!--U22C6 =star, open -->
+<!ENTITY starf      "&#9733;"  ><!--U2605 /bigstar - star, filled  -->
+<!ENTITY target     "&#8982;"  ><!--U2316 register mark or target -->
+<!ENTITY telrec     "&#8981;"  ><!--U2315 =telephone recorder symbol -->
+<!ENTITY thinsp     "&#8201;"  ><!--U2009 =thin space (1/6-em) -->
+<!ENTITY uhblk      "&#9600;"  ><!--U2580 =upper half block -->
+<!ENTITY ulcrop     "&#8975;"  ><!--U230F upward left crop mark  -->
+<!ENTITY urcrop     "&#8974;"  ><!--U230E upward right crop mark  -->
+<!ENTITY utri       "&#9653;"  ><!--U25B5 /triangle =up triangle, open -->
+<!ENTITY utrif      "&#9652;"  ><!--U25B4 /blacktriangle =up tri, filled -->
+<!ENTITY vellip     "&#8942;"  ><!--U22EE vertical ellipsis -->

@@ -1,0 +1,8 @@
+--- contrib/python/preshed/preshed/tests/test_pop.py	(index)
++++ contrib/python/preshed/preshed/tests/test_pop.py	(working tree)
+@@ -1,4 +1,4 @@
+-from ..maps import PreshMap
++from preshed.maps import PreshMap
+ 
+ 
+ def test_pop1():

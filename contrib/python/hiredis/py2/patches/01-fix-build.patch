@@ -1,0 +1,11 @@
+--- contrib/python/hiredis/py2/src/hiredis.h	(index)
++++ contrib/python/hiredis/py2/src/hiredis.h	(working tree)
+@@ -2,7 +2,7 @@
+ #define __HIREDIS_PY_H
+ 
+ #include <Python.h>
+-#include <hiredis/read.h>
++#include <read.h>
+ 
+ #ifndef PyMODINIT_FUNC	/* declarations for DLL import/export */
+ #define PyMODINIT_FUNC void

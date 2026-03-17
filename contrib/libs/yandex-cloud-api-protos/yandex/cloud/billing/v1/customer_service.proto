@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package yandex.cloud.billing.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/billing/v1/customer.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/billing/v1;billing";
+option java_package = "yandex.cloud.api.billing.v1";
+
+// A set of methods for managing Customer resources.
+service CustomerService {
+  // Retrieves the list of customers associated with the specified reseller.
+  rpc List(ListCustomersRequest) returns (ListCustomersResponse) {
+    option (google.api.http) = {get: "/billing/v1/customers"};
+  }
+
+  // Invites customer to the specified reseller.
+  rpc Invite(InviteCustomerRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/billing/v1/customers:invite"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CustomerMetadata"
+      response: "Customer"
+    };
+  }
+
+  // Creates new reseller-served customer.
+  rpc CreateResellerServed(CreateResellerServedCustomerRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/billing/v1/customers:createResellerServedCustomer"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CustomerMetadata"
+      response: "Customer"
+    };
+  }
+
+  // Activates specified customer. After customer is activated, he can use resources associated with his billing account.
+  rpc Activate(ActivateCustomerRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/billing/v1/customers/{customer_id}:activate"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "CustomerMetadata"
+      response: "Customer"
+    };
+  }
+
+  // Suspend specified customer. After customer is suspended, he can't use resources associated with his billing account.
+  rpc Suspend(SuspendCustomerRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/billing/v1/customers/{customer_id}:suspend"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "CustomerMetadata"
+      response: "Customer"
+    };
+  }
+}
+
+message ListCustomersRequest {
+  reserved 2;
+
+  // ID of the reseller.
+  string reseller_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListCustomersResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 3 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListCustomersResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 4 [(length) = "<=100"];
+}
+
+message ListCustomersResponse {
+  // List of customers.
+  repeated Customer customers = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListCustomersRequest.page_size], use
+  // [next_page_token] as the value
+  // for the [ListCustomersRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message InviteCustomerRequest {
+  // Billing account ID of the reseller that the customer will be associated with.
+  string reseller_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the customer.
+  string name = 2 [(required) = true];
+
+  // Customer email to send invitation to.
+  string invitation_email = 3 [(required) = true];
+
+  // Person of the customer.
+  CustomerPerson person = 4 [(required) = true];
+}
+
+message CreateResellerServedCustomerRequest {
+  // ID of the reseller that customer will be associated with.</br>
+  //
+  // Value must match either one of the three regular expressions:
+  // </br>- `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+  // </br>- `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{32}$`
+  // </br>- `^[a-z][-a-zA-Z0-9.]{0,48}[a-zA-Z0-9]$`
+  string reseller_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the customer.
+  //
+  // String length is not limited.
+  string name = 2 [(required) = true];
+
+  // Person of the customer.
+  CustomerPerson person = 3 [(required) = true];
+}
+
+message ActivateCustomerRequest {
+  // ID of the customer.
+  // To get the customer ID, use [CustomerService.List] request.
+  string customer_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message SuspendCustomerRequest {
+  // ID of the customer.
+  // To get the customer ID, use [CustomerService.List] request.
+  string customer_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message CustomerMetadata {
+  // ID of the reseller.
+  string reseller_id = 1;
+
+  // ID of the customer.
+  string customer_id = 2;
+}

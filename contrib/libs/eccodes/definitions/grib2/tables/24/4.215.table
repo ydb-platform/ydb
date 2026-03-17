@@ -1,0 +1,5 @@
+# Code table 4.215 - Remotely sensed snow coverage
+50 50 No-snow/no-cloud
+100 100 Clouds
+250 250 Snow
+255 255 Missing

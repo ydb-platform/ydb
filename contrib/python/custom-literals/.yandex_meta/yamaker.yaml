@@ -1,0 +1,4 @@
+requirements:
+  # https://github.com/RocketRace/custom-literals#stability
+  # As of now, the only valid backend is forbiddenfruit, which uses the forbiddenfruit library.
+  - forbiddenfruit

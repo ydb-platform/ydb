@@ -1,0 +1,47 @@
+--- contrib/python/mongoengine/py2/mongoengine/queryset/base.py (4e8a11069e7a68793db2dfe946d3d676d2720fef)
++++ contrib/python/mongoengine/py2/mongoengine/queryset/base.py (f0d1365c48dbb3d61264100db00084100baceabf)
+@@ -1257,21 +1257,18 @@ class BaseQuerySet(object):
+
+         MapReduceDocument = _import_class('MapReduceDocument')
+
+-        if not hasattr(self._collection, 'map_reduce'):
+-            raise NotImplementedError('Requires MongoDB >= 1.7.1')
+-
+         map_f_scope = {}
+         if isinstance(map_f, Code):
+             map_f_scope = map_f.scope
+             map_f = six.text_type(map_f)
+-        map_f = Code(queryset._sub_js_fields(map_f), map_f_scope)
++        map_f = Code(queryset._sub_js_fields(map_f), map_f_scope or None)
+
+         reduce_f_scope = {}
+         if isinstance(reduce_f, Code):
+             reduce_f_scope = reduce_f.scope
+             reduce_f = six.text_type(reduce_f)
+         reduce_f_code = queryset._sub_js_fields(reduce_f)
+-        reduce_f = Code(reduce_f_code, reduce_f_scope)
++        reduce_f = Code(reduce_f_code, reduce_f_scope or None)
+
+         mr_args = {'query': queryset._query}
+
+@@ -1281,7 +1278,7 @@ class BaseQuerySet(object):
+                 finalize_f_scope = finalize_f.scope
+                 finalize_f = six.text_type(finalize_f)
+             finalize_f_code = queryset._sub_js_fields(finalize_f)
+-            finalize_f = Code(finalize_f_code, finalize_f_scope)
++            finalize_f = Code(finalize_f_code, finalize_f_scope or None)
+             mr_args['finalize'] = finalize_f
+
+         if scope:
+@@ -1544,9 +1541,9 @@ class BaseQuerySet(object):
+             if self._snapshot:
+                 msg = 'The snapshot option is not anymore available with PyMongo 3+'
+                 warnings.warn(msg, DeprecationWarning)
+-            cursor_args = {
+-                'no_cursor_timeout': not self._timeout
+-            }
++            cursor_args = {}
++            if not self._timeout:
++                cursor_args['no_cursor_timeout'] = True
+         if self._loaded_fields:
+             cursor_args[fields_name] = self._loaded_fields.as_dict()

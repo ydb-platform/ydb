@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mysql.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mysql/v1;mysql";
+option java_package = "yandex.cloud.api.mdb.mysql.v1";
+
+enum DeletionProtectionMode {
+    DELETION_PROTECTION_MODE_UNSPECIFIED = 0;
+
+    // Deletion protection is disabled
+    DELETION_PROTECTION_MODE_DISABLED = 1;
+
+    // Deletion protection is enabled
+    DELETION_PROTECTION_MODE_ENABLED = 2;
+
+    // Deletion protection mode is inherited from the cluster
+    DELETION_PROTECTION_MODE_INHERITED = 3;
+}

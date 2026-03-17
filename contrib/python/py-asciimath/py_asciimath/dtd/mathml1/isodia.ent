@@ -1,0 +1,40 @@
+<!-- 
+
+     File isodia.ent produced by the dsssl script ent.dsl
+     from input data in unicode.xml.
+
+     Please report any errors to 
+     David Carlisle <davidc@nag.co.uk>.
+
+     The numeric character values assigned to each entity
+     (should) match either official Unicode assignments
+     or assignments in the STIX proposal for characters
+     for Mathematics.
+
+     The STIX assignments are temporary and will change if
+     the proposal or some variant of it is adopted by the
+     Unicode Consortium.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1986
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+-->
+
+<!ENTITY acute      "&#180;"   ><!--U00B4 =acute accent -->
+<!ENTITY breve      "&#728;"   ><!--U02D8 =breve -->
+<!ENTITY caron      "&#711;"   ><!--U02C7 =caron -->
+<!ENTITY cedil      "&#184;"   ><!--U00B8 =cedilla -->
+<!ENTITY circ       "&#94;"    ><!--U005E circumflex accent -->
+<!ENTITY dblac      "&#733;"   ><!--U02DD =double acute accent -->
+<!ENTITY die        "&#168;"   ><!--U00A8 =dieresis -->
+<!ENTITY dot        "&#729;"   ><!--U02D9 =dot above -->
+<!ENTITY grave      "&#96;"    ><!--U0060 =grave accent -->
+<!ENTITY macr       "&#175;"   ><!--U00AF =macron -->
+<!ENTITY ogon       "&#731;"   ><!--U02DB =ogonek -->
+<!ENTITY ring       "&#730;"   ><!--U02DA =ring -->
+<!ENTITY tilde      "&#732;"   ><!--U02DC =tilde -->
+<!ENTITY uml        "&#168;"   ><!--U00A8 =umlaut mark -->

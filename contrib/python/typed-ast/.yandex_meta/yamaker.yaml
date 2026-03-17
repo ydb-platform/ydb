@@ -1,0 +1,23 @@
+requirements:
+  - contrib/python/typed-ast/ast27
+  - contrib/python/typed-ast/ast3
+exclude:
+  - ast27/Grammar/*
+  - ast27/Parser/Python.asdl
+  - ast27/Parser/asdl.py
+  - ast27/Parser/asdl_c.py
+  - ast27/Parser/spark.py
+  - ast3/Grammar/*
+  - ast3/Parser/Python.asdl
+  - ast3/Parser/asdl.py
+  - ast3/Parser/asdl_c.py
+  - ast3/tests/*
+copy:
+  - ast27/*
+  - ast3/*
+keep:
+  - ast27/ya.make
+  - ast3/ya.make
+exclude_from_macros:
+  - ast27/*
+  - ast3/*

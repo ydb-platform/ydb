@@ -1,0 +1,4 @@
+requirements:
+  - contrib/libs/sctp
+copy:
+  - _sctp.[ch]

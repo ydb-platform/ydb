@@ -1,0 +1,13 @@
+# Code table 4.336 - NWP model
+1 1 AROME (Meso scale NWP, Meteo-France)
+2 2 ARPEGE (Global scale NWP, Meteo-France)
+3 3 GFS (Global forecast system, NCEP)
+4 4 HARMONIE (HIRLAM-ALADIN Research on Mesoscale Operational NWP)
+5 5 HIRLAM (HIgh resolution Limited Area Model)
+6 6 IFS (Integrated Forecast System)
+7 7 GEM GDPS (Canadian Global Deterministic Prediction System)
+8 8 GEM RDPS (Canadian Regional Deterministic Prediction System)
+9 9 GEM HRDPS (Canadian High Resolution Deterministic Prediction System)
+10 10 WRF (Weather Research and Forecasting)
+# 11-254 Reserved
+255 255 Missing value

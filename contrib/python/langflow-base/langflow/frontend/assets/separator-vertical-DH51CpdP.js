@@ -1,0 +1,1 @@
+import{a8 as e}from"./index-Cp3b7MWQ.js";const o=[["line",{x1:"12",x2:"12",y1:"3",y2:"21",key:"1efggb"}],["polyline",{points:"8 8 4 12 8 16",key:"bnfmv4"}],["polyline",{points:"16 16 20 12 16 8",key:"u90052"}]],a=e("separator-vertical",o);export{o as __iconNode,a as default};

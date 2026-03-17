@@ -1,0 +1,5 @@
+# Code table 4.211 - Contrail engine type
+0 0 Low bypass
+1 1 High bypass
+2 2 Non-bypass
+255 255 Missing

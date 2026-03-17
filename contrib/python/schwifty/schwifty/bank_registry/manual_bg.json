@@ -1,0 +1,194 @@
+[
+  {
+    "country_code": "BG",
+    "bank_code": "IORT",
+    "short_name": "INVESTBANK AD",
+    "name": "INVESTBANK AD",
+    "bic": "IORTBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "SOMB",
+    "short_name": "MUNICIPAL BANK AD",
+    "name": "MUNICIPAL BANK AD",
+    "bic": "SOMBBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "INGB",
+    "short_name": "ING BANK N.V. – SOFIA BRANCH",
+    "name": "ING BANK N.V. – SOFIA BRANCH",
+    "bic": "INGBBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "FINV",
+    "short_name": "FIRST INVESTMENT BANK AD",
+    "name": "FIRST INVESTMENT BANK AD",
+    "bic": "FINVBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "RZBB",
+    "short_name": "RAIFFEISENBANK (BULGARIA) EAD",
+    "name": "RAIFFEISENBANK (BULGARIA) EAD",
+    "bic": "RZBBBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "BGUS",
+    "short_name": "BULGARIAN-AMERICAN CREDIT BANK AD",
+    "name": "BULGARIAN-AMERICAN CREDIT BANK AD",
+    "bic": "BGUSBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "UBBS",
+    "short_name": "UNITED BULGARIAN BANK AD",
+    "name": "UNITED BULGARIAN BANK AD",
+    "bic": "UBBSBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "DEMI",
+    "short_name": "D COMMERCE BANK AD",
+    "name": "D COMMERCE BANK AD",
+    "bic": "DEMIBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "CITI",
+    "short_name": "CITIBANK EUROPE PLC., BULGARIA BRANCH",
+    "name": "CITIBANK EUROPE PLC., BULGARIA BRANCH",
+    "bic": "CITIBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "CREX",
+    "short_name": "TOKUDA BANK AD",
+    "name": "TOKUDA BANK AD",
+    "bic": "CREXBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "STSA",
+    "short_name": "DSK BANK AD",
+    "name": "DSK BANK AD",
+    "bic": "STSABGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "TBIB",
+    "short_name": "TBI BANK EAD",
+    "name": "TBI BANK EAD",
+    "bic": "TBIBBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "BNPA",
+    "short_name": "BNP PARIBAS S.A. - SOFIA BRANCH",
+    "name": "BNP PARIBAS S.A. - SOFIA BRANCH",
+    "bic": "BNPABGSX",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "IABG",
+    "short_name": "INTERNATIONAL ASSET BANK AD",
+    "name": "INTERNATIONAL ASSET BANK AD",
+    "bic": "IABGBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "TEXI",
+    "short_name": "TEXIM BANK AD",
+    "name": "TEXIM BANK AD",
+    "bic": "TEXIBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "BUIN",
+    "short_name": "ALLIANZ BANK BULGARIA AD",
+    "name": "ALLIANZ BANK BULGARIA AD",
+    "bic": "BUINBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "NASB",
+    "short_name": "BULGARIAN DEVELOPMENT BANK AD",
+    "name": "BULGARIAN DEVELOPMENT BANK AD",
+    "bic": "NASBBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "CECB",
+    "short_name": "CENTRAL COOPERATIVE BANK AD",
+    "name": "CENTRAL COOPERATIVE BANK AD",
+    "bic": "CECBBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "UNCR",
+    "short_name": "UNICREDIT BULBANK AD",
+    "name": "UNICREDIT BULBANK AD",
+    "bic": "UNCRBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "BPBI",
+    "short_name": "EUROBANK BULGARIA AD",
+    "name": "EUROBANK BULGARIA AD",
+    "bic": "BPBIBGSF",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "RZBA",
+    "short_name": "RAIFFEISEN BANK INTERNATIONAL AG",
+    "name": "RAIFFEISEN BANK INTERNATIONAL AG",
+    "bic": "RZBAATWW",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "CEDE",
+    "short_name": "CLEARSTREAM BANKING S.A. (ICSD)",
+    "name": "CLEARSTREAM BANKING S.A. (ICSD)",
+    "bic": "CEDELULL",
+    "primary": true
+  },
+  {
+    "country_code": "BG",
+    "bank_code": "CEDP",
+    "short_name": "CENTRAL DEPOSITORY AD",
+    "name": "CENTRAL DEPOSITORY AD",
+    "bic": "CEDPBGSF",
+    "primary": true
+  },
+    {
+    "country_code": "BG",
+    "bank_code": "INTF",
+    "short_name": "ICARD AD",
+    "name": "ICARD AD",
+    "bic": "INTFBGSF",
+    "primary": true
+  }
+]

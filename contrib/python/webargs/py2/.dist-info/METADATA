@@ -1,0 +1,203 @@
+Metadata-Version: 2.1
+Name: webargs
+Version: 5.5.3
+Summary: Declarative parsing and validation of HTTP request objects, with built-in support for popular web frameworks, including Flask, Django, Bottle, Tornado, Pyramid, webapp2, Falcon, and aiohttp.
+Home-page: https://github.com/marshmallow-code/webargs
+Author: Steven Loria
+Author-email: sloria1@gmail.com
+License: MIT
+Project-URL: Changelog, https://webargs.readthedocs.io/en/latest/changelog.html
+Project-URL: Issues, https://github.com/marshmallow-code/webargs/issues
+Project-URL: Funding, https://opencollective.com/marshmallow
+Project-URL: Tidelift, https://tidelift.com/subscription/pkg/pypi-webargs?utm_source=pypi-marshmallow&utm_medium=pypi
+Keywords: webargs,http,flask,django,bottle,tornado,aiohttp,webapp2,request,arguments,validation,parameters,rest,api,marshmallow
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI :: Application
+Requires-Dist: marshmallow (>=2.15.2)
+Provides-Extra: dev
+Requires-Dist: pytest ; extra == 'dev'
+Requires-Dist: mock ; extra == 'dev'
+Requires-Dist: webtest (==2.0.33) ; extra == 'dev'
+Requires-Dist: Flask (>=0.12.2) ; extra == 'dev'
+Requires-Dist: Django (>=1.11.16) ; extra == 'dev'
+Requires-Dist: bottle (>=0.12.13) ; extra == 'dev'
+Requires-Dist: tornado (>=4.5.2) ; extra == 'dev'
+Requires-Dist: pyramid (>=1.9.1) ; extra == 'dev'
+Requires-Dist: webapp2 (>=3.0.0b1) ; extra == 'dev'
+Requires-Dist: falcon (<2.0,>=1.4.0) ; extra == 'dev'
+Requires-Dist: flake8 (==3.7.8) ; extra == 'dev'
+Requires-Dist: pre-commit (~=1.17) ; extra == 'dev'
+Requires-Dist: tox ; extra == 'dev'
+Requires-Dist: webtest-aiohttp (==2.0.0) ; (python_version >= "3.5") and extra == 'dev'
+Requires-Dist: pytest-aiohttp (>=0.3.0) ; (python_version >= "3.5") and extra == 'dev'
+Requires-Dist: aiohttp (>=3.0.0) ; (python_version >= "3.5") and extra == 'dev'
+Requires-Dist: mypy (==0.730) ; (python_version >= "3.5") and extra == 'dev'
+Requires-Dist: flake8-bugbear (==19.8.0) ; (python_version >= "3.5") and extra == 'dev'
+Provides-Extra: docs
+Requires-Dist: Sphinx (==2.2.0) ; extra == 'docs'
+Requires-Dist: sphinx-issues (==1.2.0) ; extra == 'docs'
+Requires-Dist: sphinx-typlog-theme (==0.7.3) ; extra == 'docs'
+Requires-Dist: Flask (>=0.12.2) ; extra == 'docs'
+Requires-Dist: Django (>=1.11.16) ; extra == 'docs'
+Requires-Dist: bottle (>=0.12.13) ; extra == 'docs'
+Requires-Dist: tornado (>=4.5.2) ; extra == 'docs'
+Requires-Dist: pyramid (>=1.9.1) ; extra == 'docs'
+Requires-Dist: webapp2 (>=3.0.0b1) ; extra == 'docs'
+Requires-Dist: falcon (<2.0,>=1.4.0) ; extra == 'docs'
+Requires-Dist: aiohttp (>=3.0.0) ; (python_version >= "3.5") and extra == 'docs'
+Provides-Extra: frameworks
+Requires-Dist: Flask (>=0.12.2) ; extra == 'frameworks'
+Requires-Dist: Django (>=1.11.16) ; extra == 'frameworks'
+Requires-Dist: bottle (>=0.12.13) ; extra == 'frameworks'
+Requires-Dist: tornado (>=4.5.2) ; extra == 'frameworks'
+Requires-Dist: pyramid (>=1.9.1) ; extra == 'frameworks'
+Requires-Dist: webapp2 (>=3.0.0b1) ; extra == 'frameworks'
+Requires-Dist: falcon (<2.0,>=1.4.0) ; extra == 'frameworks'
+Requires-Dist: aiohttp (>=3.0.0) ; (python_version >= "3.5") and extra == 'frameworks'
+Provides-Extra: lint
+Requires-Dist: flake8 (==3.7.8) ; extra == 'lint'
+Requires-Dist: pre-commit (~=1.17) ; extra == 'lint'
+Requires-Dist: mypy (==0.730) ; (python_version >= "3.5") and extra == 'lint'
+Requires-Dist: flake8-bugbear (==19.8.0) ; (python_version >= "3.5") and extra == 'lint'
+Provides-Extra: tests
+Requires-Dist: pytest ; extra == 'tests'
+Requires-Dist: mock ; extra == 'tests'
+Requires-Dist: webtest (==2.0.33) ; extra == 'tests'
+Requires-Dist: Flask (>=0.12.2) ; extra == 'tests'
+Requires-Dist: Django (>=1.11.16) ; extra == 'tests'
+Requires-Dist: bottle (>=0.12.13) ; extra == 'tests'
+Requires-Dist: tornado (>=4.5.2) ; extra == 'tests'
+Requires-Dist: pyramid (>=1.9.1) ; extra == 'tests'
+Requires-Dist: webapp2 (>=3.0.0b1) ; extra == 'tests'
+Requires-Dist: falcon (<2.0,>=1.4.0) ; extra == 'tests'
+Requires-Dist: webtest-aiohttp (==2.0.0) ; (python_version >= "3.5") and extra == 'tests'
+Requires-Dist: pytest-aiohttp (>=0.3.0) ; (python_version >= "3.5") and extra == 'tests'
+Requires-Dist: aiohttp (>=3.0.0) ; (python_version >= "3.5") and extra == 'tests'
+
+*******
+webargs
+*******
+
+.. image:: https://badgen.net/pypi/v/webargs
+    :target: https://pypi.org/project/webargs/
+    :alt: PyPI version
+
+.. image:: https://dev.azure.com/sloria/sloria/_apis/build/status/marshmallow-code.webargs?branchName=dev
+    :target: https://dev.azure.com/sloria/sloria/_build/latest?definitionId=6&branchName=dev
+    :alt: Build status
+
+.. image:: https://readthedocs.org/projects/webargs/badge/
+   :target: https://webargs.readthedocs.io/
+   :alt: Documentation
+
+.. image:: https://badgen.net/badge/marshmallow/2,3?list=1
+    :target: https://marshmallow.readthedocs.io/en/latest/upgrading.html
+    :alt: marshmallow 2/3 compatible
+
+.. image:: https://badgen.net/badge/code%20style/black/000
+    :target: https://github.com/ambv/black
+    :alt: code style: black
+
+Homepage: https://webargs.readthedocs.io/
+
+webargs is a Python library for parsing and validating HTTP request objects, with built-in support for popular web frameworks, including Flask, Django, Bottle, Tornado, Pyramid, webapp2, Falcon, and aiohttp.
+
+.. code-block:: python
+
+    from flask import Flask
+    from webargs import fields
+    from webargs.flaskparser import use_args
+
+    app = Flask(__name__)
+
+
+    @app.route("/")
+    @use_args({"name": fields.Str(required=True)})
+    def index(args):
+        return "Hello " + args["name"]
+
+
+    if __name__ == "__main__":
+        app.run()
+
+    # curl http://localhost:5000/\?name\='World'
+    # Hello World
+
+Install
+=======
+
+::
+
+    pip install -U webargs
+
+webargs supports Python >= 2.7 or >= 3.5.
+
+
+Documentation
+=============
+
+Full documentation is available at https://webargs.readthedocs.io/.
+
+Support webargs
+===============
+
+webargs is maintained by a group of 
+`volunteers <https://webargs.readthedocs.io/en/latest/authors.html>`_.
+If you'd like to support the future of the project, please consider
+contributing to our Open Collective:
+
+.. image:: https://opencollective.com/marshmallow/donate/button.png
+    :target: https://opencollective.com/marshmallow
+    :width: 200
+    :alt: Donate to our collective
+
+Professional Support
+====================
+
+Professionally-supported webargs is available through the
+`Tidelift Subscription <https://tidelift.com/subscription/pkg/pypi-webargs?utm_source=pypi-webargs&utm_medium=referral&utm_campaign=readme>`_.
+
+Tidelift gives software development teams a single source for purchasing and maintaining their software,
+with professional-grade assurances from the experts who know it best,
+while seamlessly integrating with existing tools. [`Get professional support`_]
+
+.. _`Get professional support`: https://tidelift.com/subscription/pkg/pypi-webargs?utm_source=pypi-webargs&utm_medium=referral&utm_campaign=readme
+
+.. image:: https://user-images.githubusercontent.com/2379650/45126032-50b69880-b13f-11e8-9c2c-abd16c433495.png
+    :target: https://tidelift.com/subscription/pkg/pypi-webargs?utm_source=pypi-webargs&utm_medium=referral&utm_campaign=readme
+    :alt: Get supported marshmallow with Tidelift
+
+Security Contact Information
+============================
+
+To report a security vulnerability, please use the
+`Tidelift security contact <https://tidelift.com/security>`_.
+Tidelift will coordinate the fix and disclosure.
+
+Project Links
+=============
+
+- Docs: https://webargs.readthedocs.io/
+- Changelog: https://webargs.readthedocs.io/en/latest/changelog.html
+- Contributing Guidelines: https://webargs.readthedocs.io/en/latest/contributing.html
+- PyPI: https://pypi.python.org/pypi/webargs
+- Issues: https://github.com/marshmallow-code/webargs/issues
+
+
+License
+=======
+
+MIT licensed. See the `LICENSE <https://github.com/marshmallow-code/webargs/blob/dev/LICENSE>`_ file for more details.
+
+

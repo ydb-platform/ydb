@@ -1,0 +1,1 @@
+data.postal_code must match pattern [A-Z][0-9][A-Z] [0-9][A-Z][0-9]

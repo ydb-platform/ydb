@@ -1,0 +1,15 @@
+diff --git a/src/interfaces/libpq/fe-exec.c b/src/interfaces/libpq/fe-exec.c
+index 4180683..1593fbb 100644
+--- a/src/interfaces/libpq/fe-exec.c
++++ b/src/interfaces/libpq/fe-exec.c
+@@ -2360,5 +2360,10 @@ PQexecFinish(PGconn *conn)
+ 	lastResult = NULL;
+ 	while ((result = PQgetResult(conn)) != NULL)
+ 	{
++		/* The CONNECTION_BAD status could have been triggered by a previous query error */
++		if (conn->status == CONNECTION_BAD && lastResult && lastResult->resultStatus == PGRES_FATAL_ERROR) {
++			PQclear(result);
++			break;
++		}
+		PQclear(lastResult);
+ 		lastResult = result;

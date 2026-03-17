@@ -1,0 +1,115 @@
+comment = '#' (~'\n' anything)*
+hspace = ' ' | '\t' | comment
+vspace =  '\r\n' | '\r' | '\n'
+ws = (hspace | vspace | comment)*
+
+emptyline = hspace* vspace
+indentation = emptyline* hspace+
+noindentation = emptyline* ~~~hspace
+
+number = ws
+               ('-' barenumber:x  -> t.Exactly(-x, span=self.getSpan())
+                    |barenumber:x -> t.Exactly(x, span=self.getSpan()))
+barenumber = '0' (('x'|'X') <hexdigit+>:hs -> int(hs, 16)
+                    |<octaldigit+>:ds -> int(ds, 8))
+               |<digit+>:ds -> int(ds)
+octaldigit = :x ?(x in '01234567' ) -> x
+hexdigit = :x ?(x in '0123456789ABCDEFabcdef') -> x
+
+escapedChar = '\\' ('n' -> "\n"
+                     |'r' -> "\r"
+                     |'t' -> "\t"
+                     |'b' -> "\b"
+                     |'f' -> "\f"
+                     |'"' -> '"'
+                     |'\'' -> "'"
+                     |'x' <hexdigit hexdigit>:d -> chr(int(d, 16))
+                     |'\\' -> "\\")
+
+character = ws '\'' (~'\'' (escapedChar | anything))+:c
+            ws '\'' -> t.Exactly(''.join(c), span=self.getSpan())
+
+string = ws '"' (escapedChar | ~('"') anything)*:c
+         ws '"' -> t.Token(''.join(c), span=self.getSpan())
+
+name = <letter ('_' |letterOrDigit)*>
+
+args = ('(' !(self.applicationArgs(finalChar=')')):args ')'
+            -> args
+          | -> [])
+
+application = indentation? name:name args:args
+                -> t.Apply(name, self.rulename, args, span=self.getSpan())
+
+foreignApply = indentation? name:grammar_name '.' name:rule_name args:args
+                -> t.ForeignApply(grammar_name, rule_name, self.rulename, args, span=self.getSpan())
+
+traceable = !(self.startSpan())
+          (  foreignApply
+          | application
+          | ruleValue
+          | semanticPredicate
+          | semanticAction
+          | number:n !(self.isTree()) -> n
+          | character
+          | string)
+
+expr1 = traceable
+      | ws '(' expr:e ws ')' -> e
+      | ws '<' expr:e ws '>'
+         -> t.ConsumedBy(e)
+      | ws '[' expr?:e ws ']' !(self.isTree())
+         -> t.List(e) if e else t.List()
+
+expr2 = (ws '~' ('~' expr2:e -> t.Lookahead(e)
+                |    expr2:e -> t.Not(e)
+                )
+        |expr1)
+
+repeatTimes = (barenumber:x -> int(x)) | name
+
+expr3 = (expr2:e
+                      ('*' -> t.Many(e)
+                      |'+' -> t.Many1(e)
+                      |'?' -> t.Optional(e)
+                      |customLabel:l -> t.Label(e, l)
+                      |'{' ws repeatTimes:start ws (
+                      (',' ws repeatTimes:end ws '}'
+                           -> t.Repeat(start, end, e))
+                         | ws '}'
+                           -> t.Repeat(start, start, e))
+                      | -> e
+)):r
+           (':' name:n -> t.Bind(n, r)
+           | ':(' name:n (',' ws name)*:others ws ')'
+                (-> [n] + others if others else n):n -> t.Bind(n, r)
+           | -> r)
+          |ws ':' name:n
+          -> t.Bind(n, t.Apply("anything", self.rulename, []))
+
+expr4 = expr3+:es -> es[0] if len(es) == 1 else t.And(es)
+
+expr = expr4:e (ws '|' expr4)*:es
+          -> t.Or([e] + es) if es else e
+
+ruleValue = ws '->' -> self.ruleValueExpr(True)
+
+customLabel = (ws '^' ws '(' <(~')' anything)+>:e ')' -> e) ^ (customLabelException)
+
+semanticPredicate = ws '?(' -> self.semanticPredicateExpr()
+
+semanticAction = ws '!(' -> self.semanticActionExpr()
+
+ruleEnd = ((hspace* vspace+) | end) ^ (rule end)
+
+rulePart :requiredName = noindentation name:n ?(n == requiredName)
+                            !(setattr(self, "rulename", n))
+                            expr4?:args
+                            (ws '=' expr:e ruleEnd
+                               -> t.And([args, e]) if args else e
+                            | ruleEnd -> args)
+
+rule = noindentation ~~(name:n) rulePart(n)+:rs -> t.Rule(n, t.Or(rs))
+
+
+grammar = rule*:rs ws -> t.Grammar(self.name, self.tree_target, rs)

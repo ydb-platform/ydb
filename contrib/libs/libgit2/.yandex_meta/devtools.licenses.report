@@ -1,0 +1,1255 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     GPL-2.0-only WITH GCC-exception-2.0 0b76b883ef87b675a4d63ecf785af6c1
+BELONGS ya.make
+    License text:
+         * This file is part of libgit2, distributed under the GNU GPL v2 with
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        include/git2/apply.h [4:4]
+        include/git2/blame.h [4:4]
+        include/git2/credential.h [4:4]
+        include/git2/email.h [4:4]
+
+SKIP     GPL-2.0-only WITH GCC-exception-2.0 0d48e0b09865a98a90db20ea37b36bb8
+BELONGS ya.make
+    License text:
+        `libgit2` is licensed under a **very permissive license** (GPLv2 with
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.md [26:26]
+
+KEEP     MIT                  114a7f274d34179b4f4633a7883dd8c4
+BELONGS ya.make
+    License text:
+        * Distributed under the MIT Software License.
+        * See accompanying file LICENSE.txt or copy at
+        * https://opensource.org/licenses/MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 82.35
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/util/hash/sha1dc/sha1.c [3:5]
+        src/util/hash/sha1dc/sha1.h [3:5]
+        src/util/hash/sha1dc/ubc_check.h [3:5]
+
+SKIP     GPL-1.0-or-later     11bc8d50fd2115beaf73eadf5f658dfb
+BELONGS ya.make
+	# Not a license, but a contribution license notice
+    License text:
+        its GPL license.
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        README.md [30:30]
+
+SKIP     ISC                  1ce107aea7f831d892b2b105fcdd2daa
+BELONGS ya.make
+	# Clar is a unittesting framework, we do not run these tests in Arcadia
+    License text:
+        The Clar framework is licensed under the ISC license:
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        COPYING [391:391]
+
+KEEP     Unlicense            1d267ceb3a8d8f75f1be3011ee4cbf53
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: COPYING at line 1356
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Unlicense
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://unlicense.org/, https://spdx.org/licenses/Unlicense, https://unlicense.org/
+    Files with this license:
+        COPYING [1338:1361]
+
+KEEP     Public-Domain        1ea57da74ece607d2f434efff1522bc3
+BELONGS ya.make
+    License text:
+        The xoroshiro256** implementation is licensed in the public domain:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        COPYING [1137:1137]
+
+KEEP     BSD-3-Clause         23b11ef5f371959ab98a7a5338b89d92
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        deps/xdiff/xhistogram.c [5:8]
+
+SKIP     LGPL-2.1-only        23c2a5e0106b99d75238986559bb5fc6
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING at line 577
+	# Applies to a bundled version of winhttp.
+	# We do not use it, as GIT_WINHTTP is not defined in our configs.
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        COPYING [462:963]
+
+KEEP     MIT                  27a9a1ad81405955a403a653a79c026b
+BELONGS ya.make
+    License text:
+         * Based on code by Christopher Swenson under the MIT license
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/util/tsort.c [12:12]
+
+KEEP     BSD-3-Clause         3c9ee5705250fff4b044459a14e56079
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/git2/stdint.h [6:28]
+
+KEEP     MIT                  3fed0b37a9fc451a34f914b3e470c1ce
+BELONGS ya.make
+    License text:
+        The bundled ntlmclient code is licensed under the MIT license:
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [1220:1220]
+
+SKIP     LGPL-2.0-or-later    40091bab28b61f696334196fe9c51797
+BELONGS ya.make
+	# Applies to a bundled version of winhttp.
+    # We do not use it, as GIT_WINHTTP is not defined in our configs.
+    License text:
+        The bundled winhttp definition files (deps/winhttp/) are licensed under
+        the GNU LGPL (available at the end of this file).
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        COPYING [441:442]
+
+KEEP     Public-Domain        4084347edd4072c9abd3424525c3826d
+BELONGS ya.make
+    License text:
+        	This code is on the public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/util/util.c [484:484]
+
+KEEP     CC0-1.0              40c5eeed996cfc07f8ab53a6a2a1d7fe
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 68.42
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        src/util/rand.c [3:7]
+
+KEEP     BSD-3-Clause         41cc13592f28505e89572283aeaea9a9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/util/util.c [545:568]
+
+SKIP     Zlib                 433b473578d90129d097684897cc8b50
+BELONGS ya.make
+	# Applies to a bundled zlib code, while we unbundle it and use contrib/libs/zlib instead
+    License text:
+        The bundled ZLib code is licensed under the ZLib license:
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        COPYING [366:366]
+
+KEEP     GPL-2.0-only WITH GCC-exception-2.0 468bfb6b61ef6a0bd07fc161d7da0241
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING at line 82
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        COPYING [23:362]
+
+KEEP     MIT                  46e8ca9c662a29781f86f316baa2ce56
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: src/util/hashmap.h at line 31
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/util/hashmap.h [17:35]
+
+KEEP     Public-Domain        46e9d596fc292ed37e4de85abe7db3ff
+BELONGS ya.make
+    License text:
+        and related and neighboring rights to this software to the public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        COPYING [1142:1142]
+
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: COPYING at line 995
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [982:998]
+
+SKIP     LicenseRef-scancode-openssl 58dda1ba6f6752bc35fbb3cf31b067bb
+BELONGS ya.make
+	# We do not depend on the code copied from openssl thanks to .yandex_meta/openssl-dynamic.patch
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        COPYING [1091:1133]
+
+SKIP     BSD-3-Clause         5bd59729c540d54c38added7c4aa65ca
+BELONGS ya.make
+	# Applies to a bundled pcre version, while we use contrib/libs/pcre instead
+    License text:
+        The bundled PCRE implementation (deps/pcre/) is licensed under the BSD
+        license.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [409:410]
+
+KEEP     MIT                  5faa322101c6bcab224ccc972cd7636e
+BELONGS cli/ya.make
+    License text:
+         * This file is part of adopt, distributed under the MIT license.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/cli/opt.c [5:5]
+        src/cli/opt.h [5:5]
+    Belongs difference:
+        + cli/ya.make
+        - ya.make
+
+KEEP     RSA-MD4              60e41ad9d9d1135772ae9091c77295c7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-rsa-md4
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/rsa-md4.LICENSE
+    Files with this license:
+        COPYING [1369:1385]
+
+KEEP     BSD-2-Clause         62c60e988ffe75349ff7dbeeee409bc6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        COPYING [1195:1216]
+
+KEEP     GPL-2.0-only WITH GCC-exception-2.0 6d2a6b56e1e63d42af41b4efa4b65406
+BELONGS ya.make
+    License text:
+        `libgit2` is under GPL2 **with linking exception**. This means you can
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 50.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        README.md [568:568]
+
+KEEP     GPL-2.0-only WITH GCC-exception-2.0 75d364af29acaa24d9e07256a134e3f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        COPYING [4:19]
+    Scancode info:
+        Original SPDX id: GCC-exception-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/GCC-exception-2.0
+    Files with this license:
+        COPYING [4:19]
+
+KEEP     MIT                  7b523f1c5bab7496e2967bc818c2d405
+BELONGS ya.make
+    License text:
+        The bundled SHA1 collision detection code is licensed under the MIT license:
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [967:967]
+
+KEEP     BSD-3-Clause         81767233d62cdab4a67573b277ec0f37
+BELONGS ya.make
+	# Applies to a bundled pcre version, while we use contrib/libs/pcre instead
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [412:437]
+
+KEEP     CC0-1.0              8365806e8ea0587584d55bc9e6770815
+BELONGS ya.make
+    License text:
+        See <http://creativecommons.org/publicdomain/zero/1.0/>.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 38.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        COPYING [1145:1145]
+
+KEEP     GPL-2.0-only WITH GCC-exception-2.0 8ef7aaebc0947b19e950c247fa36b57a
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: src/libgit2/cherrypick.c at line 5, src/libgit2/patch.c at line 5, src/libgit2/patch.h at line 5, src/libgit2/proxy.h at line 5, src/libgit2/revert.c at line 5, src/util/win32/reparse.h at line 5
+    License text:
+        * This file is part of libgit2, distributed under the GNU GPL v2 with
+        * a Linking Exception. For full terms see the included COPYING file.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 54.17
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        src/libgit2/cherrypick.c [4:5]
+        src/libgit2/patch.c [4:5]
+        src/libgit2/patch.h [4:5]
+        src/libgit2/proxy.h [4:5]
+        src/libgit2/revert.c [4:5]
+        src/util/win32/reparse.h [4:5]
+
+KEEP     ISC                  908e825fc9a0afda963b7ac5fac078c6
+BELONGS ya.make
+    License text:
+        WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+        MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-apple-attribution-1997
+        Score           : 8.85
+        Match type      : TEXT
+        Links           : http://www.opensource.apple.com/source/diskdev_cmds/diskdev_cmds-208.11.2/pdisk.tproj/pdisk.h, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/apple-attribution-1997.LICENSE
+    Files with this license:
+        COPYING [1025:1026]
+
+KEEP     LGPL-2.1-or-later    914bb9d65c6c56a3c9f7d3b7b1c831ab
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        deps/xdiff/xdiff.h [5:17]
+        deps/xdiff/xdiffi.c [5:17]
+        deps/xdiff/xdiffi.h [5:17]
+        deps/xdiff/xemit.c [5:17]
+        deps/xdiff/xemit.h [5:17]
+        deps/xdiff/xinclude.h [5:17]
+        deps/xdiff/xmacros.h [5:17]
+        deps/xdiff/xmerge.c [5:17]
+        deps/xdiff/xpatience.c [5:17]
+        deps/xdiff/xprepare.c [5:17]
+        deps/xdiff/xprepare.h [5:17]
+        deps/xdiff/xtypes.h [5:17]
+        deps/xdiff/xutils.c [5:17]
+        deps/xdiff/xutils.h [5:17]
+
+KEEP     MIT                  9782b85e0d2c0beac76ebaa494a16366
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: COPYING at line 1407
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [1393:1410]
+
+SKIP     ISC                  a1a9c92890333752b564a27bf103e3a3
+BELONGS ya.make
+	# Clar is a unittesting framework, we do not run these tests in Arcadia
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        COPYING [395:405]
+
+KEEP     MIT                  a2cfee84692b338f73b9033321c0f721
+BELONGS ya.make
+    License text:
+        The bundled SHA1 collision detection code is licensed under the MIT license:
+        MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [967:969]
+
+KEEP     BSD-2-Clause         a87f22e65eae67a62d44dc47f9650b64
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        src/util/fs_path.c [81:102]
+
+KEEP     Zlib                 aa58f308323ed48be51ebc4b5d89fdbf
+BELONGS ya.make
+	# Applies to a bundled zlib code, while we unbundle it and use contrib/libs/zlib instead
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        COPYING [370:387]
+
+KEEP     MIT                  ab583fbb8fe7599e077481cbe9cdeee5
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: COPYING at line 1237
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [1224:1240]
+
+KEEP     BSD-3-Clause         ae5e6d9eb5b4d48f54614d625bf4967b
+BELONGS ya.make
+    License text:
+        Android implementation, BSD licensed:
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [1190:1190]
+
+KEEP     NCSA                 b160d8bd561da097b0edd40b062e1c84
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        COPYING [1283:1308]
+
+SKIP     OpenSSL              b578dd0ddc6fad7b2819abf548e59a04
+BELONGS ya.make
+	# libgit2 no longer includes portions of OpenSSL thanks to 
+	# https://github.com/libgit2/libgit2/pull/6658
+    License text:
+        Portions of the OpenSSL headers are included under the OpenSSL license:
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        COPYING [1030:1030]
+
+KEEP     MIT                  b9d104571fe485f20f9542d194979a00
+BELONGS ya.make
+    License text:
+         * The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/util/hashmap.h [13:13]
+
+KEEP     MIT                  ba22a25dfbbae02a88c9585f457644b3
+BELONGS ya.make
+    License text:
+        The bundled llhttp dependency is licensed under the MIT license:
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [1389:1389]
+
+KEEP     GPL-2.0-only WITH GCC-exception-2.0 c2a0c11b57712fd723136ebb754d0b30
+BELONGS cli/ya.make ya.make
+FILE_INCLUDE COPYING found in files: deps/xdiff/git-xdiff.h at line 5, include/git2.h at line 5, include/git2/annotated_commit.h at line 5, include/git2/apply.h at line 5, include/git2/attr.h at line 5, include/git2/blame.h at line 5, include/git2/blob.h at line 5, include/git2/branch.h at line 5, include/git2/buffer.h at line 5, include/git2/cert.h at line 5, include/git2/checkout.h at line 5, include/git2/cherrypick.h at line 5, include/git2/clone.h at line 5, include/git2/commit.h at line 5, include/git2/common.h at line 5, include/git2/config.h at line 5, include/git2/cred_helpers.h at line 5, include/git2/credential.h at line 5, include/git2/credential_helpers.h at line 5, include/git2/deprecated.h at line 5, include/git2/describe.h at line 5, include/git2/diff.h at line 5, include/git2/email.h at line 5, include/git2/errors.h at line 5, include/git2/experimental.h at line 5, include/git2/filter.h at line 5, include/git2/global.h at line 5, include/git2/graph.h at line 5, include/git2/ignore.h at line 5, include/git2/index.h at line 5, include/git2/indexer.h at line 5, include/git2/mailmap.h at line 5, include/git2/merge.h at line 5, include/git2/message.h at line 5, include/git2/net.h at line 5, include/git2/notes.h at line 5, include/git2/object.h at line 5, include/git2/odb.h at line 5, include/git2/odb_backend.h at line 5, include/git2/oid.h at line 5, include/git2/oidarray.h at line 5, include/git2/pack.h at line 5, include/git2/patch.h at line 5, include/git2/pathspec.h at line 5, include/git2/proxy.h at line 5, include/git2/rebase.h at line 5, include/git2/refdb.h at line 5, include/git2/reflog.h at line 5, include/git2/refs.h at line 5, include/git2/refspec.h at line 5, include/git2/remote.h at line 5, include/git2/repository.h at line 5, include/git2/reset.h at line 5, include/git2/revert.h at line 5, include/git2/revparse.h at line 5, include/git2/revwalk.h at line 5, include/git2/signature.h at line 5, include/git2/stash.h at line 5, include/git2/status.h at line 5, include/git2/strarray.h at line 5, include/git2/submodule.h at line 5, include/git2/sys/alloc.h at line 5, include/git2/sys/commit.h at line 5, include/git2/sys/commit_graph.h at line 5, include/git2/sys/config.h at line 5, include/git2/sys/cred.h at line 5, include/git2/sys/credential.h at line 5, include/git2/sys/diff.h at line 5, include/git2/sys/email.h at line 5, include/git2/sys/errors.h at line 5, include/git2/sys/filter.h at line 5, include/git2/sys/hashsig.h at line 5, include/git2/sys/index.h at line 5, include/git2/sys/mempack.h at line 5, include/git2/sys/merge.h at line 5, include/git2/sys/midx.h at line 5, include/git2/sys/odb_backend.h at line 5, include/git2/sys/openssl.h at line 5, include/git2/sys/path.h at line 5, include/git2/sys/refdb_backend.h at line 5, include/git2/sys/refs.h at line 5, include/git2/sys/remote.h at line 5, include/git2/sys/repository.h at line 5, include/git2/sys/stream.h at line 5, include/git2/sys/transport.h at line 5, include/git2/tag.h at line 5, include/git2/trace.h at line 5, include/git2/transaction.h at line 5, include/git2/transport.h at line 5, include/git2/tree.h at line 5, include/git2/types.h at line 5, include/git2/version.h at line 5, include/git2/worktree.h at line 5, src/cli/cmd.c at line 5, src/cli/cmd.h at line 5, src/cli/cmd_blame.c at line 5, src/cli/cmd_cat_file.c at line 5, src/cli/cmd_clone.c at line 5, src/cli/cmd_config.c at line 5, src/cli/cmd_hash_object.c at line 5, src/cli/cmd_help.c at line 5, src/cli/cmd_index_pack.c at line 5, src/cli/cmd_init.c at line 5, src/cli/common.c at line 5, src/cli/common.h at line 5, src/cli/error.h at line 5, src/cli/main.c at line 5, src/cli/opt_usage.c at line 5, src/cli/opt_usage.h at line 5, src/cli/progress.c at line 5, src/cli/progress.h at line 5, src/cli/sighandler.h at line 5, src/cli/unix/sighandler.c at line 5, src/libgit2/annotated_commit.c at line 5, src/libgit2/annotated_commit.h at line 5, src/libgit2/apply.c at line 5, src/libgit2/apply.h at line 5, src/libgit2/attr.c at line 5, src/libgit2/attr.h at line 5, src/libgit2/attr_file.c at line 5, src/libgit2/attr_file.h at line 5, src/libgit2/attrcache.c at line 5, src/libgit2/attrcache.h at line 5, src/libgit2/blame.c at line 5, src/libgit2/blame_git.c at line 5, src/libgit2/blame_git.h at line 5, src/libgit2/blob.c at line 5, src/libgit2/blob.h at line 5, src/libgit2/branch.c at line 5, src/libgit2/branch.h at line 5, src/libgit2/buf.c at line 5, src/libgit2/buf.h at line 5, src/libgit2/cache.c at line 5, src/libgit2/cache.h at line 5, src/libgit2/checkout.c at line 5, src/libgit2/checkout.h at line 5, src/libgit2/clone.c at line 5, src/libgit2/clone.h at line 5, src/libgit2/commit.c at line 5, src/libgit2/commit.h at line 5, src/libgit2/commit_graph.c at line 5, src/libgit2/commit_graph.h at line 5, src/libgit2/commit_list.c at line 5, src/libgit2/commit_list.h at line 5, src/libgit2/common.h at line 5, src/libgit2/config.c at line 5, src/libgit2/config.h at line 5, src/libgit2/config_backend.h at line 5, src/libgit2/config_cache.c at line 5, src/libgit2/config_file.c at line 5, src/libgit2/config_list.c at line 5, src/libgit2/config_list.h at line 5, src/libgit2/config_mem.c at line 5, src/libgit2/config_parse.c at line 5, src/libgit2/config_parse.h at line 5, src/libgit2/config_snapshot.c at line 5, src/libgit2/crlf.c at line 5, src/libgit2/delta.c at line 5, src/libgit2/describe.c at line 5, src/libgit2/diff.c at line 5, src/libgit2/diff.h at line 5, src/libgit2/diff_driver.c at line 5, src/libgit2/diff_driver.h at line 5, src/libgit2/diff_file.c at line 5, src/libgit2/diff_file.h at line 5, src/libgit2/diff_generate.c at line 5, src/libgit2/diff_generate.h at line 5, src/libgit2/diff_parse.c at line 5, src/libgit2/diff_parse.h at line 5, src/libgit2/diff_print.c at line 5, src/libgit2/diff_stats.c at line 5, src/libgit2/diff_stats.h at line 5, src/libgit2/diff_tform.c at line 5, src/libgit2/diff_tform.h at line 5, src/libgit2/diff_xdiff.c at line 5, src/libgit2/diff_xdiff.h at line 5, src/libgit2/email.c at line 5, src/libgit2/email.h at line 5, src/libgit2/fetch.c at line 5, src/libgit2/fetch.h at line 5, src/libgit2/fetchhead.c at line 5, src/libgit2/fetchhead.h at line 5, src/libgit2/filter.c at line 5, src/libgit2/filter.h at line 5, src/libgit2/grafts.c at line 5, src/libgit2/grafts.h at line 5, src/libgit2/graph.c at line 5, src/libgit2/hashmap_oid.h at line 5, src/libgit2/hashsig.c at line 5, src/libgit2/ident.c at line 5, src/libgit2/ignore.c at line 5, src/libgit2/ignore.h at line 5, src/libgit2/index.c at line 5, src/libgit2/index.h at line 5, src/libgit2/index_map.c at line 5, src/libgit2/index_map.h at line 5, src/libgit2/indexer.c at line 5, src/libgit2/indexer.h at line 5, src/libgit2/iterator.c at line 5, src/libgit2/iterator.h at line 5, src/libgit2/libgit2.c at line 5, src/libgit2/mailmap.c at line 5, src/libgit2/mailmap.h at line 5, src/libgit2/merge.c at line 5, src/libgit2/merge.h at line 5, src/libgit2/merge_driver.c at line 5, src/libgit2/merge_driver.h at line 5, src/libgit2/merge_file.c at line 5, src/libgit2/message.c at line 5, src/libgit2/midx.c at line 5, src/libgit2/midx.h at line 5, src/libgit2/mwindow.c at line 5, src/libgit2/mwindow.h at line 5, src/libgit2/notes.c at line 5, src/libgit2/notes.h at line 5, src/libgit2/object.c at line 5, src/libgit2/object.h at line 5, src/libgit2/object_api.c at line 5, src/libgit2/odb.c at line 5, src/libgit2/odb.h at line 5, src/libgit2/odb_loose.c at line 5, src/libgit2/odb_mempack.c at line 5, src/libgit2/odb_pack.c at line 5, src/libgit2/oid.c at line 5, src/libgit2/oid.h at line 5, src/libgit2/oidarray.c at line 5, src/libgit2/oidarray.h at line 5, src/libgit2/pack-objects.c at line 5, src/libgit2/pack-objects.h at line 5, src/libgit2/pack.c at line 5, src/libgit2/pack.h at line 5, src/libgit2/parse.c at line 5, src/libgit2/parse.h at line 5, src/libgit2/patch_generate.c at line 5, src/libgit2/patch_generate.h at line 5, src/libgit2/patch_parse.c at line 5, src/libgit2/patch_parse.h at line 5, src/libgit2/path.c at line 5, src/libgit2/path.h at line 5, src/libgit2/pathspec.c at line 5, src/libgit2/pathspec.h at line 5, src/libgit2/proxy.c at line 5, src/libgit2/push.c at line 5, src/libgit2/push.h at line 5, src/libgit2/reader.c at line 5, src/libgit2/reader.h at line 5, src/libgit2/rebase.c at line 5, src/libgit2/refdb.c at line 5, src/libgit2/refdb.h at line 5, src/libgit2/refdb_fs.c at line 5, src/libgit2/reflog.c at line 5, src/libgit2/reflog.h at line 5, src/libgit2/refs.c at line 5, src/libgit2/refs.h at line 5, src/libgit2/refspec.c at line 5, src/libgit2/refspec.h at line 5, src/libgit2/remote.c at line 5, src/libgit2/remote.h at line 5, src/libgit2/repo_template.h at line 5, src/libgit2/repository.c at line 5, src/libgit2/repository.h at line 5, src/libgit2/reset.c at line 5, src/libgit2/revparse.c at line 5, src/libgit2/revwalk.c at line 5, src/libgit2/revwalk.h at line 5, src/libgit2/settings.c at line 5, src/libgit2/settings.h at line 5, src/libgit2/signature.c at line 5, src/libgit2/signature.h at line 5, src/libgit2/stash.c at line 5, src/libgit2/status.c at line 5, src/libgit2/status.h at line 5, src/libgit2/strarray.c at line 5, src/libgit2/strarray.h at line 5, src/libgit2/stream.h at line 5, src/libgit2/streams/mbedtls.h at line 5, src/libgit2/streams/openssl.h at line 5, src/libgit2/streams/openssl_dynamic.c at line 5, src/libgit2/streams/openssl_legacy.c at line 5, src/libgit2/streams/registry.c at line 5, src/libgit2/streams/registry.h at line 5, src/libgit2/streams/schannel.c at line 5, src/libgit2/streams/schannel.h at line 5, src/libgit2/streams/socket.c at line 5, src/libgit2/streams/socket.h at line 5, src/libgit2/streams/stransport.c at line 5, src/libgit2/streams/stransport.h at line 5, src/libgit2/streams/tls.c at line 5, src/libgit2/streams/tls.h at line 5, src/libgit2/submodule.c at line 5, src/libgit2/submodule.h at line 5, src/libgit2/sysdir.c at line 5, src/libgit2/sysdir.h at line 5, src/libgit2/tag.c at line 5, src/libgit2/tag.h at line 5, src/libgit2/trace.c at line 5, src/libgit2/trace.h at line 5, src/libgit2/trailer.c at line 5, src/libgit2/transaction.c at line 5, src/libgit2/transaction.h at line 5, src/libgit2/transport.c at line 5, src/libgit2/transports/auth.c at line 5, src/libgit2/transports/auth.h at line 5, src/libgit2/transports/auth_gssapi.c at line 5, src/libgit2/transports/auth_negotiate.h at line 5, src/libgit2/transports/auth_ntlm.h at line 5, src/libgit2/transports/auth_ntlmclient.c at line 5, src/libgit2/transports/auth_sspi.c at line 5, src/libgit2/transports/credential.c at line 5, src/libgit2/transports/credential_helpers.c at line 5, src/libgit2/transports/git.c at line 5, src/libgit2/transports/http.c at line 5, src/libgit2/transports/http.h at line 5, src/libgit2/transports/httpclient.c at line 5, src/libgit2/transports/httpclient.h at line 5, src/libgit2/transports/httpparser.c at line 5, src/libgit2/transports/httpparser.h at line 5, src/libgit2/transports/local.c at line 5, src/libgit2/transports/smart.c at line 5, src/libgit2/transports/smart.h at line 5, src/libgit2/transports/smart_pkt.c at line 5, src/libgit2/transports/smart_protocol.c at line 5, src/libgit2/transports/ssh.c at line 5, src/libgit2/transports/ssh_exec.c at line 5, src/libgit2/transports/ssh_exec.h at line 5, src/libgit2/transports/ssh_libssh2.c at line 5, src/libgit2/transports/ssh_libssh2.h at line 5, src/libgit2/transports/winhttp.c at line 5, src/libgit2/tree-cache.c at line 5, src/libgit2/tree-cache.h at line 5, src/libgit2/tree.c at line 5, src/libgit2/tree.h at line 5, src/libgit2/userdiff.h at line 5, src/libgit2/worktree.c at line 5, src/libgit2/worktree.h at line 5, src/util/alloc.c at line 5, src/util/alloc.h at line 5, src/util/allocators/debugalloc.c at line 5, src/util/allocators/debugalloc.h at line 5, src/util/allocators/failalloc.c at line 5, src/util/allocators/failalloc.h at line 5, src/util/allocators/stdalloc.c at line 5, src/util/allocators/stdalloc.h at line 5, src/util/allocators/win32_leakcheck.c at line 5, src/util/allocators/win32_leakcheck.h at line 5, src/util/array.h at line 5, src/util/assert_safe.h at line 5, src/util/bitvec.h at line 5, src/util/cc-compat.h at line 5, src/util/ctype_compat.h at line 5, src/util/date.c at line 5, src/util/date.h at line 5, src/util/errors.c at line 5, src/util/errors.h at line 5, src/util/filebuf.c at line 5, src/util/filebuf.h at line 5, src/util/fs_path.c at line 5, src/util/fs_path.h at line 5, src/util/futils.c at line 5, src/util/futils.h at line 5, src/util/git2_util.h at line 5, src/util/hash.c at line 5, src/util/hash.h at line 5, src/util/hash/collisiondetect.c at line 5, src/util/hash/collisiondetect.h at line 5, src/util/hash/openssl.c at line 5, src/util/hash/openssl.h at line 5, src/util/hash/sha.h at line 5, src/util/hashmap.h at line 5, src/util/hashmap_str.h at line 5, src/util/integer.h at line 5, src/util/map.h at line 5, src/util/net.c at line 5, src/util/net.h at line 5, src/util/pool.c at line 5, src/util/pool.h at line 5, src/util/posix.c at line 5, src/util/posix.h at line 5, src/util/pqueue.c at line 5, src/util/pqueue.h at line 5, src/util/process.h at line 5, src/util/rand.h at line 5, src/util/regexp.c at line 5, src/util/regexp.h at line 5, src/util/runtime.c at line 5, src/util/runtime.h at line 5, src/util/sortedcache.c at line 5, src/util/sortedcache.h at line 5, src/util/staticstr.h at line 5, src/util/str.c at line 5, src/util/str.h at line 5, src/util/strlist.c at line 5, src/util/strlist.h at line 5, src/util/strnlen.h at line 5, src/util/thread.c at line 5, src/util/thread.h at line 5, src/util/tsort.c at line 5, src/util/unix/map.c at line 5, src/util/unix/posix.h at line 5, src/util/unix/process.c at line 5, src/util/unix/pthread.h at line 5, src/util/unix/realpath.c at line 5, src/util/utf8.c at line 5, src/util/utf8.h at line 5, src/util/util.c at line 5, src/util/util.h at line 5, src/util/varint.c at line 5, src/util/varint.h at line 5, src/util/vector.c at line 5, src/util/vector.h at line 5, src/util/wildmatch.c at line 5, src/util/wildmatch.h at line 5, src/util/win32/dir.c at line 5, src/util/win32/dir.h at line 5, src/util/win32/error.c at line 5, src/util/win32/error.h at line 5, src/util/win32/map.c at line 5, src/util/win32/mingw-compat.h at line 5, src/util/win32/msvc-compat.h at line 5, src/util/win32/path_w32.c at line 5, src/util/win32/path_w32.h at line 5, src/util/win32/posix.h at line 5, src/util/win32/posix_w32.c at line 5, src/util/win32/process.c at line 5, src/util/win32/thread.c at line 5, src/util/win32/thread.h at line 5, src/util/win32/utf-conv.c at line 5, src/util/win32/utf-conv.h at line 5, src/util/win32/version.h at line 5, src/util/win32/w32_buffer.c at line 5, src/util/win32/w32_buffer.h at line 5, src/util/win32/w32_common.h at line 5, src/util/win32/w32_leakcheck.c at line 5, src/util/win32/w32_leakcheck.h at line 5, src/util/win32/w32_util.c at line 5, src/util/win32/w32_util.h at line 5, src/util/win32/win32-compat.h at line 5, src/util/zstream.c at line 5, src/util/zstream.h at line 5
+    License text:
+         * This file is part of libgit2, distributed under the GNU GPL v2 with
+         * a Linking Exception. For full terms see the included COPYING file.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 54.17
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        deps/xdiff/git-xdiff.h [4:5]
+        include/git2.h [4:5]
+        include/git2/annotated_commit.h [4:5]
+        include/git2/apply.h [4:5]
+        include/git2/attr.h [4:5]
+        include/git2/blame.h [4:5]
+        include/git2/blob.h [4:5]
+        include/git2/branch.h [4:5]
+        include/git2/buffer.h [4:5]
+        include/git2/cert.h [4:5]
+        include/git2/checkout.h [4:5]
+        include/git2/cherrypick.h [4:5]
+        include/git2/clone.h [4:5]
+        include/git2/commit.h [4:5]
+        include/git2/common.h [4:5]
+        include/git2/config.h [4:5]
+        include/git2/cred_helpers.h [4:5]
+        include/git2/credential.h [4:5]
+        include/git2/credential_helpers.h [4:5]
+        include/git2/deprecated.h [4:5]
+        include/git2/describe.h [4:5]
+        include/git2/diff.h [4:5]
+        include/git2/email.h [4:5]
+        include/git2/errors.h [4:5]
+        include/git2/experimental.h [4:5]
+        include/git2/filter.h [4:5]
+        include/git2/global.h [4:5]
+        include/git2/graph.h [4:5]
+        include/git2/ignore.h [4:5]
+        include/git2/index.h [4:5]
+        include/git2/indexer.h [4:5]
+        include/git2/mailmap.h [4:5]
+        include/git2/merge.h [4:5]
+        include/git2/message.h [4:5]
+        include/git2/net.h [4:5]
+        include/git2/notes.h [4:5]
+        include/git2/object.h [4:5]
+        include/git2/odb.h [4:5]
+        include/git2/odb_backend.h [4:5]
+        include/git2/oid.h [4:5]
+        include/git2/oidarray.h [4:5]
+        include/git2/pack.h [4:5]
+        include/git2/patch.h [4:5]
+        include/git2/pathspec.h [4:5]
+        include/git2/proxy.h [4:5]
+        include/git2/rebase.h [4:5]
+        include/git2/refdb.h [4:5]
+        include/git2/reflog.h [4:5]
+        include/git2/refs.h [4:5]
+        include/git2/refspec.h [4:5]
+        include/git2/remote.h [4:5]
+        include/git2/repository.h [4:5]
+        include/git2/reset.h [4:5]
+        include/git2/revert.h [4:5]
+        include/git2/revparse.h [4:5]
+        include/git2/revwalk.h [4:5]
+        include/git2/signature.h [4:5]
+        include/git2/stash.h [4:5]
+        include/git2/status.h [4:5]
+        include/git2/strarray.h [4:5]
+        include/git2/submodule.h [4:5]
+        include/git2/sys/alloc.h [4:5]
+        include/git2/sys/commit.h [4:5]
+        include/git2/sys/commit_graph.h [4:5]
+        include/git2/sys/config.h [4:5]
+        include/git2/sys/cred.h [4:5]
+        include/git2/sys/credential.h [4:5]
+        include/git2/sys/diff.h [4:5]
+        include/git2/sys/email.h [4:5]
+        include/git2/sys/errors.h [4:5]
+        include/git2/sys/filter.h [4:5]
+        include/git2/sys/hashsig.h [4:5]
+        include/git2/sys/index.h [4:5]
+        include/git2/sys/mempack.h [4:5]
+        include/git2/sys/merge.h [4:5]
+        include/git2/sys/midx.h [4:5]
+        include/git2/sys/odb_backend.h [4:5]
+        include/git2/sys/openssl.h [4:5]
+        include/git2/sys/path.h [4:5]
+        include/git2/sys/refdb_backend.h [4:5]
+        include/git2/sys/refs.h [4:5]
+        include/git2/sys/remote.h [4:5]
+        include/git2/sys/repository.h [4:5]
+        include/git2/sys/stream.h [4:5]
+        include/git2/sys/transport.h [4:5]
+        include/git2/tag.h [4:5]
+        include/git2/trace.h [4:5]
+        include/git2/transaction.h [4:5]
+        include/git2/transport.h [4:5]
+        include/git2/tree.h [4:5]
+        include/git2/types.h [4:5]
+        include/git2/version.h [4:5]
+        include/git2/worktree.h [4:5]
+        src/cli/cmd.c [4:5]
+        src/cli/cmd.h [4:5]
+        src/cli/cmd_blame.c [4:5]
+        src/cli/cmd_cat_file.c [4:5]
+        src/cli/cmd_clone.c [4:5]
+        src/cli/cmd_config.c [4:5]
+        src/cli/cmd_hash_object.c [4:5]
+        src/cli/cmd_help.c [4:5]
+        src/cli/cmd_index_pack.c [4:5]
+        src/cli/cmd_init.c [4:5]
+        src/cli/common.c [4:5]
+        src/cli/common.h [4:5]
+        src/cli/error.h [4:5]
+        src/cli/main.c [4:5]
+        src/cli/opt_usage.c [4:5]
+        src/cli/opt_usage.h [4:5]
+        src/cli/progress.c [4:5]
+        src/cli/progress.h [4:5]
+        src/cli/sighandler.h [4:5]
+        src/cli/unix/sighandler.c [4:5]
+        src/libgit2/annotated_commit.c [4:5]
+        src/libgit2/annotated_commit.h [4:5]
+        src/libgit2/apply.c [4:5]
+        src/libgit2/apply.h [4:5]
+        src/libgit2/attr.c [4:5]
+        src/libgit2/attr.h [4:5]
+        src/libgit2/attr_file.c [4:5]
+        src/libgit2/attr_file.h [4:5]
+        src/libgit2/attrcache.c [4:5]
+        src/libgit2/attrcache.h [4:5]
+        src/libgit2/blame.c [4:5]
+        src/libgit2/blame_git.c [4:5]
+        src/libgit2/blame_git.h [4:5]
+        src/libgit2/blob.c [4:5]
+        src/libgit2/blob.h [4:5]
+        src/libgit2/branch.c [4:5]
+        src/libgit2/branch.h [4:5]
+        src/libgit2/buf.c [4:5]
+        src/libgit2/buf.h [4:5]
+        src/libgit2/cache.c [4:5]
+        src/libgit2/cache.h [4:5]
+        src/libgit2/checkout.c [4:5]
+        src/libgit2/checkout.h [4:5]
+        src/libgit2/clone.c [4:5]
+        src/libgit2/clone.h [4:5]
+        src/libgit2/commit.c [4:5]
+        src/libgit2/commit.h [4:5]
+        src/libgit2/commit_graph.c [4:5]
+        src/libgit2/commit_graph.h [4:5]
+        src/libgit2/commit_list.c [4:5]
+        src/libgit2/commit_list.h [4:5]
+        src/libgit2/common.h [4:5]
+        src/libgit2/config.c [4:5]
+        src/libgit2/config.h [4:5]
+        src/libgit2/config_backend.h [4:5]
+        src/libgit2/config_cache.c [4:5]
+        src/libgit2/config_file.c [4:5]
+        src/libgit2/config_list.c [4:5]
+        src/libgit2/config_list.h [4:5]
+        src/libgit2/config_mem.c [4:5]
+        src/libgit2/config_parse.c [4:5]
+        src/libgit2/config_parse.h [4:5]
+        src/libgit2/config_snapshot.c [4:5]
+        src/libgit2/crlf.c [4:5]
+        src/libgit2/delta.c [4:5]
+        src/libgit2/describe.c [4:5]
+        src/libgit2/diff.c [4:5]
+        src/libgit2/diff.h [4:5]
+        src/libgit2/diff_driver.c [4:5]
+        src/libgit2/diff_driver.h [4:5]
+        src/libgit2/diff_file.c [4:5]
+        src/libgit2/diff_file.h [4:5]
+        src/libgit2/diff_generate.c [4:5]
+        src/libgit2/diff_generate.h [4:5]
+        src/libgit2/diff_parse.c [4:5]
+        src/libgit2/diff_parse.h [4:5]
+        src/libgit2/diff_print.c [4:5]
+        src/libgit2/diff_stats.c [4:5]
+        src/libgit2/diff_stats.h [4:5]
+        src/libgit2/diff_tform.c [4:5]
+        src/libgit2/diff_tform.h [4:5]
+        src/libgit2/diff_xdiff.c [4:5]
+        src/libgit2/diff_xdiff.h [4:5]
+        src/libgit2/email.c [4:5]
+        src/libgit2/email.h [4:5]
+        src/libgit2/fetch.c [4:5]
+        src/libgit2/fetch.h [4:5]
+        src/libgit2/fetchhead.c [4:5]
+        src/libgit2/fetchhead.h [4:5]
+        src/libgit2/filter.c [4:5]
+        src/libgit2/filter.h [4:5]
+        src/libgit2/grafts.c [4:5]
+        src/libgit2/grafts.h [4:5]
+        src/libgit2/graph.c [4:5]
+        src/libgit2/hashmap_oid.h [4:5]
+        src/libgit2/hashsig.c [4:5]
+        src/libgit2/ident.c [4:5]
+        src/libgit2/ignore.c [4:5]
+        src/libgit2/ignore.h [4:5]
+        src/libgit2/index.c [4:5]
+        src/libgit2/index.h [4:5]
+        src/libgit2/index_map.c [4:5]
+        src/libgit2/index_map.h [4:5]
+        src/libgit2/indexer.c [4:5]
+        src/libgit2/indexer.h [4:5]
+        src/libgit2/iterator.c [4:5]
+        src/libgit2/iterator.h [4:5]
+        src/libgit2/libgit2.c [4:5]
+        src/libgit2/mailmap.c [4:5]
+        src/libgit2/mailmap.h [4:5]
+        src/libgit2/merge.c [4:5]
+        src/libgit2/merge.h [4:5]
+        src/libgit2/merge_driver.c [4:5]
+        src/libgit2/merge_driver.h [4:5]
+        src/libgit2/merge_file.c [4:5]
+        src/libgit2/message.c [4:5]
+        src/libgit2/midx.c [4:5]
+        src/libgit2/midx.h [4:5]
+        src/libgit2/mwindow.c [4:5]
+        src/libgit2/mwindow.h [4:5]
+        src/libgit2/notes.c [4:5]
+        src/libgit2/notes.h [4:5]
+        src/libgit2/object.c [4:5]
+        src/libgit2/object.h [4:5]
+        src/libgit2/object_api.c [4:5]
+        src/libgit2/odb.c [4:5]
+        src/libgit2/odb.h [4:5]
+        src/libgit2/odb_loose.c [4:5]
+        src/libgit2/odb_mempack.c [4:5]
+        src/libgit2/odb_pack.c [4:5]
+        src/libgit2/oid.c [4:5]
+        src/libgit2/oid.h [4:5]
+        src/libgit2/oidarray.c [4:5]
+        src/libgit2/oidarray.h [4:5]
+        src/libgit2/pack-objects.c [4:5]
+        src/libgit2/pack-objects.h [4:5]
+        src/libgit2/pack.c [4:5]
+        src/libgit2/pack.h [4:5]
+        src/libgit2/parse.c [4:5]
+        src/libgit2/parse.h [4:5]
+        src/libgit2/patch_generate.c [4:5]
+        src/libgit2/patch_generate.h [4:5]
+        src/libgit2/patch_parse.c [4:5]
+        src/libgit2/patch_parse.h [4:5]
+        src/libgit2/path.c [4:5]
+        src/libgit2/path.h [4:5]
+        src/libgit2/pathspec.c [4:5]
+        src/libgit2/pathspec.h [4:5]
+        src/libgit2/proxy.c [4:5]
+        src/libgit2/push.c [4:5]
+        src/libgit2/push.h [4:5]
+        src/libgit2/reader.c [4:5]
+        src/libgit2/reader.h [4:5]
+        src/libgit2/rebase.c [4:5]
+        src/libgit2/refdb.c [4:5]
+        src/libgit2/refdb.h [4:5]
+        src/libgit2/refdb_fs.c [4:5]
+        src/libgit2/reflog.c [4:5]
+        src/libgit2/reflog.h [4:5]
+        src/libgit2/refs.c [4:5]
+        src/libgit2/refs.h [4:5]
+        src/libgit2/refspec.c [4:5]
+        src/libgit2/refspec.h [4:5]
+        src/libgit2/remote.c [4:5]
+        src/libgit2/remote.h [4:5]
+        src/libgit2/repo_template.h [4:5]
+        src/libgit2/repository.c [4:5]
+        src/libgit2/repository.h [4:5]
+        src/libgit2/reset.c [4:5]
+        src/libgit2/revparse.c [4:5]
+        src/libgit2/revwalk.c [4:5]
+        src/libgit2/revwalk.h [4:5]
+        src/libgit2/settings.c [4:5]
+        src/libgit2/settings.h [4:5]
+        src/libgit2/signature.c [4:5]
+        src/libgit2/signature.h [4:5]
+        src/libgit2/stash.c [4:5]
+        src/libgit2/status.c [4:5]
+        src/libgit2/status.h [4:5]
+        src/libgit2/strarray.c [4:5]
+        src/libgit2/strarray.h [4:5]
+        src/libgit2/stream.h [4:5]
+        src/libgit2/streams/mbedtls.h [4:5]
+        src/libgit2/streams/openssl.h [4:5]
+        src/libgit2/streams/openssl_dynamic.c [4:5]
+        src/libgit2/streams/openssl_legacy.c [4:5]
+        src/libgit2/streams/registry.c [4:5]
+        src/libgit2/streams/registry.h [4:5]
+        src/libgit2/streams/schannel.c [4:5]
+        src/libgit2/streams/schannel.h [4:5]
+        src/libgit2/streams/socket.c [4:5]
+        src/libgit2/streams/socket.h [4:5]
+        src/libgit2/streams/stransport.c [4:5]
+        src/libgit2/streams/stransport.h [4:5]
+        src/libgit2/streams/tls.c [4:5]
+        src/libgit2/streams/tls.h [4:5]
+        src/libgit2/submodule.c [4:5]
+        src/libgit2/submodule.h [4:5]
+        src/libgit2/sysdir.c [4:5]
+        src/libgit2/sysdir.h [4:5]
+        src/libgit2/tag.c [4:5]
+        src/libgit2/tag.h [4:5]
+        src/libgit2/trace.c [4:5]
+        src/libgit2/trace.h [4:5]
+        src/libgit2/trailer.c [4:5]
+        src/libgit2/transaction.c [4:5]
+        src/libgit2/transaction.h [4:5]
+        src/libgit2/transport.c [4:5]
+        src/libgit2/transports/auth.c [4:5]
+        src/libgit2/transports/auth.h [4:5]
+        src/libgit2/transports/auth_gssapi.c [4:5]
+        src/libgit2/transports/auth_negotiate.h [4:5]
+        src/libgit2/transports/auth_ntlm.h [4:5]
+        src/libgit2/transports/auth_ntlmclient.c [4:5]
+        src/libgit2/transports/auth_sspi.c [4:5]
+        src/libgit2/transports/credential.c [4:5]
+        src/libgit2/transports/credential_helpers.c [4:5]
+        src/libgit2/transports/git.c [4:5]
+        src/libgit2/transports/http.c [4:5]
+        src/libgit2/transports/http.h [4:5]
+        src/libgit2/transports/httpclient.c [4:5]
+        src/libgit2/transports/httpclient.h [4:5]
+        src/libgit2/transports/httpparser.c [4:5]
+        src/libgit2/transports/httpparser.h [4:5]
+        src/libgit2/transports/local.c [4:5]
+        src/libgit2/transports/smart.c [4:5]
+        src/libgit2/transports/smart.h [4:5]
+        src/libgit2/transports/smart_pkt.c [4:5]
+        src/libgit2/transports/smart_protocol.c [4:5]
+        src/libgit2/transports/ssh.c [4:5]
+        src/libgit2/transports/ssh_exec.c [4:5]
+        src/libgit2/transports/ssh_exec.h [4:5]
+        src/libgit2/transports/ssh_libssh2.c [4:5]
+        src/libgit2/transports/ssh_libssh2.h [4:5]
+        src/libgit2/transports/winhttp.c [4:5]
+        src/libgit2/tree-cache.c [4:5]
+        src/libgit2/tree-cache.h [4:5]
+        src/libgit2/tree.c [4:5]
+        src/libgit2/tree.h [4:5]
+        src/libgit2/userdiff.h [4:5]
+        src/libgit2/worktree.c [4:5]
+        src/libgit2/worktree.h [4:5]
+        src/util/alloc.c [4:5]
+        src/util/alloc.h [4:5]
+        src/util/allocators/debugalloc.c [4:5]
+        src/util/allocators/debugalloc.h [4:5]
+        src/util/allocators/failalloc.c [4:5]
+        src/util/allocators/failalloc.h [4:5]
+        src/util/allocators/stdalloc.c [4:5]
+        src/util/allocators/stdalloc.h [4:5]
+        src/util/allocators/win32_leakcheck.c [4:5]
+        src/util/allocators/win32_leakcheck.h [4:5]
+        src/util/array.h [4:5]
+        src/util/assert_safe.h [4:5]
+        src/util/bitvec.h [4:5]
+        src/util/cc-compat.h [4:5]
+        src/util/ctype_compat.h [4:5]
+        src/util/date.c [4:5]
+        src/util/date.h [4:5]
+        src/util/errors.c [4:5]
+        src/util/errors.h [4:5]
+        src/util/filebuf.c [4:5]
+        src/util/filebuf.h [4:5]
+        src/util/fs_path.c [4:5]
+        src/util/fs_path.h [4:5]
+        src/util/futils.c [4:5]
+        src/util/futils.h [4:5]
+        src/util/git2_util.h [4:5]
+        src/util/hash.c [4:5]
+        src/util/hash.h [4:5]
+        src/util/hash/collisiondetect.c [4:5]
+        src/util/hash/collisiondetect.h [4:5]
+        src/util/hash/openssl.c [4:5]
+        src/util/hash/openssl.h [4:5]
+        src/util/hash/sha.h [4:5]
+        src/util/hashmap.h [4:5]
+        src/util/hashmap_str.h [4:5]
+        src/util/integer.h [4:5]
+        src/util/map.h [4:5]
+        src/util/net.c [4:5]
+        src/util/net.h [4:5]
+        src/util/pool.c [4:5]
+        src/util/pool.h [4:5]
+        src/util/posix.c [4:5]
+        src/util/posix.h [4:5]
+        src/util/pqueue.c [4:5]
+        src/util/pqueue.h [4:5]
+        src/util/process.h [4:5]
+        src/util/rand.h [4:5]
+        src/util/regexp.c [4:5]
+        src/util/regexp.h [4:5]
+        src/util/runtime.c [4:5]
+        src/util/runtime.h [4:5]
+        src/util/sortedcache.c [4:5]
+        src/util/sortedcache.h [4:5]
+        src/util/staticstr.h [4:5]
+        src/util/str.c [4:5]
+        src/util/str.h [4:5]
+        src/util/strlist.c [4:5]
+        src/util/strlist.h [4:5]
+        src/util/strnlen.h [4:5]
+        src/util/thread.c [4:5]
+        src/util/thread.h [4:5]
+        src/util/tsort.c [4:5]
+        src/util/unix/map.c [4:5]
+        src/util/unix/posix.h [4:5]
+        src/util/unix/process.c [4:5]
+        src/util/unix/pthread.h [4:5]
+        src/util/unix/realpath.c [4:5]
+        src/util/utf8.c [4:5]
+        src/util/utf8.h [4:5]
+        src/util/util.c [4:5]
+        src/util/util.h [4:5]
+        src/util/varint.c [4:5]
+        src/util/varint.h [4:5]
+        src/util/vector.c [4:5]
+        src/util/vector.h [4:5]
+        src/util/wildmatch.c [4:5]
+        src/util/wildmatch.h [4:5]
+        src/util/win32/dir.c [4:5]
+        src/util/win32/dir.h [4:5]
+        src/util/win32/error.c [4:5]
+        src/util/win32/error.h [4:5]
+        src/util/win32/map.c [4:5]
+        src/util/win32/mingw-compat.h [4:5]
+        src/util/win32/msvc-compat.h [4:5]
+        src/util/win32/path_w32.c [4:5]
+        src/util/win32/path_w32.h [4:5]
+        src/util/win32/posix.h [4:5]
+        src/util/win32/posix_w32.c [4:5]
+        src/util/win32/process.c [4:5]
+        src/util/win32/thread.c [4:5]
+        src/util/win32/thread.h [4:5]
+        src/util/win32/utf-conv.c [4:5]
+        src/util/win32/utf-conv.h [4:5]
+        src/util/win32/version.h [4:5]
+        src/util/win32/w32_buffer.c [4:5]
+        src/util/win32/w32_buffer.h [4:5]
+        src/util/win32/w32_common.h [4:5]
+        src/util/win32/w32_leakcheck.c [4:5]
+        src/util/win32/w32_leakcheck.h [4:5]
+        src/util/win32/w32_util.c [4:5]
+        src/util/win32/w32_util.h [4:5]
+        src/util/win32/win32-compat.h [4:5]
+        src/util/zstream.c [4:5]
+        src/util/zstream.h [4:5]
+    Belongs difference:
+        + cli/ya.make
+
+KEEP     MIT                  c48cc93729ea9e2face6f27d930d92f8
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: src/util/utf8.c at line 31
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/util/utf8.c [18:34]
+
+KEEP     BSD-3-Clause         c764e5a5141bb475cfbe5f0d2a976c92
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [1155:1185]
+
+KEEP     MIT                  c8b069f894954ad4f86abe2766e66e03
+BELONGS ya.make
+    License text:
+        * Distributed under the MIT Software License.
+        * See accompanying file LICENSE.txt or copy at
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 52.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        src/util/hash/sha1dc/sha1.h [3:4]
+        src/util/hash/sha1dc/ubc_check.h [3:4]
+
+KEEP     BSD-3-Clause         c8deedcd1c2d31ed32d4e91d04f803c5
+BELONGS ya.make
+    License text:
+         * Based on the Android implementation, BSD licensed.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/util/fs_path.c [75:75]
+        src/util/fs_path.c [174:174]
+
+SKIP     LicenseRef-scancode-ssleay-windows d75b3cfdd6902c2d1c630b9d6dbf63ac
+BELONGS ya.make
+	# libgit2 no longer includes portions of OpenSSL thanks to 
+	# https://github.com/libgit2/libgit2/pull/6658
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-ssleay-windows
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/ssleay-windows.LICENSE, https://www.openssl.org/source/license.html
+    Files with this license:
+        COPYING [1035:1086]
+
+KEEP     MIT                  d7cb4d210aa423e0022053531d406a8c
+BELONGS ya.make
+    License text:
+        * Distributed under the MIT Software License.
+        * See accompanying file LICENSE.txt or copy at
+        * https://opensource.org/licenses/MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 82.35
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/util/hash/sha1dc/ubc_check.c [3:5]
+
+KEEP     BSD-3-Clause         db5b7cc17fb5d18fbbc29a1c7b4c43d3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        deps/xdiff/xhistogram.c [12:41]
+
+KEEP     MIT                  e7dfe92ea317accd4dfdeffb12828091
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: COPYING at line 1263
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [1250:1266]
+
+KEEP     GPL-2.0-only WITH GCC-exception-2.0 ec46f9967eb8c9dd4a1b441493565273
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: src/libgit2/streams/mbedtls.c at line 5, src/libgit2/streams/openssl.c at line 5
+    License text:
+         * This file is part of libgit2, distributed under the GNU GPL v2 with
+         * a Linking Exception. For full terms see the included COPYING file.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 54.17
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        src/libgit2/streams/mbedtls.c [4:5]
+        src/libgit2/streams/openssl.c [4:5]
+
+KEEP     BSD-3-Clause         f0ec6e860956a80e6b35f2c5f9dcad02
+BELONGS ya.make
+    License text:
+        The bundled wildmatch code is licensed under the BSD license:
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [1002:1002]
+
+SKIP     GPL-1.0-or-later     f15c7526da15502d4f0ec03375be2db6
+BELONGS ya.make
+	# Not a license, but a contribution license notice
+    License text:
+        fall under the GPL. Changes to libgit2 would still be covered under
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        README.md [29:29]
+
+KEEP     MIT                  f4b14e92ea33f6c10d32a8f6759199a2
+BELONGS ya.make
+    License text:
+        * Distributed under the MIT Software License.
+        * See accompanying file LICENSE.txt or copy at
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 52.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        src/util/hash/sha1dc/ubc_check.c [3:4]
+
+KEEP     LGPL-2.1-or-later    f5f7fe090658d851c4e94e70585c0284
+BELONGS ya.make
+	# Applies to a bundled version of winhttp.
+    # We do not use it, as GIT_WINHTTP is not defined in our configs.
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        COPYING [446:458]
+
+KEEP     Unicode-Mappings     f86e25cc5b91d6b6b61d8dda1f95a9f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode-mappings
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode-mappings.LICENSE
+    Files with this license:
+        COPYING [1316:1332]
+
+KEEP     GPL-2.0-only WITH GCC-exception-2.0 f97b94c46ae99f8cb08478f8551acc6f
+BELONGS ya.make
+    License text:
+        `libgit2` is licensed under a **very permissive license** (GPLv2 with
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        README.md [26:26]

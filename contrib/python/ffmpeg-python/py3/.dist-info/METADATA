@@ -1,0 +1,39 @@
+Metadata-Version: 2.1
+Name: ffmpeg-python
+Version: 0.2.0
+Summary: Python bindings for FFmpeg - with complex filtering support
+Home-page: https://github.com/kkroening/ffmpeg-python
+Author: Karl Kroening
+Author-email: karlk@kralnet.us
+License: UNKNOWN
+Download-URL: https://github.com/kkroening/ffmpeg-python/archive/v0.2.0.zip
+Keywords: -vf,a/v,audio,dsp,FFmpeg,ffmpeg,ffprobe,filtering,filter_complex,movie,render,signals,sound,streaming,streams,vf,video,wrapper,aac,ac3,avi,bmp,flac,gif,mov,mp3,mp4,png,raw,rawvideo,wav,.aac,.ac3,.avi,.bmp,.flac,.gif,.mov,.mp3,.mp4,.png,.raw,.rawvideo,.wav
+Platform: UNKNOWN
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Requires-Dist: future
+Provides-Extra: dev
+Requires-Dist: future (==0.17.1) ; extra == 'dev'
+Requires-Dist: numpy (==1.16.4) ; extra == 'dev'
+Requires-Dist: pytest-mock (==1.10.4) ; extra == 'dev'
+Requires-Dist: pytest (==4.6.1) ; extra == 'dev'
+Requires-Dist: Sphinx (==2.1.0) ; extra == 'dev'
+Requires-Dist: tox (==3.12.1) ; extra == 'dev'
+
+ffmpeg-python: Python bindings for FFmpeg
+=========================================
+
+:Github: https://github.com/kkroening/ffmpeg-python
+:API Reference: https://kkroening.github.io/ffmpeg-python/
+
+

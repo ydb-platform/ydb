@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Member",
+  "$ref": "#/definitions/user",
+  "definitions": {
+    "user": {
+      "title": "User",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "pet": {
+          "$ref": "#/definitions/animal"
+        },
+        "home": {
+          "$ref": "#/definitions/house"
+        }
+      }
+    },
+    "animal": {
+      "title": "Animal",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "breeder": {
+          "$ref": "#/definitions/user"
+        },
+        "home": {
+          "$ref": "#/definitions/house"
+        }
+      }
+    },
+    "house": {
+      "title": "House",
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/definitions/user"
+        }
+      }
+    }
+  }
+}

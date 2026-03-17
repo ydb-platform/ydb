@@ -1,0 +1,4 @@
+requirements:
+  - contrib/libs/yandex-cloud-api-protos
+exclude:
+  - yandex/*

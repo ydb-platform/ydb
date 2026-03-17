@@ -1,0 +1,8 @@
+--- contrib/python/webstruct/webstruct/loaders.py	(index)
++++ contrib/python/webstruct/webstruct/loaders.py	(working tree)
+@@ -32 +32 @@ import lxml.html
+-import lxml.html.clean
++import lxml_html_clean
+@@ -170 +170 @@ def _get_default_cleaner():
+-    return lxml.html.clean.Cleaner(
++    return lxml_html_clean.Cleaner(

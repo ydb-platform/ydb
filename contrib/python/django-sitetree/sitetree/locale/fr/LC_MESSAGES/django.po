@@ -1,0 +1,261 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+#
+# Translators:
+# Jean Traullé <jtraulle@gmail.com>, 2017
+msgid ""
+msgstr ""
+"Project-Id-Version: django-sitetree\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2013-09-25 22:11+0700\n"
+"PO-Revision-Date: 2017-11-19 09:34+0700\n"
+"Last-Translator: Igor 'idle sign' Starikov <idlesign@yandex.ru>\n"
+"Language-Team: French (http://www.transifex.com/idlesign/django-sitetree/language/fr/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fr\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Generator: Poedit 2.0.4\n"
+
+#: admin.py:81
+msgid "Basic settings"
+msgstr "Paramètres basiques"
+
+#: admin.py:84
+msgid "Access settings"
+msgstr "Paramètres d'accès"
+
+#: admin.py:88
+msgid "Display settings"
+msgstr "Paramètres d'affichage"
+
+#: admin.py:92
+msgid "Additional settings"
+msgstr "Paramètres additionnels"
+
+#: admin.py:153
+msgid "You are seeing this warning because \"URL as Pattern\" option is active and pattern entered above seems to be invalid. Currently registered URL pattern names and parameters: "
+msgstr "Vous voyez cet avertissement car l'option \"URL comme Motif\" est active et que le motif saisi ci-dessus semble invalide. Noms et paramètres de motifs d'URL actuellement enregistrés :"
+
+#: admin.py:230
+msgid "Item's parent left unchanged. Item couldn't be parent to itself."
+msgstr "Parent de l'item inchangé. L'item ne peut être son propre parent."
+
+#: models.py:31 models.py:56 templates/admin/sitetree/tree/change_form.html:41
+msgid "Title"
+msgstr "Titre"
+
+#: models.py:31
+msgid "Site tree title for presentational purposes."
+msgstr "Titre de l'arborescence du site dans un but de présentation."
+
+#: models.py:32 models.py:62
+msgid "Alias"
+msgstr "Alias"
+
+#: models.py:32
+msgid "Short name to address site tree from templates.<br /><b>Note:</b> change with care."
+msgstr "Court nom permettant de récupérer l'arborescence depuis les gabarits.<br /><b>Note :</b> modifiez avec précaution."
+
+#: models.py:36 models.py:60
+msgid "Site Tree"
+msgstr "Arborescence"
+
+#: models.py:37
+msgid "Site Trees"
+msgstr "Arborescences"
+
+#: models.py:52
+msgid "Any"
+msgstr "N'importe quelle"
+
+#: models.py:53
+msgid "All"
+msgstr "Toutes"
+
+#: models.py:56
+msgid "Site tree item title. Can contain template variables E.g.: {{ mytitle }}."
+msgstr "Titre de l'item de l'arborescence. Peut contenir des variables de gabarit ex : {{ montitre }}."
+
+#: models.py:57
+msgid "Hint"
+msgstr "Indication"
+
+#: models.py:57
+msgid "Some additional information about this item that is used as a hint."
+msgstr "Une information additionnelle à propos de l'item utilisée comme une indication."
+
+#: models.py:58 templates/admin/sitetree/tree/change_form.html:42
+msgid "URL"
+msgstr "URL"
+
+#: models.py:58
+msgid "Exact URL or URL pattern (see \"Additional settings\") for this item."
+msgstr "URL exacte ou motif d'URL (voir \"Paramètres additionnels\") pour cet item."
+
+#: models.py:59
+msgid "URL as Pattern"
+msgstr "URL comme Motif"
+
+#: models.py:59
+msgid "Whether the given URL should be treated as a pattern.<br /><b>Note:</b> Refer to Django \"URL dispatcher\" documentation (e.g. \"Naming URL patterns\" part)."
+msgstr "L'URL donnée doit-elle être traitée comme un motif ?<br /><b>Note :</b> Se référer à la documentation Django sur la \"Distribution des URL\" (section des \"Groupes nommés\")."
+
+#: models.py:60
+msgid "Site tree this item belongs to."
+msgstr "Arborescence de site à laquelle cet item appartient."
+
+#: models.py:61 templates/admin/sitetree/tree/change_form.html:34
+msgid "Hidden"
+msgstr "Caché"
+
+#: models.py:61
+msgid "Whether to show this item in navigation."
+msgstr "Doit-on afficher cet item dans la navigation ?"
+
+#: models.py:62
+#, python-format
+msgid "Short name to address site tree item from a template.<br /><b>Reserved aliases:</b> \"%s\"."
+msgstr "Court nom permettant de récupérer l'item d'arborescence depuis un gabarit.<br /><b>Alias réservés :</b> \"%s\"."
+
+#: models.py:63
+msgid "Description"
+msgstr "Description"
+
+#: models.py:63
+msgid "Additional comments on this item."
+msgstr "Commentaires additionnels sur cet item."
+
+#: models.py:64
+msgid "Show in menu"
+msgstr "Afficher dans le menu"
+
+#: models.py:64
+msgid "Whether to show this item in a menu."
+msgstr "Doit-on afficher cet item dans un menu ?"
+
+#: models.py:65
+msgid "Show in breadcrumb path"
+msgstr "Afficher dans le fil d'ariane"
+
+#: models.py:65
+msgid "Whether to show this item in a breadcrumb path."
+msgstr "Doit-on afficher cet item dans un fil d'ariane ?"
+
+#: models.py:66
+msgid "Show in site tree"
+msgstr "Afficher dans l'arborescence du site"
+
+#: models.py:66
+msgid "Whether to show this item in a site tree."
+msgstr "Doit-on afficher cet item dans une arborescence de site ?"
+
+#: models.py:67
+msgid "Logged in only"
+msgstr "Connecté seulement"
+
+#: models.py:67
+msgid "Check it to grant access to this item to authenticated users only."
+msgstr "Cocher pour accorder l'accès à cet item uniquement aux utilisateurs identifiés."
+
+#: models.py:68 templates/admin/sitetree/tree/change_form.html:40
+msgid "Guests only"
+msgstr "Visiteurs uniquement"
+
+#: models.py:68
+msgid "Check it to grant access to this item to guests only."
+msgstr "Cocher pour accorder l'accès à cet item uniquement aux visiteurs."
+
+#: models.py:69
+msgid "Restrict access to permissions"
+msgstr "Restreindre l'accès aux permissions"
+
+#: models.py:69
+msgid "Check it to restrict user access to this item, using Django permissions system."
+msgstr "Cocher pour restreindre l'accès à cet item aux utilisateurs, en utilisant le système de permissions de Django."
+
+#: models.py:70
+msgid "Permissions granting access"
+msgstr "Autorisations d'accès"
+
+#: models.py:71
+msgid "Permissions interpretation"
+msgstr "Interprétation des permissions"
+
+#: models.py:71
+msgid "<b>Any</b> &mdash; user should have any of chosen permissions. <b>All</b> &mdash; user should have all chosen permissions."
+msgstr "<b>N'importe laquelle</b> &mdash; l'utilisateur doit disposer de l'une des autorisations choisies. <b>Toutes</b> &mdash; l'utilisateur doit disposer de toutes les autorisations choisies."
+
+#: models.py:74
+msgid "Parent"
+msgstr "Parent"
+
+#: models.py:74
+msgid "Parent site tree item."
+msgstr "Item parent dans l'arborescence de site."
+
+#: models.py:75 templates/admin/sitetree/tree/change_form.html:43
+msgid "Sort order"
+msgstr "Ordre de tri"
+
+#: models.py:75
+msgid "Item position among other site tree items under the same parent."
+msgstr "Position de l'item parmi d'autres items de l'arborescence sous le même parent."
+
+#: models.py:89
+msgid "Site Tree Item"
+msgstr "Item d'arborescence de site"
+
+#: models.py:90 templates/admin/sitetree/tree/change_form.html:17
+msgid "Site Tree Items"
+msgstr "Items d'arborescence de site"
+
+#: templates/admin/sitetree/tree/change_form.html:24
+msgid "Add Site Tree item"
+msgstr "Ajouter un item d'arborescence de site"
+
+#: templates/admin/sitetree/tree/change_form.html:35
+msgid "Menu"
+msgstr "Menu"
+
+#: templates/admin/sitetree/tree/change_form.html:36
+msgid "Breadcrumbs"
+msgstr "Fils d'ariane"
+
+#: templates/admin/sitetree/tree/change_form.html:37
+msgid "Tree"
+msgstr "Arborescence"
+
+#: templates/admin/sitetree/tree/change_form.html:38
+msgid "Restricted"
+msgstr "Restreint"
+
+#: templates/admin/sitetree/tree/change_form.html:39
+msgid "Users only"
+msgstr "Utilisateurs uniquement"
+
+#: templates/admin/sitetree/tree/tree.html:23
+msgid "Move up"
+msgstr "Déplacer vers le haut"
+
+#: templates/admin/sitetree/tree/tree.html:25
+msgid "Move down"
+msgstr "Déplacer vers le bas"
+
+#: templates/admin/sitetree/treeitem/breadcrumbs.html:5
+msgid "Home"
+msgstr "Accueil"
+
+#: templates/admin/sitetree/treeitem/breadcrumbs.html:11
+msgid "Delete"
+msgstr "Supprimer"
+
+#: templates/admin/sitetree/treeitem/breadcrumbs.html:15
+msgid "History"
+msgstr "Historique"
+
+#: templates/admin/sitetree/treeitem/breadcrumbs.html:17
+msgid "Add"
+msgstr "Ajouter"

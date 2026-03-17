@@ -1,0 +1,4 @@
+requirements:
+  - contrib/libs/xmlsec
+copy:
+  - src/*.[ch]

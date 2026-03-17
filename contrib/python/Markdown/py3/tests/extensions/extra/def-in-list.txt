@@ -1,0 +1,15 @@
+: a paragraph that starts with a colon
+
+* A List item
+* 
+    A def term
+    : A def item
+    : a second
+
+* Another def term
+
+    : a loose item
+    
+    : a second
+
+* : a list item that starts with a colon

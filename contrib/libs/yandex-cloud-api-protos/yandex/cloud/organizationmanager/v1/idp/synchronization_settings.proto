@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.idp;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/idp;idp";
+option java_package = "yandex.cloud.api.organizationmanager.v1.idp";
+
+// Synchronization settings for a subject container.
+message SynchronizationSettings {
+  // ID of the subject container.
+  string subject_container_id = 1;
+  // Filter configuration for synchronization.
+  SynchronizationFilter filter = 2;
+  // Behavior when removing users.
+  RemoveUserBehavior remove_user_behavior = 3;
+  // Interval between synchronization runs.
+  google.protobuf.Duration synchronization_interval = 4;
+  // Whether users can be captured during synchronization.
+  bool allow_to_capture_users = 5;
+  // Whether groups can be captured during synchronization.
+  bool allow_to_capture_groups = 6;
+  // User attribute mappings.
+  repeated UserAttributeMapping user_attribute_mappings = 7;
+  // Group attribute mappings.
+  repeated GroupAttributeMapping group_attribute_mappings = 8;
+  // Timestamp when the settings were created.
+  google.protobuf.Timestamp created_at = 9;
+  // Domain replacement configuration.
+  string replacement_domain = 10;
+}
+
+// Filter configuration for synchronization.
+message SynchronizationFilter {
+  // Domain to synchronize.
+  string domain = 1 [(required) = true, (length) = "1-253"];
+  // List of groups to synchronize.
+  repeated string groups = 2 [(length) = "1-253", (size) = "<=10"];
+  // List of organizational units to synchronize.
+  repeated string organization_units = 3 [(length) = "1-253", (size) = "<=10"];
+}
+
+// User attribute mapping configuration.
+message UserAttributeMapping {
+  // Source attribute name.
+  string source = 1 [(length) = "0-253"];
+  // Target attribute to map to.
+  UserTargetAttribute target = 2 [(required) = true];
+  // Type of mapping.
+  MappingType type = 3 [(required) = true];
+}
+
+// Group attribute mapping configuration.
+message GroupAttributeMapping {
+  // Source attribute name.
+  string source = 1 [(length) = "0-253"];
+  // Target attribute to map to.
+  GroupTargetAttribute target = 2 [(required) = true];
+  // Type of mapping.
+  MappingType type = 3 [(required) = true];
+}
+
+// Type of attribute mapping.
+enum MappingType {
+  // The mapping type is not specified.
+  MAPPING_TYPE_UNSPECIFIED = 0;
+  // Direct mapping from source to target.
+  DIRECT = 1;
+  // Empty mapping (no source attribute).
+  EMPTY = 2;
+}
+
+// Target attributes for user mapping.
+enum UserTargetAttribute {
+  // The target attribute is not specified.
+  USER_TARGET_ATTRIBUTE_UNSPECIFIED = 0;
+  // Full name attribute.
+  FULL_NAME = 1;
+  // Given name attribute.
+  GIVEN_NAME = 2;
+  // Family name attribute.
+  FAMILY_NAME = 3;
+  // Email attribute.
+  EMAIL = 4;
+  // Phone number attribute.
+  PHONE_NUMBER = 5;
+  // Username attribute.
+  USERNAME = 6;
+  // Company name attribute.
+  COMPANY_NAME = 7;
+	// Job title attribute.
+  JOB_TITLE = 8;
+	// Department attribute.
+  DEPARTMENT = 9;
+	// Employee ID attribute.
+  EMPLOYEE_ID = 10;
+}
+
+// Target attributes for group mapping.
+enum GroupTargetAttribute {
+  // The target attribute is not specified.
+  GROUP_TARGET_ATTRIBUTE_UNSPECIFIED = 0;
+  // Name attribute.
+  NAME = 1;
+  // Description attribute.
+  DESCRIPTION = 2;
+}
+
+// Behavior when removing users during synchronization.
+enum RemoveUserBehavior {
+  // The behavior is not specified.
+  REMOVE_USER_BEHAVIOR_UNSPECIFIED = 0;
+  // Remove the user.
+  REMOVE = 1;
+  // Block the user.
+  BLOCK = 2;
+}
+
+// Type of synchronization session.
+enum SessionType {
+  // The session type is not specified.
+  SESSION_TYPE_UNSPECIFIED = 0;
+  // Active Directory synchronization session.
+  AD_SYNC = 1;
+  // Active Directory password hash session.
+  AD_PASSWORD_HASH = 2;
+  // Active Directory user control session.
+  AD_USER_CONTROL = 3;
+}

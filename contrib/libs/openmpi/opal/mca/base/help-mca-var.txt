@@ -1,0 +1,139 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2008-2011 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2013      Los Alamos National Security, LLC. All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI MCA error messages.
+#
+[invalid-flag-combination]
+ERROR: An invalid combination of flags was passed to mca_base_var_register.
+
+  Variable: %s
+  Flags:    %s %s
+#
+[default-only-param-set]
+WARNING: A user-supplied value attempted to override the default-only MCA
+variable named "%s".
+
+The user-supplied value was ignored.
+#
+[missing-param-file]
+Process %d Unable to locate the variable file "%s" in the following search path:
+   %s
+#
+[deprecated-mca-env]
+A deprecated MCA variable value was specified in the environment or
+on the command line.  Deprecated MCA variables should be avoided;
+they may disappear in future releases.
+
+  Deprecated variable: %s
+  New variable:        %s
+#
+[deprecated-mca-cli]
+A deprecated MCA variable value was specified on the command line.  Deprecated
+MCA variables should be avoided; they may disappear in future releases.
+
+  Deprecated variable: %s
+  New variable:        %s
+#
+[deprecated-mca-file]
+A deprecated MCA variable value was specified in an MCA variable
+file.  Deprecated MCA variables should be avoided; they may disappear
+in future releases.
+
+  Deprecated variable: %s
+  Source file:         %s
+  New variable:        %s
+#
+[mutually-exclusive-vars]
+Two mutually-exclusive MCA variables were specified.  This can result
+in undefined behavior, such as ignoring the components that the MCA
+variables are supposed to affect.
+
+  1st MCA variable: %s
+    Source of value: %s
+  2nd MCA variable: %s
+    Source of value: %s
+#
+[re-register-with-different-type]
+An MCA variable was re-registered with a different type (i.e., it was
+either originally registered as an INT and re-registered as a STRING,
+or it was originially registered as a STRING and re-registered as an
+INT).  This a developer error; your job may abort.
+
+  MCA variable name: %s
+#
+[var-name-conflict]
+A name collision was detected on an MCA variable name. This can happen
+if two components try to register the same variable with slightly
+different name components. The conflicting variables are listed below:
+
+  MCA variable name: %s
+  New name: %s %s %s
+  Existing name: %s %s %s
+#
+[overridden-param-set]
+WARNING: A user-supplied value attempted to set a variable that is set
+in the override variable file (openmpi-mca-params-override.conf).
+
+  Variable: %s
+
+The user-supplied value was ignored.
+#
+[invalid-value]
+An invalid value was supplied for an MCA variable.
+
+  Variable     : %s
+  Value        : %s
+#
+[invalid-value-enum]
+An invalid value was supplied for an enum variable.
+
+  Variable     : %s
+  Value        : %s
+  Valid values : %s
+#
+[environment-only-param]
+WARNING: The special MCA parameter "%s" was set in
+an unexpected way, and is likely not working the way you want it to.
+
+Specifically, this MCA parameter is "special" in that it can *only* be
+set in the environment.  Setting this value in a file -- and sometimes
+even on the command line -- will not work as intended.  The *only* way
+to set this value is to set "OMPI_MCA_%s" in the environment before
+starting your job.
+
+  Value:      %s
+  Source:     %s
+#
+[incorrect-env-list-param]
+WARNING: The format of "mca_base_env_list" parameter is a delimited list of VAR=VAL or
+VAR instances. By default, the delimiter is a semicolon: VAR1=VAL1;VAR2;VAR3=VAL3;...
+You can set other via "mca_base_env_list_delimiter" parameter. If the delimiter is a
+semicolon, the value of "mca_base_env_list" variable should be quoted to not interfere
+with SHELL command line parsing. In the case where a value is not assigned to variable
+VAR, the value will be taken from the current environment.
+The following environment variable was not found in the environment:
+  Variable:             %s
+  MCA variable value:   %s
+#
+[incorrect-env-list-sep]
+An invalid value was supplied for an MCA variable "mca_base_env_list_delimiter".
+The "mca_base_env_list" variable will be ignored.
+  Value:     %s

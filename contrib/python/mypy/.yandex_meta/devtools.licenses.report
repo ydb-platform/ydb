@@ -1,0 +1,214 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  1d24ff22ea07e98a6769a7263566dbf7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [10:26]
+        mypy/typeshed/LICENSE [219:235]
+
+KEEP     Python-2.0           3a35def045c6b0b001d1f85c7619f367
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 137, LICENSE at line 140, LICENSE at line 208, LICENSE at line 38, LICENSE at line 41, LICENSE at line 87, LICENSE at line 90, LICENSE at line 92
+FILE_INCLUDE mypy/typeshed/LICENSE found in files: LICENSE at line 137, LICENSE at line 140, LICENSE at line 208, LICENSE at line 38, LICENSE at line 41, LICENSE at line 87, LICENSE at line 90, LICENSE at line 92
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 90.41
+        Match type      : TEXT
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        LICENSE [38:212]
+
+KEEP     MIT                  3e7f95670d940fe3832874647e7f15cb
+BELONGS ya.make
+    License text:
+        Parts of typeshed are licensed under different licenses (like the MIT
+        license), reproduced below.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        mypy/typeshed/LICENSE [210:211]
+
+KEEP     MIT                  590018df8477cbee5bd8bfa3b7913d47
+BELONGS ya.make
+    License text:
+        Mypy (and mypyc) are licensed under the terms of the MIT license, reproduced below.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [1:1]
+
+KEEP     LicenseRef-scancode-unknown-license-reference 6135a754d98ed0069f90491dbc5259c5
+BELONGS ya.make
+    License text:
+        Files under lib-rt/base64 are licensed under the following license.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [233:233]
+
+KEEP     BSD-2-Clause         6354bdc44bb59a9b51953132d5ffac1c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [243:264]
+
+KEEP     LicenseRef-scancode-unknown-license-reference 71c499fdc3d135a99f4019d8f6247d2e
+BELONGS ya.make
+    License text:
+        mypyc/lib-rt/getargsfast.c are licensed under the PSF 2 License, reproduced
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [33:33]
+
+KEEP     MIT                  73d4bbdacb9f0839a0f609e27e81c1cc
+BELONGS ya.make
+    License text:
+        License: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        .dist-info/METADATA [6:6]
+
+KEEP     LicenseRef-scancode-python-cwi 785272fad99f08cba55a201f19245a7c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-python-cwi
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://docs.python.org/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/python-cwi.LICENSE
+    Files with this license:
+        LICENSE [214:229]
+
+KEEP     MIT                  831404535d402d14ea308c2f1c833daa
+BELONGS ya.make
+    License text:
+        Classifier: License :: OSI Approved :: MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        .dist-info/METADATA [15:15]
+
+KEEP     MIT                  8c6b397cbef46628bea401075e15b1d5
+BELONGS ya.make
+    License text:
+        The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [5:5]
+        mypy/typeshed/LICENSE [215:215]
+
+KEEP     Apache-2.0           98ebb24ca7fe01016997cbb1804258d9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 99.81
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        mypy/typeshed/LICENSE [1:206]
+
+KEEP     LicenseRef-scancode-unknown-license-reference dbd5bf447d94688274d53ee69ef2e02a
+BELONGS ya.make
+    License text:
+        Portions of mypy and mypyc are licensed under different licenses.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [30:30]
+
+KEEP     LicenseRef-scancode-unknown-license-reference e2f24609cbdc84b5052207edcc245e7c
+BELONGS ya.make
+    License text:
+        The "typeshed" project is licensed under the terms of the Apache license, as
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 27.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        mypy/typeshed/LICENSE [1:1]
+
+KEEP     LicenseRef-scancode-unknown-license-reference f8943a30eecad2f606beeaea83211bf4
+BELONGS ya.make
+    License text:
+        Parts of typeshed are licensed under different licenses (like the MIT
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        mypy/typeshed/LICENSE [210:210]

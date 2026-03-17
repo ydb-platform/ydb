@@ -1,0 +1,122 @@
+Metadata-Version: 2.1
+Name: apispec-flask-restful
+Version: 0.3.1
+Summary: Flask-RESTful plugin for apispec.
+Author-email: theirix <theirix@gmail.com>
+License: The MIT License (MIT)
+        
+        Copyright (c) 2017 theirix
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/theirix/apispec-flask-restful
+Project-URL: Repository, https://github.com/theirix/apispec-flask-restful
+Keywords: apispec,swagger,openapi,specification,documentation,spec,rest api
+Classifier: Development Status :: 4 - Beta
+Classifier: Topic :: Utilities
+Classifier: Programming Language :: Python
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Requires-Python: >=3.8
+Description-Content-Type: text/x-rst
+License-File: LICENSE.txt
+License-File: AUTHORS.rst
+Requires-Dist: apispec[yaml]>=1.0
+Requires-Dist: Flask-RESTful
+
+=====================
+apispec_flask_restful
+=====================
+
+.. image:: https://badge.fury.io/py/apispec-flask-restful.svg
+    :target: https://badge.fury.io/py/apispec-flask-restful
+
+Flask-RESTful plugin.
+
+Includes a path helper that allows you to pass a Flask-RESTful resource object to `path`.
+
+Inspired by AndrewPashkin/apispec_restful plugin.
+
+Install
+=======
+
+::
+
+    pip install apispec_flask_restful
+
+Usage
+===========
+
+Typical usage
+-------------
+
+.. code-block:: python
+
+    from pprint import pprint
+
+    from flask_restful import Api, Resource
+    from flask import Flask
+    from apispec import APISpec
+    from apispec_flask_restful import RestfulPlugin
+
+    class HelloResource(Resource):
+        def get(self, hello_id):
+            '''A greeting endpoint.
+                   ---
+                   description: get a greeting
+                   responses:
+                       200:
+                           description: a pet to be returned
+                           schema:
+                               $ref: #/definitions/Pet
+            '''
+            pass
+
+    app = Flask(__name__)
+    api = Api(app)
+    spec = APISpec(title='Spec', version='1.0', openapi_version='3.0.2', plugins=[RestfulPlugin()])
+
+    api.add_resource(HelloResource, '/hello')
+
+    spec.path(resource=HelloResource, api=api)
+    pprint(spec.to_dict()['paths'])
+
+    # OrderedDict([('/hello',
+    #          {'get': {'description': 'get a greeting',
+    #                   'responses': {200: {'description': 'a pet to be returned',
+    #                                       'schema': {'$ref': None}}}}})])
+
+Without API
+-----------
+
+Method `path` can be invoked with a resource path in a `path` parameter instead of `api` parameter:
+
+.. code-block:: python
+
+        spec.path(resource=HelloResource, path='/hello')
+
+With Blueprint
+--------------
+
+Flask blueprints are supported too by passing Flask app in `app` parameter:
+
+.. code-block:: python
+
+        spec.path(resource=HelloResource, api=api, app=app)
+

@@ -1,0 +1,23 @@
+# (C) Copyright 2005- ECMWF.
+
+# Template for wave spectra defined using an array of frequencies and directions
+
+# Direction part
+signed[1] scaleFactorOfWaveDirections : dump;
+alias integerScalingFactorAppliedToDirections = scaleFactorOfWaveDirections;
+alias directionScalingFactor = integerScalingFactorAppliedToDirections;
+
+if (numberOfWaveDirections > 0) {
+ unsigned[4] scaledValuesOfWaveDirections[numberOfWaveDirections] : dump;
+ alias scaledDirections = scaledValuesOfWaveDirections ;
+}
+
+# Frequency part
+signed[1] scaleFactorOfWaveFrequencies : dump;
+alias integerScalingFactorAppliedToFrequencies = scaleFactorOfWaveFrequencies;
+alias frequencyScalingFactor = integerScalingFactorAppliedToFrequencies;
+
+if (numberOfWaveFrequencies > 0) {
+ unsigned[4] scaledValuesOfWaveFrequencies[numberOfWaveFrequencies] : dump;
+ alias scaledFrequencies = scaledValuesOfWaveFrequencies;
+}

@@ -1,0 +1,83 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+{% block extrahead %}
+<style type="text/css">
+ins, del {
+text-decoration:none;
+}
+
+del {
+-moz-background-clip:border;
+-moz-background-inline-policy:continuous;
+-moz-background-origin:padding;
+background:#FFCCCC none repeat scroll 0 0;
+}
+
+ins {
+-moz-background-clip:border;
+-moz-background-inline-policy:continuous;
+-moz-background-origin:padding;
+background:#BBFFBB none repeat scroll 0 0;
+}
+
+.img-wrapper {
+	float: left;
+	width: 75%;
+}
+.img-wrapper img {
+	max-width: 100%;
+}
+.img-wrapper img + img {
+	margin-top: 10px;
+}
+.submit-row input[name=reject] {
+	background: #ba2121;
+}
+.submit-row input[name=approve] {
+	background: #5bc76a;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% block object-tools %}
+{% if object_admin_url %}
+	<ul class="object-tools">
+	<li><a href="{{ object_admin_url }}" class="historylink">{% trans "Change object" %}</a></li>
+	</ul>
+{% endif %}
+{% endblock %}{# object-tools #}
+<form enctype="multipart/form-data" action="" method="post"
+id="moderatedobject_form">{% csrf_token %}
+
+
+<div>
+	<fieldset class="module aligned ">
+	<h2>{% trans "Object differences" %}</h2>
+
+	{% for change in changes %}
+	<div class="form-row {{ change.verbose_name }}">
+		<div>
+			<label style="font-size: 14px; font-weight: bold;">{{ change.verbose_name }}</label><p style="width:800px;">{{ change.diff|safe }}</p>
+		</div>
+
+	</div>
+	{% endfor %}
+	</fieldset>
+
+	{% for fieldset in adminform %}
+		{% include "admin/includes/fieldset.html" %}
+	{% endfor %}
+
+	<div class="submit-row">
+		<p class="deletelink-box">
+			<input type="submit" value="{% trans 'Reject' %}" name="reject"  />
+		</p>
+
+		<input type="submit" value="{% trans 'Approve' %}" name="approve" />
+	</div>
+
+</form>
+</div>
+
+{% endblock %}

@@ -1,0 +1,56 @@
+# -*- text -*-
+#
+# Copyright (c) 2018      Intel, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is a US/English help file
+#
+[reqd-not-found]
+The plog_base_order MCA parameter included a required logging
+channel that is not available:
+
+  Channel:  %s
+
+Please update the parameter and try again.
+#
+[syslog:unrec-level]
+An unrecognized syslog level was given:
+
+  Level:  %s
+
+Please see "man syslog" for a list of defined levels. Input
+parameter strings and their corresponding syslog levels
+recognized by PMIx include:
+
+  Parameter       Level
+   err           LOG_ERR  (default)
+   alert         LOG_ALERT
+   crit          LOG_CRIT
+   emerg         LOG_EMERG
+   warn          LOG_WARNING
+   not           LOG_NOTICE
+   info          LOG_INFO
+   debug         LOG_DEBUG
+
+Please redefine the MCA parameter and try again.
+#
+[syslog:unrec-facility]
+An unsupported or unrecognized value was given for the
+syslog facility (i.e., the type of program calling syslog):
+
+  Value:  %s
+
+Please see "man syslog" for a list of defined facility values.
+PMIx currently supports only the following designations:
+
+   Parameter       Level
+    auth          LOG_AUTH
+    priv          LOG_AUTHPRIV
+    daemon        LOG_DAEMON
+    user          LOG_USER  (default)
+
+Please redefine the MCA parameter and try again.

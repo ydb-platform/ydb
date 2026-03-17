@@ -1,0 +1,77 @@
+0 0 Unknown
+1 fg First guess
+2 an Analysis
+3 ia Initialised analysis
+4 oi Oi analysis
+5 3v 3d variational analysis
+6 4v 4d variational analysis
+7 3g 3d variational gradients
+8 4g 4d variational gradients
+9 fc Forecast
+10 cf Control forecast
+11 pf Perturbed forecast
+12 ef Errors in first guess
+13 ea Errors in analysis
+14 cm Cluster means
+15 cs Cluster std deviations
+16 fp Forecast probability
+17 em Ensemble mean
+18 es Ensemble standard deviation
+19 fa Forecast accumulation
+20 cl Climatology
+21 si Climate simulation
+22 s3 Climate 30 days simulation
+23 ed Empirical distribution
+24 tu Tubes
+25 ff Flux forcing realtime
+26 of Ocean forward
+27 efi Extreme forecast index
+28 efic Extreme forecast index control
+29 pb Probability boundaries
+30 ep Event probability
+31 bf Bias-corrected forecast
+32 cd Climate distribution
+33 4i 4D analysis increments
+34 go Gridded observations
+35 me Model errors
+36 pd Probability distribution
+37 ci Cluster information
+38 sot Shift of Tail
+39 eme Ensemble data assimilation model errors
+40 im Images
+42 sim Simulated images
+43 wem Weighted ensemble mean
+44 wes Weighted ensemble standard deviation
+45 cr Cluster representative
+46 ses Scaled ensemble standard deviation
+47 taem Time average ensemble mean
+48 taes Time average ensemble standard deviation
+50 sg Sensitivity gradient
+52 sf Sensitivity forecast
+60 pa Perturbed analysis
+61 icp Initial condition perturbation
+62 sv Singular vector
+63 as Adjoint singular vector
+64 svar Signal variance
+65 cv Calibration/Validation forecast
+70 or Ocean reanalysis
+71 fx Flux forcing
+72 fu Fill-up
+73 sfo Simulations with forcing
+74 tpa Time processed analysis
+75 if Interim forecast
+80 fcmean Forecast mean
+81 fcmax Forecast maximum
+82 fcmin Forecast minimum
+83 fcstdev Forecast standard deviation
+86 hcmean Hindcast climate mean
+87 ssd Simulated satellite data
+88 gsd Gridded satellite data
+89 ga GFAS analysis
+90 gai Gridded analysis input
+91 gbf Bias-corrected gridbox
+92 pfc Point values
+93 ppm Point value metrics
+94 gwt Weather types
+95 est Ensemble statistics
+96 mpp Model physics perturbations

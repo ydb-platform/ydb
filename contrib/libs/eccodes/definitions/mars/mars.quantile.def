@@ -1,0 +1,19 @@
+if ((stream is "eehs" or stream is "efhs" or stream is "wees" or stream is "wehs") and (type is "cd")) {
+  if (edition == 1) {
+    # defined in local section 19
+    alias mars.quantile = quantile;
+  } else {
+    meta marsQuantile sprintf("%d:%d",quantileValue,totalNumberOfQuantiles);
+    alias mars.quantile = marsQuantile;
+  }
+}
+else
+{
+  if (edition == 1) {
+    meta marsQuantile sprintf("%d:%d",perturbationNumber,numberOfForecastsInEnsemble);
+    alias mars.quantile = marsQuantile;
+  } else {
+    meta marsQuantile sprintf("%d:%d",quantileValue,totalNumberOfQuantiles);
+    alias mars.quantile = marsQuantile;
+  }
+}

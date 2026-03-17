@@ -1,0 +1,376 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.containers.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/logging/v1/log_entry.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/containers/v1;containers";
+option java_package = "yandex.cloud.api.serverless.containers.v1";
+
+message Container {
+  reserved 7;
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Container is being created.
+    CREATING = 1;
+
+    // Container is ready for use.
+    ACTIVE = 2;
+
+    // Container is being deleted.
+    DELETING = 3;
+
+    // Container failed. The only allowed action is delete.
+    ERROR = 4;
+  }
+
+  // ID of the container. Generated at creation time.
+  string id = 1;
+
+  // ID of the folder that the container belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp for the container.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the container. The name is unique within the folder.
+  string name = 4;
+
+  // Description of the container.
+  string description = 5;
+
+  // Container labels as `key:value` pairs.
+  map<string, string> labels = 6;
+
+  // URL that needs to be requested to call the container.
+  string url = 8;
+
+  // Status of the container.
+  Status status = 9;
+}
+
+message Revision {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Revision is being created.
+    CREATING = 1;
+
+    // Revision is currently used by the container.
+    ACTIVE = 2;
+
+    // Revision is not used by the container. May be deleted later.
+    OBSOLETE = 3;
+  }
+
+  // ID of the revision.
+  string id = 1;
+
+  // ID of the container that the revision belongs to.
+  string container_id = 2;
+
+  // Description of the revision.
+  string description = 3;
+
+  // Creation timestamp for the revision.
+  google.protobuf.Timestamp created_at = 4;
+
+  // Image configuration for the revision.
+  Image image = 5;
+
+  // Resources allocated to the revision.
+  Resources resources = 6;
+
+  // Timeout for the execution of the revision.
+  //
+  // If the timeout is exceeded, Serverless Containers responds with a 504 HTTP code.
+  google.protobuf.Duration execution_timeout = 7;
+
+  // The number of concurrent requests allowed per container instance.
+  int64 concurrency = 8;
+
+  // ID of the service account associated with the revision.
+  string service_account_id = 9;
+
+  // Status of the revision.
+  Status status = 10;
+
+  // Yandex Lockbox secrets to be used by the revision.
+  repeated Secret secrets = 11;
+
+  // Network access. If specified the revision will be attached to specified network/subnet(s).
+  Connectivity connectivity = 12;
+
+  // Policy for provisioning instances of the revision.
+  //
+  // The policy is only applied when the revision is ACTIVE.
+  ProvisionPolicy provision_policy = 13;
+
+  // Policy for scaling instances of the revision.
+  ScalingPolicy scaling_policy = 14;
+
+  // Options for logging from the container.
+  LogOptions log_options = 15;
+
+  // S3 mounts to be used by the revision.
+  repeated StorageMount storage_mounts = 16;
+
+  // Mounts to be used by the revision.
+  repeated Mount mounts = 17;
+
+  // The container's execution mode.
+  Runtime runtime = 18;
+
+  // Metadata options for the revision.
+  MetadataOptions metadata_options = 19;
+
+  // Config for asynchronous invocations of the revision.
+  AsyncInvocationConfig async_invocation_config = 20;
+}
+
+// Revision image specification.
+message Image {
+  // Image URL, that is used by the revision.
+  string image_url = 1;
+
+  // Digest of the image. Calculated at creation time.
+  string image_digest = 2;
+
+  // Override for the image's ENTRYPOINT.
+  Command command = 3;
+
+  // Override for the image's CMD.
+  Args args = 4;
+
+  // Additional environment for the container.
+  map<string, string> environment = 5 [
+    (length) = "<=4096",
+    (map_key).pattern = "[a-zA-Z][a-zA-Z0-9_]*"
+  ];
+
+  // Override for the image's WORKDIR.
+  string working_dir = 6;
+}
+
+message Command {
+  // Command that will override ENTRYPOINT of an image.
+  //
+  // Commands will be executed as is. The runtime will not substitute environment
+  // variables or execute shell commands. If one wants to do that, they should
+  // invoke shell interpreter with an appropriate shell script.
+  repeated string command = 1;
+}
+
+message Args {
+  // Arguments that will override CMD of an image.
+  //
+  // Arguments will be passed as is. The runtime will not substitute environment
+  // variables or execute shell commands. If one wants to do that, they should
+  // invoke shell interpreter with an appropriate shell script.
+  repeated string args = 1;
+}
+
+// Resources allocated to a revision.
+message Resources {
+  // Amount of memory available to the revision, specified in bytes, multiple of 128MB.
+  int64 memory = 1 [(value) = "134217728-8589934592"];
+
+  // Number of cores available to the revision.
+  int64 cores = 2 [(value) = "0-4"];
+
+  // Specifies baseline performance for a core in percent, multiple of 5%.
+  // Should be 100% for cores > 1.
+  int64 core_fraction = 3 [(value) = "0-100"];
+}
+
+message ProvisionPolicy {
+  // Minimum number of guaranteed provisioned container instances for all zones
+  // in total.
+  int64 min_instances = 1;
+}
+
+// Secret that is available to the container at run time.
+message Secret {
+  // ID of Yandex Lockbox secret.
+  string id = 1;
+
+  // ID of Yandex Lockbox secret.
+  string version_id = 2;
+
+  // Key in secret's payload, which value to be delivered into container environment.
+  string key = 3;
+  oneof reference {
+    // Environment variable in which secret's value is delivered.
+    string environment_variable = 4;
+  }
+}
+
+// Revision connectivity specification.
+message Connectivity {
+  // Network the revision will have access to.
+  string network_id = 1;
+
+  // The list of subnets (from the same network) the revision can be attached to.
+  //
+  // Deprecated, it is sufficient to specify only network_id, without the list of subnet_ids.
+  repeated string subnet_ids = 2 [
+    (length) = ">0",
+    (unique) = true
+  ];
+}
+
+message LogOptions {
+  // Is logging from container disabled.
+  bool disabled = 1;
+
+  // Log entries destination.
+  oneof destination {
+    // Entry should be written to log group resolved by ID.
+    string log_group_id = 2 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+
+    // Entry should be written to default log group for specified folder.
+    string folder_id = 3 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+  }
+
+  // Minimum log entry level.
+  //
+  // See [LogLevel.Level] for details.
+  yandex.cloud.logging.v1.LogLevel.Level min_level = 4;
+}
+
+message ScalingPolicy {
+  // Upper limit for instance count in each zone.
+  // 0 means no limit.
+  int64 zone_instances_limit = 1;
+
+  // Upper limit of requests count in each zone.
+  // 0 means no limit.
+  int64 zone_requests_limit = 2;
+}
+
+message StorageMount {
+  // Use container.proto:Mount.ObjectStorage instead
+  option deprecated = true;
+
+  // S3 bucket name for mounting.
+  string bucket_id = 1 [
+    (required) = true,
+    (length) = "3-63",
+    (pattern) = "[-.0-9a-zA-Z]*"
+  ];
+
+  // S3 bucket prefix for mounting.
+  string prefix = 2;
+
+  // Reserved for mount_point_name (optional unique mount point name for synchronization)
+  reserved 3;
+
+  // Is mount read only.
+  bool read_only = 4;
+
+  // Mount point path inside the container for mounting.
+  string mount_point_path = 5 [
+    (required) = true,
+    (length) = "1-300",
+    (pattern) = "[-_0-9a-zA-Z/]*"
+  ];
+}
+
+// Mount contains an information about version's external storage mount
+message Mount {
+  reserved 4 to 9;
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    READ_ONLY = 1;
+    READ_WRITE = 2;
+  }
+
+  /// Reserved for name (optional unique mount point name for synchronization)
+  reserved 1;
+
+  // The absolute mount point path inside the container for mounting.
+  string mount_point_path = 2 [
+    (required) = true,
+    (length) = "1-300",
+    (pattern) = "[-_0-9a-zA-Z/]*"
+  ];
+
+  // Mount's mode
+  Mode mode = 3;
+
+  // Target mount option
+  oneof target {
+    option (exactly_one) = true;
+
+    // Object storage mounts
+    ObjectStorage object_storage = 10;
+
+    // Working disk (worker-local non-shared read-write NBS disk templates)
+    DiskSpec ephemeral_disk_spec = 11;
+  }
+
+  // ObjectStorage as a mount
+  message ObjectStorage {
+    // ObjectStorage bucket name for mounting.
+    string bucket_id = 1 [
+      (required) = true,
+      (length) = "3-63",
+      (pattern) = "[-.0-9a-zA-Z]*"
+    ];
+
+    // ObjectStorage bucket prefix for mounting.
+    string prefix = 2;
+  }
+
+  // Disk as a mount
+  message DiskSpec {
+    // The size of disk for mount in bytes
+    int64 size = 1 [(value) = ">0"];
+
+    // Optional block size of disk for mount in bytes
+    int64 block_size = 2;
+  }
+}
+
+// The container's execution mode
+message Runtime {
+  oneof type {
+    option (exactly_one) = true;
+
+    // The classic one. You need to run an HTTP server inside the container.
+    Http http = 1;
+
+    // We run a process from ENTRYPOINT inside the container for each user request.
+    Task task = 2;
+  }
+
+  message Http {}
+  message Task {}
+}
+
+message MetadataOptions {
+  // Enabled access to GCE flavored metadata
+  MetadataOption gce_http_endpoint = 1;
+  // Enabled access to AWS flavored metadata (IMDSv1)
+  MetadataOption aws_v1_http_endpoint = 2;
+}
+
+enum MetadataOption {
+  // Option is default
+  METADATA_OPTION_UNSPECIFIED = 0;
+
+  // Option is enabled
+  ENABLED = 1;
+
+  // Option is disabled
+  DISABLED = 2;
+}
+
+message AsyncInvocationConfig {
+  // Optional id of service account with permission to invoke container.
+  string service_account_id = 1;
+}

@@ -1,0 +1,10 @@
+# Code table 1.2 - Significance of reference time
+0 0 Analysis
+1 1 Start of forecast
+2 2 Verifying time of forecast
+3 3 Observation time
+4 4 Local time
+5 5 Simulation start
+# 6-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

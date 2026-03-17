@@ -1,0 +1,3 @@
+[pymorphy2_dicts]
+ru = pymorphy2_dicts_ru
+

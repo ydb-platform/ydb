@@ -1,0 +1,19 @@
+---
+openapi: 3.0.3
+info:
+  title: Test specification for the translating parser
+  version: 0.0.0
+paths:
+  /hosts:
+    get:
+      responses:
+        default:
+          description: A file reference to the root file
+          content:
+            application/json:
+              schema:
+                $ref: 'root_file_reference_from_root.spec.yaml#/components/schemas/PlainObject'
+components:
+  schemas:
+    PlainObject:
+      type: object

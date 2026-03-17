@@ -1,0 +1,22 @@
+{
+  "name": "requirejs-plugins",
+  "version": "1.0.2",
+  "description": "Small set of plugins for [RequireJS](http://requirejs.org). Some plugins may also work on other AMD loaders (never tested it).",
+  "main": "src/json.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/jstrimpel/requirejs-plugins.git"
+  },
+  "author": "Jason Strimpel <jstrimpel@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jstrimpel/requirejs-plugins/issues"
+  },
+  "homepage": "https://github.com/jstrimpel/requirejs-plugins"
+}

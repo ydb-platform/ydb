@@ -1,0 +1,52 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "definitions": {
+        "Pets": {
+            "Cat": {
+                "title": "Cat",
+                "type": "object",
+                "required": [
+                    "pet_type",
+                    "hunts",
+                    "age"
+                ],
+                "properties": {
+                    "pet_type": {
+                        "enum": [
+                            "Cat"
+                        ]
+                    },
+                    "hunts": {
+                        "type": "boolean"
+                    },
+                    "age": {
+                        "type": "string"
+                    }
+                }
+            },
+            "Dog": {
+                "title": "Dog",
+                "type": "object",
+                "required": [
+                    "pet_type",
+                    "bark",
+                    "breed"
+                ],
+                "properties": {
+                    "pet_type": {
+                        "enum": [
+                            "Dog"
+                        ]
+                    },
+                    "bark": {
+                        "type": "boolean"
+                    },
+                    "breed": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    },
+    "additionalProperties": false
+}

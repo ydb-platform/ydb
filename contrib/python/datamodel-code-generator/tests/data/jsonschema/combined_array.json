@@ -1,0 +1,209 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pet",
+  "type": [
+    "object",
+    "array"
+  ],
+  "items": {
+    "$ref": "#"
+  },
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "age": {
+      "type": "integer"
+    }
+  },
+  "definitions": {
+    "CombinedEnum": {
+      "type": [
+        "array",
+        "string"
+      ],
+      "items": {
+        "$ref": "#/definitions/Kind"
+      },
+      "enum": [
+        "green",
+        "red"
+      ]
+    },
+    "CombinedAllOf": {
+      "type": [
+        "array"
+      ],
+      "items": {
+        "$ref": "#/definitions/Kind"
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/Kind"
+        },
+        {
+          "$ref": "#/definitions/Id"
+        },
+        {
+          "$ref": "#/definitions/CustomRootModel"
+        }
+      ]
+    },
+    "CombinedObjectField": {
+      "type": "object",
+      "properties": {
+        "CombinedEnumField": {
+          "type": [
+            "array",
+            "string"
+          ],
+          "items": {
+            "$ref": "#/definitions/Kind"
+          },
+          "enum": [
+            "green",
+            "red"
+          ]
+        },
+        "CombinedAllOfField": {
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/definitions/Kind"
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Kind"
+            },
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "$ref": "#/definitions/CustomRootModel"
+            }
+          ]
+        },
+        "CombinedObjectField": {
+          "type": [
+            "array",
+            "object"
+          ],
+          "items": {
+            "$ref": "#/definitions/Kind"
+          },
+          "properties": {
+            "color": {
+              "type": "string"
+            }
+          }
+        },
+        "CombinedAllOfObjectField": {
+          "type": [
+            "array",
+            "object"
+          ],
+          "properties": {
+            "color": {
+              "type": "string"
+            }
+          },
+          "items": {
+            "$ref": "#/definitions/Kind"
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Kind"
+            },
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "$ref": "#/definitions/CustomRootModel"
+            }
+          ]
+        }
+      }
+    },
+    "CombinedSelf": {
+      "type": [
+        "array",
+        "object"
+      ],
+      "items": {
+        "$ref": "#/definitions/CombinedSelf"
+      },
+      "properties": {
+        "color": {
+          "type": "string"
+        }
+      }
+    },
+    "CombinedSelfEnum": {
+      "type": [
+        "array",
+        "object"
+      ],
+      "items": {
+        "$ref": "#/definitions/CombinedSelfEnum"
+      },
+      "properties": {
+        "color": {
+          "type": "string"
+        }
+      },
+      "enum": [
+        "green",
+        "red"
+      ]
+    },
+    "CombinedSelfAllOf": {
+      "type": [
+        "array",
+        "object"
+      ],
+      "items": {
+        "$ref": "#/definitions/CombinedSelfAllOf"
+      },
+      "properties": {
+        "color": {
+          "type": "string"
+        }
+      },
+      "enum": [
+        "green",
+        "red"
+      ],
+      "allOf": [
+        {
+          "$ref": "#/definitions/Kind"
+        },
+        {
+          "$ref": "#/definitions/Id"
+        },
+        {
+          "$ref": "#/definitions/CustomRootModel"
+        }
+      ]
+    },
+    "Kind": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "Id": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        }
+      }
+    },
+    "CustomRootModel": {
+      "type": "string"
+    }
+  }
+}

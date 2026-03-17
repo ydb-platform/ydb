@@ -1,0 +1,1146 @@
+{
+  "AO": {
+    "country": "AO",
+    "bban_spec": "21!n",
+    "bban_length": 21,
+    "iban_spec": "AO2!n21!n",
+    "iban_length": 25,
+    "in_sepa_zone": false
+  },
+  "AL": {
+    "positions": {
+      "branch_code": [
+        3,
+        7
+      ],
+      "national_checksum_digits": [
+        7,
+        8
+      ]
+    }
+  },
+  "AX": {
+    "positions": {
+      "account_code": [
+        3,
+        13
+      ],
+      "national_checksum_digits": [
+        13,
+        14
+      ]
+    }
+  },
+  "BA": {
+    "positions": {
+      "account_code": [
+        6,
+        14
+      ],
+      "national_checksum_digits": [
+        14,
+        16
+      ]
+    }
+  },
+  "BE": {
+    "positions": {
+      "account_code": [
+        3,
+        10
+      ],
+      "national_checksum_digits": [
+        10,
+        12
+      ]
+    }
+  },
+  "BF": {
+    "country": "BF",
+    "bban_spec": "2!c22!n",
+    "bban_length": 24,
+    "iban_spec": "BF2!n2!c22!n",
+    "iban_length": 28,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        22
+      ],
+      "national_checksum_digits": [
+        22,
+        24
+      ]
+    }
+  },
+  "BG": {
+    "positions": {
+      "account_type": [
+        8,
+        10
+      ],
+      "account_code": [
+        10,
+        18
+      ]
+    }
+  },
+  "BI": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "BJ": {
+    "country": "BJ",
+    "bban_spec": "2!c22!n",
+    "bban_length": 24,
+    "iban_spec": "BJ2!n2!c22!n",
+    "iban_length": 28,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        22
+      ],
+      "national_checksum_digits": [
+        22,
+        24
+      ]
+    }
+  },
+  "BL": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "BR": {
+    "positions": {
+      "account_code": [
+        13,
+        23
+      ],
+      "account_type": [
+        23,
+        24
+      ],
+      "account_id": [
+        24,
+        25
+      ]
+    }
+  },
+  "CF": {
+    "country": "CF",
+    "bban_spec": "23!n",
+    "bban_length": 23,
+    "iban_spec": "CF2!n23!n",
+    "iban_length": 27,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "CG": {
+    "country": "CG",
+    "bban_spec": "23!n",
+    "bban_length": 23,
+    "iban_spec": "CG2!n23!n",
+    "iban_length": 27,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "CI": {
+    "country": "CI",
+    "bban_spec": "2!a22!n",
+    "bban_length": 24,
+    "iban_spec": "CI2!n2!a22!n",
+    "iban_length": 28,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        22
+      ],
+      "national_checksum_digits": [
+        22,
+        24
+      ]
+    }
+  },
+  "CM": {
+    "country": "CM",
+    "bban_spec": "23!n",
+    "bban_length": 23,
+    "iban_spec": "CM2!n23!n",
+    "iban_length": 27,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "CV": {
+    "country": "CV",
+    "bban_spec": "21!n",
+    "bban_length": 21,
+    "iban_spec": "CV2!n21!n",
+    "iban_length": 25,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        4
+      ],
+      "branch_code": [
+        4,
+        8
+      ],
+      "account_code": [
+        8,
+        19
+      ],
+      "national_checksum_digits": [
+        19,
+        21
+      ]
+    }
+  },
+  "CZ": {
+    "positions": {
+      "branch_code": [
+        4,
+        10
+      ],
+      "account_code": [
+        10,
+        20
+      ]
+    }
+  },
+  "DJ": {
+    "country": "DJ",
+    "bban_spec": "23!n",
+    "bban_length": 23,
+    "iban_spec": "DJ2!n23!n",
+    "iban_length": 27,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "DZ": {
+    "bban_spec": "22!n",
+    "bban_length": 22,
+    "iban_spec": "DZ2!n22!n",
+    "iban_length": 26,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        20
+      ],
+      "national_checksum_digits": [
+        20,
+        22
+      ]
+    }
+  },
+  "EE": {
+    "positions": {
+      "branch_code": [
+        2,
+        4
+      ],
+      "account_code": [
+        4,
+        15
+      ],
+      "national_checksum_digits": [
+        15,
+        16
+      ]
+    }
+  },
+  "ES": {
+    "positions": {
+      "national_checksum_digits": [
+        8,
+        10
+      ],
+      "account_code": [
+        10,
+        20
+      ]
+    }
+  },
+  "FI": {
+    "positions": {
+      "account_code": [
+        3,
+        13
+      ],
+      "national_checksum_digits": [
+        13,
+        14
+      ]
+    }
+  },
+  "FO": {
+    "positions": {
+      "account_code": [
+        4,
+        13
+      ],
+      "national_checksum_digits": [
+        13,
+        14
+      ]
+    }
+  },
+  "FR": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "GA": {
+    "country": "GA",
+    "bban_spec": "23!n",
+    "bban_length": 23,
+    "iban_spec": "GA2!n23!n",
+    "iban_length": 27,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "GF": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "GL": {
+    "positions": {
+      "account_code": [
+        4,
+        13
+      ],
+      "national_checksum_digits": [
+        13,
+        14
+      ]
+    }
+  },
+  "GP": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "GT": {
+    "positions": {
+      "currency_code": [
+        4,
+        6
+      ],
+      "account_type": [
+        6,
+        8
+      ],
+      "account_code": [
+        8,
+        24
+      ]
+    }
+  },
+  "GW": {
+    "country": "GW",
+    "bban_spec": "2!c19!n",
+    "bban_length": 21,
+    "iban_spec": "GW2!n2!c19!n",
+    "iban_length": 25,
+    "in_sepa_zone": false
+  },
+  "GQ": {
+    "country": "GQ",
+    "bban_spec": "23!n",
+    "bban_length": 23,
+    "iban_spec": "GQ2!n23!n",
+    "iban_length": 27,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "HN": {
+    "country": "HN",
+    "bban_spec": "4!a20!n",
+    "bban_length": 24,
+    "iban_spec": "HN2!n4!a20!n",
+    "iban_length": 28,
+    "in_sepa_zone": false
+  },
+  "HU": {
+    "positions": {
+      "account_code": [
+        7,
+        23
+      ],
+      "national_checksum_digits": [
+        23,
+        24
+      ]
+    }
+  },
+  "IR": {
+    "country": "IR",
+    "bban_spec": "22!n",
+    "bban_length": 22,
+    "iban_spec": "IR2!n22!n",
+    "iban_length": 26,
+    "in_sepa_zone": false
+  },
+  "IS": {
+    "positions": {
+      "account_type": [
+        4,
+        6
+      ],
+      "account_code": [
+        6,
+        12
+      ],
+      "account_holder_id": [
+        12,
+        22
+      ]
+    },
+    "in_sepa_zone": true
+  },
+  "IT": {
+    "positions": {
+      "national_checksum_digits": [
+        0,
+        1
+      ]
+    }
+  },
+  "JO": {
+    "positions": {
+      "bank_code": [
+        0,
+        4
+      ],
+      "branch_code": [
+        4,
+        8
+      ],
+      "account_code": [
+        8,
+        26
+      ]
+    }
+  },
+  "KM": {
+    "country": "KM",
+    "bban_spec": "23!n",
+    "bban_length": 23,
+    "iban_spec": "KM2!n23!n",
+    "iban_length": 27,
+    "in_sepa_zone": false
+  },
+  "MA": {
+    "country": "MA",
+    "bban_spec": "24!n",
+    "bban_length": 24,
+    "iban_spec": "MA2!n24!n",
+    "iban_length": 28,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        22
+      ],
+      "national_checksum_digits": [
+        22,
+        24
+      ]
+    }
+  },
+  "MC": {
+    "positions": {
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "ME": {
+    "positions": {
+      "account_code": [
+        3,
+        16
+      ],
+      "national_checksum_digits": [
+        16,
+        18
+      ]
+    }
+  },
+  "MF": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "MG": {
+    "country": "MG",
+    "bban_spec": "23!n",
+    "bban_length": 23,
+    "iban_spec": "MG2!n23!n",
+    "iban_length": 27,
+    "in_sepa_zone": false
+  },
+  "MK": {
+    "positions": {
+      "account_code": [
+        3,
+        13
+      ],
+      "national_checksum_digits": [
+        13,
+        15
+      ]
+    }
+  },
+  "ML": {
+    "country": "ML",
+    "bban_spec": "2!c22!n",
+    "bban_length": 24,
+    "iban_spec": "ML2!n2!c22!n",
+    "iban_length": 28,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        22
+      ],
+      "national_checksum_digits": [
+        22,
+        24
+      ]
+    }
+  },
+  "MQ": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "MR": {
+    "positions": {
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "MU": {
+    "positions": {
+      "account_code": [
+        8,
+        20
+      ],
+      "currency_code": [
+        23,
+        26
+      ]
+    },
+    "default_currency_code": "MUR"
+  },
+  "MZ": {
+    "country": "MZ",
+    "bban_spec": "21!n",
+    "bban_length": 21,
+    "iban_spec": "MZ2!n21!n",
+    "iban_length": 25,
+    "in_sepa_zone": false
+  },
+  "NE": {
+    "country": "NE",
+    "bban_spec": "2!a22!n",
+    "bban_length": 24,
+    "iban_spec": "NE2!n22!n",
+    "iban_length": 28,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        22
+      ],
+      "national_checksum_digits": [
+        22,
+        24
+      ]
+    }
+  },
+  "NO": {
+    "positions": {
+      "account_code": [
+        4,
+        10
+      ],
+      "national_checksum_digits": [
+        10,
+        11
+      ]
+    }
+  },
+  "NC": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "PF": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "PL": {
+    "positions": {
+      "bank_code": [
+        0,
+        8
+      ],
+      "branch_code": [
+        0,
+        0
+      ],
+      "national_checksum_digits": [
+        7,
+        8
+      ]
+    }
+  },
+  "PM": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "PT": {
+    "positions": {
+      "branch_code": [
+        4,
+        8
+      ],
+      "account_code": [
+        8,
+        19
+      ],
+      "national_checksum_digits": [
+        19,
+        21
+      ]
+    }
+  },
+  "RE": {
+    "positions": {
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "RS": {
+    "positions": {
+      "account_code": [
+        3,
+        16
+      ],
+      "national_checksum_digits": [
+        16,
+        18
+      ]
+    }
+  },
+  "SC": {
+    "positions": {
+      "account_code": [
+        8,
+        24
+      ],
+      "currency_code": [
+        24,
+        27
+      ]
+    },
+    "default_currency_code": "SCR"
+  },
+  "SE": {
+    "positions": {
+      "account_code": [
+        3,
+        19
+      ],
+      "national_checksum_digits": [
+        19,
+        20
+      ]
+    }
+  },
+  "SI": {
+    "positions": {
+      "bank_code": [
+        0,
+        2
+      ],
+      "branch_code": [
+        2,
+        5
+      ],
+      "account_code": [
+        5,
+        13
+      ],
+      "national_checksum_digits": [
+        13,
+        15
+      ]
+    },
+    "bic_lookup_components": [
+      "bank_code",
+      "branch_code"
+    ]
+  },
+  "SK": {
+    "positions": {
+      "branch_code": [
+        4,
+        10
+      ],
+      "account_code": [
+        10,
+        20
+      ]
+    }
+  },
+  "SM": {
+    "positions": {
+      "national_checksum_digits": [
+        0,
+        1
+      ]
+    }
+  },
+  "SN": {
+    "country": "SN",
+    "bban_spec": "2!a22!n",
+    "bban_length": 24,
+    "iban_spec": "SN2!n2!a22!n",
+    "iban_length": 28,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        22
+      ],
+      "national_checksum_digits": [
+        22,
+        24
+      ]
+    }
+  },
+  "TD": {
+    "country": "TD",
+    "bban_spec": "23!n",
+    "bban_length": 23,
+    "iban_spec": "TD2!n23!n",
+    "iban_length": 27,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        21
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "TF": {
+    "positions": {
+      "account_code": [
+        10,
+        21
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  },
+  "TG": {
+    "country": "TG",
+    "bban_spec": "2!a3!n5!n12!n2!n",
+    "bban_length": 24,
+    "iban_spec": "TG2!n2!a3!n5!n12!n2!n",
+    "iban_length": 28,
+    "in_sepa_zone": false,
+    "positions": {
+      "bank_code": [
+        0,
+        5
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "account_code": [
+        10,
+        22
+      ],
+      "national_checksum_digits": [
+        22,
+        24
+      ]
+    }
+  },
+  "TL": {
+    "positions": {
+      "account_code": [
+        3,
+        17
+      ],
+      "national_checksum_digits": [
+        17,
+        19
+      ]
+    }
+  },
+  "TN": {
+    "positions": {
+      "account_code": [
+        5,
+        18
+      ],
+      "national_checksum_digits": [
+        18,
+        20
+      ]
+    }
+  },
+  "TR": {
+    "positions": {
+      "account_code": [
+        6,
+        22
+      ]
+    }
+  },
+  "WF": {
+    "positions": {
+      "account_code": [
+        10,
+        21
+      ],
+      "branch_code": [
+        5,
+        10
+      ],
+      "national_checksum_digits": [
+        21,
+        23
+      ]
+    }
+  }
+}

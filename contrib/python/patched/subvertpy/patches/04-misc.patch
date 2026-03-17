@@ -1,0 +1,201 @@
+--- contrib/python/patched/subvertpy/subvertpy/_ra.c	(index)
++++ contrib/python/patched/subvertpy/subvertpy/_ra.c	(working tree)
+@@ -303,7 +303,7 @@ static PyTypeObject Reporter_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	reporter_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -2366,7 +2366,7 @@ static PyTypeObject RemoteAccess_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	ra_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -2694,7 +2694,7 @@ static PyTypeObject Auth_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	auth_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+--- contrib/python/patched/subvertpy/subvertpy/client.c	(index)
++++ contrib/python/patched/subvertpy/subvertpy/client.c	(working tree)
+@@ -831,8 +831,9 @@ static PyObject *client_export(PyObject *self, PyObject *args, PyObject *kwargs)
+         return NULL;
+ 
+     temp_pool = Pool(NULL);
+-    if (temp_pool == NULL)
++    if (temp_pool == NULL) {
+         return NULL;
++    }
+ 
+ 	from = py_object_to_svn_string(py_from, temp_pool);
+ 	if (from == NULL) {
+@@ -2001,7 +2002,7 @@ PyTypeObject Config_Type = {
+     /* Methods to implement standard operations */
+ 
+     (destructor)config_dealloc, /*    destructor tp_dealloc;    */
+-    NULL, /*    printfunc tp_print;    */
++    0, /*    printfunc tp_print;    */
+     NULL, /*    getattrfunc tp_getattr;    */
+     NULL, /*    setattrfunc tp_setattr;    */
+     NULL, /*    cmpfunc tp_compare;    */
+@@ -2123,7 +2124,7 @@ PyTypeObject Info_Type = {
+     /* Methods to implement standard operations */
+ 
+     info_dealloc, /*    destructor tp_dealloc;  */
+-    NULL, /*    printfunc tp_print; */
++    0, /*    printfunc tp_print; */
+     NULL, /*    getattrfunc tp_getattr; */
+     NULL, /*    setattrfunc tp_setattr; */
+     NULL, /*    cmpfunc tp_compare; */
+@@ -2223,7 +2224,7 @@ PyTypeObject WCInfo_Type = {
+     /* Methods to implement standard operations */
+ 
+     wcinfo_dealloc, /*    destructor tp_dealloc;  */
+-    NULL, /*    printfunc tp_print; */
++    0, /*    printfunc tp_print; */
+     NULL, /*    getattrfunc tp_getattr; */
+     NULL, /*    setattrfunc tp_setattr; */
+     NULL, /*    cmpfunc tp_compare; */
+@@ -2286,7 +2287,7 @@ PyTypeObject Client_Type = {
+     /* Methods to implement standard operations */
+ 
+     client_dealloc, /*    destructor tp_dealloc;    */
+-    NULL, /*    printfunc tp_print;    */
++    0, /*    printfunc tp_print;    */
+     NULL, /*    getattrfunc tp_getattr;    */
+     NULL, /*    setattrfunc tp_setattr;    */
+     NULL, /*    cmpfunc tp_compare;    */
+--- contrib/python/patched/subvertpy/subvertpy/editor.c	(index)
++++ contrib/python/patched/subvertpy/subvertpy/editor.c	(working tree)
+@@ -178,7 +178,7 @@ PyTypeObject TxDeltaWindowHandler_Type = {
+ 	/* Methods to implement standard operations */
+ 	
+ 	py_txdelta_window_handler_dealloc, /* destructor tp_dealloc; */
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -316,7 +316,7 @@ PyTypeObject FileEditor_Type = {
+ 	/* Methods to implement standard operations */
+ 	
+ 	py_editor_dealloc, /*	destructor tp_dealloc; 	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -730,7 +730,7 @@ PyTypeObject DirectoryEditor_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	py_editor_dealloc, /* destructor tp_dealloc;  */
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -932,7 +932,7 @@ PyTypeObject Editor_Type = {
+ 	/* Methods to implement standard operations */
+ 	
+ 	py_editor_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+--- contrib/python/patched/subvertpy/subvertpy/repos.c	(index)
++++ contrib/python/patched/subvertpy/subvertpy/repos.c	(working tree)
+@@ -340,7 +340,7 @@ PyTypeObject FileSystem_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	fs_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -612,7 +612,7 @@ PyTypeObject Repository_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	repos_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -879,7 +879,7 @@ static PyObject *fs_node_file_proplist(FileSystemRootObject *self, PyObject *arg
+ 	apr_pool_destroy(temp_pool);
+ 	return ret;
+ }
+-
++ 
+ static PyObject *fs_node_file_prop(FileSystemRootObject *self, PyObject *args)
+ {
+     apr_pool_t *temp_pool;
+@@ -1093,7 +1093,7 @@ PyTypeObject FileSystemRoot_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	fs_root_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -1244,7 +1244,7 @@ PyTypeObject Transaction_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	txn_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+--- contrib/python/patched/subvertpy/subvertpy/wc.c	(index)
++++ contrib/python/patched/subvertpy/subvertpy/wc.c	(working tree)
+@@ -393,7 +393,7 @@ static PyTypeObject Entry_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	entry_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -504,7 +504,7 @@ static PyTypeObject Status_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	status_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -2363,7 +2363,7 @@ static PyTypeObject Adm_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	adm_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/
+@@ -2568,7 +2568,7 @@ static PyTypeObject CommittedQueue_Type = {
+ 	/* Methods to implement standard operations */
+ 
+ 	committed_queue_dealloc, /*	destructor tp_dealloc;	*/
+-	NULL, /*	printfunc tp_print;	*/
++	0, /*	printfunc tp_print;	*/
+ 	NULL, /*	getattrfunc tp_getattr;	*/
+ 	NULL, /*	setattrfunc tp_setattr;	*/
+ 	NULL, /*	cmpfunc tp_compare;	*/

@@ -1,0 +1,5 @@
+# CODE TABLE 5.2, Matrix coordinate value function definition
+0 0 Explicit coordinate values set
+1 1 Linear coordinates
+11 11 Geometric coordinates
+255 255 Missing

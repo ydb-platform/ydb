@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package yandex.cloud.video.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/video/v1;video";
+option java_package = "yandex.cloud.api.video.v1";
+
+// Entity representing a collection of visual styling settings for content presentation.
+// Style presets define the appearance of players, widgets, and other UI elements
+// to ensure consistent branding and user experience.
+message StylePreset {
+  reserved 10, 11;
+
+  // Reserved for future use.
+  reserved 18 to 19, 22 to 99;
+
+  // Unique identifier of the style preset.
+  string id = 1;
+
+  // Identifier of the channel where this style preset is created and managed.
+  string channel_id = 2;
+
+  // Display name of the style preset shown in interfaces.
+  string title = 3;
+
+  // Background color for the player page in hexadecimal format (e.g., "#FFFFFF").
+  string background_color = 4;
+
+  // Primary text color for widgets in hexadecimal format.
+  string widget_text_color_primary = 5;
+
+  // Secondary text color for widgets in hexadecimal format.
+  string widget_text_color_secondary = 6;
+
+  // Accent color for interactive elements in widgets in hexadecimal format.
+  string widget_accent_color = 7;
+
+  // Vertical spacing between widget blocks in pixels.
+  int64 widget_block_gap = 8;
+
+  // Color of separator lines between widget blocks in hexadecimal format.
+  string widget_block_separator_color = 9;
+
+  // Corner radius of the player container in pixels.
+  int64 player_border_radius = 12;
+
+  // Primary color for player controls in hexadecimal format.
+  string player_color = 13;
+
+  // Background color for the currently selected item in playlists in hexadecimal format.
+  string playlist_selected_item_background_color = 14;
+
+  // Corner radius of playlist items in pixels.
+  int64 playlist_item_border_radius = 15;
+
+  // Spacing between playlist items in pixels.
+  int64 playlist_item_gap = 16;
+
+  // Position of the playlist widget relative to the player.
+  WidgetLocation playlist_location = 17;
+
+  // List of widgets to display to the right of the player.
+  repeated Widget right_widgets = 20;
+
+  // List of widgets to display below the player.
+  repeated Widget bottom_widgets = 21;
+
+  // Timestamp when the style preset was initially created in the system.
+  google.protobuf.Timestamp created_at = 100;
+
+  // Timestamp of the last modification to the style preset or its metadata.
+  google.protobuf.Timestamp updated_at = 101;
+
+  // Widget position relative to the player.
+  enum WidgetLocation {
+    // The widget location is not specified.
+    WIDGET_LOCATION_UNSPECIFIED = 0;
+
+    // Position the widget to the right of the player.
+    RIGHT = 1;
+
+    // Position the widget below the player.
+    BOTTOM = 2;
+  }
+}
+
+// Represents a UI component that displays additional content or functionality.
+// Widgets can be positioned in different locations around the player.
+message Widget {
+  // Specifies the type of widget to display.
+  oneof widget {
+    option (exactly_one) = true;
+
+    // Widget that displays video content summarization.
+    Summarization summarization = 1;
+
+    // Widget that displays detailed video description.
+    Description description = 2;
+  }
+
+  // Widget that presents an automatically generated summary of the video content.
+  // This helps viewers quickly understand the main points without watching the entire video.
+  message Summarization {}
+
+  // Widget that displays the full description text for the video.
+  // This can include details about the content, creators, and other relevant information.
+  message Description {}
+}

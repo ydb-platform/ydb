@@ -1,0 +1,40 @@
+version: 1
+disable_existing_loggers: false
+
+formatters:
+    standard:
+        (): contextlog.SmartFormatter
+        style: "{"
+        datefmt: "%H:%M:%S"
+        format: "[{asctime}] {log_color}{levelname:>7}{reset} {processName} - {pathname}:{lineno} - {message} -- {cyan}{_extra}{reset}"
+        max_vars_lines: 20
+    host_progress:
+        (): contextlog.SmartFormatter
+        style: "{"
+        datefmt: "%H:%M:%S"
+        format: "[{asctime}] {cyan}[{perc:>3}%]{reset} [{status_color}{bold}{status:^6}{reset}]: {status_color}{fqdn}{reset} - {message} -- {cyan}{_extra}{reset}"
+
+
+handlers:
+    console:
+        level: DEBUG
+        class: logging.StreamHandler
+        formatter: standard
+    progress:
+        level: DEBUG
+        class: logging.StreamHandler
+        formatter: host_progress
+
+root:
+    level: INFO
+    handlers:
+        - console
+
+loggers:
+    progress:
+        level: INFO
+        propagate: False
+        handlers:
+            - progress
+    rtapi:
+        level: INFO

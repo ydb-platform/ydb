@@ -1,0 +1,71 @@
+--- contrib/python/greenlet/py3/greenlet/tests/_test_extension_cpp.cpp	(index)
++++ contrib/python/greenlet/py3/greenlet/tests/_test_extension_cpp.cpp	(working tree)
+@@ -178,1 +178,1 @@ init_test_extension_cpp(void)
+-                                       "greenlet.tests._test_extension_cpp",
++                                       "__tests__._test_extension_cpp",
+--- contrib/python/greenlet/py3/greenlet/tests/fail_cpp_exception.py	(index)
++++ contrib/python/greenlet/py3/greenlet/tests/fail_cpp_exception.py	(working tree)
+@@ -6,1 +6,1 @@ Takes one argument, the name of the function in :mod:`_test_extension_cpp` to ca
+-from greenlet.tests import _test_extension_cpp
++from __tests__ import _test_extension_cpp
+--- contrib/python/greenlet/py3/greenlet/tests/test_greenlet.py	(index)
++++ contrib/python/greenlet/py3/greenlet/tests/test_greenlet.py	(working tree)
+@@ -8,2 +8,3 @@ import gc
+ import threading
++import pytest
+ 
+@@ -188,2 +189,3 @@ class TestGreenlet(TestCase):
+ 
++    @pytest.mark.xfail(reason="Fail on Python 3 in Arcadia")
+     def test_dealloc_catches_GreenletExit_throws_other(self):
+--- contrib/python/greenlet/py3/greenlet/tests/__init__.py	(index)
++++ contrib/python/greenlet/py3/greenlet/tests/__init__.py	(working tree)
+@@ -185,15 +185,18 @@ class TestCase(TestCaseMetaClass(
+
+     def run_script(self, script_name, show_output=True):
+         import subprocess
+-        script = os.path.join(
++        import yatest.common as yc
++        script = yc.source_path(os.path.join(
+             os.path.dirname(__file__),
+             script_name,
+-        )
++        ))
++        env = os.environ.copy()
++        env["Y_PYTHON_ENTRY_POINT"] = ":main"
+ 
+         try:
+             return subprocess.check_output([sys.executable, script],
+                                            encoding='utf-8',
+-                                           stderr=subprocess.STDOUT)
++                                           stderr=subprocess.STDOUT, env=env)
+         except subprocess.CalledProcessError as ex:
+             if show_output:
+                 print('-----')
+--- contrib/python/greenlet/py3/greenlet/tests/test_cpp.py	(index)
++++ contrib/python/greenlet/py3/greenlet/tests/test_cpp.py	(working tree)
+@@ -22,17 +22,21 @@ class CPPTests(TestCase):
+     def _do_test_unhandled_exception(self, target):
+         import os
+         import sys
+-        script = os.path.join(
++        import yatest.common as yc
++        env = os.environ.copy()
++        env["Y_PYTHON_ENTRY_POINT"] = ":main"
++        script = yc.source_path(os.path.join(
+             os.path.dirname(__file__),
+             'fail_cpp_exception.py',
+-        )
++        ))
+         args = [sys.executable, script, target.__name__ if not isinstance(target, str) else target]
+         __traceback_info__ = args
+         with self.assertRaises(subprocess.CalledProcessError) as exc:
+             subprocess.check_output(
+                 args,
+                 encoding='utf-8',
+-                stderr=subprocess.STDOUT
++                stderr=subprocess.STDOUT,
++                env=env,
+             )
+ 
+         ex = exc.exception

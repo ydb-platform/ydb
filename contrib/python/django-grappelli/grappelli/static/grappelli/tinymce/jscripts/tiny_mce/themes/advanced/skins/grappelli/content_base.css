@@ -1,0 +1,56 @@
+/* This file contains the CSS data for the editable area(iframe) of TinyMCE */
+/* You can extend this CSS by adding your own CSS file with the the content_css option */
+
+* html body {
+    overflow-y: auto !important; overflow-x: auto !important;
+    font-size: 0; line-height: 0;
+}
+
+body#tinymce, body#tinymce td, body#tinymce pre, body#tinymce ol, body#tinymce ul, body#tinymce li {
+    font-family: Arial, sans-serif;
+    font-size: 11px; line-height: 16px; font-weight: normal; color: #cc4343 !important;
+    white-space: normal;
+}
+body#tinymce {
+    margin: 0; padding: 10px 10px 10px 0 !important;
+    width: 620px;
+}
+body#tinymce.fullscreen {
+    width: 620px !important; /* Use this to apply the actual page-width and guarantee a wysiwyg content-structure */
+}
+
+a:link, a:visited, a:hover, a:active {
+    padding: 0;
+    color: #309bbf !important;
+    text-decoration: none !important;
+}
+
+a.external:link, a.external:visited, a.external:hover, a.external:active {
+    padding: 0;
+    color: #309bbf !important;
+    text-decoration: underline !important;
+}
+
+/* -- Absolute Break (Style=Umbruch) ---------- */
+
+.clear {
+    clear: both !important; padding: 2px 0;
+    border-top-width: 2px !important; border-bottom-width: 2px !important;
+}
+
+ol.clear, ul.clear { padding: 2px 0 2px 10px !important; }
+
+/* Clearing floats without extra markup
+   Based on How To Clear Floats Without Structural Markup by PiE
+   [http://www.positioniseverything.net/easyclearing.html] */
+
+.clearfix:after {
+    content: "."; 
+    display: block; 
+    height: 0; 
+    clear: both; 
+    visibility: hidden;
+}
+.clearfix {display: inline-block; border-top-width: 2px !important; border-bottom-width: 2px !important; }
+* html .clearfix {height: 1%;}
+.clearfix {display: block;}

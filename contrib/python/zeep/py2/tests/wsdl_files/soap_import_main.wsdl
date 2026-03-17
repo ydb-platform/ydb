@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<definitions 
+    xmlns:tns="http://example.com/stockquote.wsdl" 
+    xmlns:xsd1="http://example.com/stockquote.xsd" 
+    xmlns:sub="http://test.python-zeep.org/sub"
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" 
+    xmlns="http://schemas.xmlsoap.org/wsdl/"
+    name="StockQuote" 
+    targetNamespace="http://example.com/stockquote.wsdl">
+  <import namespace="http://test.python-zeep.org/sub" location="soap_import_2.wsdl"/>
+
+  <types/>
+  <binding name="StockQuoteBinding" type="tns:StockQuotePortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="GetLastTradePrice">
+      <soap:operation soapAction="http://example.com/GetLastTradePrice"/>
+      <input>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+      </output>
+      <fault name="fault1">
+        <soap:fault name="fault1" use="literal"/>
+      </fault>
+      <fault name="fault2">
+        <soap:fault name="fault2" use="literal"/>
+      </fault>
+    </operation>
+  </binding>
+  <service name="StockQuoteService">
+    <documentation>My first service</documentation>
+    <port name="StockQuotePort" binding="tns:StockQuoteBinding">
+      <soap:address location="http://example.com/stockquote"/>
+    </port>
+  </service>
+</definitions>
+

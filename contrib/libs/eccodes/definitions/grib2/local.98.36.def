@@ -1,0 +1,7 @@
+# Local definition 36: MARS labelling for long window 4Dvar system (inspired by local def 1)
+
+# Hours
+unsigned[2] offsetToEndOf4DvarWindow : dump;
+unsigned[2] lengthOf4DvarWindow : dump;
+
+alias anoffset=offsetToEndOf4DvarWindow;

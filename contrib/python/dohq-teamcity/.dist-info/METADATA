@@ -1,0 +1,36 @@
+Metadata-Version: 2.4
+Name: dohq-teamcity
+Version: 1.0.10
+Summary: Python JetBrains TeamCity REST API library
+Home-page: https://github.com/devopshq/teamcity
+Author: Alexey Burov
+Author-email: allburov@gmail.com
+License: MIT
+Keywords: JetBrains,TeamCity REST API,DevOpsHQ
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 3.4
+License-File: LICENSE
+Requires-Dist: urllib3>=1.15
+Requires-Dist: six>=1.10
+Requires-Dist: certifi
+Requires-Dist: python-dateutil
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary
+
+
+    dohq_teamcity is a Python package providing access to the JetBrains TeamCity server API.
+
+    You can see detailed user manual here: https://devopshq.github.io/teamcity
+    

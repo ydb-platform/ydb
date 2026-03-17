@@ -1,0 +1,14 @@
+openapi: '3.0.2'
+components:
+  schemas:
+    ApiVersion:
+      description: The version of this API
+      type: string
+      const: v1
+    Api:
+      type: object
+      required:
+        - version
+      properties:
+        version:
+          $ref: "#/components/schemas/ApiVersion"

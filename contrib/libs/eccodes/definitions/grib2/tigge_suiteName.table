@@ -1,0 +1,12 @@
+0  unknown unknown
+1  mogreps-mo-eua        Unified model based LAM-EPS run by UK Met Office
+2  sreps-aemet-eua       Multi model based LAM-EPS run by AEMET (Spain)
+3  srnwppeps-dwd-eua     Poor man's LAM-EPS run by DWD (Germany)
+4  cosmoleps-arpasimc-eu COSMO model based LAM-EPS run by ARPA-SIM (Italy)
+6  aladinlaef-zamg-eu    ALADIN model based LAM-EPS run by ZAMG (Austria)
+7  cosmodeeps-dwd-eu     COSMO model based LAM-EPS run by DWD (Germany)
+9  glameps-hirlamcons-eu ALADIN and HIRLAM models based LAM-EPS run by HIRLAM and ALADIN consortium
+10 aromeeps-mf-eu        AROME model based LAM-EPS run by Meteo-France
+11 hirlam-dmi-eu         HIRLAM model based LAM-EPS run by DMI (Denmark)
+12 aladinhuneps-omsz-eu  ALADIN model based LAM-EPS run by OMSZ (Hungary)
+13 pearp-mf-eu           ARPEGE model based LAM-EPS run by Meteo-France

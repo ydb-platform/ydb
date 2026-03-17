@@ -1,0 +1,92 @@
+Metadata-Version: 2.4
+Name: mo-future
+Version: 7.685.25166
+Summary: More future! Make Python 2/3 compatibility a bit easier
+Home-page: https://github.com/klahnakoski/mo-future
+Author: Kyle Lahnakoski
+Author-email: kyle@lahnakoski.com
+License: MPL 2.0
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: summary
+
+# More Future!
+
+For old code written against Python2, plus some tiny useful functions
+
+## Recent Changes
+
+**December 2022** - No longer points to Python2 modules. 
+
+
+## Description
+
+### Problem 
+
+`future` or `six` are hard to use: It is easy to google how to import an object in Python2, or Python3, but finding the full path to the same in these compatibility libraries is difficult. 
+
+## Solution
+
+All the modules and types required for compatibility are put into the `mo-future` top-level module so they are  easy to find.
+
+
+### Flat namespace
+
+Instead of 
+
+```python
+    from future.utils import text
+```
+
+you get the same, but without having to discover what sub-module the `text` is hiding:  
+
+```python
+    from mo_future import text
+```
+
+
+### Simpler imports
+
+Instead of writing conditional imports like 
+
+```python
+    try:
+        from io import StringIO
+    except:
+        from StringIO import StringIO
+```
+
+or 
+
+```python
+    if PY3:
+        from io import StringIO
+    else:
+        from StringIO import StringIO
+```
+
+you can use `mo-future`:
+
+```python
+    from mo_future import StringIO
+```
+
+

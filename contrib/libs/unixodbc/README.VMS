@@ -1,0 +1,138 @@
+Building unixODBC on OpenVMS (non-VAX only)
+=========================================
+
+Here's an initial go at building unixODBC on OpenVMS, at present this will 
+only run on alpha and itanium, but if anyone requires use of this on VAX drop me an email
+(suypport@easysoft.com) and I'll do the necessary transfer vector macro's to export 
+the required symbols from the two shared objects (ODBC.EXE and ODBCINST.EXE).
+
+Current components which have been built on OpenVMS
+
+LIBODBC.OLB 	   Driver manager as an OpenVMS static object library 	
+LIBODBCINST.OLB    ODBC installer / setup static object library
+LIBODBCPSQL.OLB    Postgres 6.5 driver static object library
+LIBODBC.EXE        Driver manager shareable image
+LIBODBCINST.EXE    ODBC installer / setup shareable image
+LIBODBCPSQL.EXE    Postgres 6.5 driver shareable image
+ISQL.EXE           Command line SQL tool
+DLTEST.EXE         Program to test loading shared libraries
+
+Additional components included to perform building on OpenVMS
+
+VMSBUILD.COM - DCL script which compiles, links and installs unixODBC
+[.EXTRAS]VMS.C  - Contains OpenVMS specific wrappers (dlopen, etc..)
+[.VMS]INSTALL_IMAGE.COM - DCL script to install shareable images 
+[.VMS]ODBCINST_AXP.OPT - Linker options file for ODBC installer shared image 
+[.VMS]ODBC_AXP.OPT - Linker options file for Driver manager shared image
+[.VMS]ODBC2_AXP.OPT - Linker options file for ODBC 2 drivers
+[.VMS]ODBC_SETUP.COM - DCL script to set up logicals and commands
+
+Building unixODBC on OpenVMS
+============================
+
+After unpacking the archive, change into the unixodbc directory and perform
+the following functions.
+
+COMPILING
+
+$ @vmsbuild COMPILE
+
+LINKING 
+
+$ @vmsbuild LINK
+
+COPYING SHARED LIBRARIES TO THEIR INSTALLED LOCATION
+
+Define the logical name ODBC_LIBDIR to point to wherever you would like the 
+libraries to reside and run the build procedure again with the "install" option 
+as in the following example:
+
+$ define ODBC_LIBDIR DISK$DBSTUFF:[ODBCLIB]  ! will be created if it doesn't exist
+$ @vmsbuild install
+
+If the ODBC_LIBDIR logical is not defined, it will be defined for you
+and a [.odbclib] directory will be created under the top level of the
+source directory.
+
+Note that the build procedure can be run in batch if you prefer.  It is
+also possible to specify ALL as the parameter and do the compile, link,
+and install in one fell swoop.  For example:
+
+$ submit/noprint/param=all vmsbuild.com
+
+Post-installation tasks
+======================================
+
+To use the installed software, you need to run the command procedure
+ODBC_SETUP.COM, which will have been installed in the same directory as
+the libraries.  This procedure defines the ODBC_LIBDIR logical name and
+additional logical names that are needed for the image activator to
+locate the libraries.  It also defines the ISQL command.  Put a line
+similar to the following (with your own disk and directory
+specification) in your LOGIN.COM, or (to make the software available
+system-wide) in SYS$MANAGER:SYLOGIN.COM:
+
+$ @disk$dbstuff:[odbclib]odbc_setup
+
+N.B.  It may be tempting to simply dump the libraries into SYS$SHARE and
+depend on the image activator's default behavior to locate the images.
+That works, but it's the surest way to what is known on another popular
+platform as DLL hell.
+
+If you'll be programming with ODBC rather than just using ISQL, be sure
+to hang on to the contents of the [.include] and [.doc] directories. 
+Look at the compiler flags and link commands in vmsbuild.com for
+examples of what you need to do to build programs using the libraries.
+
+For performance reasons it may be desirable to install the libraries as
+known images (which has nothing to do with "install" in the sense of
+copying software to its target location).  See the documentation to the
+INSTALL command or use the command procedure [.vms]install_image.com
+provided with this kit.  Installing the images with privileges is not
+recommended unless there is a compelling reason (Hint: failure to set up
+file permissions properly on your .ini files is not a compelling
+reason).
+
+Locations of ODBC.INI and ODBCINST.INI
+======================================
+
+After running the @VMSBUILD INSTALL command a blank odbc.ini and odbcinst.ini
+will be created in ODBC_LIBDIR. To override the default locations of the user 
+odbc.ini or the directory where the system odbc.ini and odbcinst.ini reside 
+define the following logicals.
+
+$ define/log ODBCINI "DKA100:[MYDIR.ODBC]ODBC.INI"
+$ define/log ODBCSYSINI "DKA100:[MYDIR.SYS]"
+
+Example Setup With Postgres 6.5
+===============================
+
+ODBC_LIBDIR:ODBCINST.INI
+
+[PostgreSQL]
+Description = Postgres SQL Driver
+Driver      = LIBODBCPSQL
+Setup       =
+FileUsage   = 1
+
+ODBC_LIBDIR:ODBC.INI
+[Postgres]
+Description         = Test to Postgres
+Driver              = PostgreSQL
+Trace               = No
+Database            = sample
+Servername          = myserver.mydomain.com
+UserName            = postgres
+Password            = password
+Port                = 5432
+Protocol            = 6.4
+ReadOnly            = No
+RowVersioning       = No
+ShowSystemTables    = No
+ShowOidColumn       = No
+FakeOidIndex        = No
+ConnSettings        =
+
+Jason
+
+last updated 12-Jul-2013 by Craig A. Berry -- craigberry@mac.com

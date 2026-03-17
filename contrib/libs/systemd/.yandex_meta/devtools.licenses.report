@@ -1,0 +1,657 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+IGNORE_FILES NEWS TODO
+
+KEEP     MIT                  0775f17ed13c3609fd7c31449f8749d3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/basic/sparse-endian.h [5:21]
+
+KEEP     LGPL-2.1-or-later    23936b826c876dfdbab2f3e4db3ab62b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 98.04
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        src/systemd/_sd-common.h [6:17]
+        src/systemd/sd-bus-protocol.h [6:17]
+        src/systemd/sd-bus-vtable.h [6:17]
+        src/systemd/sd-bus.h [6:17]
+        src/systemd/sd-daemon.h [6:17]
+        src/systemd/sd-device.h [6:17]
+        src/systemd/sd-event.h [6:17]
+        src/systemd/sd-hwdb.h [6:17]
+        src/systemd/sd-id128.h [6:17]
+        src/systemd/sd-journal.h [6:17]
+        src/systemd/sd-login.h [6:17]
+        src/systemd/sd-messages.h [6:17]
+        src/systemd/sd-netlink.h [6:17]
+        src/systemd/sd-network.h [6:17]
+        src/systemd/sd-path.h [6:17]
+        src/systemd/sd-resolve.h [6:17]
+        src/systemd/sd-utf8.h [6:17]
+
+KEEP     LGPL-2.1-only        23c2a5e0106b99d75238986559bb5fc6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LICENSE.LGPL2.1 [1:502]
+
+KEEP     LGPL-2.1-or-later    2cfe502133a15b2312685166553d7614
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: LGPL-2.1-or-later
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        src/basic/missing_syscall_def.h [1:1]
+        version.h [1:1]
+
+KEEP     CC0-1.0              30226df42deafeba795bc0390dd51e0b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        src/basic/siphash24.c [11:16]
+
+KEEP     Public-Domain        3e6f05fd051df31607cbb3a486adc593
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: LicenseRef-lookup3-public-domain */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-spdx
+        Score           : 85.71
+        Match type      : TAG
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-spdx.LICENSE
+    Files with this license:
+        src/libsystemd/sd-journal/lookup3.c [2:2]
+        src/libsystemd/sd-journal/lookup3.h [1:1]
+
+KEEP     Public-Domain        4f1fe8159202f044650a04f00bc590ca
+BELONGS ya.make
+    License text:
+        if SELF_TEST is defined.  You can use this free for any purpose.  It's in
+        the public domain.  It has no warranty.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 94.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        src/libsystemd/sd-journal/lookup3.c [15:16]
+
+KEEP     CC0-1.0              512c265458f976fc5bca4557e46135f5
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: CC0-1.0 */
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        src/basic/siphash24.c [2:2]
+        src/basic/siphash24.h [1:1]
+
+SKIP     GPL-2.0-only         6731edef2727e51a061f498b5d6a282a
+BELONGS ya.make
+	# According to README, GPL-2.0 only applies to src/udev which we do not use
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE.GPL2 [1:339]
+
+KEEP     Public-Domain        6f73b312395754a90fe2614a46eb72b4
+BELONGS ya.make
+FILE_INCLUDE src/libsystemd/sd-journal/lookup3.c found in files: src/libsystemd/sd-journal/lookup3.c at line 10
+    License text:
+        lookup3.c, by Bob Jenkins, May 2006, Public Domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/libsystemd/sd-journal/lookup3.c [10:10]
+
+KEEP     LGPL-2.1-or-later    8607b67781c6faa3e8db681deebcf8a5
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: LGPL-2.1-or-later */
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        src/basic/af-list.c [2:2]
+        src/basic/af-list.h [1:1]
+        src/basic/alloc-util.c [2:2]
+        src/basic/alloc-util.h [1:1]
+        src/basic/architecture.c [2:2]
+        src/basic/architecture.h [1:1]
+        src/basic/arphrd-util.c [2:2]
+        src/basic/arphrd-util.h [1:1]
+        src/basic/async.c [2:2]
+        src/basic/async.h [1:1]
+        src/basic/audit-util.c [2:2]
+        src/basic/audit-util.h [1:1]
+        src/basic/build.c [2:2]
+        src/basic/build.h [1:1]
+        src/basic/bus-label.c [2:2]
+        src/basic/bus-label.h [1:1]
+        src/basic/cap-list.c [2:2]
+        src/basic/cap-list.h [1:1]
+        src/basic/capability-util.c [2:2]
+        src/basic/capability-util.h [1:1]
+        src/basic/cgroup-util.c [2:2]
+        src/basic/cgroup-util.h [1:1]
+        src/basic/chase-symlinks.c [2:2]
+        src/basic/chase-symlinks.h [1:1]
+        src/basic/chattr-util.c [2:2]
+        src/basic/chattr-util.h [1:1]
+        src/basic/conf-files.c [2:2]
+        src/basic/conf-files.h [1:1]
+        src/basic/def.h [1:1]
+        src/basic/dirent-util.c [2:2]
+        src/basic/dirent-util.h [1:1]
+        src/basic/dns-def.h [1:1]
+        src/basic/efivars.c [2:2]
+        src/basic/efivars.h [1:1]
+        src/basic/env-file.c [2:2]
+        src/basic/env-file.h [1:1]
+        src/basic/env-util.c [2:2]
+        src/basic/env-util.h [1:1]
+        src/basic/errno-list.c [2:2]
+        src/basic/errno-list.h [1:1]
+        src/basic/errno-util.h [1:1]
+        src/basic/escape.c [2:2]
+        src/basic/escape.h [1:1]
+        src/basic/ether-addr-util.c [2:2]
+        src/basic/ether-addr-util.h [1:1]
+        src/basic/extract-word.c [2:2]
+        src/basic/extract-word.h [1:1]
+        src/basic/fd-util.c [2:2]
+        src/basic/fd-util.h [1:1]
+        src/basic/fileio.c [2:2]
+        src/basic/fileio.h [1:1]
+        src/basic/filesystems.c [2:2]
+        src/basic/filesystems.h [1:1]
+        src/basic/format-util.c [2:2]
+        src/basic/format-util.h [1:1]
+        src/basic/fs-util.c [2:2]
+        src/basic/fs-util.h [1:1]
+        src/basic/glob-util.c [2:2]
+        src/basic/glob-util.h [1:1]
+        src/basic/glyph-util.c [2:2]
+        src/basic/glyph-util.h [1:1]
+        src/basic/gunicode.c [2:2]
+        src/basic/gunicode.h [1:1]
+        src/basic/hash-funcs.c [2:2]
+        src/basic/hash-funcs.h [1:1]
+        src/basic/hashmap.c [2:2]
+        src/basic/hashmap.h [1:1]
+        src/basic/hexdecoct.c [2:2]
+        src/basic/hexdecoct.h [1:1]
+        src/basic/hmac.c [2:2]
+        src/basic/hmac.h [1:1]
+        src/basic/hostname-util.c [2:2]
+        src/basic/hostname-util.h [1:1]
+        src/basic/in-addr-util.c [2:2]
+        src/basic/in-addr-util.h [1:1]
+        src/basic/inotify-util.c [2:2]
+        src/basic/inotify-util.h [1:1]
+        src/basic/io-util.c [2:2]
+        src/basic/io-util.h [1:1]
+        src/basic/ioprio-util.c [2:2]
+        src/basic/ioprio-util.h [1:1]
+        src/basic/limits-util.c [2:2]
+        src/basic/limits-util.h [1:1]
+        src/basic/list.h [1:1]
+        src/basic/locale-util.c [2:2]
+        src/basic/locale-util.h [1:1]
+        src/basic/log.c [2:2]
+        src/basic/log.h [1:1]
+        src/basic/login-util.c [2:2]
+        src/basic/login-util.h [1:1]
+        src/basic/macro.h [1:1]
+        src/basic/memfd-util.c [2:2]
+        src/basic/memfd-util.h [1:1]
+        src/basic/memory-util.c [2:2]
+        src/basic/memory-util.h [1:1]
+        src/basic/mempool.c [2:2]
+        src/basic/mempool.h [1:1]
+        src/basic/missing_audit.h [1:1]
+        src/basic/missing_capability.h [1:1]
+        src/basic/missing_fcntl.h [1:1]
+        src/basic/missing_fs.h [1:1]
+        src/basic/missing_ioprio.h [1:1]
+        src/basic/missing_keyctl.h [1:1]
+        src/basic/missing_magic.h [1:1]
+        src/basic/missing_mman.h [1:1]
+        src/basic/missing_network.h [1:1]
+        src/basic/missing_prctl.h [1:1]
+        src/basic/missing_random.h [1:1]
+        src/basic/missing_resource.h [1:1]
+        src/basic/missing_sched.h [1:1]
+        src/basic/missing_socket.h [1:1]
+        src/basic/missing_stat.h [1:1]
+        src/basic/missing_syscall.h [1:1]
+        src/basic/missing_timerfd.h [1:1]
+        src/basic/missing_type.h [1:1]
+        src/basic/mkdir.c [2:2]
+        src/basic/mkdir.h [1:1]
+        src/basic/mountpoint-util.c [2:2]
+        src/basic/mountpoint-util.h [1:1]
+        src/basic/namespace-util.c [2:2]
+        src/basic/namespace-util.h [1:1]
+        src/basic/nulstr-util.c [2:2]
+        src/basic/nulstr-util.h [1:1]
+        src/basic/ordered-set.c [2:2]
+        src/basic/ordered-set.h [1:1]
+        src/basic/os-util.c [2:2]
+        src/basic/os-util.h [1:1]
+        src/basic/parse-util.c [2:2]
+        src/basic/parse-util.h [1:1]
+        src/basic/path-lookup.c [2:2]
+        src/basic/path-lookup.h [1:1]
+        src/basic/path-util.c [2:2]
+        src/basic/path-util.h [1:1]
+        src/basic/percent-util.c [2:2]
+        src/basic/percent-util.h [1:1]
+        src/basic/prioq.c [2:2]
+        src/basic/prioq.h [1:1]
+        src/basic/proc-cmdline.c [2:2]
+        src/basic/proc-cmdline.h [1:1]
+        src/basic/process-util.c [2:2]
+        src/basic/process-util.h [1:1]
+        src/basic/procfs-util.c [2:2]
+        src/basic/procfs-util.h [1:1]
+        src/basic/random-util.c [2:2]
+        src/basic/random-util.h [1:1]
+        src/basic/ratelimit.c [2:2]
+        src/basic/ratelimit.h [1:1]
+        src/basic/raw-clone.h [1:1]
+        src/basic/recovery-key.c [2:2]
+        src/basic/recovery-key.h [1:1]
+        src/basic/recurse-dir.c [2:2]
+        src/basic/recurse-dir.h [1:1]
+        src/basic/replace-var.c [2:2]
+        src/basic/replace-var.h [1:1]
+        src/basic/rlimit-util.c [2:2]
+        src/basic/rlimit-util.h [1:1]
+        src/basic/set.h [1:1]
+        src/basic/sigbus.c [2:2]
+        src/basic/sigbus.h [1:1]
+        src/basic/signal-util.c [2:2]
+        src/basic/signal-util.h [1:1]
+        src/basic/socket-util.c [2:2]
+        src/basic/socket-util.h [1:1]
+        src/basic/sort-util.c [2:2]
+        src/basic/sort-util.h [1:1]
+        src/basic/special.h [1:1]
+        src/basic/stat-util.c [2:2]
+        src/basic/stat-util.h [1:1]
+        src/basic/stdio-util.h [1:1]
+        src/basic/strbuf.c [2:2]
+        src/basic/strbuf.h [1:1]
+        src/basic/string-table.c [2:2]
+        src/basic/string-table.h [1:1]
+        src/basic/string-util.c [2:2]
+        src/basic/string-util.h [1:1]
+        src/basic/strv.c [2:2]
+        src/basic/strv.h [1:1]
+        src/basic/strxcpyx.c [2:2]
+        src/basic/strxcpyx.h [1:1]
+        src/basic/sync-util.c [2:2]
+        src/basic/sync-util.h [1:1]
+        src/basic/sysctl-util.c [2:2]
+        src/basic/sysctl-util.h [1:1]
+        src/basic/syslog-util.c [2:2]
+        src/basic/syslog-util.h [1:1]
+        src/basic/terminal-util.c [2:2]
+        src/basic/terminal-util.h [1:1]
+        src/basic/time-util.c [2:2]
+        src/basic/time-util.h [1:1]
+        src/basic/tmpfile-util.c [2:2]
+        src/basic/tmpfile-util.h [1:1]
+        src/basic/umask-util.h [1:1]
+        src/basic/unaligned.h [1:1]
+        src/basic/unit-def.c [2:2]
+        src/basic/unit-def.h [1:1]
+        src/basic/unit-file.c [2:2]
+        src/basic/unit-file.h [1:1]
+        src/basic/unit-name.c [2:2]
+        src/basic/unit-name.h [1:1]
+        src/basic/user-util.c [2:2]
+        src/basic/user-util.h [1:1]
+        src/basic/utf8.c [2:2]
+        src/basic/utf8.h [1:1]
+        src/basic/util.c [2:2]
+        src/basic/util.h [1:1]
+        src/basic/virt.c [2:2]
+        src/basic/virt.h [1:1]
+        src/basic/xattr-util.c [2:2]
+        src/basic/xattr-util.h [1:1]
+        src/fundamental/bootspec-fundamental.c [2:2]
+        src/fundamental/bootspec-fundamental.h [1:1]
+        src/fundamental/efivars-fundamental.c [2:2]
+        src/fundamental/efivars-fundamental.h [1:1]
+        src/fundamental/macro-fundamental.h [1:1]
+        src/fundamental/sha256.c [2:2]
+        src/fundamental/sha256.h [1:1]
+        src/fundamental/string-util-fundamental.c [2:2]
+        src/fundamental/string-util-fundamental.h [1:1]
+        src/fundamental/types-fundamental.h [1:1]
+        src/libsystemd/disable-mempool.c [2:2]
+        src/libsystemd/sd-bus/bus-common-errors.c [2:2]
+        src/libsystemd/sd-bus/bus-common-errors.h [1:1]
+        src/libsystemd/sd-bus/bus-container.c [2:2]
+        src/libsystemd/sd-bus/bus-container.h [1:1]
+        src/libsystemd/sd-bus/bus-control.c [2:2]
+        src/libsystemd/sd-bus/bus-control.h [1:1]
+        src/libsystemd/sd-bus/bus-convenience.c [2:2]
+        src/libsystemd/sd-bus/bus-creds.c [2:2]
+        src/libsystemd/sd-bus/bus-creds.h [1:1]
+        src/libsystemd/sd-bus/bus-dump.c [2:2]
+        src/libsystemd/sd-bus/bus-dump.h [1:1]
+        src/libsystemd/sd-bus/bus-error.c [2:2]
+        src/libsystemd/sd-bus/bus-error.h [1:1]
+        src/libsystemd/sd-bus/bus-gvariant.c [2:2]
+        src/libsystemd/sd-bus/bus-gvariant.h [1:1]
+        src/libsystemd/sd-bus/bus-internal.c [2:2]
+        src/libsystemd/sd-bus/bus-internal.h [1:1]
+        src/libsystemd/sd-bus/bus-introspect.c [2:2]
+        src/libsystemd/sd-bus/bus-introspect.h [1:1]
+        src/libsystemd/sd-bus/bus-kernel.c [2:2]
+        src/libsystemd/sd-bus/bus-kernel.h [1:1]
+        src/libsystemd/sd-bus/bus-match.c [2:2]
+        src/libsystemd/sd-bus/bus-match.h [1:1]
+        src/libsystemd/sd-bus/bus-message.c [2:2]
+        src/libsystemd/sd-bus/bus-message.h [1:1]
+        src/libsystemd/sd-bus/bus-objects.c [2:2]
+        src/libsystemd/sd-bus/bus-objects.h [1:1]
+        src/libsystemd/sd-bus/bus-protocol.h [1:1]
+        src/libsystemd/sd-bus/bus-signature.c [2:2]
+        src/libsystemd/sd-bus/bus-signature.h [1:1]
+        src/libsystemd/sd-bus/bus-slot.c [2:2]
+        src/libsystemd/sd-bus/bus-slot.h [1:1]
+        src/libsystemd/sd-bus/bus-socket.c [2:2]
+        src/libsystemd/sd-bus/bus-socket.h [1:1]
+        src/libsystemd/sd-bus/bus-track.c [2:2]
+        src/libsystemd/sd-bus/bus-track.h [1:1]
+        src/libsystemd/sd-bus/bus-type.c [2:2]
+        src/libsystemd/sd-bus/bus-type.h [1:1]
+        src/libsystemd/sd-bus/sd-bus.c [2:2]
+        src/libsystemd/sd-daemon/sd-daemon.c [2:2]
+        src/libsystemd/sd-device/device-enumerator-private.h [1:1]
+        src/libsystemd/sd-device/device-enumerator.c [2:2]
+        src/libsystemd/sd-device/device-internal.h [1:1]
+        src/libsystemd/sd-device/device-monitor-private.h [1:1]
+        src/libsystemd/sd-device/device-monitor.c [2:2]
+        src/libsystemd/sd-device/device-private.c [2:2]
+        src/libsystemd/sd-device/device-private.h [1:1]
+        src/libsystemd/sd-device/device-util.c [2:2]
+        src/libsystemd/sd-device/device-util.h [1:1]
+        src/libsystemd/sd-device/sd-device.c [2:2]
+        src/libsystemd/sd-event/event-source.h [2:2]
+        src/libsystemd/sd-event/event-util.c [2:2]
+        src/libsystemd/sd-event/event-util.h [1:1]
+        src/libsystemd/sd-event/sd-event.c [2:2]
+        src/libsystemd/sd-hwdb/hwdb-internal.h [1:1]
+        src/libsystemd/sd-hwdb/sd-hwdb.c [2:2]
+        src/libsystemd/sd-id128/id128-util.c [2:2]
+        src/libsystemd/sd-id128/id128-util.h [1:1]
+        src/libsystemd/sd-id128/sd-id128.c [2:2]
+        src/libsystemd/sd-journal/audit-type.c [2:2]
+        src/libsystemd/sd-journal/audit-type.h [1:1]
+        src/libsystemd/sd-journal/catalog.c [2:2]
+        src/libsystemd/sd-journal/catalog.h [1:1]
+        src/libsystemd/sd-journal/compress.c [2:2]
+        src/libsystemd/sd-journal/compress.h [1:1]
+        src/libsystemd/sd-journal/journal-authenticate.h [1:1]
+        src/libsystemd/sd-journal/journal-def.h [1:1]
+        src/libsystemd/sd-journal/journal-file.c [2:2]
+        src/libsystemd/sd-journal/journal-file.h [1:1]
+        src/libsystemd/sd-journal/journal-internal.h [1:1]
+        src/libsystemd/sd-journal/journal-send.c [2:2]
+        src/libsystemd/sd-journal/journal-send.h [1:1]
+        src/libsystemd/sd-journal/journal-vacuum.c [2:2]
+        src/libsystemd/sd-journal/journal-vacuum.h [1:1]
+        src/libsystemd/sd-journal/journal-verify.c [2:2]
+        src/libsystemd/sd-journal/journal-verify.h [1:1]
+        src/libsystemd/sd-journal/mmap-cache.c [2:2]
+        src/libsystemd/sd-journal/mmap-cache.h [1:1]
+        src/libsystemd/sd-journal/sd-journal.c [2:2]
+        src/libsystemd/sd-login/sd-login.c [2:2]
+        src/libsystemd/sd-netlink/netlink-genl.c [2:2]
+        src/libsystemd/sd-netlink/netlink-genl.h [1:1]
+        src/libsystemd/sd-netlink/netlink-internal.h [1:1]
+        src/libsystemd/sd-netlink/netlink-message-nfnl.c [2:2]
+        src/libsystemd/sd-netlink/netlink-message-rtnl.c [2:2]
+        src/libsystemd/sd-netlink/netlink-message.c [2:2]
+        src/libsystemd/sd-netlink/netlink-slot.c [2:2]
+        src/libsystemd/sd-netlink/netlink-slot.h [1:1]
+        src/libsystemd/sd-netlink/netlink-socket.c [2:2]
+        src/libsystemd/sd-netlink/netlink-types-genl.c [2:2]
+        src/libsystemd/sd-netlink/netlink-types-internal.h [1:1]
+        src/libsystemd/sd-netlink/netlink-types-nfnl.c [2:2]
+        src/libsystemd/sd-netlink/netlink-types-rtnl.c [2:2]
+        src/libsystemd/sd-netlink/netlink-types.c [2:2]
+        src/libsystemd/sd-netlink/netlink-types.h [1:1]
+        src/libsystemd/sd-netlink/netlink-util.c [2:2]
+        src/libsystemd/sd-netlink/netlink-util.h [1:1]
+        src/libsystemd/sd-netlink/sd-netlink.c [2:2]
+        src/libsystemd/sd-network/network-util.c [2:2]
+        src/libsystemd/sd-network/network-util.h [1:1]
+        src/libsystemd/sd-network/sd-network.c [2:2]
+        src/libsystemd/sd-path/sd-path.c [2:2]
+        src/libsystemd/sd-resolve/resolve-private.h [1:1]
+        src/libsystemd/sd-resolve/sd-resolve.c [2:2]
+        src/libsystemd/sd-utf8/sd-utf8.c [2:2]
+        src/systemd/_sd-common.h [1:1]
+        src/systemd/sd-bus-protocol.h [1:1]
+        src/systemd/sd-bus-vtable.h [1:1]
+        src/systemd/sd-bus.h [1:1]
+        src/systemd/sd-daemon.h [1:1]
+        src/systemd/sd-device.h [1:1]
+        src/systemd/sd-event.h [1:1]
+        src/systemd/sd-hwdb.h [1:1]
+        src/systemd/sd-id128.h [1:1]
+        src/systemd/sd-journal.h [1:1]
+        src/systemd/sd-login.h [1:1]
+        src/systemd/sd-messages.h [1:1]
+        src/systemd/sd-netlink.h [1:1]
+        src/systemd/sd-network.h [1:1]
+        src/systemd/sd-path.h [1:1]
+        src/systemd/sd-resolve.h [1:1]
+        src/systemd/sd-utf8.h [1:1]
+
+KEEP     LGPL-2.1-or-later    89ef23e057e401fdc872f0937235d95b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        src/fundamental/sha256.c [11:23]
+
+KEEP     Public-Domain        92bcc36d22d368433ecc9d4ee83412bb
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: LicenseRef-murmurhash2-public-domain */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-spdx
+        Score           : 85.71
+        Match type      : TAG
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-spdx.LICENSE
+    Files with this license:
+        src/basic/MurmurHash2.c [2:2]
+        src/basic/MurmurHash2.h [1:1]
+
+KEEP     LGPL-2.1-only        b28946095e4899ba9a4e39bfff19e0ed
+BELONGS ya.make
+    License text:
+        LICENSE:
+                LGPL-2.1-or-later for all code, exceptions noted in LICENSES/README.md
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        README [29:30]
+
+KEEP     LGPL-2.0-or-later    b98df6e5b66268e6068de3d3965b86e9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        src/basic/utf8.c [12:24]
+
+KEEP     Public-Domain        c6449d0b34e748d6351273320a5bfcbd
+BELONGS ya.make
+    License text:
+        // MurmurHash2 was written by Austin Appleby, and is placed in the public
+        // domain. The author hereby disclaims copyright to this source code.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/basic/MurmurHash2.c [4:5]
+        src/basic/MurmurHash2.h [3:4]
+
+KEEP     LGPL-2.1-or-later    c870748ba8f9c55f80ca9118b2fd8751
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        src/libsystemd/libsystemd.sym [4:7]
+
+KEEP     MIT                  cb3119e529284139494e61fc7c94d547
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/basic/sparse-endian.h [1:1]
+
+SKIP     LicenseRef-scancode-generic-exception d40b64560a53c3d1748603328392766d
+BELONGS ya.make
+    # code comment
+    License text:
+                 * everything ASCII that's not a control character. Also, as
+                 * special exception the ":" character is not allowed, as we
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-exception
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-exception.LICENSE
+    Files with this license:
+        src/basic/fd-util.c [492:493]
+
+KEEP     LGPL-2.1-or-later    dc0e6d0132d2bd0cc4e1c4ae5b3e4942
+BELONGS ya.make
+    License text:
+          SPDX-License-Identifier: LGPL-2.1-or-later
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        src/libsystemd/libsystemd.sym [2:2]
+
+SKIP     GPL-2.0-only         ef579b689cd1947f503758a48e310f65
+BELONGS ya.make
+	# Not a license, but a kudos to the original code
+    License text:
+         * <hidave.darkstar@gmail.com>, which is licensed GPLv2. */
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        src/basic/ratelimit.c [10:10]
+
+KEEP     LGPL-2.1-or-later    f42af4b66ba16d63a86c0138c83cc1b6
+BELONGS ya.make
+    License text:
+                LGPL-2.1-or-later for all code, exceptions noted in LICENSES/README.md
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        README [30:30]

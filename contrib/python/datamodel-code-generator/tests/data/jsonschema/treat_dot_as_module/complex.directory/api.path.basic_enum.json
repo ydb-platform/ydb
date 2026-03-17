@@ -1,0 +1,25 @@
+{
+  "definitions": {
+    "ProcessingStatus": {
+      "title": "ProcessingStatus",
+      "enum": [
+        "COMPLETED",
+        "PENDING",
+        "FAILED"
+      ],
+      "type": "string",
+      "description": "The processing status"
+    }
+  },
+  "properties": {
+    "processing_status": {
+      "$ref": "#/definitions/ProcessingStatus",
+      "default": "COMPLETED"
+    },
+    "name": {
+      "type": "string"
+    }
+  },  
+  "title": "Basic Enum",
+  "type": "object"
+}

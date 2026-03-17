@@ -1,0 +1,22 @@
+# For template.4.postproc.def
+"no_post_processing" = { typeOfPostProcessing = 0; }
+"lisflood"           = { typeOfPostProcessing = 1; }
+"lisflood_eric"      = { typeOfPostProcessing = 2; }
+"lisflood_season"    = { typeOfPostProcessing = 3; }
+"lisflood_merged"    = { typeOfPostProcessing = 4; }
+
+# See ECC-1977
+"global_lisflood"    = { typeOfPostProcessing = 5; }
+
+"geff"               = { typeOfPostProcessing = 10; }
+"ericha"             = { typeOfPostProcessing = 51; }
+"htessel_lisflood"   = { typeOfPostProcessing = 101; }
+"htessel_eric"       = { typeOfPostProcessing = 102; }
+"htessel_camaflood"  = { typeOfPostProcessing = 103; }
+"epic"               = { typeOfPostProcessing = 152; }
+"jules_mrm"          = { typeOfPostProcessing = 201; }
+"htessel_mrm"        = { typeOfPostProcessing = 202; }
+"mhm_mrm"            = { typeOfPostProcessing = 203; }
+"pcrg_mrm"           = { typeOfPostProcessing = 204; }
+"meteogrid"          = { typeOfPostProcessing = 205; }
+"ecPoint"            = { typeOfPostProcessing = 206; }

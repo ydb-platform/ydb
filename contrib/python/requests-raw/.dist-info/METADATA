@@ -1,0 +1,80 @@
+Metadata-Version: 2.1
+Name: requests-raw
+Version: 2.0.2
+Summary: HTTP communication through raw sockets using requests for RFC compliance testing
+Home-page: https://github.com/realgam3/requests-raw
+Author: Tomer Zait (realgam3)
+Author-email: realgam3@gmail.com
+License: Apache 2.0
+Project-URL: Source, https://github.com/realgam3/requests-raw
+Platform: any
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests >=2.30.0
+Provides-Extra: security
+Provides-Extra: socks
+Requires-Dist: PySocks !=1.5.7,>=1.5.6 ; extra == 'socks'
+Provides-Extra: use_chardet_on_py3
+Requires-Dist: chardet <6,>=3.0.2 ; extra == 'use_chardet_on_py3'
+
+# requests-raw
+[![PyPI version](https://img.shields.io/pypi/v/requests-raw)](https://pypi.org/project/requests-raw/)
+[![Downloads](https://pepy.tech/badge/requests-raw)](https://pepy.tech/project/requests-raw)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/requests-raw)  
+
+Use [requests](https://requests.readthedocs.io/) to send HTTP raw sockets (To Test RFC Compliance)
+
+![Logo](https://raw.githubusercontent.com/realgam3/requests-raw/master/assets/img/requests-raw-logo.png)
+
+## Usage
+### Explicit
+```python
+import json
+import requests_raw
+
+req = b"GET /get HTTP/1.1\r\nHost: httpbin.org\r\n\r\n"
+res = requests_raw.raw(url='http://httpbin.org/', data=req)
+res_json = res.json()
+print(json.dumps(res_json, indent=2))
+```
+
+### Implicit (monkey patch)
+```python
+import json
+import requests
+import requests_raw
+requests_raw.monkey_patch_all()
+
+req = b"GET /cookies/set/name/value HTTP/1.1\r\nHost: httpbin.org\r\n\r\n"
+session = requests.Session()
+res = session.raw(url='https://httpbin.org/', data=req)
+res_json = res.json()
+print(json.dumps(res_json, indent=2))
+```
+
+## Installation
+### Prerequisites
+* Python 3.7+
+
+```sh
+pip3 install requests-raw
+```

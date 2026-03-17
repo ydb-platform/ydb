@@ -1,0 +1,112 @@
+Metadata-Version: 2.1
+Name: iso3166
+Version: 1.0.1
+Summary: Self-contained ISO 3166-1 country definitions.
+Home-page: http://github.com/deactivated/python-iso3166
+Author: Mike Spindel
+Author-email: mike@spindel.is
+License: MIT
+Keywords: iso 3166-1 country codes
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.1
+Classifier: Programming Language :: Python :: 3.2
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+
+============================================================
+ python-iso3166 - Standalone ISO 3166-1 country definitions
+============================================================
+
+:Authors:
+        Mike Spindel
+:Version: 1.0.1
+
+
+ISO 3166-1 defines two-letter, three-letter, and three-digit country
+codes.  `python-iso3166` is a self-contained module that converts
+between these codes and the corresponding country name.
+
+
+Installation
+============
+
+::
+
+  $ pip install iso3166
+
+
+Usage
+=====
+
+
+Country details
+---------------
+
+::
+
+  >>> from iso3166 import countries
+  >>>
+  >>> countries.get('us')
+  Country(name=u'United States', alpha2='US', alpha3='USA', numeric='840')
+  >>> countries.get('ala')
+  Country(name=u'\xc5land Islands', alpha2='AX', alpha3='ALA', numeric='248')
+  >>> countries.get(8)
+  Country(name=u'Albania', alpha2='AL', alpha3='ALB', numeric='008')
+
+
+Country lists and indexes
+-------------------------
+
+::
+
+  >>> from iso3166 import countries
+
+  >>> for c in countries:
+         print c
+  >>> Country(name=u'Afghanistan', alpha2='AF', alpha3='AFG', numeric='004')
+  Country(name=u'\xc5land Islands', alpha2='AX', alpha3='ALA', numeric='248')
+  Country(name=u'Albania', alpha2='AL', alpha3='ALB', numeric='008')
+  Country(name=u'Algeria', alpha2='DZ', alpha3='DZA', numeric='012')
+
+::
+
+  >>> import iso3166
+
+  >>> iso3166.countries_by_name
+  >>> {u'AFGHANISTAN': Country(name=u'Afghanistan', alpha2='AF', alpha3='AFG', numeric='004'),
+  u'ALBANIA': Country(name=u'Albania', alpha2='AL', alpha3='ALB', numeric='008'),
+  u'ALGERIA': Country(name=u'Algeria', alpha2='DZ', alpha3='DZA', numeric='012'),
+  ...
+
+  >>> iso3166.countries_by_numeric
+  >>> {'004': Country(name=u'Afghanistan', alpha2='AF', alpha3='AFG', numeric='004'),
+  '008': Country(name=u'Albania', alpha2='AL', alpha3='ALB', numeric='008'),
+  '010': Country(name=u'Antarctica', alpha2='AQ', alpha3='ATA', numeric='010'),
+  ...
+
+  >>> iso3166.countries_by_alpha2
+  >>> {'AD': Country(name=u'Andorra', alpha2='AD', alpha3='AND', numeric='020'),
+  'AE': Country(name=u'United Arab Emirates', alpha2='AE', alpha3='ARE', numeric='784'),
+  'AF': Country(name=u'Afghanistan', alpha2='AF', alpha3='AFG', numeric='004'),
+  ...
+
+  >>> iso3166.countries_by_alpha3
+  >>> {'ABW': Country(name=u'Aruba', alpha2='AW', alpha3='ABW', numeric='533'),
+  'AFG': Country(name=u'Afghanistan', alpha2='AF', alpha3='AFG', numeric='004'),
+  'AGO': Country(name=u'Angola', alpha2='AO', alpha3='AGO', numeric='024'),
+  ...
+
+

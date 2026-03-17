@@ -1,0 +1,43 @@
+# Code table 4.243 - Tile class
+0 0 Reserved
+1 1 Evergreen broadleaved forest
+2 2 Deciduous broadleaved closed forest
+3 3 Deciduous broadleaved open forest
+4 4 Evergreen needle-leaf forest
+5 5 Deciduous needle-leaf forest
+6 6 Mixed leaf trees
+7 7 Freshwater flooded trees
+8 8 Saline water flooded trees
+9 9 Mosaic tree/natural vegetation
+10 10 Burnt tree cover
+11 11 Evergreen shrubs closed-open
+12 12 Deciduous shrubs closed-open
+13 13 Herbaceous vegetation closed-open
+14 14 Sparse herbaceous or grass
+15 15 Flooded shrubs or herbaceous
+16 16 Cultivated and managed areas
+17 17 Mosaic crop/tree/natural vegetation
+18 18 Mosaic crop/shrub/grass
+19 19 Bare areas
+20 20 Water
+21 21 Snow and ice
+22 22 Artificial surface
+23 23 Ocean
+24 24 Irrigated croplands
+25 25 Rainfed croplands
+26 26 Mosaic cropland (50-70%) - vegetation (20-50%)
+27 27 Mosaic vegetation (50-70%) - cropland (20-50%)
+28 28 Closed broadleaved evergreen forest
+29 29 Closed needle-leaved evergreen forest
+30 30 Open needle-leaved deciduous forest
+31 31 Mixed broadleaved and needle-leaved forest
+32 32 Mosaic shrubland (50-70%) - grassland (20-50%)
+33 33 Mosaic grassland (50-70%) - shrubland (20-50%)
+34 34 Closed to open shrubland
+35 35 Sparse vegetation
+36 36 Closed to open forest regularly flooded
+37 37 Closed forest or shrubland permanently flooded
+38 38 Closed to open grassland regularly flooded
+39 39 Undefined
+# 40-32767 Reserved
+# 32768- Reserved for local use

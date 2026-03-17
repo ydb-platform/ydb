@@ -1,0 +1,26 @@
+--- contrib/python/GDAL/py2/extensions/gdal_wrap.cpp	(index)
++++ contrib/python/GDAL/py2/extensions/gdal_wrap.cpp	(working tree)
+@@ -3383,1 +3383,1 @@ SWIGINTERNINLINE PyObject*
+-void NeverCallMePlease() {
++static void NeverCallMePlease() {
+@@ -7686,1 +7686,1 @@ GDALDriverShadow *IdentifyDriverEx( const char* utf8_path,
+-  char **GeneralCmdLineProcessor( char **papszArgv, int nOptions = 0 ) {
++static char **GeneralCmdLineProcessor( char **papszArgv, int nOptions = 0 ) {
+--- contrib/python/GDAL/py2/extensions/gnm_wrap.cpp	(index)
++++ contrib/python/GDAL/py2/extensions/gnm_wrap.cpp	(working tree)
+@@ -3274,1 +3274,1 @@ SWIGINTERNINLINE PyObject*
+-void NeverCallMePlease() {
++static void NeverCallMePlease() {
+--- contrib/python/GDAL/py2/extensions/ogr_wrap.cpp	(index)
++++ contrib/python/GDAL/py2/extensions/ogr_wrap.cpp	(working tree)
+@@ -3337,1 +3337,1 @@ void DontUseExceptions() {
+-void NeverCallMePlease() {
++static void NeverCallMePlease() {
+@@ -5606,1 +5606,1 @@ OGRDriverShadow* GetDriver(int driver_number) {
+-  char **GeneralCmdLineProcessor( char **papszArgv, int nOptions = 0 ) {
++static char **GeneralCmdLineProcessor( char **papszArgv, int nOptions = 0 ) {
+--- contrib/python/GDAL/py2/extensions/osr_wrap.cpp	(index)
++++ contrib/python/GDAL/py2/extensions/osr_wrap.cpp	(working tree)
+@@ -3303,1 +3303,1 @@ void DontUseExceptions() {
+-void NeverCallMePlease() {
++static void NeverCallMePlease() {

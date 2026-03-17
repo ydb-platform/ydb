@@ -1,0 +1,17 @@
+openapi: "3.0.3"
+info:
+  version: 1.0.0
+  title: T
+paths: {}
+components:
+  schemas:
+    M:
+      properties:
+        name: {"type": "string"}
+    m:
+      properties:
+        name: {"type": "string"}
+    R:
+      allOf:
+        - {"$ref":  "#/components/schemas/m"}
+        - {"$ref":  "#/components/schemas/M"}

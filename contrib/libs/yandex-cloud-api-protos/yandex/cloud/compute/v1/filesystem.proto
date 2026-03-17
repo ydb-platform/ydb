@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// A filesystem resource.
+// For details about the concept, see [documentation](/docs/compute/concepts/filesystem).
+message Filesystem {
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // The filesystem is being created.
+    CREATING = 1;
+
+    // The filesystem is ready to use.
+    READY = 2;
+
+    // The filesystem encountered a problem and cannot operate.
+    ERROR = 3;
+
+    // The filesystem is being deleted.
+    DELETING = 4;
+  }
+
+  // ID of the filesystem. Generated at creation time.
+  string id = 1;
+
+  // ID of the folder that the filesystem belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the filesystem. The name is unique within the folder.
+  string name = 4;
+
+  // Description of the filesystem.
+  string description = 5;
+
+  // Filesystem labels as `key:value` pairs.
+  // For details about the concept, see [documentation](/docs/overview/concepts/services#labels).
+  map<string, string> labels = 6;
+
+  // ID of the filesystem type.
+  //
+  // To get a list of available filesystem types, make a [yandex.cloud.compute.v1.DiskTypeService.List] request.
+  string type_id = 7;
+
+  // ID of the availability zone where the filesystem resides.
+  //
+  // A filesystem can be attached only to instances residing in the same availability zone.
+  string zone_id = 8;
+
+  // Size of the filesystem, specified in bytes.
+  int64 size = 9;
+
+  // Block size used for the filesystem, specified in bytes.
+  int64 block_size = 10;
+
+  // Current status of the filesystem.
+  Status status = 11;
+}

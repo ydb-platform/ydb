@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.agent.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/agent/v1;agent";
+option java_package = "yandex.cloud.api.loadtesting.agent.v1";
+
+import "google/api/annotations.proto";
+
+
+service TrailService {
+
+  // Creates trail for specified job.
+  rpc Create (CreateTrailRequest) returns (CreateTrailResponse) {
+    option (google.api.http) = { post: "/loadtesting/agent/v1/trails" body: "*" };
+  };
+}
+
+message CreateTrailRequest {
+  string compute_instance_id = 1;
+  repeated Trail data = 2;
+  string job_id = 3;
+  string agent_instance_id = 4;
+}
+
+message Trail {
+  int64 overall = 1;
+  string case_id = 2;
+  string time = 3;
+  int64 reqps = 4;
+  int64 resps = 5;
+  double expect = 6;
+  int64 input = 7;
+  int64 output = 8;
+  double connect_time = 9;
+  double send_time = 10;
+  double latency = 11;
+  double receive_time = 12;
+  int64 threads = 13;
+
+  double q50 = 14;
+  double q75 = 15;
+  double q80 = 16;
+  double q85 = 17;
+  double q90 = 18;
+  double q95 = 19;
+  double q98 = 20;
+  double q99 = 21;
+  double q100 = 22;
+
+  message Codes {
+    int64 code = 1;
+    int64 count = 2;
+  }
+  repeated Codes http_codes = 23;
+  repeated Codes net_codes = 24;
+
+  message Intervals {
+    double to = 1;
+    int64 count = 2;
+  }
+  repeated Intervals time_intervals = 25;
+}
+
+message CreateTrailResponse {
+  string trail_id = 1;
+  int64 code = 2;
+}

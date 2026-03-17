@@ -1,0 +1,11 @@
+--- contrib/python/django-picklefield/picklefield/fields.py	(index)
++++ contrib/python/django-picklefield/picklefield/fields.py	(working tree)
+@@ -181,7 +181,7 @@ class PickledObjectField(models.Field):
+         value = super().pre_save(model_instance, add)
+         return wrap_conflictual_object(value)
+ 
+-    def from_db_value(self, value, expression, connection):
++    def from_db_value(self, value, expression, connection, context=None):
+         return self.to_python(value)
+ 
+     def get_db_prep_value(self, value, connection=None, prepared=False):

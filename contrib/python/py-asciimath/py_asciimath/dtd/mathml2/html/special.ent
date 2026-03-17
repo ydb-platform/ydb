@@ -1,0 +1,45 @@
+
+<!--
+     File special.ent produced by the XSL script characters.xsl
+     from input data in unicode.xml.
+
+     Please report any errors to David Carlisle
+     via the public W3C list www-math@w3.org.
+
+     The numeric character values assigned to each entity
+     (should) match the Unicode assignments in Unicode 4.0.
+
+-->
+
+<!ENTITY bdquo            "&#x0201E;" ><!--double low-9 quotation mark -->
+<!ENTITY circ             "&#x002C6;" ><!--circumflex accent = spacing circumflex -->
+<!ENTITY circ             "&#x002C6;" ><!--circumflex accent = spacing circumflex -->
+<!ENTITY Dagger           "&#x02021;" ><!--double dagger -->
+<!ENTITY dagger           "&#x02020;" ><!--dagger -->
+<!ENTITY emsp             "&#x02003;" ><!--em space -->
+<!ENTITY ensp             "&#x02002;" ><!--en space -->
+<!ENTITY euro             "&#x020AC;" ><!--euro sign -->
+<!ENTITY gt               "&#x0003E;" ><!--greater-than sign -->
+<!ENTITY ldquo            "&#x0201C;" ><!--left double quotation mark -->
+<!ENTITY lrm              "&#x0200E;" ><!-- -->
+<!ENTITY lsaquo           "&#x02039;" ><!-- -->
+<!ENTITY lsquo            "&#x02018;" ><!--left single quotation mark -->
+<!ENTITY lt               "&#38;#60;" ><!--less-than sign -->
+<!ENTITY mdash            "&#x02014;" ><!--em dash -->
+<!ENTITY ndash            "&#x02013;" ><!--en dash -->
+<!ENTITY OElig            "&#x00152;" ><!--latin capital ligature OE -->
+<!ENTITY oelig            "&#x00153;" ><!--latin small ligature oe -->
+<!ENTITY permil           "&#x02030;" ><!--per mille sign -->
+<!ENTITY quot             "&#x00022;" ><!--quotation mark = APL quote -->
+<!ENTITY rdquo            "&#x0201D;" ><!--right double quotation mark -->
+<!ENTITY rlm              "&#x0200F;" ><!-- -->
+<!ENTITY rsaquo           "&#x0203A;" ><!-- -->
+<!ENTITY rsquo            "&#x02019;" ><!--right single quotation mark -->
+<!ENTITY sbquo            "&#x0201A;" ><!--single low-9 quotation mark -->
+<!ENTITY Scaron           "&#x00160;" ><!--latin capital letter S with caron -->
+<!ENTITY scaron           "&#x00161;" ><!--latin small letter s with caron -->
+<!ENTITY thinsp           "&#x02009;" ><!--thin space -->
+<!ENTITY tilde            "&#x002DC;" ><!--small tilde -->
+<!ENTITY Yuml             "&#x00178;" ><!--latin capital letter Y with diaeresis -->
+<!ENTITY zwj              "&#x0200D;" ><!-- -->
+<!ENTITY zwnj             "&#x0200C;" ><!-- -->

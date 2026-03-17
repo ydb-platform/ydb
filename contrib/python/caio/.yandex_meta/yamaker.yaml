@@ -1,0 +1,2 @@
+exclude_from_macros:
+  - caio/src/threadpool/README.md

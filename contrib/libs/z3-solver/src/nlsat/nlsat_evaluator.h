@@ -1,0 +1,61 @@
+/*++
+Copyright (c) 2012 Microsoft Corporation
+
+Module Name:
+
+    nlsat_evaluator.h
+
+Abstract:
+
+    Helper class for computing the infeasible intervals of an
+    arithmetic literal.
+
+Author:
+
+    Leonardo de Moura (leonardo) 2012-01-12.
+
+Revision History:
+
+--*/
+#pragma once
+
+#include "nlsat/nlsat_types.h"
+#include "nlsat/nlsat_assignment.h"
+#include "nlsat/nlsat_interval_set.h"
+
+namespace nlsat {
+
+    class solver;
+
+    class evaluator {
+        struct imp;
+        imp *  m_imp;
+    public:
+        evaluator(solver& s, assignment const & x2v, pmanager & pm, small_object_allocator & allocator);
+        ~evaluator();
+
+        interval_set_manager & ism() const;
+
+        /**
+           \brief Evaluate the given literal in the current model.
+           All variables in the atom must be assigned.
+           
+           The result is true if the literal is satisfied, and false otherwise.
+        */
+        bool eval(atom * a, bool neg);
+        
+        /**
+           \brief Return the infeasible interval set for the given literal.
+           All but the a->max_var() must be assigned in the current model.
+
+           Let x be a->max_var(). Then, the resultant set specifies which
+           values of x falsify the given literal.
+        */
+        interval_set_ref infeasible_intervals(atom * a, bool neg, clause const* cls);
+
+        void push();
+        void pop(unsigned num_scopes);
+    };
+    
+};
+

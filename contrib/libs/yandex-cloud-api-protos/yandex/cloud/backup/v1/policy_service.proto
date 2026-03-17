@@ -1,0 +1,201 @@
+syntax = "proto3";
+
+package yandex.cloud.backup.v1;
+
+import "google/api/annotations.proto";
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/backup/v1/policy.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/backup/v1;backup";
+option java_package = "yandex.cloud.api.backup.v1";
+
+// A set of methods for managing [policies](/docs/backup/concepts/policy).
+service PolicyService {
+    // List [policies](/docs/backup/concepts/policy) of specified folder.
+    rpc List(ListPoliciesRequest) returns (ListPoliciesResponse) {
+        option (google.api.http) = { get: "/backup/v1/policies" };
+    };
+
+    // Create a new policy.
+    // 
+    // For detailed information, please see [Creating a backup policy](/docs/backup/operations/policy-vm/create).
+    rpc Create(CreatePolicyRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/backup/v1/policies" body: "*" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "CreatePolicyMetadata"
+          response: "Policy"
+        };
+    }
+
+    // Get specific policy.
+    rpc Get(GetPolicyRequest) returns (Policy) {
+        option (google.api.http) = { get: "/backup/v1/policies/{policy_id}" };
+    };
+
+    // Update specific policy.
+    rpc Update(UpdatePolicyRequest) returns (operation.Operation) {
+        option (google.api.http) = { patch: "/backup/v1/policies/{policy_id}" body: "*" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "UpdatePolicyMetadata"
+          response: "Policy"
+        };
+    }
+
+    // Delete specific policy.
+    rpc Delete(DeletePolicyRequest)  returns (operation.Operation) {
+        option (google.api.http) = { delete: "/backup/v1/policies/{policy_id}" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "DeletePolicyMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+
+    // Apply policy to [Compute Cloud instance](/docs/backup/concepts/vm-connection#os).
+    rpc Apply(ApplyPolicyRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/backup/v1/policies/{policy_id}:apply" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "ApplyPolicyMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+
+    // List applied policies using filters.
+    rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse) {
+        option (google.api.http) = { get: "/backup/v1/policies/{policy_id}/applications" };
+    };
+
+    // Run policy on specific Compute Cloud instance. That will create backup
+    // according selected policy. In order to perform this action, policy should be
+    // applied to the Compute Cloud instance.
+    rpc Execute(ExecuteRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/backup/v1/policies/{policy_id}:execute" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "ExecuteMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+
+    // Revoke policy from Compute Cloud instance.
+    rpc Revoke(RevokeRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/backup/v1/policies/{policy_id}:revoke" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "RevokeMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+}
+
+message ListPoliciesRequest {
+    // Folder ID. Either Folder ID or Compute Cloud instance ID should be set.
+    string folder_id = 1 [(length) = "<=50"];
+    // Compute Cloud instance ID. Either Folder ID or Compute Cloud instance ID should be set.
+    string compute_instance_id = 2;
+}
+
+message ListPoliciesResponse {
+    repeated Policy policies = 1;
+}
+
+message CreatePolicyRequest {
+    // Folder ID.
+    string folder_id = 1 [ (required) = true, (length) = "<=50" ];
+    // Policy name.
+    string name = 2 [ (required) = true, (length) = "<=50"];
+    PolicySettings settings = 3 [ (required) = true ];
+}
+
+message CreatePolicyMetadata {
+    // Policy ID.
+    string policy_id = 1 [ (required) = true, (length) = "<=50" ];
+}
+
+message GetPolicyRequest {
+    // Policy ID.
+    string policy_id = 1 [ (required) = true, (length) = "<=50" ];
+}
+
+message UpdatePolicyRequest {
+    // Policy ID.
+    string policy_id = 1 [ (required) = true, (length) = "<=50" ];
+    PolicySettings settings = 2 [ (required) = true ];
+}
+
+message UpdatePolicyMetadata {
+    // Policy ID.
+    string policy_id = 1 [ (required) = true, (length) = "<=50" ];
+}
+
+message DeletePolicyRequest {
+    // Policy ID.
+    string policy_id = 1 [ (required) = true, (length) = "<=50" ];
+}
+
+message DeletePolicyMetadata {
+    // Policy ID.
+    string policy_id = 1 [ (required) = true, (length) = "<=50" ];
+}
+
+message ApplyPolicyRequest {
+    // Policy ID.
+    string policy_id = 1 [ (required) = true, (length) = "<=50" ];
+    // Compute Cloud instance ID.
+    string compute_instance_id = 2 [ (required) = true, (length) = "<=50" ];
+}
+
+message ApplyPolicyMetadata {
+    // Policy ID.
+    string policy_id = 1;
+    // Compute Cloud instance ID.
+    string compute_instance_id = 2;
+}
+
+message ListApplicationsRequest {
+    oneof id {
+        option (exactly_one) = true;
+        // Folder ID.
+        string folder_id = 1;
+        // Policy ID.
+        string policy_id = 2;
+        // Compute Cloud instance ID.
+        string compute_instance_id = 3;
+    };
+    // If true, also returns applications that in the process of binding.
+    bool show_processing = 4;
+}
+
+message ListApplicationsResponse {
+    repeated PolicyApplication applications = 1;
+}
+
+message ExecuteRequest {
+    // Policy ID.
+    string policy_id = 1 [ (required) = true, (length) = "<=50" ];
+    // Compute Cloud instance ID.
+    string compute_instance_id = 2 [ (required) = true, (length) = "<=50" ];
+}
+
+message ExecuteMetadata {
+    // Policy ID.
+    string policy_id = 1;
+    // Compute Cloud instance ID.
+    string compute_instance_id = 2;
+    // Progress of the backup process.
+    double progress_percentage = 3;
+}
+
+message RevokeRequest {
+    // Policy ID.
+    string policy_id = 1 [ (required) = true, (length) = "<=50" ];
+    // Compute Cloud instance ID.
+    string compute_instance_id = 2 [ (required) = true, (length) = "<=50" ];
+}
+
+message RevokeMetadata {
+    // Policy ID.
+    string policy_id = 1;
+    // Compute Cloud instance ID.
+    string compute_instance_id = 2;
+}

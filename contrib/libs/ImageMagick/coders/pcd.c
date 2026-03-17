@@ -1,0 +1,1202 @@
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%                            PPPP    CCCC  DDDD                               %
+%                            P   P  C      D   D                              %
+%                            PPPP   C      D   D                              %
+%                            P      C      D   D                              %
+%                            P       CCCC  DDDD                               %
+%                                                                             %
+%                                                                             %
+%                     Read/Write Photo CD Image Format                        %
+%                                                                             %
+%                              Software Design                                %
+%                                   Cristy                                    %
+%                                 July 1992                                   %
+%                                                                             %
+%                                                                             %
+%  Copyright 1999 ImageMagick Studio LLC, a non-profit organization           %
+%  dedicated to making software imaging solutions freely available.           %
+%                                                                             %
+%  You may not use this file except in compliance with the License.  You may  %
+%  obtain a copy of the License at                                            %
+%                                                                             %
+%    https://imagemagick.org/license/                                         %
+%                                                                             %
+%  Unless required by applicable law or agreed to in writing, software        %
+%  distributed under the License is distributed on an "AS IS" BASIS,          %
+%  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   %
+%  See the License for the specific language governing permissions and        %
+%  limitations under the License.                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%
+*/
+
+/*
+  Include declarations.
+*/
+#include "magick/studio.h"
+#include "magick/property.h"
+#include "magick/blob.h"
+#include "magick/blob-private.h"
+#include "magick/cache.h"
+#include "magick/client.h"
+#include "magick/colorspace.h"
+#include "magick/colorspace-private.h"
+#include "magick/constitute.h"
+#include "magick/decorate.h"
+#include "magick/distort.h"
+#include "magick/exception.h"
+#include "magick/exception-private.h"
+#include "magick/gem.h"
+#include "magick/geometry.h"
+#include "magick/image.h"
+#include "magick/image-private.h"
+#include "magick/list.h"
+#include "magick/magick.h"
+#include "magick/memory_.h"
+#include "magick/monitor.h"
+#include "magick/monitor-private.h"
+#include "magick/montage.h"
+#include "magick/pixel-accessor.h"
+#include "magick/quantum-private.h"
+#include "magick/resize.h"
+#include "magick/resource_.h"
+#include "magick/static.h"
+#include "magick/string_.h"
+#include "magick/module.h"
+#include "magick/transform.h"
+#include "magick/utility.h"
+
+/*
+  Forward declarations.
+*/
+static MagickBooleanType
+  WritePCDImage(const ImageInfo *,Image *);
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%   D e c o d e I m a g e                                                     %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  DecodeImage recovers the Huffman encoded luminance and chrominance
+%  deltas.
+%
+%  The format of the DecodeImage method is:
+%
+%      MagickBooleanType DecodeImage(Image *image,unsigned char *luma,
+%        unsigned char *chroma1,unsigned char *chroma2)
+%
+%  A description of each parameter follows:
+%
+%    o image: the address of a structure of type Image.
+%
+%    o luma: the address of a character buffer that contains the
+%      luminance information.
+%
+%    o chroma1: the address of a character buffer that contains the
+%      chrominance information.
+%
+%    o chroma2: the address of a character buffer that contains the
+%      chrominance information.
+%
+*/
+static MagickBooleanType DecodeImage(Image *image,unsigned char *luma,
+  unsigned char *chroma1,unsigned char *chroma2,ExceptionInfo *exception)
+{
+#define IsSync(sum)  ((sum & 0xffffff00UL) == 0xfffffe00UL)
+#define PCDGetBits(n) \
+{  \
+  ssize_t \
+    byte_count = 0x800; \
+  \
+  sum=(sum << n) & 0xffffffff; \
+  bits-=n; \
+  while (bits <= 24) \
+  { \
+    if (p >= (buffer+0x800)) \
+      { \
+        byte_count=ReadBlob(image,0x800,buffer); \
+        if (byte_count != 0x800) \
+          { \
+            (void) ThrowMagickException(&image->exception,GetMagickModule(), \
+              CorruptImageWarning,"CorruptImage","`%s'",image->filename); \
+            break; \
+          } \
+        p=buffer; \
+      } \
+    sum|=(((unsigned int) (*p)) << (24-bits)); \
+    bits+=8; \
+    p++; \
+  } \
+  if (byte_count != 0x800) \
+    { \
+      (void) ThrowMagickException(&image->exception,GetMagickModule(), \
+        CorruptImageWarning,"CorruptImage","`%s'",image->filename); \
+      break; \
+    } \
+}
+
+  typedef struct PCDTable
+  {
+    unsigned int
+      length,
+      sequence;
+
+    MagickStatusType
+      mask;
+
+    unsigned char
+      key;
+  } PCDTable;
+
+  PCDTable
+    *pcd_table[3];
+
+  PCDTable
+    *r;
+
+  size_t
+    bits,
+    plane,
+    row,
+    sum;
+
+  ssize_t
+    count,
+    i,
+    j,
+    pcd_count,
+    pcd_length[3],
+    quantum;
+
+  unsigned char
+    *buffer,
+    *p,
+    *q,
+    *sentinel;
+
+  /*
+    Initialize Huffman tables.
+  */
+  assert(image != (const Image *) NULL);
+  assert(image->signature == MagickCoreSignature);
+  assert(luma != (unsigned char *) NULL);
+  assert(chroma1 != (unsigned char *) NULL);
+  assert(chroma2 != (unsigned char *) NULL);
+  if (IsEventLogging() != MagickFalse)
+    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
+  buffer=(unsigned char *) AcquireQuantumMemory(0x800,sizeof(*buffer));
+  if (buffer == (unsigned char *) NULL)
+    ThrowBinaryImageException(ResourceLimitError,"MemoryAllocationFailed",
+      image->filename);
+  sum=0;
+  bits=32;
+  p=buffer+0x800;
+  for (i=0; i < 3; i++)
+  {
+    pcd_table[i]=(PCDTable *) NULL;
+    pcd_length[i]=0;
+  }
+  pcd_count=(ssize_t) (image->columns > 1536 ? 3 : 1);
+  for (i=0; i < pcd_count; i++)
+  {
+    PCDGetBits(8);
+    pcd_length[i]=(ssize_t) (sum & 0xff)+1;
+    pcd_table[i]=(PCDTable *) AcquireQuantumMemory((size_t) pcd_length[i],
+      sizeof(*pcd_table[i]));
+    if (pcd_table[i] == (PCDTable *) NULL)
+      {
+        buffer=(unsigned char *) RelinquishMagickMemory(buffer);
+        for (j=0; j < i; j++)
+          pcd_table[j]=(PCDTable *) RelinquishMagickMemory(pcd_table[j]);
+        ThrowBinaryImageException(ResourceLimitError,"MemoryAllocationFailed",
+          image->filename);
+      }
+    r=pcd_table[i];
+    for (j=0; j < pcd_length[i]; j++)
+    {
+      PCDGetBits(8);
+      r->length=(unsigned int) (sum & 0xff)+1;
+      if (r->length > 16)
+        {
+          buffer=(unsigned char *) RelinquishMagickMemory(buffer);
+          for (j=0; j <= i; j++)
+            pcd_table[j]=(PCDTable *) RelinquishMagickMemory(pcd_table[j]);
+          return(MagickFalse);
+        }
+      PCDGetBits(16);
+      r->sequence=(unsigned int) (sum & 0xffff) << 16;
+      PCDGetBits(8);
+      r->key=(unsigned char) (sum & 0xff);
+      r->mask=(~((1U << (32-r->length))-1));
+      r++;
+    }
+  }
+  if (EOFBlob(image) == MagickFalse)
+    {
+      /*
+        Search for Sync byte.
+      */
+      for (i=0; i < 1; i++)
+        PCDGetBits(16);
+      for (i=0; i < 1; i++)
+        PCDGetBits(16);
+      while ((sum & 0x00fff000UL) != 0x00fff000UL)
+        PCDGetBits(8);
+      while (IsSync(sum) == 0)
+        PCDGetBits(1);
+    }
+  /*
+    Recover the Huffman encoded luminance and chrominance deltas.
+  */
+  count=0;
+  plane=0;
+  row=0;
+  sentinel=luma+30*(image->columns+1)*image->rows;
+  for (q=luma; EOFBlob(image) == MagickFalse; )
+  {
+    if (IsSync(sum) != 0)
+      {
+        /*
+          Determine plane and row number.
+        */
+        PCDGetBits(16);
+        row=((sum >> 9) & 0x1fff);
+        if (row == image->rows)
+          break;
+        PCDGetBits(8);
+        plane=sum >> 30;
+        PCDGetBits(16);
+        switch (plane)
+        {
+          case 0:
+          {
+            q=luma+row*image->columns;
+            count=(ssize_t) image->columns;
+            break;
+          }
+          case 2:
+          {
+            q=chroma1+(row >> 1)*image->columns;
+            count=(ssize_t) (image->columns >> 1);
+            plane--;
+            break;
+          }
+          case 3:
+          {
+            q=chroma2+(row >> 1)*image->columns;
+            count=(ssize_t) (image->columns >> 1);
+            plane--;
+            break;
+          }
+          default:
+          {
+            for (i=0; i < pcd_count; i++)
+              pcd_table[i]=(PCDTable *) RelinquishMagickMemory(pcd_table[i]);
+            buffer=(unsigned char *) RelinquishMagickMemory(buffer);
+            ThrowBinaryImageException(CorruptImageError,"CorruptImage",
+              image->filename);
+          }
+        }
+        continue;
+      }
+    /*
+      Decode luminance or chrominance deltas.
+    */
+    r=pcd_table[plane];
+    for (i=1; ((i < pcd_length[plane]) && ((sum & r->mask) != r->sequence)); i++)
+      r++;
+    if ((row > image->rows) || (r == (PCDTable *) NULL))
+      {
+        (void) ThrowMagickException(&image->exception,GetMagickModule(),
+          CorruptImageWarning,"SkipToSyncByte","`%s'",image->filename);
+        while ((sum & 0x00fff000) != 0x00fff000)
+          PCDGetBits(8);
+        while (IsSync(sum) == 0)
+          PCDGetBits(1);
+        continue;
+      }
+    if ((q < luma) || (q >= sentinel))
+      break;
+    if (r->key < 128)
+      quantum=(ssize_t) (*q)+r->key;
+    else
+      quantum=(ssize_t) (*q)+r->key-256;
+    *q=(unsigned char) ((quantum < 0) ? 0 : (quantum > 255) ? 255 : quantum);
+    q++;
+    PCDGetBits(r->length);
+    count--;
+  }
+  /*
+    Relinquish resources.
+  */
+  for (i=0; i < pcd_count; i++)
+    pcd_table[i]=(PCDTable *) RelinquishMagickMemory(pcd_table[i]);
+  buffer=(unsigned char *) RelinquishMagickMemory(buffer);
+  if ((q < luma) || (q >= sentinel))
+    ThrowBinaryException(CorruptImageError,"CorruptImage",image->filename);
+  return(MagickTrue);
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%   I s P C D                                                                 %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  IsPCD() returns MagickTrue if the image format type, identified by the
+%  magick string, is PCD.
+%
+%  The format of the IsPCD method is:
+%
+%      MagickBooleanType IsPCD(const unsigned char *magick,const size_t length)
+%
+%  A description of each parameter follows:
+%
+%    o magick: compare image format pattern against these bytes.
+%
+%    o length: Specifies the length of the magick string.
+%
+*/
+static MagickBooleanType IsPCD(const unsigned char *magick,const size_t length)
+{
+  if (length < 2052)
+    return(MagickFalse);
+  if (LocaleNCompare((const char *) magick+2048,"PCD_",4) == 0)
+    return(MagickTrue);
+  return(MagickFalse);
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%   R e a d P C D I m a g e                                                   %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  ReadPCDImage() reads a Photo CD image file and returns it.  It
+%  allocates the memory necessary for the new Image structure and returns a
+%  pointer to the new image.  Much of the PCD decoder was derived from
+%  the program hpcdtoppm(1) by Hadmut Danisch.
+%
+%  The format of the ReadPCDImage method is:
+%
+%      image=ReadPCDImage(image_info)
+%
+%  A description of each parameter follows:
+%
+%    o image_info: the image info.
+%
+%    o exception: return any errors or warnings in this structure.
+%
+*/
+
+static Image *OverviewImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
+{
+  Image
+    *montage_image;
+
+  MontageInfo
+    *montage_info;
+
+  Image
+    *p;
+
+  /*
+    Create the PCD Overview image.
+  */
+  for (p=image; p != (Image *) NULL; p=p->next)
+  {
+    (void) DeleteImageProperty(p,"label");
+    (void) SetImageProperty(p,"label",DefaultTileLabel);
+  }
+  montage_info=CloneMontageInfo(image_info,(MontageInfo *) NULL);
+  (void) CopyMagickString(montage_info->filename,image_info->filename,
+    MaxTextExtent);
+  montage_image=MontageImageList(image_info,montage_info,image,exception);
+  montage_info=DestroyMontageInfo(montage_info);
+  if (montage_image == (Image *) NULL)
+    ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+  image=DestroyImageList(image);
+  return(montage_image);
+}
+
+static void Upsample(const size_t width,const size_t height,
+  const size_t scaled_width,unsigned char *pixels)
+{
+  ssize_t
+    x,
+    y;
+
+  unsigned char
+    *p,
+    *q,
+    *r;
+
+  /*
+    Create a new image that is a integral size greater than an existing one.
+  */
+  assert(pixels != (unsigned char *) NULL);
+  for (y=0; y < (ssize_t) height; y++)
+  {
+    p=pixels+(height-1-y)*scaled_width+(width-1);
+    q=pixels+((height-1-y) << 1)*scaled_width+((width-1) << 1);
+    *q=(*p);
+    *(q+1)=(*(p));
+    for (x=1; x < (ssize_t) width; x++)
+    {
+      p--;
+      q-=2;
+      *q=(*p);
+      *(q+1)=(unsigned char) ((((size_t) *p)+((size_t) *(p+1))+1) >> 1);
+    }
+  }
+  for (y=0; y < (ssize_t) (height-1); y++)
+  {
+    p=pixels+((size_t) y << 1)*scaled_width;
+    q=p+scaled_width;
+    r=q+scaled_width;
+    for (x=0; x < (ssize_t) (width-1); x++)
+    {
+      *q=(unsigned char) ((((size_t) *p)+((size_t) *r)+1) >> 1);
+      *(q+1)=(unsigned char) ((((size_t) *p)+((size_t) *(p+2))+
+        ((size_t) *r)+((size_t) *(r+2))+2) >> 2);
+      q+=(ptrdiff_t) 2;
+      p+=(ptrdiff_t) 2;
+      r+=(ptrdiff_t) 2;
+    }
+    *q++=(unsigned char) ((((size_t) *p++)+((size_t) *r++)+1) >> 1);
+    *q++=(unsigned char) ((((size_t) *p++)+((size_t) *r++)+1) >> 1);
+  }
+  p=pixels+(2*height-2)*scaled_width;
+  q=pixels+(2*height-1)*scaled_width;
+  (void) memcpy(q,p,(size_t) (2*width));
+}
+
+static Image *ReadPCDImage(const ImageInfo *image_info,ExceptionInfo *exception)
+{
+#define ThrowPCDException(exception,message) \
+{ \
+  if (header != (unsigned char *) NULL) \
+    header=(unsigned char *) RelinquishMagickMemory(header); \
+  if (pixel_info != (MemoryInfo *) NULL) \
+    pixel_info=RelinquishVirtualMemory(pixel_info); \
+  ThrowReaderException((exception),(message)); \
+}
+
+  Image
+    *image;
+
+  MagickBooleanType
+    status;
+
+  MagickOffsetType
+    offset;
+
+  MemoryInfo
+    *pixel_info;
+
+  PixelPacket
+    *q;
+
+  size_t
+    extent,
+    height,
+    number_images,
+    number_pixels,
+    rotate,
+    scene,
+    width;
+
+  ssize_t
+    count,
+    i,
+    x,
+    y;
+
+  unsigned char
+    *c1,
+    *c2,
+    *chroma1,
+    *chroma2,
+    *header,
+    *luma,
+    *yy;
+
+  unsigned int
+    overview;
+
+  /*
+    Open image file.
+  */
+  assert(image_info != (const ImageInfo *) NULL);
+  assert(image_info->signature == MagickCoreSignature);
+  if (IsEventLogging() != MagickFalse)
+    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
+      image_info->filename);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info);
+  status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
+  if (status == MagickFalse)
+    {
+      image=DestroyImageList(image);
+      return((Image *) NULL);
+    }
+  /*
+    Determine if this a PCD file.
+  */
+  header=(unsigned char *) AcquireQuantumMemory(0x800,3UL*sizeof(*header));
+  if (header == (unsigned char *) NULL)
+    ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+  pixel_info=(MemoryInfo *) NULL;
+  count=ReadBlob(image,3*0x800,header);
+  if (count != (3*0x800))
+    ThrowPCDException(CorruptImageError,"ImproperImageHeader");
+  overview=LocaleNCompare((char *) header,"PCD_OPA",7) == 0;
+  if ((LocaleNCompare((char *) header+0x800,"PCD",3) != 0) && (overview == 0))
+    {
+      header=(unsigned char *) RelinquishMagickMemory(header);
+      ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+    }
+  rotate=header[0x0e02] & 0x03;
+  number_images=((header[10] << 8) | header[11]) & 0xffff;
+  header=(unsigned char *) RelinquishMagickMemory(header);
+  if ((overview != 0) &&
+      (AcquireMagickResource(ListLengthResource,number_images) == MagickFalse))
+    ThrowPCDException(ResourceLimitError,"ListLengthExceedsLimit");
+  /*
+    Determine resolution by scene specification.
+  */
+  if ((image->columns == 0) || (image->rows == 0))
+    scene=3;
+  else
+    {
+      width=192;
+      height=128;
+      for (scene=1; scene < 6; scene++)
+      {
+        if ((width >= image->columns) && (height >= image->rows))
+          break;
+        width<<=1;
+        height<<=1;
+      }
+    }
+  if (image_info->number_scenes != 0)
+    scene=(size_t) MagickMin(image_info->scene,6);
+  if (overview != 0)
+    scene=1;
+  /*
+    Initialize image structure.
+  */
+  width=192;
+  height=128;
+  for (i=1; i < (ssize_t) MagickMin(scene,3); i++)
+  {
+    width<<=1;
+    height<<=1;
+  }
+  image->columns=width;
+  image->rows=height;
+  image->depth=8;
+  for ( ; i < (ssize_t) scene; i++)
+  {
+    image->columns<<=1;
+    image->rows<<=1;
+  }
+  status=SetImageExtent(image,image->columns,image->rows);
+  if (status == MagickFalse)
+    {
+      InheritException(exception,&image->exception);
+      return(DestroyImageList(image));
+    }
+  status=ResetImagePixels(image,exception);
+  if (status == MagickFalse)
+    {
+      InheritException(exception,&image->exception);
+      return(DestroyImageList(image));
+    }
+  /*
+    Allocate luma and chroma memory.
+  */
+  if (HeapOverflowSanityCheckGetSize(image->columns+1UL,image->rows,&extent) != MagickFalse)
+    ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+  if (HeapOverflowSanityCheckGetSize(extent,10,&number_pixels) != MagickFalse)
+    ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+  if (HeapOverflowSanityCheckGetSize(extent,30,&extent) != MagickFalse)
+    ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+  pixel_info=AcquireVirtualMemory(extent,sizeof(*luma));
+  if (pixel_info == (MemoryInfo *) NULL)
+    ThrowPCDException(ResourceLimitError,"MemoryAllocationFailed");
+  luma=(unsigned char *) GetVirtualMemoryBlob(pixel_info);
+  chroma1=(unsigned char *) GetVirtualMemoryBlob(pixel_info)+number_pixels;
+  chroma2=(unsigned char *) GetVirtualMemoryBlob(pixel_info)+2*number_pixels;
+  (void) memset(luma,0,3*number_pixels);
+  /*
+    Advance to image data.
+  */
+  offset=93;
+  if (overview != 0)
+    offset=2;
+  else
+    if (scene == 2)
+      offset=20;
+    else
+      if (scene <= 1)
+        offset=1;
+  for (i=0; i < (ssize_t) (offset*0x800); i++)
+    if (ReadBlobByte(image) == EOF)
+      ThrowPCDException(CorruptImageError,"UnexpectedEndOfFile");
+  if (overview != 0)
+    {
+      MagickProgressMonitor
+        progress_monitor;
+
+      ssize_t
+        j;
+
+      /*
+        Read thumbnails from overview image.
+      */
+      for (j=1; j <= (ssize_t) number_images; j++)
+      {
+        progress_monitor=SetImageProgressMonitor(image,
+          (MagickProgressMonitor) NULL,image->client_data);
+        (void) FormatLocaleString(image->filename,MaxTextExtent,
+          "images/img%04ld.pcd",(long) j);
+        (void) FormatLocaleString(image->magick_filename,MaxTextExtent,
+          "images/img%04ld.pcd",(long) j);
+        image->scene=(size_t) j;
+        image->columns=width;
+        image->rows=height;
+        image->depth=8;
+        yy=luma;
+        c1=chroma1;
+        c2=chroma2;
+        for (y=0; y < (ssize_t) height; y+=2)
+        {
+          count=ReadBlob(image,width,yy);
+          yy+=image->columns;
+          count=ReadBlob(image,width,yy);
+          yy+=image->columns;
+          count=ReadBlob(image,width >> 1,c1);
+          c1+=image->columns;
+          count=ReadBlob(image,width >> 1,c2);
+          c2+=image->columns;
+          if (EOFBlob(image) != MagickFalse)
+            ThrowPCDException(CorruptImageError,"UnexpectedEndOfFile");
+        }
+        Upsample(image->columns >> 1,image->rows >> 1,image->columns,chroma1);
+        Upsample(image->columns >> 1,image->rows >> 1,image->columns,chroma2);
+        /*
+          Transfer luminance and chrominance channels.
+        */
+        yy=luma;
+        c1=chroma1;
+        c2=chroma2;
+        for (y=0; y < (ssize_t) image->rows; y++)
+        {
+          q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
+          if (q == (PixelPacket *) NULL)
+            break;
+          for (x=0; x < (ssize_t) image->columns; x++)
+          {
+            SetPixelRed(q,ScaleCharToQuantum(*yy++));
+            SetPixelGreen(q,ScaleCharToQuantum(*c1++));
+            SetPixelBlue(q,ScaleCharToQuantum(*c2++));
+            q++;
+          }
+          if (SyncAuthenticPixels(image,exception) == MagickFalse)
+            break;
+        }
+        image->colorspace=YCCColorspace;
+        if (LocaleCompare(image_info->magick,"PCDS") == 0)
+          (void) SetImageColorspace(image,sRGBColorspace);
+        if (EOFBlob(image) != MagickFalse)
+          break;
+        if (j < (ssize_t) number_images)
+          {
+            /*
+              Allocate next image structure.
+            */
+            AcquireNextImage(image_info,image);
+            if (GetNextImageInList(image) == (Image *) NULL)
+              {
+                status=MagickFalse;
+                break;
+              }
+            image=SyncNextImageInList(image);
+          }
+        (void) SetImageProgressMonitor(image,progress_monitor,
+          image->client_data);
+        if (image->previous == (Image *) NULL)
+          {
+            status=SetImageProgress(image,LoadImageTag,(MagickOffsetType) j-1,
+              number_images);
+            if (status == MagickFalse)
+              break;
+          }
+      }
+      pixel_info=RelinquishVirtualMemory(pixel_info);
+      if (status == MagickFalse)
+        return(DestroyImageList(image));
+      return(OverviewImage(image_info,GetFirstImageInList(image),exception));
+    }
+  /*
+    Read interleaved image.
+  */
+  yy=luma;
+  c1=chroma1;
+  c2=chroma2;
+  for (y=0; y < (ssize_t) height; y+=2)
+  {
+    count=ReadBlob(image,width,yy);
+    yy+=image->columns;
+    count=ReadBlob(image,width,yy);
+    yy+=image->columns;
+    count=ReadBlob(image,width >> 1,c1);
+    c1+=image->columns;
+    count=ReadBlob(image,width >> 1,c2);
+    c2+=image->columns;
+    if (EOFBlob(image) != MagickFalse)
+      ThrowPCDException(CorruptImageError,"UnexpectedEndOfFile");
+  }
+  if (scene >= 4)
+    {
+      /*
+        Recover luminance deltas for 1536x1024 image.
+      */
+      Upsample(768,512,image->columns,luma);
+      Upsample(384,256,image->columns,chroma1);
+      Upsample(384,256,image->columns,chroma2);
+      image->rows=1024;
+      for (i=0; i < (4*0x800); i++)
+        (void) ReadBlobByte(image);
+      status=DecodeImage(image,luma,chroma1,chroma2,&image->exception);
+      if ((scene >= 5) && (status != MagickFalse))
+        {
+          /*
+            Recover luminance deltas for 3072x2048 image.
+          */
+          Upsample(1536,1024,image->columns,luma);
+          Upsample(768,512,image->columns,chroma1);
+          Upsample(768,512,image->columns,chroma2);
+          image->rows=2048;
+          offset=TellBlob(image)/0x800+12;
+          offset=SeekBlob(image,offset*0x800,SEEK_SET);
+          status=DecodeImage(image,luma,chroma1,chroma2,&image->exception);
+          if ((scene >= 6) && (status != MagickFalse))
+            {
+              /*
+                Recover luminance deltas for 6144x4096 image (vaporware).
+              */
+              Upsample(3072,2048,image->columns,luma);
+              Upsample(1536,1024,image->columns,chroma1);
+              Upsample(1536,1024,image->columns,chroma2);
+              image->rows=4096;
+            }
+        }
+    }
+  Upsample(image->columns >> 1,image->rows >> 1,image->columns,chroma1);
+  Upsample(image->columns >> 1,image->rows >> 1,image->columns,chroma2);
+  /*
+    Transfer luminance and chrominance channels.
+  */
+  yy=luma;
+  c1=chroma1;
+  c2=chroma2;
+  for (y=0; y < (ssize_t) image->rows; y++)
+  {
+    q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
+    if (q == (PixelPacket *) NULL)
+      break;
+    for (x=0; x < (ssize_t) image->columns; x++)
+    {
+      SetPixelRed(q,ScaleCharToQuantum(*yy++));
+      SetPixelGreen(q,ScaleCharToQuantum(*c1++));
+      SetPixelBlue(q,ScaleCharToQuantum(*c2++));
+      q++;
+    }
+    if (SyncAuthenticPixels(image,exception) == MagickFalse)
+      break;
+    if (image->previous == (Image *) NULL)
+      {
+        status=SetImageProgress(image,LoadImageTag,(MagickOffsetType) y,
+                image->rows);
+        if (status == MagickFalse)
+          break;
+      }
+  }
+  pixel_info=RelinquishVirtualMemory(pixel_info);
+  if (EOFBlob(image) != MagickFalse)
+    ThrowFileException(exception,CorruptImageError,"UnexpectedEndOfFile",
+      image->filename);
+  (void) CloseBlob(image);
+  if (image_info->ping == MagickFalse)
+    if ((rotate == 1) || (rotate == 3))
+      {
+        double
+          degrees;
+
+        Image
+          *rotate_image;
+
+        /*
+          Rotate image.
+        */
+        degrees=rotate == 1 ? -90.0 : 90.0;
+        rotate_image=RotateImage(image,degrees,exception);
+        if (rotate_image != (Image *) NULL)
+          {
+            image=DestroyImage(image);
+            image=rotate_image;
+          }
+      }
+  /*
+    Set CCIR 709 primaries with a D65 white point.
+  */
+  image->chromaticity.red_primary.x=0.6400f;
+  image->chromaticity.red_primary.y=0.3300f;
+  image->chromaticity.green_primary.x=0.3000f;
+  image->chromaticity.green_primary.y=0.6000f;
+  image->chromaticity.blue_primary.x=0.1500f;
+  image->chromaticity.blue_primary.y=0.0600f;
+  image->chromaticity.white_point.x=0.3127f;
+  image->chromaticity.white_point.y=0.3290f;
+  image->gamma=1.000f/2.200f;
+  image->colorspace=YCCColorspace;
+  if (LocaleCompare(image_info->magick,"PCDS") == 0)
+    (void) SetImageColorspace(image,sRGBColorspace);
+  if (image_info->scene != 0)
+    for (i=0; i < (ssize_t) image_info->scene; i++)
+      AppendImageToList(&image,CloneImage(image,0,0,MagickTrue,exception));
+  return(GetFirstImageInList(image));
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%   R e g i s t e r P C D I m a g e                                           %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  RegisterPCDImage() adds attributes for the PCD image format to
+%  the list of supported formats.  The attributes include the image format
+%  tag, a method to read and/or write the format, whether the format
+%  supports the saving of more than one frame to the same file or blob,
+%  whether the format supports native in-memory I/O, and a brief
+%  description of the format.
+%
+%  The format of the RegisterPCDImage method is:
+%
+%      size_t RegisterPCDImage(void)
+%
+*/
+ModuleExport size_t RegisterPCDImage(void)
+{
+  MagickInfo
+    *entry;
+
+  entry=SetMagickInfo("PCD");
+  entry->decoder=(DecodeImageHandler *) ReadPCDImage;
+  entry->encoder=(EncodeImageHandler *) WritePCDImage;
+  entry->magick=(IsImageFormatHandler *) IsPCD;
+  entry->adjoin=MagickFalse;
+  entry->seekable_stream=MagickTrue;
+  entry->description=ConstantString("Photo CD");
+  entry->magick_module=ConstantString("PCD");
+  (void) RegisterMagickInfo(entry);
+  entry=SetMagickInfo("PCDS");
+  entry->decoder=(DecodeImageHandler *) ReadPCDImage;
+  entry->encoder=(EncodeImageHandler *) WritePCDImage;
+  entry->adjoin=MagickFalse;
+  entry->seekable_stream=MagickTrue;
+  entry->description=ConstantString("Photo CD");
+  entry->magick_module=ConstantString("PCD");
+  (void) RegisterMagickInfo(entry);
+  return(MagickImageCoderSignature);
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%   U n r e g i s t e r P C D I m a g e                                       %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  UnregisterPCDImage() removes format registrations made by the
+%  PCD module from the list of supported formats.
+%
+%  The format of the UnregisterPCDImage method is:
+%
+%      UnregisterPCDImage(void)
+%
+*/
+ModuleExport void UnregisterPCDImage(void)
+{
+  (void) UnregisterMagickInfo("PCD");
+  (void) UnregisterMagickInfo("PCDS");
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%   W r i t e P C D I m a g e                                                 %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  WritePCDImage() writes an image in the Photo CD encoded image format.
+%
+%  The format of the WritePCDImage method is:
+%
+%      MagickBooleanType WritePCDImage(const ImageInfo *image_info,Image *image)
+%
+%  A description of each parameter follows.
+%
+%    o image_info: the image info.
+%
+%    o image:  The image.
+%
+*/
+
+static MagickBooleanType WritePCDTile(Image *image,const char *page_geometry,
+  const char *tile_geometry)
+{
+  GeometryInfo
+    geometry_info;
+
+  Image
+    *downsample_image,
+    *tile_image;
+
+  MagickBooleanType
+    status;
+
+  MagickStatusType
+    flags;
+
+  RectangleInfo
+    geometry;
+
+  const PixelPacket
+    *p,
+    *q;
+
+  ssize_t
+    i,
+    x;
+
+  ssize_t
+    y;
+
+  /*
+    Scale image to tile size.
+  */
+  SetGeometry(image,&geometry);
+  (void) ParseMetaGeometry(page_geometry,&geometry.x,&geometry.y,
+    &geometry.width,&geometry.height);
+  if ((geometry.width % 2) != 0)
+    geometry.width=MagickMax(geometry.width-1,1);
+  if ((geometry.height % 2) != 0)
+    geometry.height=MagickMax(geometry.height-1,1);
+  tile_image=ResizeImage(image,geometry.width,geometry.height,TriangleFilter,
+    1.0,&image->exception);
+  if (tile_image == (Image *) NULL)
+    return(MagickFalse);
+  flags=ParseGeometry(page_geometry,&geometry_info);
+  geometry.width=(size_t) geometry_info.rho;
+  geometry.height=(size_t) geometry_info.sigma;
+  if ((flags & SigmaValue) == 0)
+    geometry.height=geometry.width;
+  if ((tile_image->columns != geometry.width) ||
+      (tile_image->rows != geometry.height))
+    {
+      Image
+        *bordered_image;
+
+      RectangleInfo
+        border_info;
+
+      /*
+        Put a border around the image.
+      */
+      border_info.width=(geometry.width-tile_image->columns+1) >> 1;
+      border_info.height=(geometry.height-tile_image->rows+1) >> 1;
+      bordered_image=BorderImage(tile_image,&border_info,&image->exception);
+      if (bordered_image == (Image *) NULL)
+        return(MagickFalse);
+      tile_image=DestroyImage(tile_image);
+      tile_image=bordered_image;
+    }
+  (void) TransformImage(&tile_image,(char *) NULL,tile_geometry);
+  (void) TransformImageColorspace(tile_image,YCCColorspace);
+  downsample_image=ResizeImage(tile_image,tile_image->columns/2,
+    tile_image->rows/2,TriangleFilter,1.0,&image->exception);
+  if (downsample_image == (Image *) NULL)
+    return(MagickFalse);
+  /*
+    Write tile to PCD file.
+  */
+  for (y=0; y < (ssize_t) tile_image->rows; y+=2)
+  {
+    p=GetVirtualPixels(tile_image,0,y,tile_image->columns,2,
+      &tile_image->exception);
+    if (p == (const PixelPacket *) NULL)
+      break;
+    for (x=0; x < (ssize_t) (tile_image->columns << 1); x++)
+    {
+      (void) WriteBlobByte(image,ScaleQuantumToChar(GetPixelRed(p)));
+      p++;
+    }
+    q=GetVirtualPixels(downsample_image,0,y >> 1,downsample_image->columns,
+      1,&downsample_image->exception);
+    if (q == (const PixelPacket *) NULL)
+      break;
+    for (x=0; x < (ssize_t) downsample_image->columns; x++)
+    {
+      (void) WriteBlobByte(image,ScaleQuantumToChar(GetPixelGreen(q)));
+      q++;
+    }
+    q=GetVirtualPixels(downsample_image,0,y >> 1,downsample_image->columns,
+      1,&downsample_image->exception);
+    if (q == (const PixelPacket *) NULL)
+      break;
+    for (x=0; x < (ssize_t) downsample_image->columns; x++)
+    {
+      (void) WriteBlobByte(image,ScaleQuantumToChar(GetPixelBlue(q)));
+      q++;
+    }
+    status=SetImageProgress(image,SaveImageTag,(MagickOffsetType) y,
+      tile_image->rows);
+    if (status == MagickFalse)
+      break;
+  }
+  for (i=0; i < 0x800; i++)
+    (void) WriteBlobByte(image,'\0');
+  downsample_image=DestroyImage(downsample_image);
+  tile_image=DestroyImage(tile_image);
+  return(MagickTrue);
+}
+
+static MagickBooleanType WritePCDImage(const ImageInfo *image_info,Image *image)
+{
+  Image
+    *pcd_image;
+
+  MagickBooleanType
+    status;
+
+  ssize_t
+    i;
+
+  assert(image_info != (const ImageInfo *) NULL);
+  assert(image_info->signature == MagickCoreSignature);
+  assert(image != (Image *) NULL);
+  assert(image->signature == MagickCoreSignature);
+  if (IsEventLogging() != MagickFalse)
+    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
+  pcd_image=image;
+  if (image->columns < image->rows)
+    {
+      Image
+        *rotate_image;
+
+      /*
+        Rotate portrait to landscape.
+      */
+      rotate_image=RotateImage(image,90.0,&image->exception);
+      if (rotate_image == (Image *) NULL)
+        return(MagickFalse);
+      pcd_image=rotate_image;
+      DestroyBlob(rotate_image);
+      pcd_image->blob=ReferenceBlob(image->blob);
+    }
+  /*
+    Open output image file.
+  */
+  status=OpenBlob(image_info,pcd_image,WriteBinaryBlobMode,&image->exception);
+  if (status == MagickFalse)
+    {
+      if (pcd_image != image)
+        pcd_image=DestroyImage(pcd_image);
+      return(status);
+    }
+  if (IssRGBCompatibleColorspace(image->colorspace) == MagickFalse)
+    (void) TransformImageColorspace(pcd_image,sRGBColorspace);
+  /*
+    Write PCD image header.
+  */
+  for (i=0; i < 32; i++)
+    (void) WriteBlobByte(pcd_image,0xff);
+  for (i=0; i < 4; i++)
+    (void) WriteBlobByte(pcd_image,0x0e);
+  for (i=0; i < 8; i++)
+    (void) WriteBlobByte(pcd_image,'\0');
+  for (i=0; i < 4; i++)
+    (void) WriteBlobByte(pcd_image,0x01);
+  for (i=0; i < 4; i++)
+    (void) WriteBlobByte(pcd_image,0x05);
+  for (i=0; i < 8; i++)
+    (void) WriteBlobByte(pcd_image,'\0');
+  for (i=0; i < 4; i++)
+    (void) WriteBlobByte(pcd_image,0x0A);
+  for (i=0; i < 36; i++)
+    (void) WriteBlobByte(pcd_image,'\0');
+  for (i=0; i < 4; i++)
+    (void) WriteBlobByte(pcd_image,0x01);
+  for (i=0; i < 1944; i++)
+    (void) WriteBlobByte(pcd_image,'\0');
+  (void) WriteBlob(pcd_image,7,(const unsigned char *) "PCD_IPI");
+  (void) WriteBlobByte(pcd_image,0x06);
+  for (i=0; i < 1530; i++)
+    (void) WriteBlobByte(pcd_image,'\0');
+  if (image->columns < image->rows)
+    (void) WriteBlobByte(pcd_image,'\1');
+  else
+    (void) WriteBlobByte(pcd_image,'\0');
+  for (i=0; i < (3*0x800-1539); i++)
+    (void) WriteBlobByte(pcd_image,'\0');
+  /*
+    Write PCD tiles.
+  */
+  status=WritePCDTile(pcd_image,"768x512>","192x128");
+  status=WritePCDTile(pcd_image,"768x512>","384x256");
+  status=WritePCDTile(pcd_image,"768x512>","768x512");
+  (void) CloseBlob(pcd_image);
+  if (pcd_image != image)
+    pcd_image=DestroyImage(pcd_image);
+  return(status);
+}

@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.assistants.v1.threads;
+
+import "yandex/cloud/ai/assistants/v1/common.proto";
+import "yandex/cloud/ai/common/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/assistants/v1/threads;threads";
+option java_package = "yandex.cloud.api.ai.assistants.v1.threads";
+
+message Thread {
+  // Unique identifier of the thread.
+  string id = 1;
+
+  // ID of the folder that the thread belongs to.
+  string folder_id = 2;
+
+  // Name of the thread.
+  string name = 3;
+
+  // Description of the thread.
+  string description = 4;
+
+  // Default user ID that will be used as the author for thread messages if no other author is specified.
+  string default_message_author_id = 5;
+
+  // Identifier of the subject who created this thread.
+  string created_by = 6;
+
+  // Timestamp representing when the thread was created.
+  google.protobuf.Timestamp created_at = 7;
+
+  // Identifier of the subject who last updated this thread.
+  string updated_by = 8;
+
+  // Timestamp representing the last time this thread was updated.
+  google.protobuf.Timestamp updated_at = 9;
+
+  // Configuration for the expiration of the thread, defining when and how the thread will expire.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 10;
+
+  // Timestamp representing when the thread will expire.
+  google.protobuf.Timestamp expires_at = 11;
+
+  // Set of key-value pairs that can be used to organize and categorize the thread.
+  map<string, string> labels = 12;
+
+  // List of tools that are available for assistants to use in this thread.
+  repeated yandex.cloud.ai.assistants.v1.Tool tools = 13;
+}

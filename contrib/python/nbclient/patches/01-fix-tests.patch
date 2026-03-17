@@ -1,0 +1,21 @@
+--- contrib/python/nbclient/tests/test_client.py	(index)
++++ contrib/python/nbclient/tests/test_client.py	(working tree)
+@@ -25,2 +25,4 @@ from nbformat import NotebookNode
+ 
++import yatest.common
++
+ addr_pat = re.compile(r'0x[0-9a-f]{7,9}')
+@@ -30,1 +30,1 @@ from nbformat import NotebookNode
+-current_dir = os.path.dirname(__file__)
++current_dir = yatest.common.source_path(os.path.dirname(__file__))
+@@ -30,2 +30,8 @@ from nbformat import NotebookNode
+ 
++@pytest.fixture(autouse=True)
++def _set_arc_env(monkeypatch):
++    # move IPYTHONDIR from distbuild/~home to writeable location
++    monkeypatch.setenv('IPYTHONDIR', yatest.common.work_path('ipython'))
++
++
+ # Avoid warnings from pydev.
+@@ -803,1 +811,0 @@ while True: continue
+-        current_dir = os.path.dirname(__file__)

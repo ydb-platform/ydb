@@ -1,0 +1,7 @@
+{"__comment__": "JSON file specifying the image to use for a given type/name and resolution. Read in by cartopy.mpl.geoaxes.read_user_background_images.",
+  "ne_shaded": {
+    "__comment__": "Natural Earth shaded relief",
+    "__source__": "https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-1/",
+    "__projection__": "PlateCarree",
+    "low": "50-natural-earth-1-downsampled.png"  }
+}

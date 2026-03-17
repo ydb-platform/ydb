@@ -1,0 +1,14 @@
+version: v1
+plugins:
+  - plugin: go
+    out: go
+    opt: paths=source_relative
+  - plugin: go-grpc
+    out: go
+    opt:
+      - paths=source_relative
+  - plugin: openapiv2
+    out: openapiv2
+    opt:
+      - output_format=yaml
+      - allow_delete_body

@@ -1,0 +1,84 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "additionalProperties": false,
+    "definitions": {
+        "apiObject": {
+            "additionalProperties": false,
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "operations": {
+                    "items": {
+                        "$ref": "operationObject.json#"
+                    },
+                    "type": "array"
+                },
+                "path": {
+                    "format": "uri-template",
+                    "pattern": "^/",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "path",
+                "operations"
+            ],
+            "type": "object"
+        },
+        "mimeTypeArray": {
+            "items": {
+                "format": "mime-type",
+                "type": "string"
+            },
+            "type": "array"
+        }
+    },
+    "properties": {
+        "apiVersion": {
+            "type": "string"
+        },
+        "apis": {
+            "items": {
+                "$ref": "#/definitions/apiObject"
+            },
+            "type": "array"
+        },
+        "authorizations": {
+            "$ref": "authorizationObject.json#"
+        },
+        "basePath": {
+            "format": "uri",
+            "pattern": "^http://",
+            "type": "string"
+        },
+        "consumes": {
+            "$ref": "#/definitions/mimeTypeArray"
+        },
+        "models": {
+            "additionalProperties": {
+                "$ref": "modelsObject.json#"
+            },
+            "type": "object"
+        },
+        "produces": {
+            "$ref": "#/definitions/mimeTypeArray"
+        },
+        "resourcePath": {
+            "format": "uri",
+            "pattern": "^/",
+            "type": "string"
+        },
+        "swaggerVersion": {
+            "enum": [
+                "1.2"
+            ]
+        }
+    },
+    "required": [
+        "swaggerVersion",
+        "basePath",
+        "apis"
+    ],
+    "type": "object"
+}

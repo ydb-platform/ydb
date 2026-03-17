@@ -1,0 +1,27 @@
+*** List of things to-do in no particular order ***
+
+General:
+- Define common Python style license for all modules
+- Support Python 3.2+
+
+Modules/
+- Specific support for more controls
+  - VLV control
+  - server-side sorting control
+- Wrap libldif as faster drop-in replacement for module ldif?
+- Extract response controls in SASL bind responses
+- Attach response controls to LDAPError instances to deliver the
+  controls to the calling application in case of an error
+- Attach more useful information to LDAPError instances, e.g. the filter used
+  when doing a search in case of ldap.FILTER_ERROR etc.
+
+Lib/
+- Unicode support for DNs, filter strings, etc. but not entry attributes!
+(Everybody asking for the latter should check the mailing list archive first.)
+- Caching of search requests for each LDAPObject instance
+- LDIF parser for replication logs and change records
+
+Tests/
+- Clean up and finish the mess of small test scripts started.
+- Create a test script that exercises everything with a server
+  holding the BLITS test data set

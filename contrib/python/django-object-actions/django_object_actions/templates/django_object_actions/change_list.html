@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+
+{% block object-tools-items %}
+  {% for tool in objectactions %}
+    <li class="objectaction-item" data-tool-name="{{ tool.name }}">
+      {% url tools_view_name tool=tool.name as action_url %}
+      {% include 'django_object_actions/action_trigger.html' %}
+    </li>
+  {% endfor %}
+  {{ block.super }}
+{% endblock %}

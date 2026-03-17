@@ -1,0 +1,13 @@
+# Code table 4.2 - discipline=0 category=1 for ERA6
+192 192 Snow evaporation rate (kg m-2 s-1)
+193 193 Total precipitation rate (m s-1)
+194 194 Accumulated freezing rain (m)
+195 195 Convective precipitation rate (m s-1)
+196 196 Large-scale precipitation rate (m s-1)
+197 197 Snow evaporation rate (m of water equivalent s-1)
+198 198 Snowfall rate (m of water equivalent s-1)
+199 199 Evaporation rate (m of water equivalent s-1)
+200 200 Potential evaporation rate (m s-1)
+201 201 Convective snowfall rate (m of water equivalent s-1)
+202 202 Large-scale snowfall rate (m of water equivalent s-1)
+254 254 Snow depth (m of water equivalent)

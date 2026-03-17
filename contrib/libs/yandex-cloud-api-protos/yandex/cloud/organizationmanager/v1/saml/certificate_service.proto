@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.saml;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/organizationmanager/v1/saml/certificate.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/saml;saml";
+option java_package = "yandex.cloud.api.organizationmanager.v1.saml";
+
+// A set of methods for managing certificates.
+service CertificateService {
+  // Returns the specified certificate.
+  //
+  // To get the list of available certificates, make a [List] request.
+  rpc Get (GetCertificateRequest) returns (Certificate) {
+    option (google.api.http) = { get: "/organization-manager/v1/saml/certificates/{certificate_id}" };
+  }
+
+  // Retrieves the list of certificates in the specified federation.
+  rpc List (ListCertificatesRequest) returns (ListCertificatesResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/saml/certificates" };
+  }
+
+  // Creates a certificate in the specified federation.
+  rpc Create (CreateCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/saml/certificates" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateCertificateMetadata"
+      response: "Certificate"
+    };
+  }
+
+  // Updates the specified certificate.
+  rpc Update (UpdateCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/saml/certificates/{certificate_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateCertificateMetadata"
+      response: "Certificate"
+    };
+  }
+
+  // Deletes the specified certificate.
+  rpc Delete (DeleteCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/organization-manager/v1/saml/certificates/{certificate_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteCertificateMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified certificate.
+  rpc ListOperations (ListCertificateOperationsRequest) returns (ListCertificateOperationsResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/saml/certificates/{certificate_id}/operations" };
+  }
+}
+
+message GetCertificateRequest {
+  // ID of the certificate to return.
+  // To get the certificate ID, make a [CertificateService.List] request.
+  string certificate_id = 1 [(length) = "<=50"];
+}
+
+message ListCertificatesRequest {
+  // ID of the federation to list certificates in.
+  // To get the federation ID make a [yandex.cloud.organizationmanager.v1.saml.FederationService.List] request.
+  string federation_id = 1 [(length) = "<=50", (required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListCertificatesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token]
+  // to the [ListCertificatesResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=2000"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on [Certificate.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListCertificatesResponse {
+  // List of certificates.
+  repeated Certificate certificates = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListCertificatesRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListCertificatesRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateCertificateRequest {
+  // ID of the federation to add new certificate.
+  // To get the federation ID make a [yandex.cloud.organizationmanager.v1.saml.FederationService.List] request.
+  string federation_id = 1 [(length) = "<=50"];
+
+  // Name of the certificate.
+  // The name must be unique within the federation.
+  string name = 2 [(pattern) = "[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the certificate.
+  string description = 3 [(length) = "<=256"];
+
+  // Certificate data in PEM format.
+  string data = 4 [(length) = "<=32000"];
+}
+
+message CreateCertificateMetadata {
+  // ID of the certificate that is being created.
+  string certificate_id = 1;
+}
+
+message UpdateCertificateRequest {
+  // ID of the certificate to update.
+  // To get the certificate ID, make a [CertificateService.List] request.
+  string certificate_id = 1 [(length) = "<=50"];
+
+  // Field mask that specifies which fields of the certificate are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the certificate.
+  // The name must be unique within the federation.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the certificate.
+  string description = 4 [(length) = "<=256"];
+
+  // Certificate data in PEM format.
+  string data = 5 [(length) = "<=32000"];
+}
+
+message UpdateCertificateMetadata {
+  // ID of the certificate that is being updated.
+  string certificate_id = 1;
+}
+
+message DeleteCertificateRequest {
+  // ID of the certificate to delete.
+  // To get the certificate ID, make a [CertificateService.List] request.
+  string certificate_id = 1 [(length) = "<=50"];
+}
+
+message DeleteCertificateMetadata {
+  // ID of the certificate that is being deleted.
+  string certificate_id = 1;
+}
+
+message ListCertificateOperationsRequest {
+  // ID of the certificate to list operations for.
+  string certificate_id = 1 [(length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListCertificateOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token]
+  // to the [ListCertificateOperationsResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+message ListCertificateOperationsResponse {
+  // List of operations for the specified certificate.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListCertificateOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListCertificateOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

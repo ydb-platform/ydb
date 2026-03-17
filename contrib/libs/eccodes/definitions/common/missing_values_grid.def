@@ -1,0 +1,5 @@
+# (C) Copyright 2005- ECMWF.
+
+#meta numberOfMissing vector(computeStatistics,3) : dump;
+meta numberOfMissing count_missing(bitmap,unusedBitsInBitmap,numberOfDataPoints) : dump;
+alias numberOfMissingValues=numberOfMissing;

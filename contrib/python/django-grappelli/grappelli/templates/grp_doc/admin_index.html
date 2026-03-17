@@ -1,0 +1,86 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Admin Index{% endblock %}
+
+{% block extrahead %}
+	<script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(django.jQuery);
+	</script>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Admin Index</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Admin Index</h1>
+    <div class="g-d-c">
+    	<section>
+	    	<div class="g-d-24">
+		        <div class="grp-doc-description">
+		            <h1>Basics</h1>
+		            <p>A <span class="grp-doc-class">.grp-group</span> encloses <a href="{% url 'grp_doc_modules' %}">modules</a> which belong together or should appear in a more associated way.</p>
+		            <p>Usually a group starts with a heading but you might as well use it without one. <br />Just be aware of the fact that groups without headings do not appear in document outlines.</p>
+		            <p>There are two different types of groups: <strong>Stacked Groups</strong> and <strong>Tabular Groups</strong>.</p>
+		        </div>
+		    </div>
+	    	<div class="g-d-24">
+	    		<div class="grp-doc-code-source">
+	    			<div class="grp-group">
+	    				<h2>Group</h2>
+	    				<div class="grp-module">
+		    				<h3>Module</h3>
+						    <div class="grp-row"><p>Row</p></div>
+						    <div class="grp-row"><p>Row</p></div>
+						</div>
+						<div class="grp-module">
+		    				<h3>Module</h3>
+						    <div class="grp-row"><p>Row</p></div>
+						    <div class="grp-row"><p>Row</p></div>
+						</div>
+					</div>
+				</div>
+		    </div>
+	    	<div class="g-d-24">
+	    		<div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<div class="grp-group">
+    <h2>Group</h2>
+    <div class="grp-module">
+        <h3>Module</h3>
+        <div class="grp-row"><p>Row</p></div>
+        <div class="grp-row"><p>Row</p></div>
+    </div>
+    <div class="grp-module">
+        <h3>Module</h3>
+        <div class="grp-row"><p>Row</p></div>
+        <div class="grp-row"><p>Row</p></div>
+    </div>
+</div>
+{% endfilter %}</code></pre></div>
+	    	</div>
+	    </section>
+	    
+    </div>
+{% endblock %}
+

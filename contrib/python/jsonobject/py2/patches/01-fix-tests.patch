@@ -1,0 +1,27 @@
+--- contrib/python/jsonobject/py2/tests/tests.py	(index)
++++ contrib/python/jsonobject/py2/tests/tests.py	(working tree)
+@@ -5,1 +5,1 @@
+-import unittest2
++import unittest as unittest2
+@@ -149,14 +149,14 @@ class JsonObjectTestCase(unittest2.TestCase):
+                 self.assertEqual(
+                     six.text_type(cm.exception),
+                     "can't set attribute corresponding to "
+-                    "u'full_name' on a <class 'test.tests.Person'> "
++                    "u'full_name' on a <class '__tests__.tests.Person'> "
+                     "while wrapping {u'full_name': u'Danny Roberts'}"
+                 )
+             else:
+                 self.assertEqual(
+                     six.text_type(cm.exception),
+                     "can't set attribute corresponding to "
+-                    "'full_name' on a <class 'test.tests.Person'> "
++                    "'full_name' on a <class '__tests__.tests.Person'> "
+                     "while wrapping {'full_name': 'Danny Roberts'}"
+                 )
+ 
+--- contrib/python/jsonobject/py2/tests/test_stringconversions.py	(index)
++++ contrib/python/jsonobject/py2/tests/test_stringconversions.py	(working tree)
+@@ -7,1 +7,1 @@ from decimal import Decimal
+-import unittest2
++import unittest as unittest2

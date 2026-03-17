@@ -1,0 +1,87 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.10, Mercator
+include "grib2/templates/template.3.shape_of_the_earth.def"
+
+constant isGridded = true;
+
+unsigned[4] Ni : dump;
+alias numberOfPointsAlongAParallel = Ni;
+alias Nx = Ni;
+alias numberOfPointsAlongXAxis = Ni;
+alias geography.Ni=Ni;
+
+unsigned[4] Nj : dump;
+alias numberOfPointsAlongAMeridian = Nj;
+alias Ny = Nj;
+alias numberOfPointsAlongYAxis = Nj;
+alias geography.Nj=Nj;
+
+# La1 - latitude of first grid point
+signed[4] latitudeOfFirstGridPoint: edition_specific,no_copy ;
+alias La1 =  latitudeOfFirstGridPoint;
+meta geography.latitudeOfFirstGridPointInDegrees scale(latitudeOfFirstGridPoint,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# Lo1 - longitude of first grid point
+signed[4] longitudeOfFirstGridPoint : edition_specific,no_copy;
+alias Lo1 =  longitudeOfFirstGridPoint;
+meta geography.longitudeOfFirstGridPointInDegrees scale(longitudeOfFirstGridPoint,oneConstant,grib2divider,truncateDegrees) : dump;
+
+include "grib2/templates/template.3.resolution_flags.def"
+
+# LaD - Latitude(s) at which the Mercator projection intersects the Earth
+# (Latitude(s) where Di and Dj are specified)
+signed[4] LaD : edition_specific,no_copy;
+meta geography.LaDInDegrees scale(LaD,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# La2 - latitude of last grid point
+signed[4] latitudeOfLastGridPoint : edition_specific,no_copy;
+alias La2 =  latitudeOfLastGridPoint;
+meta geography.latitudeOfLastGridPointInDegrees scale(latitudeOfLastGridPoint,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# Lo2 - longitude of last grid point
+signed[4] longitudeOfLastGridPoint: edition_specific,no_copy ;
+alias Lo2 =  longitudeOfLastGridPoint;
+meta geography.longitudeOfLastGridPointInDegrees scale(longitudeOfLastGridPoint,oneConstant,grib2divider,truncateDegrees) : dump;
+
+include "grib2/templates/template.3.scanning_mode.def"
+
+# Orientation of the grid, angle between i direction on the map and the equator
+# NOTE 1: Limited to the range of 0 to 90 degrees; if the angle of orientation of the grid is neither 0 nor 90 degrees,
+#         Di and Dj must be equal to each other
+unsigned[4] orientationOfTheGrid : dump ;
+meta geography.orientationOfTheGridInDegrees
+    scale(orientationOfTheGrid,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# Di - longitudinal direction grid length
+# NOTE 2: Grid lengths are in units of 10**-3 m, at the latitude specified by LaD
+unsigned[4] Di : edition_specific,no_copy;
+alias longitudinalDirectionGridLength = Di;
+meta geography.DiInMetres scale(Di,oneConstant,thousand,truncateDegrees) : dump;
+alias DxInMetres = DiInMetres;
+
+# Dj - latitudinal direction grid length
+# NOTE 2: Grid lengths are in units of 10**-3 m, at the latitude specified by LaD
+unsigned[4] Dj : edition_specific,no_copy ;
+alias latitudinalDirectionGridLength = Dj;
+meta geography.DjInMetres scale(Dj,oneConstant,thousand,truncateDegrees) : dump;
+alias DyInMetres = DjInMetres;
+
+iterator mercator(numberOfPoints,missingValue,values,
+          radius,Ni,Nj,
+          latitudeOfFirstGridPointInDegrees, longitudeOfFirstGridPointInDegrees,
+          LaDInDegrees,
+          latitudeOfLastGridPointInDegrees, longitudeOfLastGridPointInDegrees,
+          orientationOfTheGridInDegrees,
+          DiInMetres,DjInMetres,
+          iScansNegatively, jScansPositively,
+          jPointsAreConsecutive, alternativeRowScanning);
+
+nearest mercator(values,radius,Nx,Ny);
+
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);

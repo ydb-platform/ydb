@@ -1,0 +1,58 @@
+# (C) Copyright 2005- ECMWF.
+
+constant isGridded = true;
+
+unsigned[4] Ni : can_be_missing,dump;
+alias numberOfPointsAlongAParallel=Ni;
+alias numberOfPointsAlongXAxis=Ni;
+alias Nx = Ni;
+
+unsigned[4] Nj : dump;
+alias numberOfPointsAlongAMeridian=Nj;
+alias numberOfPointsAlongYAxis= Nj;
+alias Ny = Nj;
+
+alias geography.Ni=Ni;
+alias geography.Nj=Nj;
+
+# Basic angle of the initial production domain
+unsigned[4] basicAngleOfTheInitialProductionDomain = 0;
+transient mBasicAngle=basicAngleOfTheInitialProductionDomain*oneMillionConstant;
+transient angleMultiplier  = 1;
+transient mAngleMultiplier = 1000000;
+when (basicAngleOfTheInitialProductionDomain == 0) {
+  set angleMultiplier  = 1;
+  set mAngleMultiplier = 1000000;
+} else {
+  set angleMultiplier  = basicAngleOfTheInitialProductionDomain;
+  set mAngleMultiplier = mBasicAngle;
+}
+
+# Subdivisions of basic angle used to define extreme longitudes and latitudes, and direction increments
+unsigned[4] subdivisionsOfBasicAngle = missing() : can_be_missing;
+
+transient angleDivisor = 1000000;
+when (missing(subdivisionsOfBasicAngle) || subdivisionsOfBasicAngle == 0) {
+  set angleDivisor = 1000000;
+} else {
+  set angleDivisor = subdivisionsOfBasicAngle;
+}
+
+#  La1 - latitude of first grid point
+signed[4] latitudeOfFirstGridPoint : edition_specific ;
+alias La1 = latitudeOfFirstGridPoint;
+#meta latitudeOfFirstGridPointInMicrodegrees times(latitudeOfFirstGridPoint,mAngleMultiplier,angleDivisor) : no_copy;
+
+# Lo1 - longitude of first grid point
+signed[4] longitudeOfFirstGridPoint ;
+alias Lo1 = longitudeOfFirstGridPoint;
+
+include "grib2/templates/template.3.resolution_flags.def"
+
+# La2 - latitude of last grid point
+signed[4] latitudeOfLastGridPoint : edition_specific;
+alias La2 = latitudeOfLastGridPoint;
+
+# Lo2 - longitude of last grid point
+signed[4] longitudeOfLastGridPoint : edition_specific ;
+alias Lo2 = longitudeOfLastGridPoint;

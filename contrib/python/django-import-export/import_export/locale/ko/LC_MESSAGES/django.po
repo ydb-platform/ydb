@@ -1,0 +1,202 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Jinmyeong Cho <britzegs@gmail.com>, 2020.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-06-23 19:11+0100\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Yeongkwang Yang <immutable000@gmail.com>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: admin.py templates/admin/import_export/change_list_import_item.html
+#: templates/admin/import_export/import.html
+msgid "Import"
+msgstr "가져오기"
+
+#: admin.py
+#, python-format
+msgid "%s through import_export"
+msgstr "%s은(는) django-import-export를 통해 가져왔습니다."
+
+#: admin.py
+#, fuzzy
+#| msgid "Import finished, with {} new and {} updated {}."
+msgid "Import finished: {} new, {} updated, {} deleted and {} skipped {}."
+msgstr "가져오기 성공, {} 행 추가, {} 행 업데이트"
+
+#: admin.py
+#, python-format
+msgid ""
+"%(exc_name)s encountered while trying to read file. Ensure you have chosen "
+"the correct format for the file."
+msgstr ""
+
+#: admin.py
+msgid ""
+"No valid data to import. Ensure your file has the correct headers or data "
+"for import."
+msgstr ""
+
+#: admin.py templates/admin/import_export/change_form.html
+#: templates/admin/import_export/change_list_export_item.html
+#: templates/admin/import_export/export.html
+msgid "Export"
+msgstr "내보내기"
+
+#: admin.py
+#, python-format
+msgid "Export selected %(verbose_name_plural)s"
+msgstr "선택한 %(verbose_name_plural)s 내보내기"
+
+#: formats/base_formats.py
+msgid "export failed due to IllegalCharacterError"
+msgstr ""
+
+#: forms.py
+msgid "Resource"
+msgstr ""
+
+#: forms.py
+msgid "Format"
+msgstr "형식"
+
+#: forms.py
+msgid "File to import"
+msgstr "파일"
+
+#: forms.py
+msgid "Form is not validated, call `is_valid` first"
+msgstr ""
+
+#: forms.py
+#, python-format
+msgid "Select at least 1 field for \"%(resource_name)s\" to export"
+msgstr ""
+
+#: resources.py
+#, python-format
+msgid ""
+"The following fields are declared in 'import_id_fields' but are not present "
+"in the resource fields: %s"
+msgstr ""
+
+#: resources.py
+#, python-format
+msgid ""
+"The following fields are declared in 'import_id_fields' but are not present "
+"in the file headers: %s"
+msgstr ""
+
+#: results.py
+#, python-format
+msgid "call to force_str() on instance failed: %s"
+msgstr ""
+
+#: templates/admin/import_export/base.html
+msgid "Home"
+msgstr ""
+
+#: templates/admin/import_export/export.html
+#, python-format
+msgid "Export %(len)s selected item."
+msgid_plural "Export %(len)s selected items."
+msgstr[0] ""
+
+#: templates/admin/import_export/export.html
+#: templates/admin/import_export/resource_fields_list.html
+#, fuzzy
+#| msgid "This importer will import the following fields: "
+msgid "This exporter will export the following fields: "
+msgstr "다음의 필드를 가져옵니다: "
+
+#: templates/admin/import_export/export.html
+msgid "Select all"
+msgstr ""
+
+#: templates/admin/import_export/export.html
+#: templates/admin/import_export/import.html
+msgid "Submit"
+msgstr "제출"
+
+#: templates/admin/import_export/import.html
+msgid ""
+"Below is a preview of data to be imported. If you are satisfied with the "
+"results, click 'Confirm import'"
+msgstr ""
+"다음은 불러올 데이터의 미리보기 입니다.데이터에 문제가 없다면 확인을 눌러 가"
+"져오기를 진행하세요."
+
+#: templates/admin/import_export/import.html
+msgid "Confirm import"
+msgstr "확인"
+
+#: templates/admin/import_export/import.html
+msgid "Errors"
+msgstr "에러"
+
+#: templates/admin/import_export/import.html
+msgid "Line number"
+msgstr "행 번호"
+
+#: templates/admin/import_export/import.html
+msgid "Some rows failed to validate"
+msgstr "유효성 검증에 실패한 행이 있습니다."
+
+#: templates/admin/import_export/import.html
+msgid ""
+"Please correct these errors in your data where possible, then reupload it "
+"using the form above."
+msgstr "에러를 수정한 후 파일을 다시 업로드 해주세요."
+
+#: templates/admin/import_export/import.html
+msgid "Row"
+msgstr ""
+
+#: templates/admin/import_export/import.html
+msgid "Non field specific"
+msgstr "지정된 필드 없음"
+
+#: templates/admin/import_export/import.html
+msgid "Preview"
+msgstr "미리보기"
+
+#: templates/admin/import_export/import.html
+msgid "New"
+msgstr "생성"
+
+#: templates/admin/import_export/import.html
+msgid "Skipped"
+msgstr "넘어감"
+
+#: templates/admin/import_export/import.html
+msgid "Delete"
+msgstr "삭제"
+
+#: templates/admin/import_export/import.html
+msgid "Update"
+msgstr "갱신"
+
+#: templates/admin/import_export/resource_fields_list.html
+msgid "This importer will import the following fields: "
+msgstr "다음의 필드를 가져옵니다: "
+
+#: widgets.py
+msgid "Value could not be parsed."
+msgstr ""
+
+#: widgets.py
+msgid "use_natural_foreign_keys and key_is_id cannot both be True"
+msgstr ""
+
+#~ msgid "You must select an export format."
+#~ msgstr "내보낼 형식을 선택해주세요."

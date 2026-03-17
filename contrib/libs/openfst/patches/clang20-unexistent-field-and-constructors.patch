@@ -1,0 +1,24 @@
+--- contrib/libs/openfst/src/include/fst/bi-table.h	(64b8eb3dd999590ca4f691c9e3acfb53a4212419)
++++ contrib/libs/openfst/src/include/fst/bi-table.h	(working tree)
+@@ -325,7 +325,7 @@ class VectorHashBiTable {
+   }
+ 
+   VectorHashBiTable(const VectorHashBiTable<I, T, S, FP, H, HS> &table)
+-      : selector_(table.s_),
++      : selector_(table.selector_),
+         fp_(table.fp_),
+         h_(table.h_),
+         id2entry_(table.id2entry_),
+--- contrib/libs/openfst/src/include/fst/fst.h	(64b8eb3dd999590ca4f691c9e3acfb53a4212419)
++++ contrib/libs/openfst/src/include/fst/fst.h	(working tree)
+@@ -688,8 +688,8 @@ class FstImpl {
+     properties_.store(impl.properties_.load(std::memory_order_relaxed),
+                       std::memory_order_relaxed);
+     type_ = impl.type_;
+-    isymbols_ = impl.isymbols_ ? impl.isymbols_->Copy() : nullptr;
+-    osymbols_ = impl.osymbols_ ? impl.osymbols_->Copy() : nullptr;
++    isymbols_ = std::unique_ptr<SymbolTable>(impl.isymbols_ ? impl.isymbols_->Copy() : nullptr);
++    osymbols_ = std::unique_ptr<SymbolTable>(impl.osymbols_ ? impl.osymbols_->Copy() : nullptr);
+     return *this;
+   }
+ 

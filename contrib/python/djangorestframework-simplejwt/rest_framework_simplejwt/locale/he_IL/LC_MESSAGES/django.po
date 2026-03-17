@@ -1,0 +1,164 @@
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <zeack@protonmail.com>, 2020.
+msgid ""
+msgstr ""
+"Project-Id-Version: djangorestframework_simplejwt\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-02-28 15:09-0300\n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: he\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n==1 ? 0 : n==2 ? 1 : n>10 && n%10==0 ? "
+"2 : 3);\n"
+"X-Generator: Poedit 3.2.2\n"
+
+#: authentication.py:89
+msgid "Authorization header must contain two space-delimited values"
+msgstr "Authorization Header חייבת להכיל שני ערכים מופרדים ברווח"
+
+#: authentication.py:115
+msgid "Given token not valid for any token type"
+msgstr "המזהה הנתון אינו תקף עבור אף סיווג"
+
+#: authentication.py:128 authentication.py:166
+msgid "Token contained no recognizable user identification"
+msgstr "המזהה לא הכיל זיהוי משתמש שניתן לזהות"
+
+#: authentication.py:135
+msgid "User not found"
+msgstr "משתמש לא נמצא"
+
+#: authentication.py:139
+msgid "User is inactive"
+msgstr "המשתמש אינו פעיל"
+
+#: authentication.py:146
+msgid "The user's password has been changed."
+msgstr ""
+
+#: backends.py:90
+msgid "Unrecognized algorithm type '{}'"
+msgstr "סוג אלגוריתם לא מזוהה '{}'"
+
+#: backends.py:96
+msgid "You must have cryptography installed to use {}."
+msgstr "עליך להתקין קריפטוגרפיה כדי להשתמש ב-{}."
+
+#: backends.py:111
+msgid ""
+"Unrecognized type '{}', 'leeway' must be of type int, float or timedelta."
+msgstr "סוג לא מזוהה '{}', 'leeway' חייב להיות מסוג int, float או timedelta."
+
+#: backends.py:125 backends.py:177 tokens.py:69
+#, fuzzy
+#| msgid "Token is invalid or expired"
+msgid "Token is invalid"
+msgstr "המזהה אינו חוקי או שפג תוקפו"
+
+#: backends.py:173
+msgid "Invalid algorithm specified"
+msgstr "צוין אלגוריתם לא חוקי"
+
+#: backends.py:175 tokens.py:67
+#, fuzzy
+#| msgid "Token is invalid or expired"
+msgid "Token is expired"
+msgstr "המזהה אינו חוקי או שפג תוקפו"
+
+#: exceptions.py:55
+msgid "Token is invalid or expired"
+msgstr "המזהה אינו חוקי או שפג תוקפו"
+
+#: serializers.py:35
+msgid "No active account found with the given credentials"
+msgstr "לא נמצא חשבון עם פרטי זיהוי אלו"
+
+#: serializers.py:108
+#, fuzzy
+#| msgid "No active account found with the given credentials"
+msgid "No active account found for the given token."
+msgstr "לא נמצא חשבון עם פרטי זיהוי אלו"
+
+#: serializers.py:178 tokens.py:280
+msgid "Token is blacklisted"
+msgstr "המזהה ברשימה השחורה."
+
+#: settings.py:74
+msgid ""
+"The '{}' setting has been removed. Please refer to '{}' for available "
+"settings."
+msgstr "ההגדרה '{}' הוסרה. בבקשה קראו כאן: '{}' בשביל לראות הגדרות אפשרויות"
+
+#: token_blacklist/admin.py:79
+msgid "jti"
+msgstr "jti"
+
+#: token_blacklist/admin.py:85
+msgid "user"
+msgstr "משתמש"
+
+#: token_blacklist/admin.py:91
+msgid "created at"
+msgstr "נוצר בשעה"
+
+#: token_blacklist/admin.py:97
+msgid "expires at"
+msgstr "פג תוקף בשעה"
+
+#: token_blacklist/apps.py:7
+msgid "Token Blacklist"
+msgstr "רשימה שחורה של מזהים"
+
+#: token_blacklist/models.py:19
+msgid "Outstanding Token"
+msgstr ""
+
+#: token_blacklist/models.py:20
+msgid "Outstanding Tokens"
+msgstr ""
+
+#: token_blacklist/models.py:32
+#, python-format
+msgid "Token for %(user)s (%(jti)s)"
+msgstr ""
+
+#: token_blacklist/models.py:45
+msgid "Blacklisted Token"
+msgstr ""
+
+#: token_blacklist/models.py:46
+msgid "Blacklisted Tokens"
+msgstr ""
+
+#: token_blacklist/models.py:57
+#, python-format
+msgid "Blacklisted token for %(user)s"
+msgstr ""
+
+#: tokens.py:53
+msgid "Cannot create token with no type or lifetime"
+msgstr "לא ניתן ליצור מזהה ללא סוג או אורך חיים"
+
+#: tokens.py:127
+msgid "Token has no id"
+msgstr "למזהה אין מספר זיהוי"
+
+#: tokens.py:139
+msgid "Token has no type"
+msgstr "למזהה אין סוג"
+
+#: tokens.py:142
+msgid "Token has wrong type"
+msgstr "למזהה יש סוג לא נכון"
+
+#: tokens.py:201
+msgid "Token has no '{}' claim"
+msgstr "למזהה אין '{}'"
+
+#: tokens.py:206
+msgid "Token '{}' claim has expired"
+msgstr "מזהה '{}' פג תוקף"

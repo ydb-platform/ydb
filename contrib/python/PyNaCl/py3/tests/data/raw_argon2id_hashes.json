@@ -1,0 +1,102 @@
+[
+  {
+    "iters": 1,
+    "mode": "raw",
+    "salt": "RPgjpKWKmH7otL58",
+    "dgst_len": 25,
+    "construct": "argon2id",
+    "passwd": "jfuT8oJu2Fg",
+    "pwhash": "959f27c6ac7a7f9d4cebb7bb1cc05833810079e4e384f687a7",
+    "maxmem": 131072
+  },
+  {
+    "iters": 4,
+    "mode": "raw",
+    "salt": "hsvjdI3ckgfMke6x",
+    "dgst_len": 19,
+    "construct": "argon2id",
+    "passwd": "J2TU89T68L",
+    "pwhash": "f45619dcd98553c38a4f311904a06e888dd5dd",
+    "maxmem": 32768
+  },
+  {
+    "iters": 3,
+    "mode": "raw",
+    "salt": "oCSdi7b6I3UYftj6",
+    "dgst_len": 23,
+    "construct": "argon2id",
+    "passwd": "ZTgoKeVg",
+    "pwhash": "823cd743a9378b0013a61b275d8a8d61b4abf465e3c758",
+    "maxmem": 65536
+  },
+  {
+    "iters": 3,
+    "mode": "raw",
+    "salt": "BcZv9BmKSL1BZXBD",
+    "dgst_len": 25,
+    "construct": "argon2id",
+    "passwd": "3bDtmljuB86",
+    "pwhash": "a667a360356b3658656cc51feda5abc3c9932d1e3b4a398633",
+    "maxmem": 16384
+  },
+  {
+    "iters": 5,
+    "mode": "raw",
+    "salt": "hqiuuNWIOLHft77r",
+    "dgst_len": 20,
+    "construct": "argon2id",
+    "passwd": "410nLopRL2Pt6yT",
+    "pwhash": "7274d6a9be2b52feab9b346df1abee1a68ec5c79",
+    "maxmem": 65536
+  },
+  {
+    "iters": 1,
+    "mode": "raw",
+    "salt": "ZP3u5yVZTAl0F33z",
+    "dgst_len": 31,
+    "construct": "argon2id",
+    "passwd": "0pXnCEpVlR",
+    "pwhash": "d14d136cae8ca735e0fe03d2c618f904cff07a525579d0dc67d813b223ac7a",
+    "maxmem": 32768
+  },
+  {
+    "iters": 3,
+    "mode": "raw",
+    "salt": "QWWo5rUeD3nBv0dF",
+    "dgst_len": 28,
+    "construct": "argon2id",
+    "passwd": "vl50xKRCK0EHNRY",
+    "pwhash": "23560c5771bb56d02c8129effd4ff2c70d2f28e1912636ff1a4f11a6",
+    "maxmem": 262144
+  },
+  {
+    "iters": 5,
+    "mode": "raw",
+    "salt": "OADldcmnqJHY6tkc",
+    "dgst_len": 24,
+    "construct": "argon2id",
+    "passwd": "EuXIuKCdFq",
+    "pwhash": "bae0f9ff8143a141bfb8b8629414eba2c51f122b2524e73d",
+    "maxmem": 65536
+  },
+  {
+    "iters": 2,
+    "mode": "raw",
+    "salt": "cxYQAFWsKbji4Y0e",
+    "dgst_len": 30,
+    "construct": "argon2id",
+    "passwd": "2su5ROWRMZLOOWbv",
+    "pwhash": "6341329de527593dbd479e24ca02b7f6bfcc29a6c74def655db74808e199",
+    "maxmem": 32768
+  },
+  {
+    "iters": 1,
+    "mode": "raw",
+    "salt": "Zk6vLoBZZA8lgzKL",
+    "dgst_len": 19,
+    "construct": "argon2id",
+    "passwd": "7mPYiXjrwLw",
+    "pwhash": "84dc96e740c84cc52855c3f7c1b5b05070d14a",
+    "maxmem": 65536
+  }
+]

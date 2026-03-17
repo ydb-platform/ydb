@@ -1,0 +1,78 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2007 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI MCA error messages.
+#
+[slurm-env-var-not-found]
+While trying to determine what resources are available, the SLURM
+resource allocator expects to find the following environment variables:
+
+    SLURM_NODELIST
+    SLURM_TASKS_PER_NODE
+
+However, it was unable to find the following environment variable:
+
+    %s
+
+#This is a fatal error.
+[slurm-env-var-bad-value]
+While trying to determine what resources are available, the SLURM
+resource allocator uses the following environment variables:
+
+    SLURM_NODELIST       value: %s
+    SLURM_TASKS_PER_NODE value: %s
+
+However, an error was encountered when trying to parse the following variable:
+
+    %s
+
+#This is a fatal error.
+[slurm-dyn-alloc-timeout]
+We attempted to obtain a dynamic allocation from Slurm, but
+contact with the Slurm control daemon timed out. Please check
+that the Slurm dynamic allocation plug-in is properly operating.
+#
+[slurm-dyn-alloc-failed]
+
+  Allocation request: %s
+#
+[dyn-alloc-no-config]
+Dynamic allocation was enabled, but no Slurm configuration
+file was given. Please provide the required configuration file.
+#
+[host-not-resolved]
+The Slurm control host could not be resolved.
+
+  Host: %s
+
+Please check the Slurm configuration and try again.
+#
+[connection-failed]
+Connection to the Slurm controller failed:
+
+  Host: %s
+  Port: %d
+
+Please check the Slurm configuration and try again.
+#
+[config-file-not-found]
+The Slurm configuration file was not found.
+
+  File: %s
+
+Please check the filename and path and try again.

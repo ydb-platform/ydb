@@ -1,0 +1,5 @@
+# CODE TABLE 4.1, Category of parameters by product discipline
+0 0 Temperature
+1 1 Moisture
+3 3 Mass
+255 255 Missing

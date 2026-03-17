@@ -1,0 +1,13 @@
+requirements:
+  - contrib/libs/h3
+exclude:
+  - h3lib/*
+  - h3/CMakeLists.txt
+  - h3/_cy/CMakeLists.txt
+mark_as_cython_c:
+  - h3/_cy/cells.pyx
+  - h3/_cy/edges.pyx
+  - h3/_cy/geo.pyx
+  - h3/_cy/to_multipoly.pyx
+  - h3/_cy/unstable_vect.pyx
+  - h3/_cy/util.pyx

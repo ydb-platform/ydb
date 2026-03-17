@@ -1,0 +1,26 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.53, BiFourier coefficients data - complex packing
+# Spectral data for limited area models - complex packing
+
+include "grib2/templates/template.5.packing.def"
+
+transient computeLaplacianOperator=1 : hidden;
+
+codetable[1] biFourierSubTruncationType ('5.25.table',masterDir,localDir) : dump;
+codetable[1] biFourierPackingModeForAxes ('5.26.table',masterDir,localDir) = 0 : dump;
+
+constant laplacianScalingFactorUnset = -2147483647;
+signed[4] laplacianScalingFactor : edition_specific ; # units of 10^-6
+
+meta data.laplacianOperator scale(laplacianScalingFactor,one,million,truncateLaplacian) ;
+meta laplacianOperatorIsSet evaluate(laplacianScalingFactor != laplacianScalingFactorUnset && !computeLaplacianOperator);
+
+unsigned[2] biFourierResolutionSubSetParameterN : dump;    # NS
+unsigned[2] biFourierResolutionSubSetParameterM : dump;    # MS
+unsigned[4] totalNumberOfValuesInUnpackedSubset = 0 : dump; # TS
+
+# This is read_only until we support other values
+codetable[1] unpackedSubsetPrecision ('5.7.table',masterDir,localDir) = 1 : dump;
+
+alias precisionOfTheUnpackedSubset=unpackedSubsetPrecision;

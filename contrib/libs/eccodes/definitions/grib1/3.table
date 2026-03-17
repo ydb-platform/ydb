@@ -1,0 +1,51 @@
+# CODE TABLE 3 Fixed levels or layers for which the data are included
+0 0 Reserved
+1 sfc Surface (of the Earth, which includes sea surface)
+2 sfc Cloud base level
+3 sfc Cloud top level
+4 sfc 0 deg (C) isotherm level
+5 5 Adiabatic condensation level (parcel lifted from surface)
+6 6 Maximum wind speed level
+7 7 Tropopause level
+8 sfc Nominal top of atmosphere
+9 9 Sea bottom
+# 10-19 Reserved
+20 20 Isothermal level Temperature in 1/100 K
+# 21-99 Reserved
+100 pl Isobaric level pressure in hectoPascals (hPa) (2 octets)
+101 101 Layer between two isobaric levels pressure of top (kPa) pressure of bottom (kPa)
+102 sfc Mean sea level 0 0
+103 103 Fixed height level height above mean sea level (MSL) in meters
+104 104 Layer between two specfied altitudes above mean sea level - altitude of top, altitude of bottom (hm)
+105 sfc Fixed height above ground height in meters (2 octets)
+106 106 Layer between two height levels above ground - height of top, height of bottom (hm)
+107 107 Sigma level sigma value in 1/10000 (2 octets)
+108 108 Layer between two sigma levels sigma value at top in 1/100 sigma value at bottom in 1/100
+109 ml Hybrid level level number (2 octets)
+110 ml Layer between two hybrid levels level number of top level number of bottom
+111 sfc Depth below land surface centimeters (2 octets)
+112 sfc Layer between two depths below land surface - depth of upper surface, depth of lower surface (cm)
+113 pt Isentropic (theta) level Potential Temp. degrees K (2 octets)
+114 114 Layer between two isentropic levels 475K minus theta of top in Deg. K 475K minus theta of bottom in Deg. K
+115 115 Level at specified pressure difference from ground to level hPa (2 octets)
+116 116 Layer between two levels at specified pressure differences from ground to levels pressure difference from ground to top level hPa pressure difference from ground to bottom level hPa
+117 pv Potential vorticity surface 10-9 K m2 kg-1 s-1
+# 118 Reserved
+119 119 ETA level: ETA value in 1/10000 (2 octets)
+120 120 Layer between two ETA levels: ETA value at top of layer in 1/100, ETA value at bottom of layer in 1/100
+121 121 Layer between two isobaric surfaces (high precision) 1100 hPa minus pressure of top, in hPa 1100 hPa minus pressure of bottom, in hPa
+# 122-124 Reserved
+125 125 Height level above ground (high precision) centimeters (2 octets)
+# 126-127 Reserved
+128 128 Layer between two sigma levels (high precision) 1.1 minus sigma of top, in 1/1000 of sigma 1.1 minus sigma of bottom, in 1/1000 of sigma
+# 129-140 Reserved
+141 141 Layer between two isobaric surfaces (mixed precision) pressure of top, in kPa 1100hPa minus pressure of bottom, in hPa
+# 142-159 Reserved
+160 dp Depth below sea level meters (2 octets)
+# 161-199Reserved
+200 sfc Entire atmosphere considered as a single layer 0 (2 octets)
+201 201 Entire ocean considered as a single layer 0 (2 octets)
+# 202-209 Reserved
+210 pl Isobaric surface (Pa) (ECMWF extension)
+# 211-254 Reserved for local use
+255 255 Indicates a missing value

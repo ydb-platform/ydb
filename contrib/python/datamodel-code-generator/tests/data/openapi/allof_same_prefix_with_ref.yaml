@@ -1,0 +1,30 @@
+openapi: 3.0.3
+info:
+  title: Foo
+  version: "1.0"
+paths:
+  /:
+    get:
+      responses:
+        '200':
+          description: ''
+components:
+  schemas:
+    Foo:
+      type: object
+      properties:
+        foo_bar:
+          allOf:
+          - $ref: '#/components/schemas/FooBarBaz'
+
+    FooBar:
+      type: object
+      properties:
+        id:
+          type: integer
+
+    FooBarBaz:
+      type: object
+      properties:
+        id:
+          type: integer

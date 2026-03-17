@@ -1,0 +1,43 @@
+#########################
+##
+## author: Sebastien Villaume
+## created: 6 Oct 2011
+## modified: 13 May 2013
+##
+#
+# Model 50 (MATCH) SMHI local definitions landtype
+#
+#  landtype parameter in local extension
+#
+0 0 All surfaces
+1 1 Water or Sea Water (fraction)
+2 2 Rural (fraction)
+3 3 Urban (fraction)
+4 4 Lowveg (fraction)
+5 5 Forest (fraction)
+6 6 Noveg (fraction)
+21 21 Pasture (fraction)
+22 22 Arable (fraction)
+23 23 Beech_oak (fraction)
+24 24 Deciduous (fraction)
+25 25 Spruce (fraction)
+26 26 Pine (fraction)
+27 27 Wetland (fraction)
+28 28 Mountain (fraction)
+29 29 Birch (fraction)
+51 51 Ice (fraction)
+52 52 Snow (fraction)
+71 71 Hendersen-Sellers classification
+72 72 Hendersen-Sellers classification
+73 73 Politi
+74 74 Mask
+81 81 Regional contribution
+82 82 Long-range contribution
+83 83 Local (urban) contribution
+90 90 Zone index
+100 100 Top layer
+150 150 Effective dose [Sv]
+151 151 Skin dose [Sv]
+152 152 Thyroid dose [Sv]
+153 153 Lung dose [Sv]
+255 255 missing value

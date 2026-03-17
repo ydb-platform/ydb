@@ -1,0 +1,36 @@
+# List of projects known to use GNU FriBidi
+#
+#
+# terminal emulation software:
+#
+BiCon: http://www.arabeyes.org/project.php?proj=BiCon # a bidirectional terminal emulation layer
+mlterm: http://mlterm.sourceforge.net/ # a bidirectional terminal emulator
+AbsoluteTelnet: http://www.celestialsoftware.net/support/online-help/8-terminalfeatures/27-bidirectional-text-support-rtl # a terminal emulator
+#
+# text rendering systems:
+#
+Pango: http://www.pango.org/ # text rendering engine. statically links
+m17nlib: http://m17n.org/ # an i18n framework
+#
+# editors and word processors:
+#
+AbiWord: http://www.abisource.com/ # a word processor that handles RTL docs
+Geresh: http://www.typo.co.il/~mooffie/geresh/ # a terminal-based editor capable of editing RTL text
+Motor: http://konst.org.ua/en/motor/ # a terminal-based IDE capable of editing RTL text
+#
+# media players using fribidi to render RTL subtitles:
+#
+MPlayer: http://www.mplayerhq.hu/ # movie player capable of showing RTL subtitles
+vlc: http://www.videolan.org/vlc/ # another media player capable of showing RTL subtitles
+dvdauthor: http://dvdauthor.sourceforge.net/ # DVD authoring tool that renders RTL subtitles
+#
+# misc:
+#
+CenterICQ: http://konst.org.ua/centericq/ # an ICQ client, capable of showing RTL messages
+bidiv: http://www.iglu.org.il/faq/cache/153.html # cmdline tool to display RTL text files on consoles without RTL support
+ksvg: http://svg.kde.org/ # SVG renderer capable of rendering RTL text
+fvwm: http://www.fvwm.org/ # a window manager with RTL text handling
+Nano-X: http://www.microwindows.org/ # a tiny window system 
+HebrewService: http://mac.plonter.co.il/plonwiki/HebrewService # Mac OS X service to convert visual Hebrew (iso8859-8) to logical order
+Nokia 9110 Hebrew Support: http://www.zak.co.il/gpl/geos/9110Hebrew.html # uses to render Hebrew SMS messages
+EFL: http://www.enlightenment.org/ # a set of libraries used to write the Enlightenment windows manager

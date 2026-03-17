@@ -1,0 +1,92 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Unlicense            1d267ceb3a8d8f75f1be3011ee4cbf53
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Unlicense
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://unlicense.org/, https://spdx.org/licenses/Unlicense, https://unlicense.org/
+    Files with this license:
+        LICENSE [1:24]
+
+KEEP     Unlicense            2f1b180f28a422e2c814fea6930943a0
+BELONGS ya.make
+    License text:
+        // This is free and unencumbered software released into the public domain under The Unlicense (http://unlicense.org/)
+    Scancode info:
+        Original SPDX id: Unlicense
+        Score           : 16.00
+        Match type      : REFERENCE
+        Links           : http://unlicense.org/, https://spdx.org/licenses/Unlicense, https://unlicense.org/
+    Files with this license:
+        wyhash.h [1:1]
+
+KEEP     Unlicense            6802fab4927b14b8445aac479f3f15cc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Unlicense
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://unlicense.org/, https://spdx.org/licenses/Unlicense, https://unlicense.org/
+    Files with this license:
+        wyhash.h [269:293]
+
+KEEP     Public-Domain        6e673157e433310a1dc0c9b42d466050
+BELONGS ya.make
+    License text:
+        // This is free and unencumbered software released into the public domain under The Unlicense (http://unlicense.org/)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        wyhash.h [1:1]
+
+KEEP     Unlicense            f25af936c9f8f718d06d02bbd9f22857
+BELONGS ya.make
+    License text:
+        // This is free and unencumbered software released into the public domain under The Unlicense (http://unlicense.org/)
+    Scancode info:
+        Original SPDX id: Unlicense
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://unlicense.org/, https://spdx.org/licenses/Unlicense, https://unlicense.org/
+    Files with this license:
+        wyhash.h [1:1]

@@ -1,0 +1,15 @@
+--- contrib/python/google-api-python-client/py3/googleapiclient/discovery_cache/__init__.py	(index)
++++ contrib/python/google-api-python-client/py3/googleapiclient/discovery_cache/__init__.py	(working tree)
+@@ -69,9 +69,9 @@ def get_static_doc(serviceName, version):
+     doc_name = "{}.{}.json".format(serviceName, version)
+ 
+     try:
+-        with open(os.path.join(DISCOVERY_DOC_DIR, doc_name), "r") as f:
+-            content = f.read()
+-    except FileNotFoundError:
++        import pkgutil
++        content = pkgutil.get_data(__package__, f"documents/{doc_name}").decode("utf-8")
++    except:
+         # File does not exist. Nothing to do here.
+         pass
+ 

@@ -1,0 +1,6 @@
+# CODE TABLE local definition 13 (wave)
+0 0 System and method are not included
+1 1 System and method are included
+2 2 System, method, reference date, climate date (from) and climate date (to) are included
+3 3 All information in 2 plus leg information for variable resolution systems are included
+4 4 All information in 3 plus 4DVar window info

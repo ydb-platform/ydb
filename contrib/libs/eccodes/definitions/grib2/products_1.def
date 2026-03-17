@@ -1,0 +1,11 @@
+# (C) Copyright 2005- ECMWF.
+
+# Operationl test products
+
+alias parameter=paramId;
+alias mars.param = paramId;
+
+alias parameter.paramId=paramId;
+alias parameter.shortName=shortName;
+alias parameter.units=units;
+alias parameter.name=name;

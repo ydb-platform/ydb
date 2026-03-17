@@ -1,0 +1,3 @@
+# (C) Copyright 2005- ECMWF.
+
+include "grib2/templates/template.5.40.def"

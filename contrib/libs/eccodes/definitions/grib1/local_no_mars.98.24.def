@@ -1,0 +1,25 @@
+# Description            Octet    Code    Ksec1    Count
+# -----------            -----    ----    -----    -----
+#localDefinitionNumber       41  I1  37  -
+#class                       42  I1  38  -
+#type                        43  I1  39  -
+#stream                      44  I2  40  -
+#experimentVersionNumber     46  A4  41  -
+#satelliteIdentifier         50  I2  42  -
+#instrumentIdentifier        52  I2  43  -
+#channelNumber               54  I2  44  -
+#functionCode                56  I1  45  -
+#
+
+constant GRIBEXSection1Problem = 56  - section1Length ;
+
+unsigned[2] satelliteIdentifier  : dump;
+alias mars.ident = satelliteIdentifier;
+
+unsigned[2] instrumentIdentifier  : dump;
+alias mars.instrument = instrumentIdentifier;
+
+unsigned[2] channelNumber : dump ;
+alias mars.channel = channelNumber;
+
+unsigned[1] functionCode : dump ;

@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1.analysis;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/speechsense/v1/analysis/utterance_statistics.proto";
+import "yandex/cloud/speechsense/v1/analysis/predefined_classifiers.proto";
+
+option java_package = "yandex.cloud.api.speechsense.v1.analysis";
+option java_outer_classname = "TranscriptionProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1/analysis;speechsense";
+
+message Transcription {
+  repeated Phrase phrases = 1;
+  // Their might be several algorithms that work on talk transcription. For example: speechkit and translator
+  // So there might be other fields here for tracing
+  repeated AlgorithmMetadata algorithms_metadata = 2;
+}
+
+message Phrase {
+  int64 channel_number = 1;
+  int64 start_time_ms = 2;
+  int64 end_time_ms = 3;
+  PhraseText phrase = 4;
+  PhraseStatistics statistics = 5;
+  repeated RecognitionClassifierResult classifiers = 6;
+}
+
+message PhraseText {
+  string text = 1;
+  string language = 2;
+  string normalized_text = 3;
+  repeated Word words = 4;
+}
+
+message Word {
+  string word = 1;
+  int64 start_time_ms = 2;
+  int64 end_time_ms = 3;
+}
+
+message AlgorithmMetadata {
+  google.protobuf.Timestamp created_task_date = 1;
+  google.protobuf.Timestamp completed_task_date = 2;
+  Error error = 3;
+  string trace_id = 4;
+  string name = 5;
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+}
+
+message PhraseStatistics {
+  UtteranceStatistics statistics = 1;
+}

@@ -1,0 +1,170 @@
+commit d325df0369c193f368131ba5e683f4e8bfa74093
+merge: 083bc2bc15e8b9adadd583ef9079df32b99fc954 106eb8417c216ebf767f9f9e2ca42ce83127a6a2
+author: shadchin
+date: 2022-04-18T17:00:53+03:00
+revision: 9364423
+
+    IGNIETFERRO-1816 Switch on collections.abc
+    
+    REVIEW: 2477554
+
+--- contrib/deprecated/python/nose/py3/nose/case.py	(083bc2bc15e8b9adadd583ef9079df32b99fc954)
++++ contrib/deprecated/python/nose/py3/nose/case.py	(d325df0369c193f368131ba5e683f4e8bfa74093)
+@@ -9,7 +9,7 @@ from inspect import isfunction
+ from nose.config import Config
+ from nose.failure import Failure # for backwards compatibility
+ from nose.util import resolve_name, test_address, try_run
+-import collections
++import collections.abc
+ 
+ log = logging.getLogger(__name__)
+ 
+@@ -27,7 +27,7 @@ class Test(unittest.TestCase):
+     __test__ = False # do not collect
+     def __init__(self, test, config=None, resultProxy=None):
+         # sanity check
+-        if not isinstance(test, collections.Callable):
++        if not isinstance(test, collections.abc.Callable):
+             raise TypeError("nose.case.Test called with argument %r that "
+                             "is not callable. A callable is required."
+                             % test)
+--- contrib/deprecated/python/nose/py3/nose/inspector.py	(083bc2bc15e8b9adadd583ef9079df32b99fc954)
++++ contrib/deprecated/python/nose/py3/nose/inspector.py	(d325df0369c193f368131ba5e683f4e8bfa74093)
+@@ -7,7 +7,7 @@ import re
+ import sys
+ import textwrap
+ import tokenize
+-import collections
++import collections.abc
+ 
+ try:
+     from io import StringIO
+@@ -182,14 +182,14 @@ class Expander:
+             # Clean this junk up
+             try:
+                 val = self.locals[tok]
+-                if isinstance(val, collections.Callable):
++                if isinstance(val, collections.abc.Callable):
+                     val = tok
+                 else:
+                     val = repr(val)
+             except KeyError:
+                 try:
+                     val = self.globals[tok]
+-                    if isinstance(val, collections.Callable):
++                    if isinstance(val, collections.abc.Callable):
+                         val = tok
+                     else:
+                         val = repr(val)
+--- contrib/deprecated/python/nose/py3/nose/loader.py	(083bc2bc15e8b9adadd583ef9079df32b99fc954)
++++ contrib/deprecated/python/nose/py3/nose/loader.py	(d325df0369c193f368131ba5e683f4e8bfa74093)
+@@ -25,7 +25,7 @@ from nose.util import func_lineno, getpackage, isclass, isgenerator, \
+     transplant_class, test_address
+ from nose.suite import ContextSuiteFactory, ContextList, LazySuite
+ from nose.pyversion import sort_list, cmp_to_key
+-import collections
++import collections.abc
+ 
+ 
+ log = logging.getLogger(__name__)
+@@ -251,7 +251,7 @@ class TestLoader(unittest.TestLoader):
+             try:
+                 for test in g():
+                     test_func, arg = self.parseGeneratedTest(test)
+-                    if not isinstance(test_func, collections.Callable):
++                    if not isinstance(test_func, collections.abc.Callable):
+                         test_func = getattr(m, test_func)
+                     yield FunctionTestCase(test_func, arg=arg, descriptor=g)
+             except KeyboardInterrupt:
+@@ -284,11 +284,11 @@ class TestLoader(unittest.TestLoader):
+             try:
+                 for test in g():
+                     test_func, arg = self.parseGeneratedTest(test)
+-                    if not isinstance(test_func, collections.Callable):
++                    if not isinstance(test_func, collections.abc.Callable):
+                         test_func = unbound_method(c, getattr(c, test_func))
+                     if ismethod(test_func):
+                         yield MethodTestCase(test_func, arg=arg, descriptor=g)
+-                    elif isinstance(test_func, collections.Callable):
++                    elif isinstance(test_func, collections.abc.Callable):
+                         # In this case we're forcing the 'MethodTestCase'
+                         # to run the inline function as its test call,
+                         # but using the generator method as the 'method of
+--- contrib/deprecated/python/nose/py3/nose/plugins/attrib.py	(083bc2bc15e8b9adadd583ef9079df32b99fc954)
++++ contrib/deprecated/python/nose/py3/nose/plugins/attrib.py	(d325df0369c193f368131ba5e683f4e8bfa74093)
+@@ -107,7 +107,7 @@ import sys
+ from inspect import isfunction
+ from nose.plugins.base import Plugin
+ from nose.util import tolist
+-import collections
++import collections.abc
+ 
+ log = logging.getLogger('nose.plugins.attrib')
+ compat_24 = sys.version_info >= (2, 4)
+@@ -239,7 +239,7 @@ class AttributeSelector(Plugin):
+             match = True
+             for key, value in group:
+                 attr = get_method_attr(method, cls, key)
+-                if isinstance(value, collections.Callable):
++                if isinstance(value, collections.abc.Callable):
+                     if not value(key, method, cls):
+                         match = False
+                         break
+--- contrib/deprecated/python/nose/py3/nose/plugins/collect.py	(083bc2bc15e8b9adadd583ef9079df32b99fc954)
++++ contrib/deprecated/python/nose/py3/nose/plugins/collect.py	(d325df0369c193f368131ba5e683f4e8bfa74093)
+@@ -14,7 +14,7 @@ from nose.plugins.base import Plugin
+ from nose.case import Test
+ import logging
+ import unittest
+-import collections
++import collections.abc
+ 
+ log = logging.getLogger(__name__)
+ 
+@@ -81,7 +81,7 @@ class TestSuite(unittest.TestSuite):
+     def __init__(self, tests=(), conf=None):
+         self.conf = conf
+         # Exec lazy suites: makes discovery depth-first
+-        if isinstance(tests, collections.Callable):
++        if isinstance(tests, collections.abc.Callable):
+             tests = tests()
+         log.debug("TestSuite(%r)", tests)
+         unittest.TestSuite.__init__(self, tests)
+--- contrib/deprecated/python/nose/py3/nose/suite.py	(083bc2bc15e8b9adadd583ef9079df32b99fc954)
++++ contrib/deprecated/python/nose/py3/nose/suite.py	(d325df0369c193f368131ba5e683f4e8bfa74093)
+@@ -16,7 +16,7 @@ from nose.case import Test
+ from nose.config import Config
+ from nose.proxy import ResultProxyFactory
+ from nose.util import isclass, resolve_name, try_run
+-import collections
++import collections.abc
+ 
+ if sys.platform == 'cli':
+     if sys.version_info[:2] < (2, 6):
+@@ -103,7 +103,7 @@ class LazySuite(unittest.TestSuite):
+     def _set_tests(self, tests):
+         self._precache = []
+         is_suite = isinstance(tests, unittest.TestSuite)
+-        if isinstance(tests, collections.Callable) and not is_suite:
++        if isinstance(tests, collections.abc.Callable) and not is_suite:
+             self.test_generator = tests()
+         elif is_suite:
+             # Suites need special treatment: they must be called like
+@@ -455,7 +455,7 @@ class ContextSuiteFactory(object):
+             ancestors.pop()
+ 
+     def findContext(self, tests):
+-        if isinstance(tests, collections.Callable) or isinstance(tests, unittest.TestSuite):
++        if isinstance(tests, collections.abc.Callable) or isinstance(tests, unittest.TestSuite):
+             return None
+         context = None
+         for test in tests:
+@@ -538,7 +538,7 @@ class ContextSuiteFactory(object):
+ 
+     def wrapTests(self, tests):
+         log.debug("wrap %s", tests)
+-        if isinstance(tests, collections.Callable) or isinstance(tests, unittest.TestSuite):
++        if isinstance(tests, collections.abc.Callable) or isinstance(tests, unittest.TestSuite):
+             log.debug("I won't wrap")
+             return tests
+         wrapped = []

@@ -1,0 +1,20 @@
+                       1980 Phases of the Moon
+                            Universal Time
+
+        New Moon   First Quarter       Full Moon    Last Quarter    
+
+         d  h  m         d  h  m         d  h  m         d  h  m
+
+                                    Jan  2  9 02    Jan 10 11 50
+    Jan 17 21 19    Jan 24 13 58    Feb  1  2 21    Feb  9  7 35
+    Feb 16  8 51    Feb 23  0 14    Mar  1 21 00    Mar  9 23 49
+    Mar 16 18 56    Mar 23 12 31    Mar 31 15 14    Apr  8 12 06
+    Apr 15  3 46    Apr 22  2 59    Apr 30  7 35    May  7 20 51
+    May 14 12 00    May 21 19 16    May 29 21 28    Jun  6  2 53
+    Jun 12 20 38    Jun 20 12 32    Jun 28  9 02    Jul  5  7 27
+    Jul 12  6 46    Jul 20  5 51    Jul 27 18 54    Aug  3 12 00
+    Aug 10 19 09    Aug 18 22 28    Aug 26  3 42    Sep  1 18 08
+    Sep  9 10 00    Sep 17 13 54    Sep 24 12 08    Oct  1  3 18
+    Oct  9  2 50    Oct 17  3 47    Oct 23 20 52    Oct 30 16 33
+    Nov  7 20 43    Nov 15 15 47    Nov 22  6 39    Nov 29  9 59
+    Dec  7 14 35    Dec 15  1 47    Dec 21 18 08    Dec 29  6 32

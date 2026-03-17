@@ -1,0 +1,41 @@
+syntax = "proto3";
+package yandex.cloud.billing.usage_records.v1;
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/billing/usage_records/v1;usageRecords";
+option java_package = "yandex.cloud.api.billing.usage_records.v1";
+
+// StringDecimal representation for financial values
+// Used to ensure precise handling of monetary values
+message StringDecimal {
+  // String representation of the decimal value to avoid floating-point precision issues
+  string value = 1;
+}
+
+// Enum for time period grouping options used to control the granularity of time-based data aggregation.
+// This determines how the time series data is grouped in responses (e.g., daily, monthly reports).
+enum TimeGrouping {
+  TIME_GROUPING_UNSPECIFIED = 0; // Default unspecified value. Typically treated as DAY.
+
+  // Group reports by day.
+  DAY = 1;
+
+  // Group reports by week.
+  WEEK = 2;
+
+  // Group reports by month.
+  MONTH = 3;
+
+  // Group reports by quarter (3-month periods).
+  QUARTER = 4;
+
+  // Group reports by year.
+  YEAR = 5;
+}
+
+// Enum for supported currency codes used in billing and financial reports.
+enum Currency {
+    CURRENCY_UNSPECIFIED = 0; // Unspecified or unknown currency.
+    RUB = 1;                  // Russian Ruble
+    USD = 2;                  // US Dollar
+    KZT = 3;                  // Kazakhstani Tenge
+    EUR = 4;                  // Euro
+}

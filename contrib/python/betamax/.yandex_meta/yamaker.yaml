@@ -1,0 +1,2 @@
+keep:
+  - tests/cassettes/FakeBetamaxTestCase.test_fake.json

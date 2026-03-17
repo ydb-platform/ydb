@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NestedPerson",
+  "type": "object",
+  "properties": {
+    "nested_deep_childJson": {
+      "$ref": "#/definitions/nested.deep.Json"
+    },
+    "nested_deep_childAnother": {
+      "$ref": "#/definitions/nested.deep.Another"
+    },
+    "empty_parent_nested_deep_childJson": {
+      "$ref": "#/definitions/empty_parent.nested.deep.Json"
+    }
+  },
+  "definitions": {
+    "nested.deep.Json": {
+      "type": "object",
+      "properties": {
+        "firstName": {
+          "type": "string"
+        }
+      }
+    },
+    "nested.deep.Another": {
+      "type": "object",
+      "properties": {
+        "firstName": {
+          "type": "string"
+        }
+      }
+    },
+    "empty_parent.nested.deep.Json": {
+      "type": "object",
+      "properties": {
+        "firstName": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+alias mars.number = perturbationNumber;
+alias mars.method = methodNumber;
+
+if (class is "od" || class is "me" || class is "en") {
+    alias mars.system = systemNumber;
+}

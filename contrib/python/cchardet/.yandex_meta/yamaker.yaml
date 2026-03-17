@@ -1,0 +1,33 @@
+copy:
+  - ext/uchardet/*
+exclude:
+  - ext/uchardet/.git
+  - ext/uchardet/.gitignore
+  - ext/uchardet/CMakeLists.txt
+  - ext/uchardet/INSTALL
+  - ext/uchardet/build-mac/*
+  - ext/uchardet/doc/*
+  - ext/uchardet/script/*
+  - ext/uchardet/src/CMakeLists.txt
+  - ext/uchardet/src/fuzzing/CMakeLists.txt
+  - ext/uchardet/src/tools/CMakeLists.txt
+  - ext/uchardet/src/tools/uchardet.cpp
+  - ext/uchardet/test/*
+  - ext/uchardet/uchardet.doap
+  - ext/uchardet/uchardet.pc.in
+  - tests/bench.py
+  - tests/samples/*
+  - tests/testdata/*
+  - tests/test.py
+exclude_from_macros:
+  - ext/uchardet/AUTHORS
+  - ext/uchardet/COPYING
+  - ext/uchardet/README.md
+  - ext/uchardet/src/Big5Freq.tab
+  - ext/uchardet/src/EUCKRFreq.tab
+  - ext/uchardet/src/EUCTWFreq.tab
+  - ext/uchardet/src/GB2312Freq.tab
+  - ext/uchardet/src/JISFreq.tab
+  - ext/uchardet/src/symbols.cmake
+keep:
+  - tests/test_simple.py

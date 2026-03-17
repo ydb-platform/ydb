@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1.analysis;
+
+option java_package = "yandex.cloud.api.speechsense.v1.analysis";
+option java_outer_classname = "RecognitionClassifierProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1/analysis;speechsense";
+
+message RecognitionClassifierResult {
+  // Start time of the audio segment used for classification
+  int64 start_time_ms = 1;
+
+  // End time of the audio segment used for classification
+  int64 end_time_ms = 2;
+
+  // Name of the triggered classifier
+  string classifier = 3;
+
+  // List of highlights, i.e. parts of phrase that determine the result of the classification
+  repeated PhraseHighlight highlights = 4;
+
+  // Classifier predictions
+  repeated RecognitionClassifierLabel labels = 5;
+}
+
+message PhraseHighlight {
+  // Text transcription of the highlighted audio segment
+  string text = 1;
+
+  // offset in symbols from the beginning of whole phrase where highlight begins
+  int64 offset = 2;
+
+  // count of symbols in highlighted text
+  int64 count = 3;
+}
+
+message RecognitionClassifierLabel {
+  // The label of the class predicted by the classifier
+  string label = 1;
+
+  // The prediction confidence
+  double confidence = 2;
+}

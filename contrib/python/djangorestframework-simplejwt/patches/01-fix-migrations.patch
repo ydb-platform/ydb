@@ -1,0 +1,29 @@
+--- contrib/python/djangorestframework-simplejwt/rest_framework_simplejwt/token_blacklist/migrations/0010_fix_migrate_to_bigautofield.py	(index)
++++ contrib/python/djangorestframework-simplejwt/rest_framework_simplejwt/token_blacklist/migrations/0010_fix_migrate_to_bigautofield.py	(working tree)
+@@ -4,8 +4,6 @@ from pathlib import Path
+ 
+ from django.db import migrations, models
+ 
+-parent_dir = Path(__file__).resolve(strict=True).parent
+-
+ 
+ class Migration(migrations.Migration):
+     dependencies = [
+--- contrib/python/djangorestframework-simplejwt/rest_framework_simplejwt/token_blacklist/migrations/0011_linearizes_history.py	(index)
++++ contrib/python/djangorestframework-simplejwt/rest_framework_simplejwt/token_blacklist/migrations/0011_linearizes_history.py	(working tree)
+@@ -4,15 +4,10 @@ from pathlib import Path
+ 
+ from django.db import migrations, models  # noqa F401
+ 
+-parent_dir = Path(__file__).resolve(strict=True).parent
+-
+ 
+ class Migration(migrations.Migration):
+     def __init__(self, *args, **kwargs):
+         super().__init__(*args, **kwargs)
+         self.dependencies = [("token_blacklist", "0010_fix_migrate_to_bigautofield")]
+-        _m = sorted(fnmatch.filter(os.listdir(parent_dir), "000*.py"))
+-        if len(_m) == 9:
+-            self.dependencies.insert(0, ("token_blacklist", os.path.splitext(_m[8])[0]))
+ 
+     operations = []

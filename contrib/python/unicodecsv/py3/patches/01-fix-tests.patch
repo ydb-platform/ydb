@@ -1,0 +1,42 @@
+--- contrib/python/unicodecsv/py3/unicodecsv/py3.py	(index)
++++ contrib/python/unicodecsv/py3/unicodecsv/py3.py	(working tree)
+@@ -36,18 +36,8 @@ class UnicodeWriter(object):
+ 
+ 
+ class UnicodeReader(object):
+-    def __init__(self, f, dialect=None, encoding='utf-8', errors='strict',
++    def __init__(self, f, dialect=csv.excel, encoding='utf-8', errors='strict',
+                  **kwds):
+-
+-        format_params = ['delimiter', 'doublequote', 'escapechar',
+-                     'lineterminator', 'quotechar', 'quoting',
+-                     'skipinitialspace']
+-
+-        if dialect is None:
+-            if not any([kwd_name in format_params
+-                        for kwd_name in kwds.keys()]):
+-                dialect = csv.excel
+-
+         f = (bs.decode(encoding, errors=errors) for bs in f)
+         self.reader = csv.reader(f, dialect, **kwds)
+ 
+--- contrib/python/unicodecsv/py3/unicodecsv/test.py	(index)
++++ contrib/python/unicodecsv/py3/unicodecsv/test.py	(working tree)
+@@ -8,7 +8,7 @@ import os
+ import string
+ import sys
+ import tempfile
+-import unittest2 as unittest
++import unittest
+ from codecs import EncodedFile
+ from io import BytesIO
+ 
+@@ -272,7 +272,7 @@ class Test_Csv(unittest.TestCase):
+     def test_read_quoting(self):
+         self._read_test([b'1,",3,",5'], [['1', ',3,', '5']])
+         self._read_test([b'1,",3,",5'], [['1', '"', '3', '"', '5']],
+-                        quotechar=None, escapechar='\\')
++                        quoting=csv.QUOTE_NONE, escapechar='\\')
+         self._read_test([b'1,",3,",5'], [['1', '"', '3', '"', '5']],
+                         quoting=csv.QUOTE_NONE, escapechar='\\')
+         # will this fail where locale uses comma for decimals?

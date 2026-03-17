@@ -1,0 +1,145 @@
+# Операторы:
+#   *  Один аргумент в undo
+#   ~  Несколько аргументов (минимум один) в undo
+#
+# Параметры:
+#   %global         Команда действует на любом уровне ниже
+#   %logic=...      Кастомная функция обработки правила
+#   %diff_logic=... Кастомная функция построения диффа.
+#                   данная функция работает для подблоков (в отличие от %logic)
+#   %comment=...    Добавить коммент после строки который будет видно с опцией patch --add-comments
+#                   Сделано в основном для того чтобы генерировать специальные команды для наливки
+# -----
+
+system
+    host-name *
+    name-server
+        ~
+    ntp
+        server *
+        source-address *
+    syslog
+        host *
+            match
+        file messages
+            match
+
+routing-options
+    autonomous-system *
+    rib *
+        */(aggregate|static)/
+            route *                    %logic=common.undo_redo
+                ~
+    ~
+
+services
+    ~
+
+chassis
+    tfeb
+        slot *
+            inline-services
+                flow-table-size
+                    ipv4-flow-table-size
+                    ipv6-flow-table-size
+    fpc *
+        inline-services
+            flow-table-size
+                ipv4-flow-table-size
+                ipv6-flow-table-size
+        pic *
+            ~
+
+protocols
+    isis
+        overload
+    mpls
+        path *
+            *           %ordered
+    source-packet-routing
+        segment-list *
+            *           %ordered
+                ~
+
+routing-instances
+    ~
+        routing-options
+            autonomous-system *
+            rib *
+                */(aggregate|static)/
+                    route *            %logic=common.undo_redo
+                        ~
+        protocols
+            bgp
+                group *
+                    local-as
+
+interfaces
+    *
+        unit *
+            description ~
+            mtu *
+            vlan-tags
+            family inet6
+                address * %diff_logic=juniper.iface.ipv6_addr
+        description ~
+        mtu *
+        hold-time
+
+snmp
+    community *
+        ~
+
+ntp
+    ~
+
+class-of-service
+    classifiers
+        dscp *
+            ~
+            forwarding-class *
+                ~
+    forwarding-classes
+        class *
+        ~
+
+    interfaces
+        *
+                    unit *
+                        rewrite-rules
+                            dscp *
+                            dscp-ipv6 *
+                            exp *
+                            ieee-802.1 *
+                            ~
+
+policy-options
+    community ~
+    prefix-list ~
+    policy-statement *
+        term *               %ordered
+            from             %logic=common.undo_redo
+                ~
+            then             %logic=common.undo_redo
+                community ~  %ordered
+                ~
+            ~                %global
+        ~                    %global
+
+
+firewall
+    family *
+        filter *
+            term *     %ordered
+                from   %logic=common.undo_redo
+                    ~
+                then   %logic=common.undo_redo
+                    ~
+                ~      %global
+
+
+forwarding-options
+    ~
+
+
+~ %global

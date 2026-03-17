@@ -1,0 +1,18 @@
+about_resource: fileutils.py
+version: 2.7.8
+download_url: https://hg.python.org/cpython/raw-file/ee879c0ffa11/Lib/shutil.py
+
+name: Python shutil
+
+description: fileutils borrows snippets of code from the shutil copytree,
+ copyfile and copymode functions modified to ignore special files and
+ permissions.
+homepage_url: http://python.org/
+
+owner: nexB
+license_expression: apache-2.0 AND python
+licenses:
+-   file: python.LICENSE
+    key: python
+    name: Python Software Foundation License v2
+copyright: Copyright (c) Python Software Foundation and others

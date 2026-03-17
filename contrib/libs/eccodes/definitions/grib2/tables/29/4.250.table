@@ -1,0 +1,12 @@
+# Code table 4.250 - Drainage direction
+0 0 Reserved
+1 1 South-West
+2 2 South
+3 3 South-East
+4 4 West
+5 5 No direction
+6 6 East
+7 7 North-West
+8 8 North
+9 9 North-East
+255 255 Missing

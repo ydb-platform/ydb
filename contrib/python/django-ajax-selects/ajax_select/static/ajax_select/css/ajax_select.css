@@ -1,0 +1,65 @@
+.results_on_deck .ui-icon-trash {
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ui-icon {
+    filter: invert(0.8);
+    margin-right: 0.25rem;
+  }
+}
+
+html[data-theme="dark"] {
+  .ui-icon {
+    filter: invert(0.8);
+    margin-right: 0.25rem;
+  }
+}
+
+.results_on_deck {
+  padding: 0.25em 0;
+}
+.results_on_deck .item_on_deck {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+.results_on_deck .item_on_deck > div {
+  margin: 0.5em 0;
+}
+
+form .aligned .results_on_deck {
+  padding-left: 14px;
+  margin-left: 160px;
+}
+.ui-autocomplete-loading {
+  background: url("../images/loading-indicator.gif") no-repeat;
+  background-origin: content-box;
+  background-position: right;
+}
+ul.ui-autocomplete {
+  /*
+  this is the dropdown menu.
+
+  if max-width is not set and you are using django-admin
+    then the dropdown is the width of your whole page body (totally wrong).
+
+  this sets max-width at 60% which is graceful at full page or in a popup
+    or on a small width window.
+
+  fixed width is harder see http://stackoverflow.com/questions/4607164/changing-width-of-jquery-ui-autocomplete-widgets-individually
+	*/
+  max-width: 60%;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+}
+ul.ui-autocomplete li {
+  list-style-type: none;
+  padding: 0;
+}
+ul.ui-autocomplete li a {
+  display: block;
+  padding: 2px 3px;
+  cursor: pointer;
+}

@@ -1,0 +1,5 @@
+--- contrib/python/pyre2/py2/ya.make	(index)
++++ contrib/python/pyre2/py2/ya.make	(working tree)
+@@ -20,1 +20,1 @@ NO_COMPILER_WARNINGS()
+-    src/re2.pyx
++    src/re2.pyx=re2

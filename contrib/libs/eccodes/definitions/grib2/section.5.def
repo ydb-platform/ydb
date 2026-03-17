@@ -1,0 +1,61 @@
+# (C) Copyright 2005- ECMWF.
+
+position offsetBSection5;
+
+# SECTION 5, DATA REPRESENTATION SECTION
+
+position offsetSection5;
+section_length[4] section5Length;
+
+meta section5 section_pointer(offsetSection5,section5Length,5);
+
+unsigned[1] numberOfSection = 5 : read_only;
+
+# Number of data points where one or more values are specified in Section 7 when a bit map is present,
+# total number of data pints when a bit map is absent.
+unsigned[4] numberOfValues : dump;
+alias numberOfCodedValues=numberOfValues;
+alias numberOfEffectiveValues=numberOfValues;
+
+codetable[2] dataRepresentationTemplateNumber ('5.0.table',masterDir,localDir) : edition_specific;
+
+concept packingType (unknown) {
+#set uses the last one
+#get returns the first match
+  "grid_simple"                          = { dataRepresentationTemplateNumber = 0; }
+  "spectral_complex"                     = { dataRepresentationTemplateNumber = 51; spectralType=1; spectralMode=1; }
+  "spectral_simple"                      = { dataRepresentationTemplateNumber = 50; spectralType=1; spectralMode=1; }
+  "grid_simple_matrix"                   = { dataRepresentationTemplateNumber = 1; }
+  "grid_complex"                         = { dataRepresentationTemplateNumber = 2; }
+  "grid_complex_spatial_differencing"    = { dataRepresentationTemplateNumber = 3; }
+  "grid_jpeg"                            = { dataRepresentationTemplateNumber = 40000; }
+  "grid_jpeg"                            = { dataRepresentationTemplateNumber = 40; }
+  "grid_png"                             = { dataRepresentationTemplateNumber = 40010; }
+  "grid_png"                             = { dataRepresentationTemplateNumber = 41; }
+  "grid_ccsds"                           = { dataRepresentationTemplateNumber = 42; }
+  "grid_ieee"                            = { dataRepresentationTemplateNumber = 4; }
+  "grid_second_order"                    = { dataRepresentationTemplateNumber = 50001; }
+  "grid_second_order"                    = { dataRepresentationTemplateNumber = 50002; }
+  "grid_second_order_boustrophedonic"    = { dataRepresentationTemplateNumber = 50002; }
+  "grid_second_order_no_boustrophedonic" = { dataRepresentationTemplateNumber = 50001; }
+  "grid_second_order_row_by_row"         = { dataRepresentationTemplateNumber = 50001; }
+  "grid_second_order_constant_width"     = { dataRepresentationTemplateNumber = 50001; }
+  "grid_second_order_general_grib1"      = { dataRepresentationTemplateNumber = 50001; }
+  "grid_second_order_no_SPD"             = { dataRepresentationTemplateNumber = 50001;orderOfSPD=0; }
+  "grid_second_order_SPD1"               = { dataRepresentationTemplateNumber = 50001;orderOfSPD=1; }
+  "grid_second_order_SPD2"               = { dataRepresentationTemplateNumber = 50001;orderOfSPD=2; }
+  "grid_second_order_SPD3"               = { dataRepresentationTemplateNumber = 50001;orderOfSPD=3; }
+  "spectral_ieee"                        = { dataRepresentationTemplateNumber = 50000; }
+  "grid_simple_log_preprocessing"        = { dataRepresentationTemplateNumber = 61; }
+  "bifourier_complex"                    = { dataRepresentationTemplateNumber = 53; spectralType=2; }
+  "grid_run_length"                      = { dataRepresentationTemplateNumber = 200; }
+}  : dump;
+
+template dataRepresentation "grib2/templates/template.5.[dataRepresentationTemplateNumber:l].def";
+
+alias ls.packingType=packingType;
+alias dataRepresentation=packingType;
+alias typeOfPacking=packingType;
+transient representationMode=0 :hidden,no_copy;
+
+meta md5Section5 md5(offsetSection5,section5Length);

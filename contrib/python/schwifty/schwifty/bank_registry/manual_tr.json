@@ -1,0 +1,410 @@
+[
+  {
+    "country_code": "TR",
+    "name": "T\u00fcrkiye Cumhuriyeti Ziraat Bankas\u0131 A.\u015e.",
+    "short_name": "T\u00fcrkiye Cumhuriyeti Ziraat Bankas\u0131 A.\u015e.",
+    "bank_code": "00010",
+    "bic": "TCZBTR2A",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "T\u00fcrkiye Halk Bankas\u0131 A.\u015e.",
+    "short_name": "T\u00fcrkiye Halk Bankas\u0131 A.\u015e.",
+    "bank_code": "00012",
+    "bic": "TRHBTR2A",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "T\u00fcrkiye Vak\u0131flar Bankas\u0131 T.A.O.",
+    "short_name": "T\u00fcrkiye Vak\u0131flar Bankas\u0131 T.A.O.",
+    "bank_code": "00015",
+    "bic": "TVBATR2A",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Akbank T.A.\u015e.",
+    "short_name": "Akbank T.A.\u015e.",
+    "bank_code": "00046",
+    "bic": "AKBKTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Anadolubank A.\u015e.",
+    "short_name": "Anadolubank A.\u015e.",
+    "bank_code": "00135",
+    "bic": "ANDLTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Fibabanka A.\u015e.",
+    "short_name": "Fibabanka A.\u015e.",
+    "bank_code": "00103",
+    "bic": "FBHLTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "\u015eekerbank T.A.\u015e.",
+    "short_name": "\u015eekerbank T.A.\u015e.",
+    "bank_code": "00059",
+    "bic": "SEKETR2A",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Turkish Bank A.\u015e.",
+    "short_name": "Turkish Bank A.\u015e.",
+    "bank_code": "00096",
+    "bic": "TUBATRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "T\u00fcrk Ekonomi Bankas\u0131 A.\u015e.",
+    "short_name": "T\u00fcrk Ekonomi Bankas\u0131 A.\u015e.",
+    "bank_code": "00032",
+    "bic": "TEBUTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "T\u00fcrk Ticaret Bankas\u0131 A.\u015e.",
+    "short_name": "T\u00fcrk Ticaret Bankas\u0131 A.\u015e.",
+    "bank_code": "00060",
+    "bic": "",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "T\u00fcrkiye \u0130\u015f Bankas\u0131 A.\u015e.",
+    "short_name": "T\u00fcrkiye \u0130\u015f Bankas\u0131 A.\u015e.",
+    "bank_code": "00064",
+    "bic": "ISBKTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Yap\u0131 ve Kredi Bankas\u0131 A.\u015e.",
+    "short_name": "Yap\u0131 ve Kredi Bankas\u0131 A.\u015e.",
+    "bank_code": "00067",
+    "bic": "YAPITRISXXX",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Birle\u015fik Fon Bankas\u0131 A.\u015e.",
+    "short_name": "Birle\u015fik Fon Bankas\u0131 A.\u015e.",
+    "bank_code": "00029",
+    "bic": "BAYDTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Alternatifbank A.\u015e.",
+    "short_name": "Alternatifbank A.\u015e.",
+    "bank_code": "00124",
+    "bic": "ALFBTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Arap T\u00fcrk Bankas\u0131 A.\u015e.",
+    "short_name": "Arap T\u00fcrk Bankas\u0131 A.\u015e.",
+    "bank_code": "00091",
+    "bic": "ATUBTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Bank of China Turkey A.\u015e.",
+    "short_name": "Bank of China Turkey A.\u015e.",
+    "bank_code": "00149",
+    "bic": "BKCHTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Burgan Bank A.\u015e.",
+    "short_name": "Burgan Bank A.\u015e.",
+    "bank_code": "00125",
+    "bic": "TEKFTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Citibank A.\u015e.",
+    "short_name": "Citibank A.\u015e.",
+    "bank_code": "00092",
+    "bic": "CITITRIX",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Denizbank A.\u015e.",
+    "short_name": "Denizbank A.\u015e.",
+    "bank_code": "00134",
+    "bic": "DENITRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Deutsche Bank A.\u015e.",
+    "short_name": "Deutsche Bank A.\u015e.",
+    "bank_code": "00115",
+    "bic": "BKTRTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "HSBC Bank A.\u015e.",
+    "short_name": "HSBC Bank A.\u015e.",
+    "bank_code": "00123",
+    "bic": "HSBCTRIX",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "ICBC Turkey Bank A.\u015e.",
+    "short_name": "ICBC Turkey Bank A.\u015e.",
+    "bank_code": "00109",
+    "bic": "ICBKTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "ING Bank A.\u015e.",
+    "short_name": "ING Bank A.\u015e.",
+    "bank_code": "00099",
+    "bic": "INGBTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "MUFG Bank Turkey A.\u015e.",
+    "short_name": "MUFG Bank Turkey A.\u015e.",
+    "bank_code": "00147",
+    "bic": "BOTKTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Odea Bank A.\u015e.",
+    "short_name": "Odea Bank A.\u015e.",
+    "bank_code": "00146",
+    "bic": "ODEATRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "QNB Finansbank A.\u015e.",
+    "short_name": "QNB Finansbank A.\u015e.",
+    "bank_code": "00111",
+    "bic": "FNNBTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Rabobank A.\u015e.",
+    "short_name": "Rabobank A.\u015e.",
+    "bank_code": "00137",
+    "bic": "RABOTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Turkland Bank A.\u015e.",
+    "short_name": "Turkland Bank A.\u015e.",
+    "bank_code": "00108",
+    "bic": "TBNKTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "T\u00fcrkiye Garanti Bankas\u0131 A.\u015e.",
+    "short_name": "T\u00fcrkiye Garanti Bankas\u0131 A.\u015e.",
+    "bank_code": "00062",
+    "bic": "TGBATRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Bank Mellat",
+    "short_name": "Bank Mellat",
+    "bank_code": "00094",
+    "bic": "BKMTTRIS",
+    "primary": false
+  },
+  {
+    "country_code": "TR",
+    "name": "Habib Bank Limited",
+    "short_name": "Habib Bank Limited",
+    "bank_code": "00097",
+    "bic": "HABBTRIS",
+    "primary": false
+  },
+  {
+    "country_code": "TR",
+    "name": "Intesa Sanpaolo S.p.A.",
+    "short_name": "Intesa Sanpaolo S.p.A.",
+    "bank_code": "00148",
+    "bic": "BCITTRIS",
+    "primary": false
+  },
+  {
+    "country_code": "TR",
+    "name": "JPMorgan Chase Bank N.A.",
+    "short_name": "JPMorgan Chase Bank N.A.",
+    "bank_code": "00098",
+    "bic": "CHASTRIS",
+    "primary": false
+  },
+  {
+    "country_code": "TR",
+    "name": "Soci\u00e9t\u00e9 G\u00e9n\u00e9rale (SA)",
+    "short_name": "Soci\u00e9t\u00e9 G\u00e9n\u00e9rale (SA)",
+    "bank_code": "00122",
+    "bic": "SOGETRIS",
+    "primary": false
+  },
+  {
+    "country_code": "TR",
+    "name": "\u0130ller Bankas\u0131 A.\u015e.",
+    "short_name": "\u0130ller Bankas\u0131 A.\u015e.",
+    "bank_code": "00004",
+    "bic": "",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "T\u00fcrk Eximbank",
+    "short_name": "T\u00fcrk Eximbank",
+    "bank_code": "00016",
+    "bic": "TIKBTR2A",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "T\u00fcrkiye Kalk\u0131nma ve Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "short_name": "T\u00fcrkiye Kalk\u0131nma ve Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "bank_code": "00017",
+    "bic": "TKBNTR2A",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Aktif Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "short_name": "Aktif Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "bank_code": "00143",
+    "bic": "CAYTTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "BankPozitif Kredi ve Kalk\u0131nma Bankas\u0131 A.\u015e.",
+    "short_name": "BankPozitif Kredi ve Kalk\u0131nma Bankas\u0131 A.\u015e.",
+    "bank_code": "00142",
+    "bic": "BPTRTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "D Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "short_name": "D Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "bank_code": "00151",
+    "bic": "YATITRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Destek Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "short_name": "Destek Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "bank_code": "00152",
+    "bic": "DEYATRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Diler Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "short_name": "Diler Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "bank_code": "00138",
+    "bic": "DYAKTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Golden Global Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "short_name": "Golden Global Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "bank_code": "00150",
+    "bic": "GOGYTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "GSD Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "short_name": "GSD Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "bank_code": "00139",
+    "bic": "GSDBTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "\u0130stanbul Takas ve Saklama Bankas\u0131 A.\u015e.",
+    "short_name": "\u0130stanbul Takas ve Saklama Bankas\u0131 A.\u015e.",
+    "bank_code": "00132",
+    "bic": "TVSBTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Nurol Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "short_name": "Nurol Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "bank_code": "00141",
+    "bic": "NUROTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Tera Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "short_name": "Tera Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "bank_code": "00154",
+    "bic": "",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "T\u00fcrkiye S\u0131nai Kalk\u0131nma Bankas\u0131 A.\u015e.",
+    "short_name": "T\u00fcrkiye S\u0131nai Kalk\u0131nma Bankas\u0131 A.\u015e.",
+    "bank_code": "00014",
+    "bic": "TSKBTRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Bank of America Yat\u0131r\u0131m Bank A.\u015e.",
+    "short_name": "Bank of America Yat\u0131r\u0131m Bank A.\u015e.",
+    "bank_code": "00129",
+    "bic": "MEYYTRISXXX",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Pasha Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "short_name": "Pasha Yat\u0131r\u0131m Bankas\u0131 A.\u015e.",
+    "bank_code": "00116",
+    "bic": "PAHATRIS",
+    "primary": true
+  },
+  {
+    "country_code": "TR",
+    "name": "Standard Chartered Yat\u0131r\u0131m Bankas\u0131 T\u00fcrk A.\u015e.",
+    "short_name": "Standard Chartered Yat\u0131r\u0131m Bankas\u0131 T\u00fcrk A.\u015e.",
+    "bank_code": "00121",
+    "bic": "SCBLTRIS",
+    "primary": true
+  }
+]

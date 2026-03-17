@@ -1,0 +1,116 @@
+Metadata-Version: 2.1
+Name: timezonefinder
+Version: 6.5.3
+Summary: python package for finding the timezone of any point on earth (coordinates) offline
+Home-page: https://timezonefinder.michelfe.it/gui
+License: MIT
+Keywords: timezone,coordinates,latitude,longitude,location,offline,polygon
+Author: jannikmi
+Author-email: github@michelfe.it
+Requires-Python: >=3.8,<4
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Localization
+Provides-Extra: numba
+Provides-Extra: pytz
+Requires-Dist: cffi (>=1.15.1,<2)
+Requires-Dist: h3 (>=3.7.6,<4)
+Requires-Dist: numba (>=0.56,<1) ; (python_version < "3.12") and (extra == "numba")
+Requires-Dist: numba (>=0.59,<1) ; (python_version >= "3.12") and (extra == "numba")
+Requires-Dist: numpy (>=1.21,<3) ; python_version < "3.9"
+Requires-Dist: numpy (>=1.23,<3) ; python_version >= "3.9"
+Requires-Dist: pytz (>=2022.7.1) ; extra == "pytz"
+Requires-Dist: setuptools (>=65.5)
+Project-URL: Documentation, https://timezonefinder.readthedocs.io/en/latest/
+Project-URL: Repository, https://github.com/jannikmi/timezonefinder
+Description-Content-Type: text/x-rst
+
+==============
+timezonefinder
+==============
+
+
+..
+    Note: can't include the badges file from the docs here, as it won't render on PyPI -> sync manually
+
+.. image:: https://github.com/jannikmi/timezonefinder/actions/workflows/build.yml/badge.svg?branch=master
+    :target: https://github.com/jannikmi/timezonefinder/actions?query=branch%3Amaster
+
+.. image:: https://readthedocs.org/projects/timezonefinder/badge/?version=latest
+    :alt: documentation status
+    :target: https://timezonefinder.readthedocs.io/en/latest/?badge=latest
+
+.. image:: https://img.shields.io/pypi/wheel/timezonefinder.svg
+    :target: https://pypi.python.org/pypi/timezonefinder
+
+.. image:: https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white
+   :target: https://github.com/pre-commit/pre-commit
+   :alt: pre-commit
+
+.. image:: https://pepy.tech/badge/timezonefinder
+    :alt: total PyPI downloads
+    :target: https://pepy.tech/project/timezonefinder
+
+.. image:: https://img.shields.io/pypi/v/timezonefinder.svg
+    :alt: latest version on PyPI
+    :target: https://pypi.python.org/pypi/timezonefinder
+
+.. image:: https://img.shields.io/conda/vn/conda-forge/timezonefinder.svg
+   :target: https://anaconda.org/conda-forge/timezonefinder
+   :alt: latest version on conda-forge
+
+.. image:: https://img.shields.io/badge/code%20style-black-000000.svg
+    :target: https://github.com/psf/black
+
+
+
+
+Notice: Looking for maintainers. Reach out if you want to contribute!
+---------------------------------------------------------------------
+
+
+This is a python package for looking up the corresponding timezone for given coordinates on earth entirely offline.
+
+
+Quick Guide:
+
+.. code-block:: console
+
+    pip install timezonefinder
+
+
+.. code-block:: python
+
+    from timezonefinder import TimezoneFinder
+
+    tf = TimezoneFinder()  # reuse
+
+    query_points = [(13.358, 52.5061), ...]
+    for lng, lat in query_points:
+        tz = tf.timezone_at(lng=lng, lat=lat)  # 'Europe/Berlin'
+
+
+For more refer to the `Documentation <https://timezonefinder.readthedocs.io/en/latest/>`__.
+
+Also check:
+
+`PyPI <https://pypi.python.org/pypi/timezonefinder/>`__
+
+`online GUI and API <https://timezonefinder.michelfe.it>`__
+
+`conda-forge feedstock <https://github.com/conda-forge/timezonefinder-feedstock>`__
+
+ruby port: `timezone_finder <https://github.com/gunyarakun/timezone_finder>`__
+
+`download stats <https://pepy.tech/project/timezonefinder>`__
+

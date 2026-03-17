@@ -1,0 +1,67 @@
+[
+    {
+        "pk": 1, 
+        "model": "auth.user", 
+        "fields": {
+            "username": "moderator", 
+            "first_name": "", 
+            "last_name": "", 
+            "is_active": true, 
+            "is_superuser": false, 
+            "is_staff": true, 
+            "last_login": "2009-11-20 13:34:03", 
+            "password": "sha1$a24c0$9dd0c6c162b6ed7bd5f29cce9a689ff5ff237663", 
+            "email": "admin@example.com", 
+            "date_joined": "2009-11-20 13:34:03"
+        }
+    },
+    {
+        "pk": 2, 
+        "model": "auth.user", 
+        "fields": {
+            "username": "user1", 
+            "first_name": "", 
+            "last_name": "", 
+            "is_active": true, 
+            "is_superuser": false, 
+            "is_staff": true, 
+            "last_login": "2009-11-20 13:34:03", 
+            "password": "sha1$a24c0$9dd0c6c162b6ed7bd5f29cce9a689ff5ff237663", 
+            "email": "user1@example.com", 
+            "date_joined": "2009-11-20 13:34:03"
+        }
+    },
+    {
+        "pk": 3, 
+        "model": "auth.user", 
+        "fields": {
+            "username": "user2", 
+            "first_name": "", 
+            "last_name": "", 
+            "is_active": true, 
+            "is_superuser": false, 
+            "is_staff": true, 
+            "last_login": "2009-11-20 13:34:03", 
+            "password": "sha1$a24c0$9dd0c6c162b6ed7bd5f29cce9a689ff5ff237663", 
+            "email": "user2@example.com", 
+            "date_joined": "2009-11-20 13:34:03"
+        }
+    },
+    {
+        "pk": 4, 
+        "model": "auth.user", 
+        "fields": {
+            "username": "admin", 
+            "first_name": "", 
+            "last_name": "", 
+            "is_active": true, 
+            "is_superuser": true, 
+            "is_staff": true, 
+            "last_login": "2010-02-09 05:18:10", 
+            "password": "sha1$2acfc$ff585e3cc7037d6cdcfabd974a487ab340a77a09", 
+            "email": "admin@example.com", 
+            "date_joined": "2010-02-09 05:16:35"
+        }
+    }
+
+]

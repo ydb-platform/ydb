@@ -1,0 +1,15 @@
+# -*- text -*-
+#
+# Copyright (c) 2016 Los Alamos National Security, LLC. All rights
+#                    reserved.
+#
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+[mpi-thread-multiple-not-supported]
+The OSC pt2pt component does not support MPI_THREAD_MULTIPLE in this release.
+Workarounds are to run on a single node, or to use a system with an RDMA
+capable network such as Infiniband.

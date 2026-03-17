@@ -1,0 +1,4 @@
+requirements:
+  - setuptools
+keep:
+  - tests/*

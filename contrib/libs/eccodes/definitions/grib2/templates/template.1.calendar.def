@@ -1,0 +1,4 @@
+# (C) Copyright 2005- ECMWF.
+
+#  Type of Calendar (see Code Table 1.6)
+codetable[1] typeOfCalendar ('1.6.table',masterDir,localDir) = 255 : dump,no_copy,edition_specific;

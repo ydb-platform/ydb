@@ -1,0 +1,20 @@
+--- a/magick/magic.c
++++ b/magick/magic.c
+@@ -137,6 +137,17 @@ static const MagicMapInfo
+     { "HEIC", 4, MagicPattern("ftyphevs") },
+     { "HEIC", 4, MagicPattern("ftypmif1") },
+     { "HEIC", 4, MagicPattern("ftypmsf1") },
++    { "HEIC", 8, MagicPattern("avcs") },
++    { "HEIC", 8, MagicPattern("avic") },
++    { "HEIC", 8, MagicPattern("heim") },
++    { "HEIC", 8, MagicPattern("heis") },
++    { "HEIC", 8, MagicPattern("heix") },
++    { "HEIC", 8, MagicPattern("hevc") },
++    { "HEIC", 8, MagicPattern("hevm") },
++    { "HEIC", 8, MagicPattern("hevs") },
++    { "HEIC", 8, MagicPattern("hevx") },
++    { "HEIC", 8, MagicPattern("mif1") },
++    { "HEIC", 8, MagicPattern("msf1") },
+     { "HPGL", 0, MagicPattern("IN;") },
+     { "HTML", 1, MagicPattern("HTML") },
+     { "HTML", 1, MagicPattern("html") },

@@ -1,0 +1,5 @@
+requirements:
+  - contrib/libs/sqlite3
+mark_as_cython_c:
+  - playhouse/*.pyx
+ignore_wheel: true

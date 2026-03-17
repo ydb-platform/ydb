@@ -1,0 +1,29 @@
+# (C) Copyright 2005- ECMWF.
+# Second order
+
+ieeefloat referenceValue: no_copy;
+meta referenceValueError reference_value_error(referenceValue,ieee);
+
+signed[2] binaryScaleFactor: no_copy;
+
+signed[2] decimalScaleFactor: no_copy;
+
+# Try different values of binaryScaleFactor and decimalScaleFactor to reduce packing error
+transient optimizeScaleFactor = 0;
+
+unsigned[1] bitsPerValue;
+alias accuracy = bitsPerValue;
+if (bitsPerValue) {
+  unsigned[1] widthOfFirstOrderValues :no_copy ;
+
+  unsigned [4] numberOfGroups : no_copy;
+  unsigned [4] numberOfSecondOrderPackedValues : no_copy;
+  unsigned [1] widthOfWidths : no_copy;
+  unsigned [1] widthOfLengths : no_copy;
+  unsigned [1] orderOfSPD = 2 : no_copy ;
+
+  if (orderOfSPD) {
+    unsigned[1] widthOfSPD ;
+    meta SPD spd(widthOfSPD,orderOfSPD) : read_only;
+  }
+}

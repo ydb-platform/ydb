@@ -1,0 +1,34 @@
+# (C) Copyright 2005- ECMWF.
+
+section_length[3] section1Length ;
+unsigned[1] gribTablesVersionNo ;
+codetable[1] centre 'common/c-1.table';
+alias ls.centre=centre;
+
+unsigned[1] generatingProcessIdentifier ;
+
+unsigned[1] gridDefinition ;
+
+flags[1] flag 'grib1/1.table';
+
+codetable[1] indicatorOfParameter 'grib1/2.[centre:l].[gribTablesVersionNo:l].table';
+
+codetable[1] indicatorOfTypeOfLevel 'grib1/3.table' : string_type,edition_specific;
+alias ls.levelType = indicatorOfTypeOfLevel;
+codetable[2] heightPressureEtcOfLevels 'grib1/3.table';
+
+unsigned[1] yearOfCentury;
+unsigned[1] month;
+unsigned[1] day;
+unsigned[1] hour;
+unsigned[1] minute;
+
+codetable[1] indicatorOfUnitOfTimeRange 'grib1/4.table';
+
+#  P1 - Period of time (number of time units)
+unsigned[1] periodOfTime ;
+
+alias P1 = periodOfTime ;
+
+#  P2 - Period of time (number of time units)
+unsigned[1] periodOfTimeIntervals ;

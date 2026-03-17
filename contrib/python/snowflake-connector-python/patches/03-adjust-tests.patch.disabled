@@ -1,0 +1,21 @@
+--- contrib/python/snowflake-connector-python/test/unit/test_cache.py	(index)
++++ contrib/python/snowflake-connector-python/test/unit/test_cache.py	(working tree)
+@@ -300,6 +300,7 @@ class TestSFDictFileCache:
+         ):
+             assert c2["c"] == 3
+ 
++    @pytest.mark.skip
+     def test_filelock_hang(self, tmpdir, caplog):
+         """Check whether if file lock is held save doesn't hang."""
+         c = AlwaysSaveSFDictFileCache.from_dict(
+--- contrib/python/snowflake-connector-python/test/unit/test_result_batch.py	(index)
++++ contrib/python/snowflake-connector-python/test/unit/test_result_batch.py	(working tree)
+@@ -7,7 +7,7 @@ from __future__ import annotations
+ 
+ from collections import namedtuple
+ from http import HTTPStatus
+-from test.helpers import create_mock_response
++from ..helpers import create_mock_response
+ from unittest import mock
+ 
+ import pytest

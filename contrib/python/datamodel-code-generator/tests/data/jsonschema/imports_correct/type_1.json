@@ -1,0 +1,13 @@
+{
+  "properties": {
+    "type_": {
+      "default": "a",
+      "enum": ["a", "A"],
+
+      "type": "string",
+      "title": "Type"
+    }
+  },
+  "title": "Type1",
+  "type": "object"
+}

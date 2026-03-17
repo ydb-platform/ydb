@@ -1,0 +1,8 @@
+requirements:
+  - contrib/libs/libsodium
+copy:
+  - src/bindings/*
+exclude:
+  - libsodium/*
+exclude_from_macros:
+  - src/bindings/*

@@ -1,0 +1,302 @@
+syntax = "proto3";
+
+package yandex.cloud.vpc.v1.privatelink;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/vpc/v1/privatelink/private_endpoint.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1/privatelink;privatelink";
+option java_package = "yandex.cloud.api.vpc.v1.privatelink";
+
+// A set of methods for managing PrivateEndpoint resources.
+service PrivateEndpointService {
+  // Returns the specified Private Endpoint resource.
+  //
+  // To get the list of all available PrivateEndpoint resources, make a [List]
+  // request.
+  rpc Get(GetPrivateEndpointRequest) returns (PrivateEndpoint) {
+    option (google.api.http) = {get: "/vpc/v1/endpoints/{private_endpoint_id}"};
+  }
+
+  // Retrieves the list of PrivateEndpoint resources in the specified folder.
+  rpc List(ListPrivateEndpointsRequest) returns (ListPrivateEndpointsResponse) {
+    option (google.api.http) = {get: "/vpc/v1/endpoints"};
+  }
+
+  // Creates an private endpoint in the specified folder and network.
+  rpc Create(CreatePrivateEndpointRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/vpc/v1/endpoints"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreatePrivateEndpointMetadata"
+      response: "PrivateEndpoint"
+    };
+  }
+
+  // Updates the specified private endpoint.
+  rpc Update(UpdatePrivateEndpointRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/vpc/v1/endpoints/{private_endpoint_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdatePrivateEndpointMetadata"
+      response: "PrivateEndpoint"
+    };
+  }
+
+  // Deletes the specified private endpoint.
+  rpc Delete(DeletePrivateEndpointRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/vpc/v1/endpoints/{private_endpoint_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeletePrivateEndpointMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // List operations for the specified private endpoint.
+  rpc ListOperations(ListPrivateEndpointOperationsRequest) returns (ListPrivateEndpointOperationsResponse) {
+    option (google.api.http) = {get: "/vpc/v1/endpoints/{private_endpoint_id}/operations"};
+  }
+}
+
+message GetPrivateEndpointRequest {
+  // ID of the PrivateEndpoint resource to return.
+  //
+  // To get PrivateEndpoint resource ID make a [PrivateEndpointService.List]
+  // request.
+  string private_endpoint_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message InternalIpv4AddressSpec {
+  // ID of the subnet that address belongs to.
+  string subnet_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Value of address.
+  string address = 2;
+}
+
+message AddressSpec {
+  oneof address {
+    // ID of IP address to associate with private endpoint.
+    string address_id = 1;
+
+    // Internal ipv4 address specification.
+    InternalIpv4AddressSpec internal_ipv4_address_spec = 2;
+  }
+}
+
+message CreatePrivateEndpointRequest {
+  reserved 7;
+  // ID of the folder to create a private endpoint in.
+  //
+  // To get a folder ID make a
+  // [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the private endpoint.
+  // The name must be unique within the folder.
+  string name = 2 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the private endpoint.
+  string description = 3 [(length) = "<=256"];
+
+  // Private endpoint labels as `key:value` pairs.
+  map<string, string> labels = 4 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // ID of the network to create a private endpoint in.
+  string network_id = 5 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Private endpoint address specification.
+  AddressSpec address_spec = 6;
+
+  // Private endpoint dns options.
+  PrivateEndpoint.DnsOptions dns_options = 8;
+
+  // Service to connect with via private endpoint.
+  oneof service {
+    option (exactly_one) = true;
+    // Yandex Cloud Object Storage.
+    PrivateEndpoint.ObjectStorage object_storage = 9;
+  }
+}
+
+message CreatePrivateEndpointMetadata {
+  // ID of the private endpoint that is being created.
+  string private_endpoint_id = 1;
+}
+
+message UpdatePrivateEndpointRequest {
+  reserved 7;
+  // ID of the private endpoint to update.
+  //
+  // To get the private endpoint ID make a [PrivateEndpointService.List]
+  // request.
+  string private_endpoint_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which attributes of the PrivateEndpoint should be
+  // updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New name for the private endpoint.
+  // The name must be unique within the folder.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // New description of the private endpoint.
+  string description = 4 [(length) = "<=256"];
+
+  // Private endpoint labels as `key:value` pairs.
+  //
+  // Existing set of labels is completely replaced by the provided set, so if
+  // you just want to add or remove a label:
+  // 1. Get the current set of labels with a [PrivateEndpointService.Get]
+  // request.
+  // 2. Add or remove a label in this set.
+  // 3. Send the new set in this field.
+  map<string, string> labels = 5 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // Private endpoint address specification.
+  AddressSpec address_spec = 6;
+
+  // Private endpoint dns options.
+  PrivateEndpoint.DnsOptions dns_options = 8;
+}
+
+message UpdatePrivateEndpointMetadata {
+  // ID of the private endpoint that is being updated.
+  string private_endpoint_id = 1;
+}
+
+message DeletePrivateEndpointRequest {
+  // ID of the private endpoint to delete.
+  //
+  // To get a private endpoint ID make a [PrivateEndpointService.List] request.
+  string private_endpoint_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeletePrivateEndpointMetadata {
+  // ID of the private endpoint that is being deleted.
+  string private_endpoint_id = 1;
+}
+
+message ListPrivateEndpointsRequest {
+  reserved 2;
+  oneof container {
+    option (exactly_one) = true;
+    // ID of the folder to list private endpoints in.
+    //
+    // To get the folder ID use a
+    // [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+    string folder_id = 1 [(length) = "<=50"];
+  }
+
+  // The maximum number of results per page to return. If the number of
+  // available results is larger than `page_size`, the service returns a
+  // [ListPrivateEndpointsResponse.next_page_token] that can be used to get the
+  // next page of results in subsequent list requests. Default value: 100.
+  int64 page_size = 3 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListPrivateEndpointsResponse.next_page_token] returned by a previous list
+  // request.
+  string page_token = 4 [(length) = "<=1000"];
+
+  // A filter expression that filters PrivateEndpoint listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on
+  // [PrivateEndpoint.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match
+  // the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`. Example of a filter:
+  // `name=my-private-endpoint`.
+  string filter = 5 [(length) = "<=1000"];
+}
+
+message ListPrivateEndpointsResponse {
+  // List of private endpoints.
+  repeated PrivateEndpoint private_endpoints = 1;
+
+  // Token for getting the next page of the list. If the number of results is
+  // greater than the specified [ListPrivateEndpointsRequest.page_size], use
+  // `next_page_token` as the value for the
+  // [ListPrivateEndpointsRequest.page_token] parameter in the next list
+  // request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging
+  // through the results.
+  string next_page_token = 2;
+}
+
+message ListPrivateEndpointOperationsRequest {
+  // ID of the private endpoint to list operations for.
+  //
+  // To get a private endpoint ID make a [PrivateEndpointService.List] request.
+  string private_endpoint_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of
+  // available results is larger than [page_size], the service returns a
+  // [ListPrivateEndpointOperationsResponse.next_page_token] that can be used to
+  // get the next page of results in subsequent list requests. Default value:
+  // 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListPrivateEndpointOperationsResponse.next_page_token] returned by a
+  // previous list request.
+  string page_token = 3 [(length) = "<=1000"];
+}
+
+message ListPrivateEndpointOperationsResponse {
+  // List of operations for the specified private endpoint.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is
+  // greater than the specified
+  // [ListPrivateEndpointOperationsRequest.page_size], use `next_page_token` as
+  // the value for the [ListPrivateEndpointOperationsRequest.page_token]
+  // parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging
+  // through the results.
+  string next_page_token = 2;
+}

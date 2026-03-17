@@ -1,0 +1,42 @@
+# (C) Copyright 2005- ECMWF.
+
+constant GRIBEXSection1Problem = 120 - section1Length ;
+
+
+#1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=18;
+
+if (stepType is "instant" ) {
+  alias productDefinitionTemplateNumber=epsPoint;
+} else {
+   alias productDefinitionTemplateNumber=epsContinuous;
+}
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber : dump ;
+alias number=perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble : dump ;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+codetable[1] dataOrigin "common/c-1.table" : dump;
+alias origin = dataOrigin;
+
+ascii[4] modelIdentifier : dump ;
+
+unsigned[1] consensusCount =1 : dump ;
+
+# spareSetToZero
+pad padding_loc18_1(3);
+
+ascii[4] ccccIdentifiers ;
+
+#consensus list(consensusCount)
+#{  ascii[4] ccccIdentifiers  : dump;}
+
+padto padding_loc18_2(offsetSection1 + 120);
+
+alias local.dataOrigin=dataOrigin;
+alias local.modelIdentifier=modelIdentifier;
+alias local.consensusCount=consensusCount;

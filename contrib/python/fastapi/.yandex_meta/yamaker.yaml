@@ -1,0 +1,11 @@
+requirements:
+  # Пока в Аркадии два Pydantic, даем возможность пользователям самим выбирать нужную версию
+  - pydantic: null
+  # Автор FastAPI убрал все сазвисимости из дефолтной конфигурации и рекомендует ставить falvor - fastapi[standard],
+  # делаем это руками
+  - fastapi-cli
+  - httpx
+  - jinja2
+  - python-multipart
+  - email-validator
+  - uvicorn

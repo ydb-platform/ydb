@@ -1,0 +1,94 @@
+This is a sextext header {: #setext}
+====================================
+
+A paragraph with some text.
+Line two of the paragraph.
+{: #par1 .myclass }
+
+This is another {: #sextext2 .someclass}
+----------------------------------------
+
+Test some _inline_{: .inline} text.
+A [link](http://example.com){: .linkkyclass title="A title."}
+And a __nested [link][]{: .linky2}__{: .nest}
+
+[link]: http://example.com "Some title"
+
+### This is a hash Header ### {: #hash}
+
+And now some random attributes.
+{:foo bar='b az' baz="blah blah" title="I wasn't kidding!" }
+
+### No closing hash header {: #hash2}
+
+Now test overrides
+{: #overrideme .andme id=overridden class='foo bar' .addme }
+
+    # A code block which contains attr_list syntax
+    # This should be ignored.
+    {: #someid .someclass }
+
+### No colon for compatibility with Headerid ext { #hash3 }
+
+Also a codespan: `{: .someclass}`{: .foo}.
+{: #the_end}
+
+### Bad Syntax { {: #hash5 }
+
+* Item1
+  {: .item }
+* Item2
+  {: .item }
+    * Item2-1
+      {: .subitem }
+* _Item3_{: .emph }
+  {: .item }
+    * _Item3-1_{: .emph }
+      {: .subitem }
+* Item4
+    * Item4-1
+* Item5
+
+# And ordered lists *too*{.inline}
+
+1. Item1
+   {: .item }
+2. Item2
+   {: .item }
+    1. Item2-1
+       {: .subitem }
+3. _Item3_{: .emph }
+   {: .item }
+    1. _Item3-1_{: .emph }
+       {: .subitem }
+4. Item4
+    1. Item4-1
+5. Item5
+
+# Definition *lists* {.block}
+
+DT1 {.term}
+DT2 {.term}
+:   Some dd
+    {.def}
+:   *dd*{.inline}
+
+*DT3*{.inline}
+:   Some dd
+
+# Bad attributes
+
+Key without *value*{ foo= }
+
+Value without *key*{ =bar }
+
+No *key or value*{ = }
+
+*Weirdness*{ == }
+
+*More weirdness*{ === }
+
+This should not cause a *crash*{ foo=a=b }
+
+Attr_lists do not contain *newlines*{ foo=bar
+key=value }

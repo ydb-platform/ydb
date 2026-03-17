@@ -1,0 +1,4 @@
+---
+$defs:
+  RefObject:
+    $ref: "different_file_reference_from_file_schemas2.spec.yaml#/$defs/PlainObject"

@@ -1,0 +1,7 @@
+# Code table 4.241 - Coverage attributes
+0 0 Undefined
+1 1 Unmodified
+2 2 Snow covered
+3 3 Flooded
+4 4 Ice covered
+255 255 Missing value

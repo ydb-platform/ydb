@@ -1,0 +1,33 @@
+--- contrib/python/PyNaCl/py3/ya.make	(index)
++++ contrib/python/PyNaCl/py3/ya.make	(working tree)
+@@ -58,4 +58,30 @@ PY_SRCS(
+ )
+ 
++RUN_PROGRAM(
++    contrib/python/cffi/py3/gen src/bindings/build.py:ffi nacl._sodium.cffi.py3.c
++    IN  src/bindings/build.py
++        src/bindings/crypto_aead.h
++        src/bindings/crypto_box.h
++        src/bindings/crypto_core.h
++        src/bindings/crypto_generichash.h
++        src/bindings/crypto_hash.h
++        src/bindings/crypto_kx.h
++        src/bindings/crypto_pwhash.h
++        src/bindings/crypto_scalarmult.h
++        src/bindings/crypto_secretbox.h
++        src/bindings/crypto_secretstream.h
++        src/bindings/crypto_shorthash.h
++        src/bindings/crypto_sign.h
++        src/bindings/randombytes.h
++        src/bindings/sodium_core.h
++        src/bindings/utils.h
++        src/bindings/minimal/crypto_core.h
++        src/bindings/minimal/crypto_pwhash.h
++        src/bindings/minimal/crypto_scalarmult.h
++        src/bindings/minimal/crypto_shorthash.h
++    OUT nacl._sodium.cffi.py3.c
++    OUTPUT_INCLUDES sodium.h
++)
++
+ RESOURCE_FILES(
+     PREFIX contrib/python/PyNaCl/py3/

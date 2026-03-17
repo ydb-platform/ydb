@@ -1,0 +1,8 @@
+requirements:
+  - contrib/libs/stan
+  - contrib/restricted/boost/date_time
+  - setuptools
+mark_as_resources:
+  - pystan/stanfit4model.pyx
+exclude:
+  - pystan/stan/*

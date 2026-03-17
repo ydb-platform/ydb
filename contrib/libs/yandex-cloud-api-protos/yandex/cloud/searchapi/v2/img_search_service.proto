@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package yandex.cloud.searchapi.v2;
+
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/searchapi/v2/search_query.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/searchapi/v2;searchapi";
+option java_package = "yandex.cloud.api.search.v2";
+
+// A set of methods for searching of images using the Yandex Images.
+service ImageSearchService {
+  rpc Search (ImageSearchRequest) returns (ImageSearchResponse) {
+    option (google.api.http) = { post: "/v2/image/search" body: "*" };
+  }
+
+  rpc SearchByImage (ImageSearchByImageRequest) returns (ImageSearchByImageResponse) {
+    option (google.api.http) = { post: "/v2/image/search_by_image" body: "*" };
+  }
+}
+
+message ImageSpec {
+  enum ImageFormat {
+    IMAGE_FORMAT_UNSPECIFIED = 0;
+    // JPG format.
+    IMAGE_FORMAT_JPEG = 1;
+    // GIF format.
+    IMAGE_FORMAT_GIF = 2;
+    // PNG format.
+    IMAGE_FORMAT_PNG = 3;
+  }
+
+  enum ImageOrientation {
+    IMAGE_ORIENTATION_UNSPECIFIED = 0;
+    // Horizontal orientation.
+    IMAGE_ORIENTATION_VERTICAL = 1;
+    // Vertical orientation.
+    IMAGE_ORIENTATION_HORIZONTAL = 2;
+    // Square aspect ratio.
+    IMAGE_ORIENTATION_SQUARE = 3;
+  }
+
+  enum ImageSize {
+    IMAGE_SIZE_UNSPECIFIED = 0;
+    // Very large images (larger than 1,600 × 1,200 pixels).
+    IMAGE_SIZE_ENORMOUS = 1;
+    // Large images (from 800 × 600 to 1,600 × 1,200 pixels).
+    IMAGE_SIZE_LARGE = 2;
+    // Medium images (from 150 × 150 to 800 × 600 pixels).
+    IMAGE_SIZE_MEDIUM = 3;
+    // Small images (from 32 × 32 to 150 × 150 pixels).
+    IMAGE_SIZE_SMALL = 4;
+    // Icons (up to 32 × 32 pixels).
+    IMAGE_SIZE_TINY = 5;
+    // Desktop wallpapers.
+    IMAGE_SIZE_WALLPAPER = 6;
+  }
+
+  enum ImageColor {
+    IMAGE_COLOR_UNSPECIFIED = 0;
+    // Color images.
+    IMAGE_COLOR_COLOR = 1;
+    // Black and white images.
+    IMAGE_COLOR_GRAYSCALE = 2;
+    // Red is the main color of the image.
+    IMAGE_COLOR_RED = 3;
+    // Orange is the main color of the image.
+    IMAGE_COLOR_ORANGE = 4;
+    // Yellow is the main color of the image.
+    IMAGE_COLOR_YELLOW = 5;
+    // Green is the main color of the image.
+    IMAGE_COLOR_GREEN = 6;
+    // Cyan is the main color of the image.
+    IMAGE_COLOR_CYAN = 7;
+    // Blue is the main color of the image.
+    IMAGE_COLOR_BLUE = 8;
+    // Violet is the main color of the image.
+    IMAGE_COLOR_VIOLET = 9;
+    // White is the main color of the image.
+    IMAGE_COLOR_WHITE = 10;
+    // Black is the main color of the image.
+    IMAGE_COLOR_BLACK = 11;
+  }
+
+  //Searching for images in a particular format.
+  ImageFormat format = 1;
+  // Searching for images of a particular size.
+  ImageSize size = 2;
+  // Searching for images with a particular orientation.
+  ImageOrientation orientation = 3;
+  // Searching for images containing a particular color.
+  ImageColor color = 4;
+}
+
+message ImageSearchRequest {
+  // Search query.
+  SearchQuery query = 1 [(required) = true];
+  // Searching for images with a particular size, orientation, format or color.
+  ImageSpec image_spec = 2;
+  // Searching for images on a particular website only.
+  string site = 3;
+  // Number of results per search result page.
+  int64 docs_on_page = 4 [(value) = "1-100"];
+  // ID of the folder.
+  string folder_id = 5 [(length) = "<=50"];
+  // User-Agent request header value.
+  string user_agent = 6 [(length) = "<=300"];
+}
+
+message ImageSearchResponse {
+  // Search results in XML format.
+  bytes raw_data = 1 [(required) = true];
+}
+
+message ImageSearchByImageRequest {
+  // Restricts the search to the specific website.
+  string site = 1 [(length) = "<=1024"];
+  // ID of the folder.
+  string folder_id = 2 [(length) = "<=50"];
+  oneof image {
+    // The image url to use for the search.
+    string url = 3 [(required) = true, (length) = "<=1024"];
+    // The image data to use for the search.
+    bytes data = 4 [(required) = true, (length) = "<=3145728"];
+    // CBIR ID of the image to use for the search.
+    string id = 5  [(required) = true, (length) = "<=1024"];
+  }
+  // The number of a requested page with search results.
+  int64 page = 6 [(value) = ">=0"];
+  // Rule for filtering search results and determines whether any documents should be excluded.
+  SearchQuery.FamilyMode family_mode = 7;
+}
+
+message ImageSearchByImageResponse {
+  message ImageInfo {
+    // Image URL.
+    string url = 1;
+    // Image format.
+    ImageSpec.ImageFormat format = 2;
+    // Image width.
+    int64 width = 3;
+    // Image height.
+    int64 height = 4;
+    // Text passage.
+    string  passage = 5;
+    // Document host.
+    string  host = 6;
+    // Document title.
+    string page_title = 7;
+    // Document URL.
+    string page_url = 8;
+  }
+
+  // The images found.
+  repeated ImageInfo images = 1;
+  // The number of the page with search results.
+  int64 page = 2;
+  int64 max_page = 3 [deprecated = true];
+  // CBIR ID of the image used for the search.
+  string id = 4;
+}

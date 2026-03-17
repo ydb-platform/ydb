@@ -1,0 +1,15 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.30, Satellite Product
+# Note: This template is deprecated. Template 4.31 should be used instead.
+transient template_is_deprecated = 1 : hidden;
+
+include "grib2/templates/template.4.parameter.def"
+
+codetable[1] typeOfGeneratingProcess ('4.3.table',masterDir,localDir) : dump;
+
+#  Observation generating process identifier (defined by originating centre)
+unsigned[1] observationGeneratingProcessIdentifier  : dump;
+alias generatingProcessIdentifier=observationGeneratingProcessIdentifier;
+
+include "grib2/templates/template.4.satellite_30.def"

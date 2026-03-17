@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1.analysis;
+
+import "yandex/cloud/speechsense/v1/analysis/statistics_common.proto";
+
+option java_package = "yandex.cloud.api.speechsense.v1.analysis";
+option java_outer_classname = "InterruptsStatisticsProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1/analysis;speechsense";
+
+message InterruptsStatistics {
+  // Interrupts description for every speaker
+  repeated InterruptsEvaluation speaker_interrupts = 1;
+}
+
+message InterruptsEvaluation {
+  // Speaker tag
+  string speaker_tag = 1;
+
+  // Number of interrupts made by the speaker
+  int64 interrupts_count = 2;
+
+  // Total duration of all interrupts
+  int64 interrupts_duration_ms = 3;
+
+  // Boundaries for every interrupt
+  repeated AudioSegmentBoundaries interrupts = 4;
+
+  // Total duration of all interrupts in seconds
+  int64 interrupts_duration_seconds = 5;
+}

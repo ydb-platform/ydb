@@ -1,0 +1,11 @@
+copy:
+  - pyjson5.pyx
+  - src/*.cc
+  - src/*.hpp
+  - src/*.pyx
+  - src/VERSION.inc
+  - src/DESCRIPTION.inc
+  - third-party/fast_double_parser/include/fast_double_parser.h
+exclude_from_macros:
+  # these are included by pyjson5.pyx
+  - src/*.pyx

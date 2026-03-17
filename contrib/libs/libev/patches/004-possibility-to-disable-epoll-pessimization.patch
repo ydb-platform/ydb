@@ -1,0 +1,78 @@
+--- contrib/libs/libev/ev.c	(3645c03fc23f076ed7d607eabf6cf886919bfce0)
++++ contrib/libs/libev/ev.c	(working tree)
+@@ -3751,6 +3751,14 @@ ev_pending_count (EV_P) EV_NOEXCEPT
+   return count;
+ }
+ 
++void
++ev_set_io_pessimistic_remove (EV_P) EV_NOEXCEPT
++{
++#if EV_USE_EPOLL || EV_GENWRAP
++  epoll_pessimistic_remove = 1;
++#endif
++}
++
+ ecb_noinline
+ void
+ ev_invoke_pending (EV_P)
+--- contrib/libs/libev/ev.h	(3645c03fc23f076ed7d607eabf6cf886919bfce0)
++++ contrib/libs/libev/ev.h	(working tree)
+@@ -676,6 +676,10 @@ EV_API_DECL void ev_set_loop_release_cb (EV_P_ void (*release)(EV_P) EV_NOEXCEPT
+ 
+ EV_API_DECL unsigned int ev_pending_count (EV_P) EV_NOEXCEPT; /* number of pending events, if any */
+ 
++#define EV_HAS_IO_PESSIMISTIC_REMOVE 1
++/* Disable an optimistics epoll_ctl(..., EPOLL_CTL_DEL, ...) optimization for epoll backend, does nothing for other backends */
++EV_API_DECL void ev_set_io_pessimistic_remove (EV_P) EV_NOEXCEPT;
++
+ /*
+  * stop/start the timer handling.
+  */
+--- contrib/libs/libev/ev_epoll.c	(3645c03fc23f076ed7d607eabf6cf886919bfce0)
++++ contrib/libs/libev/ev_epoll.c	(working tree)
+@@ -80,9 +80,24 @@ epoll_modify (EV_P_ int fd, int oev, int nev)
+    * event in epoll_poll.
+    * if the fd is added again, we try to ADD it, and, if that
+    * fails, we assume it still has the same eventmask.
++   *
++   * however, if the select-ready notification is removed by another
++   * thread and not the thread that does ev_run, this would be a pessimization,
++   * condition it on epoll_pessimistic_remove.
+    */
+   if (!nev)
+-    return;
++    {
++      if (epoll_pessimistic_remove)
++        {
++          /* pre-2.6.9 kernels require a non-null pointer with EPOLL_CTL_DEL, */
++          /* which is fortunately easy to do for us. */
++          if (ecb_expect_true (!epoll_ctl(backend_fd, EPOLL_CTL_DEL, fd, &ev)))
++            return;
++
++          postfork |= 2; /* an error occurred, recreate kernel state */
++        }
++      return;
++    }
+ 
+   oldmask = anfds [fd].emask;
+   anfds [fd].emask = nev;
+--- contrib/libs/libev/ev_vars.h	(3645c03fc23f076ed7d607eabf6cf886919bfce0)
++++ contrib/libs/libev/ev_vars.h	(working tree)
+@@ -105,6 +105,7 @@ VARx(int, epoll_eventmax)
+ VARx(int *, epoll_eperms)
+ VARx(int, epoll_epermcnt)
+ VARx(int, epoll_epermmax)
++VARx(char, epoll_pessimistic_remove)
+ #endif
+ 
+ #if EV_USE_LINUXAIO || EV_GENWRAP
+--- contrib/libs/libev/ev_wrap.h	(3645c03fc23f076ed7d607eabf6cf886919bfce0)
++++ contrib/libs/libev/ev_wrap.h	(working tree)
+@@ -26,6 +26,7 @@
+ #define epoll_eperms ((loop)->epoll_eperms)
+ #define epoll_eventmax ((loop)->epoll_eventmax)
+ #define epoll_events ((loop)->epoll_events)
++#define epoll_pessimistic_remove ((loop)->epoll_pessimistic_remove)
+ #define evpipe ((loop)->evpipe)
+ #define fdchangecnt ((loop)->fdchangecnt)
+ #define fdchangemax ((loop)->fdchangemax)

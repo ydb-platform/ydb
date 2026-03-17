@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx
+  version="1.1"
+  creator="RunKeeper - http://www.runkeeper.com"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd"
+  xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
+<trk>
+  <name><![CDATA[Running 6/11/14 8:19 am]]></name>
+  <time>2014-06-11T12:19:43Z</time>
+<trkseg>
+<trkpt lat="42.361951000" lon="-71.108203000"><ele>11.0</ele><time>2014-06-11T12:21:40Z</time></trkpt>
+<trkpt lat="42.361797000" lon="-71.108370000"><ele>10.9</ele><time>2014-06-11T12:21:48Z</time></trkpt>
+<trkpt lat="42.361615000" lon="-71.108543000"><ele>10.7</ele><time>2014-06-11T12:21:56Z</time></trkpt>
+<trkpt lat="42.361451000" lon="-71.108731000"><ele>10.5</ele><time>2014-06-11T12:22:04Z</time></trkpt>
+<trkpt lat="42.361341000" lon="-71.108968000"><ele>10.4</ele><time>2014-06-11T12:22:12Z</time></trkpt>
+<trkpt lat="42.361474000" lon="-71.109162000"><ele>10.2</ele><time>2014-06-11T12:22:20Z</time></trkpt>
+<trkpt lat="42.361612000" lon="-71.109330000"><ele>10.0</ele><time>2014-06-11T12:22:27Z</time></trkpt>
+<trkpt lat="42.361751000" lon="-71.109529000"><ele>10.0</ele><time>2014-06-11T12:22:36Z</time></trkpt>
+<trkpt lat="42.361880000" lon="-71.109774000"><ele>10.0</ele><time>2014-06-11T12:22:43Z</time></trkpt>
+<trkpt lat="42.362007000" lon="-71.109991000"><ele>10.2</ele><time>2014-06-11T12:22:53Z</time></trkpt>
+<trkpt lat="42.362115000" lon="-71.110213000"><ele>10.4</ele><time>2014-06-11T12:23:01Z</time></trkpt>
+<trkpt lat="42.362180000" lon="-71.110484000"><ele>10.5</ele><time>2014-06-11T12:23:09Z</time></trkpt>
+<trkpt lat="42.362205000" lon="-71.110728000"><ele>10.5</ele><time>2014-06-11T12:23:18Z</time></trkpt>
+<trkpt lat="42.362320000" lon="-71.110988000"><ele>10.1</ele><time>2014-06-11T12:23:27Z</time></trkpt>
+<trkpt lat="42.362467000" lon="-71.111170000"><ele>9.6</ele><time>2014-06-11T12:23:34Z</time></trkpt>
+<trkpt lat="42.362640000" lon="-71.111344000"><ele>9.1</ele><time>2014-06-11T12:23:42Z</time></trkpt>
+<trkpt lat="42.362799000" lon="-71.111519000"><ele>8.3</ele><time>2014-06-11T12:23:51Z</time></trkpt>
+<trkpt lat="42.362837000" lon="-71.111772000"><ele>7.2</ele><time>2014-06-11T12:23:57Z</time></trkpt>
+<trkpt lat="42.362716000" lon="-71.111994000"><ele>6.6</ele><time>2014-06-11T12:24:04Z</time></trkpt>
+</trkseg>
+</trk>
+</gpx>

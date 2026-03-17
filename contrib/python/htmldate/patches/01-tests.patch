@@ -1,0 +1,40 @@
+--- contrib/python/htmldate/tests/unit_tests.py	(index)
++++ contrib/python/htmldate/tests/unit_tests.py	(working tree)
+@@ -55,7 +55,8 @@ from htmldate.validators import (
+ )
+
+
+-TEST_DIR = os.path.abspath(os.path.dirname(__file__))
++import yatest.common as yc
++TEST_DIR = os.path.abspath(os.path.dirname(yc.source_path(__file__)))
+ OUTPUTFORMAT = "%Y-%m-%d"
+
+ LATEST_POSSIBLE = datetime.datetime.now()
+@@ -101,7 +102,10 @@ def test_input():
+         load_html("<html><body>\x2f\x2e\x9f</body></html>".encode("latin-1"))
+         is not None
+     )
+-    assert load_html("https://httpbun.com/html") is not None
++
++    # No internet in CI
++    # assert load_html("https://httpbun.com/html") is not None
++
+     # encoding declaration
+     assert (
+         load_html(
+@@ -1549,6 +1553,7 @@ def test_parser():
+     )
+
+
++@pytest.mark.skip
+ def test_cli():
+     "Test the command-line interface"
+     testargs = ["--original"]
+@@ -1631,6 +1636,7 @@ def test_cli():
+     assert f.getvalue() == "https://httpbun.com/html\tNone\n"
+
+
++@pytest.mark.skip
+ def test_download():
+     """test page download"""
+     with pytest.raises(SystemExit):

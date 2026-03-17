@@ -1,0 +1,3 @@
+[console_scripts]
+parsegemfile = gemfileparser:command_line
+

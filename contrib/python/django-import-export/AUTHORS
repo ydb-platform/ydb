@@ -1,0 +1,169 @@
+The django-import-export was original created by Bojan Mihelac (bmihelac).
+
+The following is a list of much appreciated contributors:
+
+* Titusz
+* jmaupetit (Julien Maupetit)
+* geeknam (Nam Ngo)
+* tepez
+* rubinsztajn (Aaron Rubinstein)
+* pombredanne
+* djm (Darian Moody)
+* pjdelport (Pi Delport)
+* rhunwicks (Roger Hunwicks)
+* trbs (IdoTech)
+* mulder999
+* inodb
+* paulshannon (Paul Shannon)
+* tomd-aptivate (Tom Daley)
+* mauler
+* brad (Brad Pitcher)
+* xevinbox (Степан)
+* peterisb
+* qris (Chris Wilson)
+* andreacimino (Andrea Cimino)
+* frank-u (Oleksandr Poliatykin)
+* Kobold (Andy Kish)
+* cherepski
+* ludwiktrammer (Ludwik Trammer)
+* cuchac
+* aidanlister (Aidan Lister)
+* tabac
+* GroSte
+* w0rp
+* nastyako (Nastya Konak)
+* ianwalter (Ian Walter)
+* amarandon (Alex Marandon)
+* caljess599
+* mightygraf (Denis K)
+* spookylukey (Luke Plant)
+* kane-c
+* ddiazpinto (David Díaz)
+* jeberger (Jérôme M. Berger)
+* schemacs (Lele Long)
+* jbub (Juraj Bubniak)
+* manelclos (Manel Clos)
+* pkozlov (Pavel Kozlov)
+* vparitskiy
+* snj (KINOSHITA Shinji)
+* AyumuKasuga (Andrey Kostakov)
+* luto
+* gallochri (Christian Galeffi)
+* ericdwang (Eric Wang)
+* gonzalobustos (Gonzalo Bustos)
+* domenkozar (Domen Kožar)
+* staranjeet (Taranjeet Singh)
+* mikhailmain
+* retrry (Tadas Barzdžius)
+* ericbuckley (Eric Buckley)
+* PetrDlouhy
+* shalakhin (Olexandr Shalakhin)
+* fabian (Fabian Vogler)
+* citmusa (Citlalli Murillo)
+* jarekwg (Jarek Glowacki)
+* fossilet (Yongzhi Pan)
+* jnns (Jannis)
+* sgarcialaguna
+* carlosp420 (Carlos Peña)
+* freelancersunion (Freelancers Union)
+* jbradberry (Jeff Bradberry)
+* antoniablair
+* kellerkind
+* yueyoum (Johnnie Wang)
+* shaggyfrog (Thomas Hauk)
+* suriya (Suriya Subramanian)
+* arj03 (Anders Rune Jensen)
+* arseniy-panfilov (Arseniy Panfilov)
+* jheld (Jason Held)
+* pajod (Paul J. Dorn)
+* illagrenan (Vašek Dohnal)
+* browniebroke (Bruno Alla)
+* ahmed-cheikh (Ahmed Cheikh)
+* jschneier (Josh Schneier)
+* brianmay (Brian May)
+* williamwang61 (Will Wang)
+* adamcharnock (Adam Charnock)
+* paveltyavin (Pavel)
+* jameshiew (James Hiew)
+* mgrdcm (Dan Moore)
+* korkmaz (Ahmet Korkmaz)
+* petrmifek
+* ryan-copperleaf (Ryan O’Hara)
+* gatsinski (Hristo Gatsinski)
+* raghavsethi (Raghav Sethi)
+* jdufresne (Jon Dufresne)
+* trik (Marco Marche)
+* krishraghuram (Raghuram Krishnaswami)
+* int_ua (Serhiy Zahoriya)
+* Marpop (Marcin Popławski)
+* frnhr (Fran Hrženjak)
+* gelbander (Gustaf Elbander)
+* dfirst
+* lorenzomorandini
+* piotr-szpetkowski (Piotr Szpetkowski)
+* pacotole (Pacotole)
+* KenyaDonDraper
+* andrew-bro (Andrei Loskutov)
+* toivomattila (Toivo Mattila)
+* ZuluPro (Anthony Monthe)
+* kunal15595 (Kunal Khandelwal)
+* fatanugraha (Fata Nugraha)
+* aniav (Ania Warzecha)
+* ababic (Andy Babic)
+* BramManuel (Bram Janssen)
+* mofe (Moritz Federspiel)
+* kjpc-tech (Kyle)
+* Matthew Hegarty
+* jinmay (jinmyeong Cho)
+* DonQueso89 (Kees van Ekeren)
+* yazdanRa (Yazdan Ranjbar)
+* Gabriel Warkentin
+* striveforbest (Alex Zagoro)
+* josx (José Luis Di Biase)
+* Jan Rydzewski
+* rpsands (Ryan P. Sands)
+* 2ykwang (Youngkwang Yang)
+* KamilRizatdinov (Kamil Rizatdinov)
+* Mark Walker
+* shimakaze-git
+* frgmt
+* vanschelven (Klaas van Schelven)
+* HaPyTeX (Willem Van Onsem)
+* nikhaldi (Nik Haldimann)
+* TheRealVizard (Eduardo Leyva)
+* 1gni5 (Jules Ducange)
+* mpasternak (Michał Pasternak)
+* nikatlas (Nikos Atlas)
+* cocorocho (Erkan Çoban)
+* bdnettleton (Brian Nettleton)
+* Ptosiek (Antonin)
+* samupl (Jakub Szafrański)
+* smunoz-ml (Santiago Muñoz)
+* carlosal0ns0 (Carlos Alonso)
+* travenin (Lauri Virtanen)
+* christophehenry (Christophe Henry)
+* bgelov (Oleg Belov)
+* EricOuma (Eric Ouma)
+* ZibingZhang (Zibing Zhang)
+* Glay00 (Gleb Gorelov)
+* PrashansaChaudhary (Prashansa Chaudhary)
+* Vedang Barhate (bvedang)
+* RobTilton (Robert Tilton)
+* ulliholtgrave
+* mishka251 (Mikhail Belov)
+* jhthompson (Jeremy Thompson)
+* thisisumurzakov (Akbarbek Umurzakov)
+* roharvey (Rob Harvey)
+* RenDelaCruz (Ren de la Cruz)
+* 19greg96 (Gergely Karz)
+* AyushDharDubey
+* dahvo (David Mark Awad)
+* jurrian
+* merwok
+* rodolvbg (Rodolfo Becerra)
+* Andy Zickler
+* kuldeepkhatke (Kuldeep Khatke)
+* siddharth1012 (Siddharth Saraswat)
+* borisovodov (Boris Ovodov)
+* ghostishev (Yevhen Hostishchev)
+* Lokker29 (Bohdan Bilokon)

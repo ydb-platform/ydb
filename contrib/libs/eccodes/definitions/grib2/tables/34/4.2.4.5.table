@@ -1,0 +1,8 @@
+# Product discipline 4 - Space weather products, parameter category 5: waves
+0 0 Amplitude (dB)
+1 1 Phase (rad)
+2 2 Frequency (Hz)
+3 3 Wavelength (m)
+# 4-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,67 @@
+{% extends "admin/change_form.html" %}
+
+{% load i18n static admin_modify admin_urls %}
+
+{% block extrastyle %}
+	{{ adminform.media.css }}
+	{{ block.super }}
+{% endblock extrastyle %}
+
+{% block content %}
+	<form novalidate {% if has_file_field %}enctype="multipart/form-data" {% endif %}action="{{ form_url }}" method="post" id="{{ opts.model_name }}_form">{% csrf_token %}{% block form_top %}{% endblock %}
+		{% with adminform.form.fields_formset as formset %}
+			<div id="advanced_filters">
+				<h1>{% trans "Change advanced filter" %}:</h1>
+					{% csrf_token %}
+					{{ formset.management_form }}
+					<!-- Fieldsets -->
+					{% block field_sets %}
+						{% for fieldset in adminform %}
+							{% include "admin/includes/fieldset.html" %}
+						{% endfor %}
+					{% endblock %}
+					<br/>
+					<table id="{{ formset.prefix }}-group" data-rules-formset>
+						<thead>
+							<tr>
+								{% for field in formset.fields %}
+									<th style="color: black;">{{ field.label|capfirst }}</th>
+								{% endfor %}
+							</tr>
+						</thead>
+						<tbody>
+							{% for form in formset %}
+								<tr class="form-row {% cycle "row1" "row2" %} {% if forloop.last %}empty-form{% endif %}" id="{{ formset.prefix }}-{% if not forloop.last %}{{ forloop.counter0 }}{% else %}empty{% endif %}">
+									{% for field in form.visible_fields %}
+										<td{% if field.field.name %} class="field-{{ field.field.name }}"{% endif %}>
+											{{ field }}
+											{{ field.errors }}
+										</td>
+										{% endfor %}
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+					<br />
+
+				<!-- Submit-Row -->
+				{% block submit_buttons_bottom %}
+					{% submit_row %}
+					<input method="POST" name="_save_goto" type="submit" value="{% trans "Save & Filter Now!" %}">
+				{% endblock %}
+
+				<!-- JS for prepopulated fields -->
+				{% prepopulated_fields_js %}
+				{{ adminform.media.js }}
+
+				<script type="text/javascript" charset="utf-8">
+					// using django's original jquery, initial formset
+					var FORM_MODEL = '{% if adminform %}{{ adminform.form.instance.model }}{% endif %}';
+					var MODEL_LABEL = '{{ app_label }}.{{ opts.model_name }}';
+				</script>
+
+				{% include "admin/common_js_init.html" with formset=formset %}
+			</div>
+		{% endwith %}
+	</form>
+{% endblock content %}

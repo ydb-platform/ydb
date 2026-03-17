@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1;
+
+option java_package = "yandex.cloud.api.speechsense.v1";
+option java_outer_classname = "SearchProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1;speechsense";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+message Filter {
+  // metadata key (user.some_key / system.created_at / analysis.speechkit.duration)
+  string key = 1;
+
+  oneof filter {
+    // find talk matched by any text filters
+    AnyMatchFilter any_match = 2;
+
+    // find talks with value from int range
+    IntRangeFilter int_range = 3;
+
+    // find talks with value from double range
+    DoubleRangeFilter double_range = 4;
+
+    // find talks with value from date range
+    DateRangeFilter date_range = 5;
+
+    // find talks with value from duration range
+    DurationRangeFilter duration_range = 6;
+
+    // find talks with value equals boolean
+    BooleanFilter boolean_match = 9;
+  }
+
+  bool inverse = 7;
+
+  // channel number to apply filter for, starting with 0. applies to all channels if not specified
+  google.protobuf.Int64Value channel_number = 8;
+}
+
+message Query {
+  string text = 1;
+
+  // should or should NOT match
+  bool inverse = 2;
+
+  // id of channel to search ("1", "2", ..., any channel if not set)
+  google.protobuf.Int64Value channel_number = 3;
+}
+
+message AnyMatchFilter {
+  // values list to match with "OR" operator
+  repeated string values = 1;
+}
+
+// indicates whether to include range boundaries
+message BoundsInclusive {
+  // include from bound
+  bool from_inclusive = 1;
+  // include to bound
+  bool to_inclusive = 2;
+}
+
+message IntRangeFilter {
+  google.protobuf.Int64Value from_value = 1;
+  google.protobuf.Int64Value to_value = 2;
+  BoundsInclusive bounds_inclusive = 3;
+}
+
+message DoubleRangeFilter {
+  google.protobuf.DoubleValue from_value = 1;
+  google.protobuf.DoubleValue to_value = 2;
+  BoundsInclusive bounds_inclusive = 3;
+}
+
+message DateRangeFilter {
+  google.protobuf.Timestamp from_value = 1;
+  google.protobuf.Timestamp to_value = 2;
+  BoundsInclusive bounds_inclusive = 3;
+}
+
+message DurationRangeFilter {
+  google.protobuf.Duration from_value = 1;
+  google.protobuf.Duration to_value = 2;
+  BoundsInclusive bounds_inclusive = 3;
+}
+
+message BooleanFilter {
+  bool value = 1;
+}
+
+message SortData {
+  repeated SortField fields = 1;
+}
+
+message SortField {
+  // sorting key
+  string field = 1;
+
+  // sorting order by current `field`
+  SortOrder order = 2;
+
+  // number of field in comparing order (sort by key1 (position = 0), then key2 (position = 1), then key3...)
+  int64 position = 3;
+}
+
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  SORT_ORDER_ASC = 1;
+  SORT_ORDER_DESC = 2;
+}

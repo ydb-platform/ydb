@@ -1,0 +1,14 @@
+# Code table 4.238 - source, sink or chemical/physical process
+0 0   Reserved
+1 1   Aviation
+2 2   Lightning
+3 3   Biogenic sources
+4 4   Anthropogenic sources
+5 5   Wild fires
+6 6   Natural sources
+7 7   Volcanoes
+8 8   Bio-fuel
+9 9   Fossil-fuel
+10 10 Wetlands
+11 11 Oceans
+255 255 Missing

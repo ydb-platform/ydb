@@ -1,0 +1,2 @@
+[opentelemetry_instrumentor]
+openai = opentelemetry.instrumentation.openai:OpenAIInstrumentor

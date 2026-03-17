@@ -1,0 +1,6 @@
+# Code table 3.12 - HEALPix rhomboids or points ordering
+0 ring Ring ordering
+1 nested Nested ordering
+# 2-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

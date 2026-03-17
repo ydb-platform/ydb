@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.foundation_models.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/ai/foundation_models/v1/text_common.proto";
+import "yandex/cloud/ai/foundation_models/v1/batch_inference_task_status.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/foundation_models/v1/text_generation;foundation_models";
+option java_package = "yandex.cloud.api.ai.foundation_models.v1";
+
+
+// Request for the service to generate text completion.
+message CompletionRequest {
+  // The [ID of the model](/docs/foundation-models/concepts/yandexgpt/models) to be used for completion generation.
+  string model_uri = 1;
+
+  // Configuration options for completion generation.
+  CompletionOptions completion_options = 2;
+
+  // A list of messages representing the context for the completion model.
+  repeated Message messages = 3;
+
+  // List of tools that are available for the model to invoke during the completion generation.
+  // Note: This parameter is not yet supported and will be ignored if provided.
+  repeated Tool tools = 4;
+
+  // Specifies the format of the model's response.
+  oneof ResponseFormat {
+    // When set to true, the model will respond with a valid JSON object.
+    // Be sure to explicitly ask the model for JSON.
+    // Otherwise, it may generate excessive whitespace and run indefinitely until it reaches the token limit.
+    bool json_object = 5;
+    // Enforces a specific JSON structure for the model's response based on a provided schema.
+    JsonSchema json_schema = 6;
+  }
+
+  // Controls whether the model can generate multiple tool calls in a single response. Defaults to true.
+  google.protobuf.BoolValue parallel_tool_calls = 7;
+
+  // Specifies how the model should select which tool (or tools) to use when generating a response.
+  ToolChoice tool_choice = 8;
+}
+
+// Response containing generated text completions.
+message CompletionResponse {
+  // A list of generated completion alternatives.
+  repeated Alternative alternatives = 1;
+
+  // A set of statistics describing the number of content tokens used by the completion model.
+  ContentUsage usage = 2;
+
+  // The model version changes with each new releases.
+  string model_version = 3;
+}
+
+// Service for text generation.
+service TextGenerationService {
+  // A method for generating text completions in [synchronous mode](/docs/foundation-models/concepts/#working-mode).
+  rpc Completion (CompletionRequest) returns (stream CompletionResponse) {
+    option (google.api.http) = {post: "/foundationModels/v1/completion" body: "*"};
+  }
+}
+
+// Service for asynchronous text generation.
+service TextGenerationAsyncService {
+  // A method for generating text completions in [asynchronous mode](/docs/foundation-models/concepts/#working-mode).
+  rpc Completion (CompletionRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "CompletionResponse"
+    };
+    option (google.api.http) = {post: "/foundationModels/v1/completionAsync" body: "*"};
+  }
+}
+
+// Request for the service to generate batch text completion.
+message BatchCompletionRequest {
+  // The [ID of the model](/docs/foundation-models/concepts/yandexgpt/models) to be used for batch completion generation.
+  string model_uri = 1;
+
+  // Configuration options for completion generation.
+  CompletionOptions completion_options = 2;
+
+  // Specifies the format of the request.
+  oneof request_format {
+    // ID of the dataset containing the context for the completion model.
+    string source_dataset_id = 3;
+  }
+
+  // Specifies the format of the model's response.
+  oneof ResponseFormat {
+    // When set to true, the model will respond with a valid JSON object.
+    // Be sure to explicitly ask the model for JSON.
+    // Otherwise, it may generate excessive whitespace and run indefinitely until it reaches the token limit.
+    bool json_object = 4;
+    // Enforces a specific JSON structure for the model's response based on a provided schema.
+    JsonSchema json_schema = 5;
+  }
+}
+
+// Metadata of the batch completion operation.
+message BatchCompletionMetadata {
+  // The ID of the batch completion task.
+  string task_id = 1;
+  // The status of the batch completion task.
+  BatchInferenceTaskStatus task_status = 2;
+
+  // A number of currently completed batches of the completion task.
+  int64 completed_batches = 3;
+  // A number of total batches of the completion task.
+  int64 total_batches = 4;
+}
+
+// Response containing information about completion task.
+message BatchCompletionResponse {
+  // The ID of the batch completion task.
+  string task_id = 1;
+  // The status of the batch completion task.
+  BatchInferenceTaskStatus task_status = 2;
+  // The ID of the dataset containing completion results.
+  string result_dataset_id = 3;
+}
+
+// Service for text generation.
+service TextGenerationBatchService {
+  // A method for generating text completions in [synchronous mode](/docs/foundation-models/concepts/#working-mode).
+  // Note: Not implemented yet
+  rpc Completion (BatchCompletionRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "BatchCompletionMetadata"
+      response: "BatchCompletionResponse"
+    };
+    option (google.api.http) = {post: "/foundationModels/v1/completionBatch" body: "*"};
+  }
+}
+
+
+// Request for the service to tokenize input text.
+message TokenizeRequest {
+  // The identifier of the model to be used for tokenization.
+  string model_uri = 1;
+  
+  // Text to be tokenized.
+  string text = 2;
+}
+
+// Response containing tokenized content from request.
+message TokenizeResponse {
+  // A list of tokens obtained from tokenization.
+  repeated Token tokens = 1;
+
+  // Model version (changes with model releases).
+  string model_version = 2;
+}
+
+// Service for tokenizing input content.
+service TokenizerService {
+  // RPC method for tokenizing text.
+  rpc Tokenize (TokenizeRequest) returns (TokenizeResponse) {
+    option (google.api.http) = {post: "/foundationModels/v1/tokenize" body: "*"};
+  }
+
+  // RPC method for tokenizing content of CompletionRequest
+  rpc TokenizeCompletion (CompletionRequest) returns (TokenizeResponse) {
+    option (google.api.http) = {post: "/foundationModels/v1/tokenizeCompletion" body: "*"};
+  }
+}

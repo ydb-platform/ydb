@@ -1,0 +1,87 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  0de64830926d7b28059b0628b12a0676
+BELONGS ya.make
+    License text:
+        SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        dgif_lib.c [9:9]
+        egif_lib.c [9:9]
+        gif_err.c [5:5]
+        gif_font.c [5:5]
+        gif_hash.c [12:12]
+        gif_hash.h [5:5]
+        gif_lib.h [5:5]
+        gif_lib_private.h [5:5]
+        gifalloc.c [5:5]
+
+KEEP     MIT                  3158a75221c70090b7e127aa7c980dd8
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        openbsd-reallocarray.c [3:3]
+
+KEEP     MIT                  62574968655dfadc849b1ab4123aba22
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [3:19]
+
+KEEP     MIT                  d138b1208f1a9dd2ea4e7aeffe56c88c
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: README at line 17
+    # COPYING is identified as MIT license
+    License text:
+        The (permissive) open-source license is in the file COPYING.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        README [17:17]

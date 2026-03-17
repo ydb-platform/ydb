@@ -1,0 +1,19 @@
+# -*- text -*-
+#
+# Copyright (c) 2017      IBM Corporation.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI MCA hook-specific
+# error messages.
+#
+[hook:missing-required-component]
+Error: A request was made to exclude a hook component from consideration that
+is required to be included. This component (noted below) can -not- be excluded
+from consideration. The program will fail at this time.
+ 
+Framework: %s
+Component: %s

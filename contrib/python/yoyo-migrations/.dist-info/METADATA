@@ -1,0 +1,69 @@
+Metadata-Version: 2.1
+Name: yoyo-migrations
+Version: 9.0.0
+Summary: Database migrations with SQL
+Home-page: https://ollycope.com/software/yoyo/latest/
+Author: Oliver Cope
+Author-email: oliver@redgecko.org
+License: Apache
+Keywords: migrations migrate database alembic south
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Database
+Classifier: Topic :: Database :: Front-Ends
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Version Control
+Classifier: Programming Language :: Python :: 3
+License-File: LICENSE.txt
+Requires-Dist: sqlparse
+Requires-Dist: tabulate
+Requires-Dist: importlib-metadata >=3.6.0
+Provides-Extra: mysql
+Requires-Dist: PyMySQL ; extra == 'mysql'
+Provides-Extra: postgres
+Requires-Dist: psycopg2 ; extra == 'postgres'
+Provides-Extra: pyodbc
+Requires-Dist: pyodbc ; extra == 'pyodbc'
+
+Yoyo database migrations
+========================
+
+Yoyo-migrations is a database schema migration tool.
+Database migrations can be written as SQL files or Python scripts.
+
+What does yoyo-migrations do?
+-----------------------------
+
+As your database application evolves, changes to the database schema may be
+required. Yoyo lets you write migration scripts in raw SQL or Python containing
+SQL statements to migrate your database schema to a new version.
+
+A simple migration script looks like this:
+
+.. code::python
+
+    # file: migrations/0001.create-foo.py
+    from yoyo import step
+    step(
+        "CREATE TABLE foo (id INT, bar VARCHAR(20), PRIMARY KEY (id))",
+        "DROP TABLE foo",
+    )
+
+Yoyo manages these database migration scripts,
+gives you command line tools to apply and rollback migrations,
+and manages dependencies between migrations.
+
+Database support
+----------------
+
+PostgreSQL, MySQL and SQLite databases are supported.
+ODBC and Oracle database backends are available (but unsupported).
+
+Documentation and code
+----------------------
+
+`Yoyo migrations documentation <https://ollycope.com/software/yoyo/>`_
+\| `Repository and issue tracker <https://sr.ht/~olly/yoyo/>`_

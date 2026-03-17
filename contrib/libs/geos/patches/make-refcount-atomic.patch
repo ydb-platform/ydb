@@ -1,0 +1,20 @@
+--- a/include/geos/geom/GeometryFactory.h    (index)
++++ b/include/geos/geom/GeometryFactory.h    (working tree)
+@@ -29,7 +29,7 @@
+ #include <geos/export.h>
+ #include <geos/inline.h>
+ #include <geos/util.h>
+-
++#include <atomic>
+ #include <vector>
+ #include <memory>
+ #include <cassert>
+@@ -491,7 +491,7 @@ private:
+     int SRID;
+     const CoordinateSequenceFactory* coordinateListFactory;
+ 
+-    mutable int _refCount;
++    mutable std::atomic_int _refCount;
+     bool _autoDestroy;
+ 
+     friend class Geometry;

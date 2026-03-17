@@ -1,0 +1,69 @@
+<h1 id="setext">This is a sextext header</h1>
+<p class="myclass" id="par1">A paragraph with some text.
+Line two of the paragraph.</p>
+<h2 class="someclass" id="sextext2">This is another</h2>
+<p>Test some <em class="inline">inline</em> text.
+A <a class="linkkyclass" href="http://example.com" title="A title.">link</a>
+And a <strong class="nest">nested <a class="linky2" href="http://example.com" title="Some title">link</a></strong></p>
+<h3 id="hash">This is a hash Header</h3>
+<p bar="b az" baz="blah blah" foo="foo" title="I wasn't kidding!">And now some random attributes.</p>
+<h3 id="hash2">No closing hash header</h3>
+<p class="foo bar addme" id="overridden">Now test overrides</p>
+<pre><code># A code block which contains attr_list syntax
+# This should be ignored.
+{: #someid .someclass }
+</code></pre>
+<h3 id="hash3">No colon for compatibility with Headerid ext</h3>
+<p id="the_end">Also a codespan: <code class="foo">{: .someclass}</code>.</p>
+<h3 _:="{:" id="hash5">Bad Syntax</h3>
+<ul>
+<li class="item">Item1</li>
+<li class="item">Item2<ul>
+<li class="subitem">Item2-1</li>
+</ul>
+</li>
+<li class="item"><em class="emph">Item3</em><ul>
+<li class="subitem"><em class="emph">Item3-1</em></li>
+</ul>
+</li>
+<li>Item4<ul>
+<li>Item4-1</li>
+</ul>
+</li>
+<li>Item5</li>
+</ul>
+<h1>And ordered lists <em class="inline">too</em></h1>
+<ol>
+<li class="item">Item1</li>
+<li class="item">Item2<ol>
+<li class="subitem">Item2-1</li>
+</ol>
+</li>
+<li class="item"><em class="emph">Item3</em><ol>
+<li class="subitem"><em class="emph">Item3-1</em></li>
+</ol>
+</li>
+<li>Item4<ol>
+<li>Item4-1</li>
+</ol>
+</li>
+<li>Item5</li>
+</ol>
+<h1 class="block">Definition <em>lists</em></h1>
+<dl>
+<dt class="term">DT1</dt>
+<dt class="term">DT2</dt>
+<dd class="def">Some dd</dd>
+<dd><em class="inline">dd</em></dd>
+<dt><em class="inline">DT3</em></dt>
+<dd>Some dd</dd>
+</dl>
+<h1>Bad attributes</h1>
+<p>Key without <em foo="foo">value</em></p>
+<p>Value without <em>key</em></p>
+<p>No <em>key or value</em></p>
+<p><em>Weirdness</em></p>
+<p><em>More weirdness</em></p>
+<p>This should not cause a <em foo="a">crash</em></p>
+<p>Attr_lists do not contain <em>newlines</em>{ foo=bar
+key=value }</p>

@@ -1,0 +1,69 @@
+--- contrib/python/tld/tld/base.py	(index)
++++ contrib/python/tld/tld/base.py	(working tree)
+@@ -2,6 +2,7 @@ import logging
+ from codecs import open as codecs_open
+ from typing import Dict, ItemsView, Optional, Union
+ from urllib.request import urlopen
++from os.path import isabs
+
+ from .exceptions import TldImproperlyConfigured, TldIOError
+ from .helpers import project_dir
+@@ -94,13 +95,19 @@ class BaseTLDSourceParser(metaclass=Registry):
+         """
+         try:
+             remote_file = urlopen(cls.source_url)
+-            local_file_abs_path = project_dir(cls.local_path)
+-            local_file = codecs_open(local_file_abs_path, "wb", encoding="utf8")
++
++            if isabs(cls.local_path):
++                local_path = cls.local_path
++                local_file = codecs_open(local_path, "r", encoding="utf8")
++            else:
++                local_path = project_dir(cls.local_path)
++                local_file = local_path.open("r", encoding="utf8")
++
+             local_file.write(remote_file.read().decode("utf8"))
+             local_file.close()
+             remote_file.close()
+             LOGGER.info(
+-                f"Fetched '{cls.source_url}' as '{local_file_abs_path}'"
++                f"Fetched '{cls.source_url}' as '{local_path}'"
+             )
+         except Exception as err:
+             LOGGER.error(
+--- contrib/python/tld/tld/helpers.py	(index)
++++ contrib/python/tld/tld/helpers.py	(working tree)
+@@ -2,6 +2,8 @@ from os.path import abspath, join
+
+ from .conf import get_setting
+
++import importlib.resources
++
+ __author__ = "Artur Barseghyan"
+ __copyright__ = "2013-2025 Artur Barseghyan"
+ __license__ = "MPL-1.1 OR GPL-2.0-only OR LGPL-2.1-or-later"
+@@ -13,8 +15,7 @@ __all__ = (
+
+ def project_dir(base: str) -> str:
+     """Project dir."""
+-    tld_names_local_path_parent = get_setting("NAMES_LOCAL_PATH_PARENT")
+-    return abspath(join(tld_names_local_path_parent, base).replace("\\", "/"))
++    return importlib.resources.files(__package__) / base
+
+
+ PROJECT_DIR = project_dir
+--- contrib/python/tld/tld/utils.py	(index)
++++ contrib/python/tld/tld/utils.py	(working tree)
+@@ -201,9 +202,11 @@ class BaseMozillaTLDSourceParser(BaseTLDSourceParser):
+             # Load the TLD names file
+             if isabs(cls.local_path):
+                 local_path = cls.local_path
++                local_file = codecs_open(local_path, "r", encoding="utf8")
+             else:
+                 local_path = project_dir(cls.local_path)
+-            local_file = codecs_open(local_path, "r", encoding="utf8")
++                local_file = local_path.open("r", encoding="utf8")
++
+             trie = Trie()
+             trie_add = trie.add  # Performance opt
+             # Make a list of it all, strip all garbage

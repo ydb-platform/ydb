@@ -1,0 +1,28 @@
+Metadata-Version: 2.1
+Name: urlpy
+Version: 0.5
+Summary: Simple URL parsing, canonicalization and equivalence.
+Home-page: http://github.com/nexB/urlpy
+Author: nexB Inc (based on code from Dan Lecocq)
+Author-email: UNKNOWN
+License: MIT
+Platform: UNKNOWN
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Development Status :: 3 - Alpha
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Internet :: WWW/HTTP
+Requires-Dist: publicsuffix2 (>=2.20191221)
+
+
+
+A library with helper functions to parse URLs, and sanitize and normalize them
+in pure python.
+
+This includes support for escaping, unescaping, cleaning and sorting parameters
+and query strings, and a little more sanitization.
+
+This version is a friendly fork of the upstream url.py from Moz to keep a pure
+Python version around to run on Python 2 and 3 and all OSes.
+
+

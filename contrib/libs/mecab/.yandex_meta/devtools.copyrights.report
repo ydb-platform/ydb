@@ -1,0 +1,105 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d5f379020e7b5a78a7898c54f993d87
+BELONGS ya.make
+    License text:
+        Copyright (c) 2001-2008, Taku Kudo
+        Copyright (c) 2004-2008, Nippon Telegraph and Telephone Corporation
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        BSD [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8cf91579d8cb4087b6bd775cd2b2bbed
+BELONGS ya.make
+    License text:
+         Copyright (C) 1989, 1991 Free Software Foundation, Inc.
+                               59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        GPL [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 94c60bb19c6591efa5676fe32f80fded
+BELONGS ya.make
+    License text:
+        Copyright (C) 1994, 1995, 1996, 1999, 2000, 2001, 2002, 2004, 2005,
+        2006, 2007, 2008 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        INSTALL [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        GPL [251:256]
+        LGPL [428:433]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
+BELONGS ya.make
+    License text:
+         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+             59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LGPL [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL edabc4ecb3628f9589555c3c3b61df60
+BELONGS ya.make
+    License text:
+        Copyright (c) 2001-2008, Taku Kudo
+        Copyright (c) 2004-2008, Nippon Telegraph and Telephone Corporation
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        BSD [1:3]

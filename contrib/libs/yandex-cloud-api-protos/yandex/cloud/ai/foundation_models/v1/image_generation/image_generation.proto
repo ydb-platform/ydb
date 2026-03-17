@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.foundation_models.v1.image_generation;
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/foundation_models/v1/image_generation;image_generation";
+option java_package = "yandex.cloud.api.ai.foundation_models.v1.image_generation";
+
+
+// The text descriptions and weights that the model uses to generate an image.
+message Message {
+  // Text describing the image.
+  string text = 1;
+  // Message weight. Negative values indicate negative messages. Note: Currently not supported.
+  double weight = 2;
+}
+
+message AspectRatio {
+  // Weight of width in image.
+  int64 width_ratio = 1;
+  // Weight of height in image.
+  int64 height_ratio = 2;
+}
+
+message ImageGenerationOptions {
+  
+  // The [MIME type](https://en.wikipedia.org/wiki/Media_type) of generated image format.
+  // For possible specifications, see [documentation](/docs/foundation-models/concepts).
+  string mime_type = 1;
+  // Seed for image generation. It serves as a starting point for image generation from noise. If set to 0 or not provided, a randomly generated value will be used.
+  int64 seed = 2;
+  // Aspect ratio of generated image.
+  AspectRatio aspect_ratio = 3;
+}

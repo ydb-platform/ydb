@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+{% block header %}
+    <div class="d-flex justify-content-between align-items-center">
+        <h1>{{ model.label }}</h1>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a href="{{ url_for(__name__ ~ ':index') }}">{{ _("Admin") }}</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for(__name__ ~ ':list', identity=model.identity) }}">{{ model.label }}</a>
+            </li>
+            <li class="breadcrumb-item active">{{ _("Create") }}</li>
+        </ol>
+    </div>
+{% endblock %}
+{% block content %}
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <form action="{{ request.url | safe }}" method="POST" enctype="multipart/form-data">
+                        <div class="card-header">
+                            <div class="container-fluid">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h3 class="card-title">{{ _("New %(name)s", name=model.name ) }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body border-bottom py-3">
+                            {% block create_form %}
+                                {% for field in model.get_fields_list(request, 'CREATE' | ra) %}
+                                    <div class="mb-3">
+                                        {% with action=('CREATE'| ra), data=(None if not obj else obj[field.name]), error=errors.get(field.name, None) if errors else None %}
+                                            {% include field.label_template %}
+                                            {% include field.form_template %}
+                                        {% endwith %}
+                                    </div>
+                                {% endfor %}
+                            {% endblock %}
+                        </div>
+                        <div class="card-footer text-black">
+                            <div class="btn-list ms-auto justify-content-end">
+                                <a href="{{ url_for(__name__ ~ ':list', identity=model.identity) }}"
+                                   class="btn btn-danger">{{ _("Cancel") }}</a>
+                                <button type="submit" name="_add_another"
+                                        class="btn">{{ _("Save and add another") }}</button>
+                                <button type="submit" name="_continue_editing"
+                                        class="btn">{{ _("Save and continue editing") }}</button>
+                                <button type="submit" class="btn btn-success">{{ _("Save") }}</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block head_css %}
+    {{ super() }}
+    {% for link in model._additional_css_links(request, "CREATE" | ra) %}
+        <link rel="stylesheet" href="{{ link }}">
+    {% endfor %}
+    <style>
+        .is-invalid .select2-selection {
+            border-color: #d63939 !important;
+        }
+    </style>
+{% endblock %}
+{% block script %}
+    {{ super() }}
+    <script type="text/javascript" src="{{ url_for(__name__ ~ ':statics', path='js/form.js').include_query_params(v=1) }}"></script>
+    {% for link in model._additional_js_links(request, "CREATE" | ra) %}
+        <script type="text/javascript" src="{{ link }}"></script>
+    {% endfor %}
+{% endblock %}

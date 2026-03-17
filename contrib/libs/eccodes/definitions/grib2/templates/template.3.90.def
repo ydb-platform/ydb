@@ -1,0 +1,94 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.90, Space view perspective or orthographic
+include "grib2/templates/template.3.shape_of_the_earth.def"
+
+constant isGridded = true;
+
+unsigned[4] Nx : dump;
+alias Ni = Nx;
+alias numberOfPointsAlongXAxis = Nx;
+alias geography.Nx=Nx;
+
+unsigned[4] Ny : dump;
+alias Nj = Ny;
+alias numberOfPointsAlongYAxis  = Nj;
+alias numberOfPointsAlongAMeridian = Nj;
+alias geography.Ny=Ny;
+
+# Lap - latitude of sub-satellite point
+signed[4] latitudeOfSubSatellitePoint;
+
+# Lop - longitude of sub-satellite point
+signed[4] longitudeOfSubSatellitePoint;
+
+meta geography.latitudeOfSubSatellitePointInDegrees   scale(latitudeOfSubSatellitePoint,one,grib2divider,truncateDegrees) : dump;
+meta geography.longitudeOfSubSatellitePointInDegrees   scale(longitudeOfSubSatellitePoint,one,grib2divider,truncateDegrees) : dump;
+
+include "grib2/templates/template.3.resolution_flags.def"
+
+# dx - apparent diameter of Earth in grid lengths, in X-direction
+unsigned[4] dx : dump;
+alias geography.dx=dx;
+
+# dy - apparent diameter of Earth in grid lengths, in Y-direction
+unsigned[4] dy : dump;
+alias geography.dy=dy;
+
+# Xp - X-coordinate of sub-satellite point
+# (in units of 10^-3 grid length expressed as an integer)
+unsigned[4] Xp : no_copy;
+meta geography.XpInGridLengths scale(Xp,one,thousand) : dump;
+alias xCoordinateOfSubSatellitePoint=XpInGridLengths;
+
+# Yp - Y-coordinate of sub-satellite point
+# (in units of 10^-3 grid length expressed as an integer)
+unsigned[4] Yp : no_copy;
+meta geography.YpInGridLengths scale(Yp,one,thousand) : dump;
+alias yCoordinateOfSubSatellitePoint=YpInGridLengths;
+
+include "grib2/templates/template.3.scanning_mode.def"
+
+# Orientation of the grid; i.e. the angle between the increasing Y-axis and the meridian
+# of the sub-satellite point in the direction of increasing latitude
+signed[4] orientationOfTheGrid : edition_specific;
+meta geography.orientationOfTheGridInDegrees
+    scale(orientationOfTheGrid,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# Nr - altitude of the camera from the Earth's centre, measured in units of the Earth's
+# (equatorial) radius multiplied by a scale factor of 10^6
+unsigned[4] Nr : edition_specific,can_be_missing,no_copy;
+alias altitudeOfTheCameraFromTheEarthsCentreMeasuredInUnitsOfTheEarthsRadius = Nr;
+meta geography.NrInRadiusOfEarth scale(Nr,oneConstant,oneMillionConstant,truncateDegrees) : dump;
+alias NrInRadiusOfEarthScaled=NrInRadiusOfEarth;
+
+# Xo - X-coordinate of origin of sector image
+unsigned[4] Xo  : dump;
+alias xCoordinateOfOriginOfSectorImage=Xo;
+alias geography.Xo=Xo;
+
+# Yo - Y-coordinate of origin of sector image
+unsigned[4] Yo  : dump;
+alias yCoordinateOfOriginOfSectorImage=Yo;
+alias geography.Yo=Yo;
+
+iterator space_view(numberOfPoints, missingValue, values, radius,
+          earthIsOblate,
+          earthMajorAxis, earthMinorAxis,
+          Nx, Ny,
+          latitudeOfSubSatellitePointInDegrees,
+          longitudeOfSubSatellitePointInDegrees,
+          dx, dy, XpInGridLengths, YpInGridLengths,
+          orientationOfTheGridInDegrees,
+          NrInRadiusOfEarthScaled, Xo, Yo,
+          iScansNegatively, jScansPositively,
+          jPointsAreConsecutive, alternativeRowScanning);
+
+nearest space_view(values,radius,Nx,Ny);
+
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);

@@ -1,0 +1,3 @@
+mark_as_py3_sources:
+  - rx/core/py3/*.py
+  - rx/concurrency/threadpoolscheduler.py

@@ -1,0 +1,9 @@
+Aleksey Sanin  <aleksey@aleksey.com>
+
+Windows port:     Igor Zlatkovic <igor@stud.fh-frankfurt.de>
+Debian port:      John Belmonte  <jvb@prairienet.org> 
+xmlsec-nss:       Tej Arora <tej@netscape.com>, AOL Inc.
+xmlsec-mscrypto:  Wouter Ketting <wsh@xs4all.nl>, Cordys R&D BV
+xmlsec-mscng:     Miklos Vajna <vmiklos@vmiklos.hu>
+GOST support:     Dmitry Belyavsky <beldmit@cryptocom.ru>, Cryptocom LTD (http://www.cryptocom.ru)
+

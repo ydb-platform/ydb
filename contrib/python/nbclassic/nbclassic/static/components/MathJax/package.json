@@ -1,0 +1,49 @@
+{
+  "name": "mathjax",
+  "version": "2.7.9",
+  "description": "Beautiful and accessible math in all browsers. MathJax is an open-source JavaScript display engine for LaTeX, MathML, and AsciiMath notation that works in all browsers.",
+  "main": "./unpacked/MathJax.js",
+  "keywords": [
+    "math",
+    "svg",
+    "mathml",
+    "tex",
+    "latex",
+    "asciimath",
+    "browser",
+    "browser-only"
+  ],
+  "maintainers": [
+    "MathJax Consortium <info@mathjax.org> (http://www.mathjax.org)"
+  ],
+  "bugs": {
+    "url": "http://github.com/mathjax/MathJax/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mathjax/MathJax.git"
+  },
+  "files": [
+    "MathJax.js",
+    "/config",
+    "/extensions",
+    "/fonts/HTML-CSS/*-*",
+    "/fonts/HTML-CSS/TeX/eot",
+    "/fonts/HTML-CSS/TeX/otf",
+    "/fonts/HTML-CSS/TeX/svg",
+    "/fonts/HTML-CSS/TeX/woff",
+    "/jax",
+    "/latest.js",
+    "/localization",
+    "/package.json",
+    "/test",
+    "/unpacked",
+    "/LICENSE",
+    "/README.md",
+    "/CONTRIBUTING.md"
+  ],
+  "scripts": {
+    "test": "echo 'No tests here!'"
+  }
+}

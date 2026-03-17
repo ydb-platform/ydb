@@ -1,0 +1,71 @@
+Metadata-Version: 2.4
+Name: django-treebeard
+Version: 5.0.5
+Summary: Efficient tree implementations for Django
+Author-email: Gustavo Picon <tabo@tabo.pe>
+License-Expression: Apache-2.0
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 5.2
+Classifier: Framework :: Django :: 6.0
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Utilities
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: AUTHORS
+Requires-Dist: django>=5.2
+Provides-Extra: test
+Requires-Dist: pytest-django<5.0,>=4.0; extra == "test"
+Requires-Dist: pytest-pythonpath<1.0,>=0.7; extra == "test"
+Dynamic: license-file
+
+# django-treebeard
+
+**django-treebeard** is a library that implements efficient tree implementations for the Django Web Framework.
+
+It was written by Gustavo Picón and licensed under the Apache License 2.0.
+
+## Status
+
+[![Documentation Status](https://readthedocs.org/projects/django-treebeard/badge/?version=latest)](https://django-treebeard.readthedocs.io/en/latest/?badge=latest)
+[![Tests](https://github.com/django-treebeard/django-treebeard/actions/workflows/test.yml/badge.svg)]()
+[![PyPI](https://img.shields.io/pypi/pyversions/django-treebeard.svg)]()
+![PyPI - Django Version](https://img.shields.io/pypi/frameworkversions/django/django-treebeard.svg)
+[![PyPI version](https://img.shields.io/pypi/v/django-treebeard.svg)](https://pypi.org/project/django-treebeard/)
+
+
+## Features
+
+django-treebeard is:
+
+-   **Flexible**: Includes 3 different tree implementations with the
+    same API:
+    1.  Adjacency List
+    2.  Materialized Path
+    3.  Nested Sets
+    4.  PostgreSQL ltree (experimental)
+-   **Fast**: Optimized non-naive tree operations
+-   **Easy**: Uses Django Model Inheritance with abstract classes to
+    define your own models.
+-   **Clean**: Testable and well tested code base. Code/branch test
+    coverage is above 96%.
+
+You can find the documentation at <https://django-treebeard.readthedocs.io/en/latest/>
+
+### Supported versions
+
+**django-treebeard** officially supports
+
+-   Django 5.2 and higher
+-   Python 3.10 and higher
+-   PostgreSQL, MySQL, MSSQL, SQLite database back-ends.

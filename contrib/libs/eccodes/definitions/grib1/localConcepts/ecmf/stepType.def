@@ -1,0 +1,35 @@
+# Concept stepType for ECMWF
+# In case of a repeated entry:
+#  set uses the FIRST one
+#  get returns the LAST match
+
+"instant" = {timeRangeIndicator=0;}
+"instant" = {timeRangeIndicator=10;}
+"instant" = {timeRangeIndicator=1;}
+"instant" = {timeRangeIndicator=14;} # Fields from DWD in MARS
+
+"avg"     = {timeRangeIndicator=3;}
+
+"avgd"    = {timeRangeIndicator=113;}
+"avgfc"   = {timeRangeIndicator=113;}
+
+"accum"   = {timeRangeIndicator=4;}
+"accum"   = {timeRangeIndicator=2;}
+
+# Since grib1 has not min/max, we had to use our own convention
+# therefore we set the centre to ECMWF (98)
+"min"     = {timeRangeIndicator=2;centre=98;}
+"min"     = {timeRangeIndicator=119;}
+"max"     = {timeRangeIndicator=2;centre=98;}
+"max"     = {timeRangeIndicator=118;}
+
+"diff"    = {timeRangeIndicator=5;}
+"rms"     = {timeRangeIndicator=120;}
+"sd"      = {timeRangeIndicator=121;}
+"cov"     = {timeRangeIndicator=122;}
+"avgua"   = {timeRangeIndicator=123;}
+"avgia"   = {timeRangeIndicator=124;}
+
+"avgas"   = {timeRangeIndicator=128;}
+"avgad"   = {timeRangeIndicator=130;}
+"avgid"   = {timeRangeIndicator=133;}

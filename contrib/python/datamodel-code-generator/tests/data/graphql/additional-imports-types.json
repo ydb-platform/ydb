@@ -1,0 +1,11 @@
+{
+  "Date": {
+    "py_type": "date"
+  },
+  "DateTime": {
+    "py_type": "datetime"
+  },
+  "MyCustomClass": {
+    "py_type": "MyCustomPythonClass"
+  }
+}

@@ -1,0 +1,946 @@
+[
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BCEELULL",
+    "bank_code": "001",
+    "name": "Banque et Caisse d'\u00c9pargne de l'\u00c9tat, Luxembourg",
+    "short_name": "SPUERKEESS"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BILLLULL",
+    "bank_code": "002",
+    "name": "Banque Internationale \u00e0 Luxembourg S.A.",
+    "short_name": "BILL"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BGLLLULL",
+    "bank_code": "003",
+    "name": "BGL BNP Paribas S.A.",
+    "short_name": "BGL BNP Paribas"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BSUILULL",
+    "bank_code": "007",
+    "name": "CACEIS Bank Luxembourg Branch",
+    "short_name": "CACEIS"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BLUXLULL",
+    "bank_code": "008",
+    "name": "Banque de Luxembourg S.A.",
+    "short_name": "Banque de Luxembourg"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CCRALULL",
+    "bank_code": "009",
+    "name": "Banque Raiffeisen S.C.",
+    "short_name": "Raiffeisen"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CELLLULL",
+    "bank_code": "014",
+    "name": "ING Luxembourg S.A.",
+    "short_name": "ING"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BMECLULL",
+    "bank_code": "025",
+    "name": "Banque BCP S.A.",
+    "short_name": "BCP"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BAERLULU",
+    "bank_code": "032",
+    "name": "Bank Julius Baer Europe S.A.",
+    "short_name": "BAER"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BSCHLULL",
+    "bank_code": "033",
+    "name": "Banco Santander S.A.",
+    "short_name": "Santander"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CITILULX",
+    "bank_code": "034",
+    "name": "Citibank Europe plc Luxembourg Branch",
+    "short_name": "CITI"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "DEUTLULL",
+    "bank_code": "036",
+    "name": "Deutsche Bank Luxembourg S.A.",
+    "short_name": "Deutsche Bank"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "DBSALULL",
+    "bank_code": "038",
+    "name": "Union Bancaire Priv\u00e9e S.A.",
+    "short_name": "UBP"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "WBWCLULL",
+    "bank_code": "058",
+    "name": "European Depositary Bank S.A.",
+    "short_name": "EUD"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SGABLU2S",
+    "bank_code": "060",
+    "name": "Soci\u00e9t\u00e9 G\u00e9n\u00e9rale Luxembourg S.A.",
+    "short_name": "SG"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SGABLULL",
+    "bank_code": "061",
+    "name": "Soci\u00e9t\u00e9 G\u00e9n\u00e9rale Luxembourg S.A.",
+    "short_name": "SG"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "HAUKLULL",
+    "bank_code": "062",
+    "name": "Hauck & Aufh\u00e4user Privatbank AG",
+    "short_name": "HAUCK"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "ESSELULL",
+    "bank_code": "064",
+    "name": "Skandinaviska Enskilda Banken AB S.A.",
+    "short_name": "SEB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CHASLULX",
+    "bank_code": "067",
+    "name": "J.P. Morgan SE - Luxembourg Branch",
+    "short_name": "J.P. Morgan"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "UBSWLULL",
+    "bank_code": "070",
+    "name": "UBS EUROPE SE",
+    "short_name": "UBS"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "MUGCLULL",
+    "bank_code": "077",
+    "name": "Mitsubishi UFJ Investor Services S.A.",
+    "short_name": "MUG"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CRESLULL",
+    "bank_code": "078",
+    "name": "Credit Suisse S.A.",
+    "short_name": "CS"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "MUGCLULLBAS",
+    "bank_code": "079",
+    "name": "Mitsubishi UFJ Investor Services S.A.",
+    "short_name": "MUG"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "EWUBLULL",
+    "bank_code": "082",
+    "name": "East",
+    "short_name": "EAST"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "DEGRLULL",
+    "bank_code": "083",
+    "name": "Banque Degroof Petercam Luxembourg S.A.",
+    "short_name": "DEGROOF"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SEBKLULL",
+    "bank_code": "087",
+    "name": "Intesa Sanpaolo Bank Luxembourg S.A.",
+    "short_name": "ISPL"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "DABALULL",
+    "bank_code": "093",
+    "name": "Danske Bank International S.A.",
+    "short_name": "DAB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "HSHNLULL",
+    "bank_code": "097",
+    "name": "HCOB Securities S.A.",
+    "short_name": "HSH"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SNCILUL1",
+    "bank_code": "104",
+    "name": "Soci\u00e9t\u00e9 Nationale de Cr\u00e9dit et d\u00e9pargne S.A.",
+    "short_name": "SNCE"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CCPLLULL",
+    "bank_code": "111",
+    "name": "POST Group S.A.",
+    "short_name": "POST"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BKCHLULL",
+    "bank_code": "116",
+    "name": "Bank of China Limited Luxembourg Branch",
+    "short_name": "BOC"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "AGRILULA",
+    "bank_code": "123",
+    "name": "CA Indosuez Wealth S.A.",
+    "short_name": "CAI"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SPLBLUL1",
+    "bank_code": "131",
+    "name": "State Street Bank Luxembourg S.A.",
+    "short_name": "SSB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BBDELULL",
+    "bank_code": "133",
+    "name": "Banco Bradesco Europa S.A.",
+    "short_name": "BBDE"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BPCPLULL",
+    "bank_code": "134",
+    "name": "Banque de Commerce et de Placements S.A.",
+    "short_name": "BCP"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "DGZFLULI",
+    "bank_code": "135",
+    "name": "DekaBank Deutsche Girozentrale",
+    "short_name": "DEKA"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "UBNLLULL",
+    "bank_code": "143",
+    "name": "DNB Luxembourg S.A.",
+    "short_name": "DNB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "IKBDLUL1",
+    "bank_code": "144",
+    "name": "IKB Deutsche Industriebank AG",
+    "short_name": "IKB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "STBCLULL",
+    "bank_code": "146",
+    "name": "Sumitomo Mitsui Trust Bank S.A.",
+    "short_name": "STB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BLICLULX",
+    "bank_code": "147",
+    "name": "HSBC Private Bank S.A.",
+    "short_name": "HSBC"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BSAFLULL",
+    "bank_code": "148",
+    "name": "Banque J.S.A.",
+    "short_name": "BJ"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BNPALULS",
+    "bank_code": "149",
+    "name": "BNP Paribas S.A.",
+    "short_name": "BNP"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "ERBKLULL",
+    "bank_code": "151",
+    "name": "Eurobank Private Bank Luxembourg S.A.",
+    "short_name": "EB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "UNCRLULL",
+    "bank_code": "158",
+    "name": "UniCredit International Bank S.A.",
+    "short_name": "UCI"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "HSHNLULB",
+    "bank_code": "164",
+    "name": "Hamburg Commercial Bank AG Luxembourg Branch",
+    "short_name": "HSHN"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BBDALULX",
+    "bank_code": "167",
+    "name": "HSBC Continental Europe S.A.",
+    "short_name": "HSBC"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "PRIBLULL",
+    "bank_code": "172",
+    "name": "Edmond de Rothschild S.A.",
+    "short_name": "EDR"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BKBKLULL",
+    "bank_code": "177",
+    "name": "Bankinter Luxembourg S.A.",
+    "short_name": "BKIN"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BBHCLULL",
+    "bank_code": "178",
+    "name": "Brown Brothers Harriman S.A.",
+    "short_name": "BBH"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "MHTBLULL",
+    "bank_code": "181",
+    "name": "Mizuho Trust S.A.",
+    "short_name": "MHTB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "VPBVLULL",
+    "bank_code": "183",
+    "name": "VP Bank S.A.",
+    "short_name": "VPB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CMCILUL1",
+    "bank_code": "193",
+    "name": "Banque Transatlantique Luxembourg S.A.",
+    "short_name": "BTL"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "NATXLULL",
+    "bank_code": "197",
+    "name": "Natixis Wealth Management Luxembourg S.A.",
+    "short_name": "NATIXIS"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "PICTLULX",
+    "bank_code": "198",
+    "name": "Pictet S.A.",
+    "short_name": "Pictet"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "NBLXLULL",
+    "bank_code": "204",
+    "name": "Nomura Bank S.A.",
+    "short_name": "Nomura"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BKCHLULA",
+    "bank_code": "222",
+    "name": "Bank of China S.A.",
+    "short_name": "BOC"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "HANDLULB",
+    "bank_code": "229",
+    "name": "Svenska Handelsbanken AB S.A.",
+    "short_name": "SHB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CHASLULW",
+    "bank_code": "250",
+    "name": "J.P. Morgan Bank Luxembourg S.A.",
+    "short_name": "JPM"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "DEUTLULB",
+    "bank_code": "259",
+    "name": "Deutsche Bank AG S.A.",
+    "short_name": "DBAG"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "PBNKLULL",
+    "bank_code": "265",
+    "name": "Deutsche Bank AG S.A.",
+    "short_name": "DBAG"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "FISPLU22",
+    "bank_code": "281",
+    "name": "FIS Privatbank S.A.",
+    "short_name": "FIS"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "HAVLLULL",
+    "bank_code": "284",
+    "name": "Banque Havilland S.A.",
+    "short_name": "HAVILLAND"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CEDELULL",
+    "bank_code": "289",
+    "name": "Clearstream Banking S.A.",
+    "short_name": "CLEARSTREAM"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "EFGBLULX",
+    "bank_code": "301",
+    "name": "EFG Bank S.A.",
+    "short_name": "EFG"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "DELELULL",
+    "bank_code": "305",
+    "name": "Delen Private Bank Luxembourg S.A.",
+    "short_name": "DELEN"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "FIBKLULL",
+    "bank_code": "308",
+    "name": "Fideuram Bank S.A.",
+    "short_name": "FIDEURAM"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "FIBKLULLFPB",
+    "bank_code": "309",
+    "name": "Fideuram Bank S.A.",
+    "short_name": "FIDEURAM"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "ICBKLULL",
+    "bank_code": "316",
+    "name": "Industrial and Commercial Bank of China Ltd S.A.",
+    "short_name": "ICBC"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "HAVLLULL",
+    "bank_code": "318",
+    "name": "Banque Havilland S.A.",
+    "short_name": "HAVILLAND"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SWQBLULL",
+    "bank_code": "324",
+    "name": "Swissquote Bank Europe S.A.",
+    "short_name": "SQS"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "PARBLULL",
+    "bank_code": "328",
+    "name": "BNP Paribas Securities Services S.A.",
+    "short_name": "BNP"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CRESLULX",
+    "bank_code": "338",
+    "name": "Credit Suisse AG S.A.",
+    "short_name": "CS"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "IRVTLULX",
+    "bank_code": "340",
+    "name": "The Bank of New York Mellon S.A.",
+    "short_name": "BNYM"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "FETALULL",
+    "bank_code": "341",
+    "name": "RBC Investor Services Bank S.A.",
+    "short_name": "RBC"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "EFGBLULX",
+    "bank_code": "343",
+    "name": "EFG Bank S.A.",
+    "short_name": "EFG"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "ADVZLULL",
+    "bank_code": "344",
+    "name": "Advanzia Bank S.A.",
+    "short_name": "ADV"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "ICBKLULU",
+    "bank_code": "348",
+    "name": "Industrial and Commercial Bank of China S.A.",
+    "short_name": "ICBC"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CITCLULL",
+    "bank_code": "349",
+    "name": "Citco Bank Nederland N.V.",
+    "short_name": "CITCO"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CBPXLULL",
+    "bank_code": "350",
+    "name": "Compagnie de Banque Priv\u00e9e Quilvest S.A.",
+    "short_name": "CBPQ"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "PPLXLULL",
+    "bank_code": "351",
+    "name": "PayPal S.A.",
+    "short_name": "PAYPAL"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "KEYTLULL",
+    "bank_code": "359",
+    "name": "Keytrade Bank Luxembourg S.A.",
+    "short_name": "KEYTRADE"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BACALULL",
+    "bank_code": "360",
+    "name": "Andbank Luxembourg S.A.",
+    "short_name": "ANDBANK"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BBPPLULL",
+    "bank_code": "361",
+    "name": "Banque de Patrimoines Priv\u00e9s S.A.",
+    "short_name": "Banque de Patrimoines Priv\u00e9s"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BESCLULL",
+    "bank_code": "365",
+    "name": "Novo Banco S.A.",
+    "short_name": "Novo Banco"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BMARLU2M",
+    "bank_code": "368",
+    "name": "Banca March S.A.",
+    "short_name": "Banca March"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SAFRLULLCCY",
+    "bank_code": "371",
+    "name": "Banco Safra S.A.",
+    "short_name": "Safra"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "HSBCLULL",
+    "bank_code": "374",
+    "name": "HSBC Continental Europe S.A.",
+    "short_name": "HSBC"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "PCBCLULL",
+    "bank_code": "375",
+    "name": "China Construction Bank S.A.",
+    "short_name": "CCB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "PCBCLULX",
+    "bank_code": "377",
+    "name": "China Construction Bank Corporation S.A.",
+    "short_name": "CCBC"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "GAZPLULL",
+    "bank_code": "379",
+    "name": "Bank GPB International S.A.",
+    "short_name": "GPB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "MIRALULL",
+    "bank_code": "381",
+    "name": "Mirabaud S.A.",
+    "short_name": "MIRABAUD"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "ALLFLULL",
+    "bank_code": "386",
+    "name": "Allfunds Bank International S.A.",
+    "short_name": "AFB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CMBCLULL",
+    "bank_code": "391",
+    "name": "China Merchants Bank Co S.A.",
+    "short_name": "CMB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "RRBALULL",
+    "bank_code": "400",
+    "name": "RiverBank S.A.",
+    "short_name": "RIVER"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "HYVELULL",
+    "bank_code": "404",
+    "name": "UniCredit Bank AG Luxembourg Branch",
+    "short_name": "UCB"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BCIRLULL",
+    "bank_code": "408",
+    "name": "Banking Circle S.A.",
+    "short_name": "BC"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BARCLULL",
+    "bank_code": "409",
+    "name": "Barclays Bank Ireland plc",
+    "short_name": "BARCLAYS"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CAIXLULL",
+    "bank_code": "411",
+    "name": "CaixaBank Wealth Management Luxembourg S.A.",
+    "short_name": "CAIXA"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "CRBALULL",
+    "bank_code": "413",
+    "name": "Alpha Bank S.A.",
+    "short_name": "ALPHA"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "USBKLU2L",
+    "bank_code": "414",
+    "name": "Elavon Financial Services DAC S.A.",
+    "short_name": "ELAVON"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "PANXLUL2",
+    "bank_code": "625",
+    "name": "UnifiedPost Payments S.A.",
+    "short_name": "UP"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "EWUBLUL2",
+    "bank_code": "700",
+    "name": "East",
+    "short_name": "EAST"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "RAPSLUL1",
+    "bank_code": "701",
+    "name": "Rakuten Europe Bank S.A.",
+    "short_name": "RAKUTEN"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "KBLXLULL",
+    "bank_code": "705",
+    "name": "Quintet Private Bank S.A.",
+    "short_name": "QUINTET"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "IBNXLULM",
+    "bank_code": "713",
+    "name": "iBAN",
+    "short_name": "IBAN"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "MUGCLULX",
+    "bank_code": "777",
+    "name": "Mitsubishi UFJ Investor Services S.A.",
+    "short_name": "MUG"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SATYLUL1SRV",
+    "bank_code": "802",
+    "name": "Satispay Europe S.A.",
+    "short_name": "SATISPAY"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "MAGYLUL1",
+    "bank_code": "805",
+    "name": "MANGOPAY S.A.",
+    "short_name": "MANGOPAY"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SSWILUL1",
+    "bank_code": "807",
+    "name": "SnapSwap International S.A.",
+    "short_name": "SNAPSWAP"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SATYLUL1XXX",
+    "bank_code": "810",
+    "name": "Satispay Europe S.A.",
+    "short_name": "SATISPAY"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "VPAYLUL2",
+    "bank_code": "813",
+    "name": "Viva Payment Services S.A.",
+    "short_name": "VIVA"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BEILLULL",
+    "bank_code": "998",
+    "name": "Banque europ\u00e9enne d'\u00e9pargne S.A.",
+    "short_name": "BE"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "BCLXLULL",
+    "bank_code": "999",
+    "name": "Banque centrale du Luxembourg",
+    "short_name": "BCL"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "SOXALULL",
+    "bank_code": "619",
+    "name": "Sogexia S.A.",
+    "short_name": "Sogexia"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "ABOCLULL",
+    "bank_code": "420",
+    "name": "Agricultural Bank of China (Luxembourg) S.A.",
+    "short_name": "Agricultural Bank of China"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "EVERLULX",
+    "bank_code": "421",
+    "name": "China Everbright Bank (Europe) S.A.",
+    "short_name": "China Everbright Bank"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "ABOCLULB",
+    "bank_code": "422",
+    "name": "Agricultural Bank of China, Luxembourg Branch",
+    "short_name": "Agricultural Bank of China Luxembourg Branch"
+  },
+  {
+    "country_code": "LU",
+    "primary": true,
+    "bic": "INVLLULLXXX",
+    "bank_code": "423",
+    "name": "Banco Inversis S.A., Luxembourg branch",
+    "short_name": "Banco Inversis"
+  }
+]

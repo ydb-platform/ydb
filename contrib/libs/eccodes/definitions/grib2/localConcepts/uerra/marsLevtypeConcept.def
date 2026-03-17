@@ -1,0 +1,47 @@
+# Concept marsLevtype for UERRA
+'sfc' = {typeOfFirstFixedSurface=1; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=1; typeOfSecondFixedSurface=8;}
+'o2d' = {typeOfFirstFixedSurface=1; typeOfSecondFixedSurface=9;}
+'sfc' = {typeOfFirstFixedSurface=7; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=8; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=17; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=18; typeOfSecondFixedSurface=255;}
+'o2d' = {typeOfFirstFixedSurface=20; scaleFactorOfFirstFixedSurface=-2; scaledValueOfFirstFixedSurface=29315; typeOfSecondFixedSurface=255;}
+'o2d' = {typeOfFirstFixedSurface=20; typeOfSecondFixedSurface=255;}
+'pl'  = {typeOfFirstFixedSurface=100; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=101; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=102; typeOfSecondFixedSurface=255;}
+'hl'  = {typeOfFirstFixedSurface=103; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=103; scaleFactorOfFirstFixedSurface=0; scaledValueOfFirstFixedSurface=0; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=103; scaleFactorOfFirstFixedSurface=1; scaledValueOfFirstFixedSurface=15; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=103; scaleFactorOfFirstFixedSurface=0; scaledValueOfFirstFixedSurface=2; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=103; scaleFactorOfFirstFixedSurface=0; scaledValueOfFirstFixedSurface=10; typeOfSecondFixedSurface=255;}
+'ml'  = {typeOfFirstFixedSurface=105; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=106; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=106;typeOfSecondFixedSurface=106;}
+'pt'  = {typeOfFirstFixedSurface=107; typeOfSecondFixedSurface=255;}
+'pv'  = {typeOfFirstFixedSurface=109; typeOfSecondFixedSurface=255;}
+'sol' = {typeOfFirstFixedSurface=114; typeOfSecondFixedSurface=255;}
+'ml'  = {typeOfFirstFixedSurface=118; typeOfSecondFixedSurface=255;}
+'hpl' = {typeOfFirstFixedSurface=119; typeOfSecondFixedSurface=255;}
+'sol' = {typeOfFirstFixedSurface=151; typeOfSecondFixedSurface=255;}
+'sol' = {typeOfFirstFixedSurface=151; typeOfSecondFixedSurface=151;}
+'sol' = {typeOfFirstFixedSurface=152; typeOfSecondFixedSurface=255;}
+'sol' = {typeOfFirstFixedSurface=152; typeOfSecondFixedSurface=152;}
+'o2d' = {typeOfFirstFixedSurface=160; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=160; scaleFactorOfFirstFixedSurface=0; scaledValueOfFirstFixedSurface=0; typeOfSecondFixedSurface=255;}
+'o2d' = {typeOfFirstFixedSurface=160; typeOfSecondFixedSurface=160;}
+'o2d' = {typeOfFirstFixedSurface=160; typeOfSecondFixedSurface=9;}
+'sfc' = {typeOfFirstFixedSurface=162; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=166; typeOfSecondFixedSurface=255;}
+'o3d' = {typeOfFirstFixedSurface=168; typeOfSecondFixedSurface=255;}
+'o3d' = {typeOfFirstFixedSurface=168; typeOfSecondFixedSurface=168;}
+'o2d' = {typeOfFirstFixedSurface=169; typeOfSecondFixedSurface=255;}
+'o2d' = {typeOfFirstFixedSurface=170; typeOfSecondFixedSurface=255;}
+'o2d' = {typeOfFirstFixedSurface=171; typeOfSecondFixedSurface=255;}
+'sfc' = {typeOfFirstFixedSurface=174; typeOfSecondFixedSurface=255;}
+'o2d' = {typeOfFirstFixedSurface=175; typeOfSecondFixedSurface=255;}
+'o2d' = {typeOfFirstFixedSurface=176; typeOfSecondFixedSurface=255;}
+'o2d' = {typeOfFirstFixedSurface=174; typeOfSecondFixedSurface=176;}
+'o2d' = {typeOfFirstFixedSurface=175; typeOfSecondFixedSurface=176;}
+'sfc' = {typeOfFirstFixedSurface=177; typeOfSecondFixedSurface=255;}

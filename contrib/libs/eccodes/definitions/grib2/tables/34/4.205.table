@@ -1,0 +1,6 @@
+# Code table 4.205 - Presence of aerosol
+0 0 Aerosol not present
+1 1 Aerosol present
+# 2-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

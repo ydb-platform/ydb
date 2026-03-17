@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Info",
+  "type": "object",
+  "properties": {
+    "hostName": {
+      "type": "string",
+      "format": "hostname"
+    },
+    "arn": {
+      "type": "string",
+      "pattern": "(^arn:([^:]*):([^:]*):([^:]*):(|\\*|[\\d]{12}):(.+)$)|^\\*$"
+    },
+    "tel": {
+      "type": "string",
+      "pattern": "^(\\([0-9]{3}\\))?[0-9]{3}-[0-9]{4}$"
+    },
+    "comment": {
+        "type": "string",
+        "pattern": "[^\b\f\n\r\t\\\\a+.?'\"|()]+$"
+    }
+  }
+}

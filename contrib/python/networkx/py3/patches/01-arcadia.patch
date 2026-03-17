@@ -1,0 +1,5 @@
+--- contrib/python/networkx/py3/networkx/generators/atlas.py	(index)
++++ contrib/python/networkx/py3/networkx/generators/atlas.py	(working tree)
+@@ -64 +64 @@ def _generate_graphs():
+-    with gzip.open(ATLAS_FILE, "rb") as f:
++    with gzip.open(ATLAS_FILE.open("rb")) as f:

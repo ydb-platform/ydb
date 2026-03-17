@@ -1,0 +1,6 @@
+<!doctype html>
+<html><head><title>Simple Index</title></head><body>
+{% for package in packages %}
+<a href="{% url 'packages:simple_detail' repo=view.repository.slug slug=package.name %}">{{ package.name }}</a><br />
+{% endfor %}
+</body></html>

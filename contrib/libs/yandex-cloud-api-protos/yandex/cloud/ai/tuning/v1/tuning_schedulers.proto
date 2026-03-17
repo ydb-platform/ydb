@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.tuning.v1;
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/tuning/v1;fomo";
+
+option java_package = "yandex.cloud.api.ai.tuning.v1";
+
+message SchedulerLinear {
+    double min_lr = 1;
+}
+
+message SchedulerConstant {
+
+}
+
+message SchedulerCosine {
+    double min_lr = 1;
+}

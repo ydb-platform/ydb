@@ -1,0 +1,66 @@
+Cerberus is developed and maintained by the Cerberus community. It was created
+by Nicola Iarocci.
+
+Core maintainers
+~~~~~~~~~~~~~~~~
+
+- Nicola Iarocci (nicolaiarocci)
+- Frank Sachsenheim (funkyfuture)
+
+Contributors
+~~~~~~~~~~~~
+
+- Antoine Lubineau
+- Arsh Singh
+- Audric Schiltknecht
+- Brandon Aubie
+- Brett
+- Bruno Oliveira
+- Bryan W. Weber
+- C.D. Clark III
+- Christian Hogan
+- Connor Zapfel
+- Damián Nohales
+- Danielle Pizzolli
+- Davis Kirkendall
+- Denis Carriere
+- Dominik Kellner
+- Eelke Hermens
+- Evgeny Odegov
+- Florian Rathgeber
+- Gabriel Wainer
+- Harro van der Klauw
+- Jaroslav Semančík
+- Jonathan Huot
+- Kaleb Pomeroy
+- Kirill Pavlov
+- Kornelijus Survila
+- Lujeni
+- Luke Bechtel
+- Luo Peng
+- Martijn Vermaat
+- Martin Ortbauer
+- Matthew Ellison
+- Michael Klich
+- Nik Haldimann
+- Nikita Melentev
+- Nikita Vlaznev
+- Paul Weaver
+- Peter Demin
+- Riccardo
+- Roman Redkovich
+- Scott Crunkleton
+- Sebastian Heid
+- Sebastian Rajo
+- Sergey Leshchenko
+- Tobias Betz
+- Trong Hieu HA
+- Vipul Gupta
+- Waldir Pimenta
+- Yauhen Shulitski
+- calve
+- gilbsgilbs
+
+A full, up-to-date list of contributors is available from git with:
+
+    git shortlog -sne

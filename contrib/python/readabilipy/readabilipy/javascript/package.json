@@ -1,0 +1,26 @@
+{
+  "name": "ReadabiliPy",
+  "version": "0.1.0",
+  "description": "An augmented Python wrapper for the Mozilla standalone Readability.js package.",
+  "main": "ExtractArticle.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alan-turing-institute/ReadabiliPy"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/alan-turing-institute/ReadabiliPy/issues"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "homepage": "https://github.com/alan-turing-institute/ReadabiliPy",
+  "devDependencies": {},
+  "dependencies": {
+    "@mozilla/readability": ">=0.4.1",
+    "jsdom": ">=12.2.0",
+    "minimist": "^1.2.3"
+  }
+}

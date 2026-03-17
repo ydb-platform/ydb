@@ -1,0 +1,6 @@
+# CODE TABLE 4.207, Icing
+0 0  None
+1 1  Light
+2 2  Moderate
+3 3  Severe
+255 255  Missing

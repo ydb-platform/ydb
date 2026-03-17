@@ -1,0 +1,7 @@
+'a' = { northLatitudeOfDomainOfTubing=70000; westLongitudeOfDomainOfTubing=332500; southLatitudeOfDomainOfTubing=40000; eastLongitudeOfDomainOfTubing=10000;  }
+'b' = { northLatitudeOfDomainOfTubing=72500; westLongitudeOfDomainOfTubing=0;      southLatitudeOfDomainOfTubing=50000; eastLongitudeOfDomainOfTubing=45000;  }
+'c' = { northLatitudeOfDomainOfTubing=57500; westLongitudeOfDomainOfTubing=345000; southLatitudeOfDomainOfTubing=32500; eastLongitudeOfDomainOfTubing=17500;  }
+'d' = { northLatitudeOfDomainOfTubing=57500; westLongitudeOfDomainOfTubing=2500;   southLatitudeOfDomainOfTubing=32500; eastLongitudeOfDomainOfTubing=42500;  }
+'e' = { northLatitudeOfDomainOfTubing=75000; westLongitudeOfDomainOfTubing=340000; southLatitudeOfDomainOfTubing=30000; eastLongitudeOfDomainOfTubing=45000;  }
+'f' = { northLatitudeOfDomainOfTubing=60000; westLongitudeOfDomainOfTubing=310000; southLatitudeOfDomainOfTubing=40000; eastLongitudeOfDomainOfTubing=0;  }
+

@@ -1,0 +1,29 @@
+#code|abbreviation|type|name|unit|scale|reference|width|crex_unit|crex_scale|crex_width
+001230|uniqueProductDescription|string|UNIQUE PRODUCT DESCRIPTION|CCITT IA5|0|0|2048
+002193|antennaRotationDirection|table|ANTENNA ROTATION DIRECTION|Code table|0|0|2
+002194|dualprfRatio|table|DualPRF ratio|Code table|0|0|4
+005230|maximumSizeOfXDimensionInAVolumeScanOrDataCube|long|MAXIMUM SIZE OF X DIMENSION IN A VOLUME SCAN OR DATA CUBE|Numeric|0|0|12
+006230|maximumSizeOfYDimensionInAVolumeScanOrDataCube|long|MAXIMUM SIZE OF Y DIMENSION IN A VOLUME SCAN OR DATA CUBE|Numeric|0|0|12
+007230|maximumSizeOfZDimensionInAVolumeScanOrDataCube|long|MAXIMUM SIZE OF Z DIMENSION IN A VOLUME SCAN OR DATA CUBE|Numeric|0|0|12
+007231|levelIndexOfZ|long|LEVEL INDEX OF Z|Numeric|0|0|16
+021200|heightOfCappiAboveSealLevel|long|Height of CAPPI above seal level|m|0|-1000|15
+021201|rangeBinSize|long|RANGE-BIN SIZE|m|0|0|14
+021202|azimuthalResolution|double|AZIMUTHAL RESOLUTION|deg|1|0|8
+021203|rangeBinOffset|double|RANGE-BIN OFFSET|m|-1|0|14
+021204|azimuthOffset|double|AZIMUTH OFFSET|deg|1|0|12
+021210|versionOfAlgorithmForQualityAssurance|double|Version of algorithm for quality assurance|Numeric|2|0|10
+021211|numberOfBlacklist|long|Number of Blacklist|Numeric|0|0|14
+021212|radarMaintenance|table|Radar maintenance|Code table|0|0|2
+021213|radarhardware|table|Radarhardware|Code table|0|0|2
+021214|corruptImage|table|Corrupt image|Code table|0|0|2
+021215|germanPancake|table|German Pancake|Code table|0|0|2
+021216|radomeAttenuation|table|Radome attenuation|Code table|0|0|2
+021217|checkedAlgorithm|flag|Checked algorithm|Flag table|0|0|16
+021218|radarQualityFlag|flag|Radar quality flag|Flag table|0|0|16
+021236|extendedNyquistVelocity|long|extended NYQUIST Velocity|m/s|0|0|8
+021237|highNyquistVelocity|long|high Nyquist Velocity|m/s|0|0|8
+030192|northSouthViewOrganisation|table|North south view organisation|Code table|0|0|3
+030193|eastWestViewOrganisation|table|East west view organisation|Code table|0|0|3
+030194|numberOfBinsAlongTheRadial|long|NUMBER OF BINS ALONG THE RADIAL|Numeric|0|0|12
+030195|numberOfAzimuths|long|NUMBER OF AZIMUTHS|Numeric|0|0|11
+030196|typeOfProduct|table|TYPE OF PRODUCT|Code table|0|0|16

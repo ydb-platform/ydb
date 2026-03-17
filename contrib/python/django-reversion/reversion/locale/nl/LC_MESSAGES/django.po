@@ -1,0 +1,135 @@
+# Dutch translations for django-reversion extension
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Alexander Schoemaker <alexander.schoemaker@gmail.com>, 2012.
+# Bouke Haarsma <bouke@webatoom.nl>, 2013.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2012-12-12 10:41+0100\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Alexander Schoemaker <alexander.schoemaker@gmail.com>\n"
+"Language-Team: Dutch\n"
+"Language: nl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+
+#: admin.py:141
+msgid "Initial version."
+msgstr "Eerste versie."
+
+#: admin.py:163
+#, python-format
+msgid "Deleted %(verbose_name)s."
+msgstr "%(verbose_name)s is verwijderd."
+
+#: admin.py:186 templates/reversion/change_list.html:7
+#: templates/reversion/recover_form.html:11
+#: templates/reversion/recover_list.html:11
+#, python-format
+msgid "Recover deleted %(name)s"
+msgstr "Herstel verwijderde %(name)s"
+
+#: admin.py:297
+#, python-format
+msgid "Reverted to previous version, saved on %(datetime)s"
+msgstr "Vorige versie van %(datetime)s is teruggeplaatst"
+
+#: admin.py:299
+#, python-format
+msgid ""
+"The %(model)s \"%(name)s\" was reverted successfully. You may edit it again "
+"below."
+msgstr ""
+"%(model)s \"%(name)s\" is succesvol teruggeplaatst. Je kunt het nu opnieuw "
+"wijzigen."
+
+#: admin.py:385
+#, python-format
+msgid "Recover %(name)s"
+msgstr "Herstel %(name)s"
+
+#: admin.py:399
+#, python-format
+msgid "Revert %(name)s"
+msgstr "%(name)s terugplaatsen"
+
+#: models.py:68
+msgid "date created"
+msgstr "datum aangemaakt"
+
+#: models.py:74
+msgid "user"
+msgstr "gebruiker"
+
+#: models.py:78
+msgid "comment"
+msgstr "toelichting"
+
+#: templates/reversion/object_history.html:8
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr ""
+"Selecteer een datum uit de lijst om een vorige versie terug te plaatsen."
+
+#: templates/reversion/object_history.html:15
+#: templates/reversion/recover_list.html:24
+msgid "Date/time"
+msgstr "Datum/tijdstip"
+
+#: templates/reversion/object_history.html:16
+msgid "User"
+msgstr "Gebruiker"
+
+#: templates/reversion/object_history.html:17
+msgid "Comment"
+msgstr "Toelichting"
+
+#: templates/reversion/object_history.html:36
+msgid ""
+"This object doesn't have a change history. It probably wasn't added via this "
+"admin site."
+msgstr ""
+"Dit object bevat geen wijzigingshistorie. Vermoedelijk is het niet "
+"vanuit sitebeheer toegevoegd."
+
+#: templates/reversion/recover_form.html:8
+#: templates/reversion/recover_list.html:8
+#: templates/reversion/revision_form.html:8
+msgid "Home"
+msgstr ""
+
+#: templates/reversion/recover_form.html:18
+msgid "Press the save button below to recover this version of the object."
+msgstr ""
+"Klik op onderstaande knop om deze versie van het object te herstellen."
+
+#: templates/reversion/recover_list.html:18
+msgid ""
+"Choose a date from the list below to recover a deleted version of an object."
+msgstr ""
+"Selecteer een datum uit de lijst om een verwijderde versie van het object "
+"te herstellen."
+
+#: templates/reversion/recover_list.html:38
+msgid "There are no deleted objects to recover."
+msgstr "Er zijn geen verwijderde objecten die hersteld kunnen worden."
+
+#: templates/reversion/revision_form.html:12
+msgid "History"
+msgstr "Geschiedenis"
+
+#: templates/reversion/revision_form.html:13
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "%(verbose_name)s terugplaatsen"
+
+#: templates/reversion/revision_form.html:26
+msgid "Press the save button below to revert to this version of the object."
+msgstr ""
+"Klik op onderstaande knop om deze versie van het object terug te plaatsen."

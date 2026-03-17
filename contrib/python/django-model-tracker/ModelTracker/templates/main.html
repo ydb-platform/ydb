@@ -1,0 +1,74 @@
+{% load static %}
+<html>
+<head>
+    <link href="{% static 'ModelTracker/bootstrap.min.css' %}" rel="stylesheet">
+    <script src="{% static 'ModelTracker/jquery-3.2.1.min.js' %}"></script>
+    <script type="application/javascript">
+        function copy(id) {
+            var copyText = $("#text_"+id);
+            copyText.show()
+            copyText.select();
+            document.execCommand("copy");
+            copyText.hide()
+}
+
+    </script>
+</head>
+<body class="container" style="margin: 5px;padding: 5px; ">
+<div style=""><h4 style="font-weight: bold;">ModelTracker</h4></div>
+<form action="." method="post">
+{% csrf_token %}
+<div class="row">
+    <div class="col-md-2"><label>Model:</label></div>
+    <div class="col-md-4"><select id="table" name="table" class="form-control">
+    {% for model in models %}
+        <option value="{{ model }}"
+                {% if model == selected_model %}
+                selected
+                {% endif %}
+        >{{ model }}</option>
+    {% endfor %}
+</select>
+    </div>
+</div>
+<div class="row">
+    <div class="col-md-2"><label>ID:</label></div>
+    <div class="col-md-4">
+        <input name="id" id="id" value="{{ id }}" class="form-control"/>
+        </div>
+    </div>
+<br/>
+<div class="row">
+    <div class="col-md-6" align="center">
+    <button type="submit" class="btn btn-primary">Get History</button></div></div>
+
+
+</form>
+{% if count > 0 %}
+{% for change in changes %}
+
+    {% if change.name|length > 0 %} <span style="font-weight: bold;font-style: italic" title="{{ change.id }}">({{ change.name }})</span>{% endif %}
+    <span title="{{ change.id }}"> By: {{ change.by }} on: {{ change.event_time }}</span>
+       <input type="text" value="{{ change.id }}" maxlength="9" readonly style="display:none;width: 85px" id="text_{{ change.id }}"><a href="javascript:void(0)" onclick="copy({{ change.id }})" >Copy ID!</a>
+       <a href="{% url 'revert' change.id %}">Revert to this!</a>
+        <div id="" style="background-color: #f0f0f0">
+        {% if change.changes|length > 0 %}
+            <ul>
+        {% for row in change.changes %}
+            <li>{{ row|safe }}</li>
+            {% endfor %}
+    </ul>
+        {% else %}
+            <p>No Change...</p>
+        {% endif %}
+</div>
+
+{% endfor %}
+
+{% else %}
+    <div class="alert alert-danger">
+        No Changes found for {{ id }}.
+    </div>
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,2 @@
+requirements:
+  - setuptools: contrib/python/setuptools

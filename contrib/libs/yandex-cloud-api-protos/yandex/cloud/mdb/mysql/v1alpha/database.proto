@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mysql.v1alpha;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mysql/v1alpha;mysql";
+option java_package = "yandex.cloud.api.mdb.mysql.v1alpha";
+
+// A MySQL database. For more information, see the [documentation](/docs/managed-mysql/concepts).
+message Database {
+  // Name of the database.
+  string name = 1;
+
+  // ID of the MySQL cluster that the database belongs to.
+  string cluster_id = 2;
+}
+
+
+message DatabaseSpec {
+  // Name of the MySQL database.
+  string name = 1 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+}

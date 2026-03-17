@@ -1,0 +1,4 @@
+# CODE TABLE 4.13, Quality Control Indicator
+0 0  No quality control applied
+1 1  Quality control applied
+255 255  Missing

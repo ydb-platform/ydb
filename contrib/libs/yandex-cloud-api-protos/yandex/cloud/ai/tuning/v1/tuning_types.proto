@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.tuning.v1;
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/tuning/v1;fomo";
+
+option java_package = "yandex.cloud.api.ai.tuning.v1";
+
+message TuningTypeLora {
+    int64 rank = 1;
+    // Integer value
+    double alpha = 2;
+    string initialization = 3;
+    string type = 4;
+}
+  
+message TuningTypePromptTune {
+    int64 virtual_tokens = 1;
+}

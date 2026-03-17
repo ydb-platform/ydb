@@ -1,0 +1,55 @@
+Metadata-Version: 2.4
+Name: preshed
+Version: 3.0.12
+Summary: Cython hash table that trusts the keys are pre-hashed
+Home-page: https://github.com/explosion/preshed
+Author: Explosion
+Author-email: contact@explosion.ai
+License: MIT
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Programming Language :: Cython
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Scientific/Engineering
+Requires-Python: >=3.6,<3.15
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: cymem<2.1.0,>=2.0.2
+Requires-Dist: murmurhash<1.1.0,>=0.28.0
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+<a href="https://explosion.ai"><img src="https://explosion.ai/assets/img/logo.svg" width="125" height="125" align="right" /></a>
+
+# preshed: Cython Hash Table for Pre-Hashed Keys
+
+Simple but high performance Cython hash table mapping pre-randomized keys to
+`void*` values. Inspired by
+[Jeff Preshing](http://preshing.com/20130107/this-hash-table-is-faster-than-a-judy-array/).
+
+[![tests](https://github.com/explosion/preshed/actions/workflows/tests.yml/badge.svg)](https://github.com/explosion/preshed/actions/workflows/tests.yml)
+[![pypi Version](https://img.shields.io/pypi/v/preshed.svg?style=flat-square&logo=pypi&logoColor=white)](https://pypi.python.org/pypi/preshed)
+[![conda Version](https://img.shields.io/conda/vn/conda-forge/preshed.svg?style=flat-square&logo=conda-forge&logoColor=white)](https://anaconda.org/conda-forge/preshed)
+[![Python wheels](https://img.shields.io/badge/wheels-%E2%9C%93-4c1.svg?longCache=true&style=flat-square&logo=python&logoColor=white)](https://github.com/explosion/wheelwright/releases)

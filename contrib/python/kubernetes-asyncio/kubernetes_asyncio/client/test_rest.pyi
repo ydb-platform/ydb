@@ -1,0 +1,9 @@
+import unittest
+from kubernetes_asyncio.client.configuration import Configuration as Configuration
+from kubernetes_asyncio.client.rest import RESTClientObject as RESTClientObject
+
+class TestRESTClientObject(unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls) -> None: ...
+    async def test_rest_request_timeout(self) -> None: ...
+    async def test_disable_ssl_verification(self) -> None: ...

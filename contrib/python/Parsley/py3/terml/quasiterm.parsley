@@ -1,0 +1,28 @@
+schema = production+:ps -> schema(ps)
+production = tag:t ws '::=' argList:a ws ';' -> production(t, a)
+
+functor = (spaces ( (functorHole functorHole !(reserved("hole-tagged-hole")))
+                  | ('.'? functorHole)
+                  | (tag:t functorHole:h) -> taggedHole(t, h)))
+          | super
+
+arg = interleave:l (ws '|' interleave)*:r -> _or(l, *r)
+interleave = action:l (ws '&' action)*:r -> interleave(l, *r)
+action = pred:l (ws '->' pred:r -> action(l, *r)
+                |                   -> l)
+pred = some | (ws '!' some:x -> not(x))
+some = (quant:q -> some(None, q)
+       | ( prim:l ( (ws '**' prim:r -> matchSeparatedSequence(l, r))
+                  | (ws '++' prim:r -> matchSeparatedSequence1(l, r))
+                  )?:seq
+           quant?:q -> some(seq or l, q)))
+quant = ws ('?' |'+' | '*')
+prim = term
+     | ('.' -> any())
+     | (literal:l ws '..' literal:r -> range(l, r))
+     | ws '^' string:s -> anyOf(s)
+     | ws '(' argList:l ws ')' -> l
+
+simpleint = decdigits:ds -> int(ds)
+functorHole = '$'        (simpleint:i | '{' simpleint:i '}' | (tag:t -> t.name):i) -> dollarHole(i)
+            |('@' | '=') (simpleint:i | '{' simpleint:i '}' | (tag:t -> t.name):i) -> patternHole(i)

@@ -1,0 +1,304 @@
+syntax = "proto3";
+
+package yandex.cloud.containerregistry.v1;
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/containerregistry/v1/image.proto";
+import "yandex/cloud/containerregistry/v1/lifecycle_policy.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/containerregistry/v1;containerregistry";
+option java_package = "yandex.cloud.api.containerregistry.v1";
+
+// A set of methods for managing Lifecycle policy resources.
+service LifecyclePolicyService {
+
+    // Returns the specified lifecycle policy.
+    //
+    // To get the list of all available lifecycle policies, make a [List] request.
+    rpc Get (GetLifecyclePolicyRequest) returns (LifecyclePolicy) {
+        option (google.api.http) = { get: "/container-registry/v1/lifecyclePolicies/{lifecycle_policy_id}" };
+    }
+
+    // Retrieves the list of lifecycle policies in the specified repository.
+    rpc List (ListLifecyclePoliciesRequest) returns (ListLifecyclePoliciesResponse) {
+        option (google.api.http) = { get: "/container-registry/v1/lifecyclePolicies" };
+    }
+
+    // Creates a lifecycle policy in the specified repository.
+    rpc Create (CreateLifecyclePolicyRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/container-registry/v1/lifecyclePolicies" body: "*" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "CreateLifecyclePolicyMetadata"
+          response: "LifecyclePolicy"
+        };
+    }
+
+    // Updates the specified lifecycle policy.
+    rpc Update (UpdateLifecyclePolicyRequest) returns (operation.Operation) {
+        option (google.api.http) = { patch: "/container-registry/v1/lifecyclePolicies/{lifecycle_policy_id}" body: "*" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "UpdateLifecyclePolicyMetadata"
+          response: "LifecyclePolicy"
+        };
+    };
+
+    // Deletes the specified lifecycle policy.
+    rpc Delete (DeleteLifecyclePolicyRequest) returns (operation.Operation) {
+        option (google.api.http) = { delete: "/container-registry/v1/lifecyclePolicies/{lifecycle_policy_id}" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "DeleteLifecyclePolicyMetadata"
+          response: "google.protobuf.Empty"
+        };
+    }
+
+    // Creates a request of a dry run of the lifecycle policy.
+    rpc DryRun (DryRunLifecyclePolicyRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/container-registry/v1/dryRunLifecyclePolicy/{lifecycle_policy_id}" body: "*" };
+        option (yandex.cloud.api.operation) = {
+          metadata: "DryRunLifecyclePolicyMetadata"
+          response: "DryRunLifecyclePolicyResult"
+        };
+    }
+    
+    // Returns the dry run result of the specified lifecycle policy.
+    rpc GetDryRunResult (GetDryRunLifecyclePolicyResultRequest) returns (DryRunLifecyclePolicyResult){
+        option (google.api.http) = { get: "/container-registry/v1/dryRunLifecyclePolicyResults/{dry_run_lifecycle_policy_result_id}" };
+    }
+
+    // Retrieves the list of the dry run results.
+    rpc ListDryRunResults (ListDryRunLifecyclePolicyResultsRequest) returns (ListDryRunLifecyclePolicyResultsResponse){
+        option (google.api.http) = { get: "/container-registry/v1/dryRunLifecyclePolicyResults" };
+    }
+
+    // Retrieves the list of the affected images.
+    rpc ListDryRunResultAffectedImages (ListDryRunLifecyclePolicyResultAffectedImagesRequest) returns (ListDryRunLifecyclePolicyResultAffectedImagesResponse) {
+        option (google.api.http) = { get: "/container-registry/v1/dryRunLifecyclePolicyResults/{dry_run_lifecycle_policy_result_id}:affectedImages" };
+    }
+}
+
+message GetLifecyclePolicyRequest {
+    // ID of the lifecycle policy.
+    string lifecycle_policy_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListLifecyclePoliciesRequest {
+    oneof id {
+        option (exactly_one) = true;
+
+        // ID of the lifecycle policy.
+        string registry_id = 1 [(length) = "<=50"];
+
+        // Repository of the lifecycle policy.
+        string repository_id = 6 [(length) = "<=50"];
+    }
+
+    // The maximum number of results per page to return. If the number of available
+    // results is larger than `page_size`, the service returns 
+    // a [ListLifecyclePoliciesResponse.next_page_token] that can be used to get the next page of results in subsequent list requests.
+    // Default value: 100.
+    int64 page_size = 2 [(value) = "0-1000"];
+
+    // Page token. To get the next page of results, set `page_token` to the
+    // [ListLifecyclePoliciesResponse.next_page_token] returned by a previous list request.
+    string page_token = 3 [(length) = "<=100"];
+
+    // A filter expression that filters lifecycle policy resources listed in the response.
+    //
+    // The expression must specify:
+    // 1. The field name. Currently you can use filtering only on [LifecyclePolicy.name] field.
+    // 2. An `=` operator.
+    // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+    string filter = 4 [(length) = "<=1000"];
+
+    // Sorting the list by [LifecyclePolicy.name], [LifecyclePolicy.created_at] and [LifecyclePolicy.status] fields.
+    // The default sorting order is ascending.
+    string order_by = 5 [(length) = "<=100"];
+}
+
+message ListLifecyclePoliciesResponse {
+    // List of lifecycle policies.
+    repeated LifecyclePolicy lifecycle_policies = 1;
+
+    // Token for getting the next page of the list. If the number of results is greater than
+    // the specified [ListLifecyclePoliciesRequest.page_size], use `next_page_token` as the value
+    // for the [ListLifecyclePoliciesRequest.page_token] parameter in the next list request.
+    //
+    // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message CreateLifecyclePolicyRequest {
+    // ID of the lifecycle policy repository.
+    string repository_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Name of lifecycle policy.
+    string name = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+    // Description of lifecycle policy.
+    string description = 3 [(length) = "<=256"];
+
+    // Status of the lifecycle policy.
+    LifecyclePolicy.Status status = 4 [(required) = true];
+
+    // The rules of the lifecycle policy.
+    repeated LifecycleRule rules = 5;
+}
+
+message UpdateLifecyclePolicyRequest {
+    // ID of the lifecycle policy.
+    string lifecycle_policy_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Field mask that specifies which fields of the lifecycle policy resource are going to be updated.
+    google.protobuf.FieldMask update_mask = 2;
+
+    // Name of lifecycle policy.
+    string name = 3 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+    // Description of lifecycle policy.
+    string description = 4 [(length) = "<=256"];
+
+     // Status of the lifecycle policy.
+    LifecyclePolicy.Status status = 5 [(required) = true];
+
+    // The rules of the lifecycle policy.
+    repeated LifecycleRule rules = 6;
+}
+
+message DeleteLifecyclePolicyRequest {
+    // ID of the lifecycle policy.
+    string lifecycle_policy_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message CreateLifecyclePolicyMetadata {
+    // ID of the lifecycle policy resource that is being created.
+    string lifecycle_policy_id = 1;
+}
+
+message UpdateLifecyclePolicyMetadata {
+    // ID of the lifecycle policy resource that is being updated.
+    string lifecycle_policy_id = 1;
+}
+
+message DeleteLifecyclePolicyMetadata {
+    // ID of the lifecycle policy resource that is being deleted.
+    string lifecycle_policy_id = 1;
+}
+
+message DryRunLifecyclePolicyRequest {
+    // ID of the lifecycle policy.
+    string lifecycle_policy_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DryRunLifecyclePolicyMetadata {
+    
+    // ID of the dry run result of the lifecycle policy.
+    string dry_run_lifecycle_policy_result_id = 1;
+
+    // ID of the lifecycle policy.
+    string lifecycle_policy_id = 2;
+}
+
+message DryRunLifecyclePolicyResult {
+    
+    // ID of the dry run result of the lifecycle policy.
+    string dry_run_lifecycle_policy_result_id = 1;
+
+    // ID of the lifecycle policy.
+    string lifecycle_policy_id = 2;
+
+    // Time of the getting result.
+    google.protobuf.Timestamp run_at = 3;
+
+    // Count of affected images.
+    int64 affected_images_count = 4;
+}
+
+message GetDryRunLifecyclePolicyResultRequest {
+
+    // ID of the dry run result of the lifecycle policy.
+    string dry_run_lifecycle_policy_result_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListDryRunLifecyclePolicyResultsRequest {
+    // ID of the lifecycle policy.
+    string lifecycle_policy_id = 1 [(required) = true, (length) = "<=50"];
+
+    // The maximum number of results per page to return. If the number of available
+    // results is larger than `page_size`, the service returns 
+    // a [ListDryRunLifecyclePolicyResultsResponse.next_page_token] that can be used to get 
+    // the next page of results in subsequent list requests.
+    int64 page_size = 2 [(value) = "0-1000"];
+
+    // Page token. To get the next page of results, set `page_token` to the
+    // [ListDryRunLifecyclePolicyResultsResponse.next_page_token] returned by a previous list request.
+    string page_token = 3 [(length) = "<=100"];
+
+    // A filter expression that filters dry run results listed in the response.
+    //
+    // The expression must specify:
+    // 1. The field name. Currently you can use filtering only on [LifecyclePolicy.name] field.
+    // 2. An `=` operator.
+    // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+    string filter = 4 [(length) = "<=1000"];
+
+    // Sorting the list by [DryRunLifecyclePolicyResult.run_at] and [DryRunLifecyclePolicyResult.affected_images_count] fields.
+    // The default sorting order is ascending.
+    string order_by = 5 [(length) = "<=100"];
+}
+
+message ListDryRunLifecyclePolicyResultsResponse {
+    // List of results of dry runs of a lifecycle policy.
+    repeated DryRunLifecyclePolicyResult dry_run_lifecycle_policy_results = 1;
+
+    // Token for getting the next page of the list. If the number of results is greater than
+    // the specified [ListDryRunLifecyclePolicyResultsRequest.page_size] use `next_page_token` as the value
+    // for the [ListDryRunLifecyclePolicyResultsRequest.page_token] parameter in the next list request.
+    //
+    // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message ListDryRunLifecyclePolicyResultAffectedImagesRequest {
+    
+    // ID of the dry run result of the lifecycle policy
+    string dry_run_lifecycle_policy_result_id = 1 [(required) = true, (length) = "<=50"];
+
+    // The maximum number of results per page to return. If the number of available
+    // results is larger than `page_size`, the service returns a [ListDryRunLifecyclePolicyResultAffectedImagesResponse.next_page_token]
+    // that can be used to get the next page of results in subsequent list requests.
+    int64 page_size = 2 [(value) = "0-1000"];
+
+    // Page token. To get the next page of results, set `page_token` to the
+    // [ListDryRunLifecyclePolicyResultAffectedImagesResponse.next_page_token] returned by a previous list request.
+    string page_token = 3 [(length) = "<=100"];
+
+    // A filter expression that filters affected images listed in the response.
+    //
+    // The expression must specify:
+    // 1. The field name. Currently you can use filtering only on [LifecyclePolicy.name] field.
+    // 2. An `=` operator.
+    // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+    string filter = 4 [(length) = "<=1000"];
+
+    // Sorting the list by [LifecyclePolicy.name] and [LifecyclePolicy.created_at] fields.
+    // The default sorting order is ascending.
+    string order_by = 5 [(length) = "<=100"];
+}
+
+message ListDryRunLifecyclePolicyResultAffectedImagesResponse {
+    // List of affected images.
+    repeated Image affected_images = 1;
+
+    // Token for getting the next page of the list. If the number of results is greater than
+    // the specified [ListDryRunLifecyclePolicyResultAffectedImagesRequest.page_size], use `next_page_token` as the value
+    // for the [ListDryRunLifecyclePolicyResultAffectedImagesRequest.page_token] parameter in the next list request.
+    //
+    // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}

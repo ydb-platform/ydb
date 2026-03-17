@@ -1,0 +1,79 @@
+--- contrib/deprecated/python/ujson/py3/lib/ultrajson.h	(index)
++++ contrib/deprecated/python/ujson/py3/lib/ultrajson.h	(working tree)
+@@ -115,7 +115,12 @@ typedef uint32_t JSUINT32;
+ #define FASTCALL_ATTR
+ #endif
+ 
+-#define INLINE_PREFIX inline
++
++#if defined(__clang__)
++#define INLINE_PREFIX inline __attribute__((always_inline))
++#else
++#define INLINE_PREFIX static inline
++#endif
+ 
+ typedef uint8_t JSUINT8;
+ typedef uint16_t JSUTF16;
+--- contrib/deprecated/python/ujson/py3/lib/ultrajsonenc.c	(index)
++++ contrib/deprecated/python/ujson/py3/lib/ultrajsonenc.c	(working tree)
+@@ -764,7 +764,12 @@ void encode(JSOBJ obj, JSONObjectEncoder *enc, const char *name, size_t cbName)
+     Buffer_AppendCharUnchecked(enc, '\"');
+ 
+     Buffer_AppendCharUnchecked (enc, ':');
+-#ifndef JSON_NO_EXTRA_WHITESPACE
++#ifdef JSON_NO_EXTRA_WHITESPACE
++    if (enc->indent)
++    {
++      Buffer_AppendCharUnchecked (enc, ' ');
++    }
++#else
+     Buffer_AppendCharUnchecked (enc, ' ');
+ #endif
+     }
+--- contrib/deprecated/python/ujson/py3/python/objToJSON.c	(index)
++++ contrib/deprecated/python/ujson/py3/python/objToJSON.c	(working tree)
+@@ -607,7 +607,6 @@ void SortedDict_iterEnd(JSOBJ obj, JSONTypeContext *tc)
+ {
+   GET_TC(tc)->itemName = NULL;
+   GET_TC(tc)->itemValue = NULL;
+-  Py_DECREF(GET_TC(tc)->newObj);
+   Py_DECREF(GET_TC(tc)->dictObj);
+   PRINTMARK();
+ }
+@@ -933,6 +932,10 @@ void Object_endTypeContext(JSOBJ obj, JSONTypeContext *tc)
+ {
+   Py_XDECREF(GET_TC(tc)->newObj);
+ 
++  if (tc->type == JT_RAW)
++  {
++    Py_XDECREF(GET_TC(tc)->rawJSONValue);
++  }
+   PyObject_Free(tc->prv);
+   tc->prv = NULL;
+ }
+@@ -1102,6 +1105,7 @@ PyObject* objToJSONFile(PyObject* self, PyObject *args, PyObject *kwargs)
+   PyObject *string;
+   PyObject *write;
+   PyObject *argtuple;
++  PyObject *write_result;
+ 
+   PRINTMARK();
+ 
+@@ -1144,13 +1148,16 @@ PyObject* objToJSONFile(PyObject* self, PyObject *args, PyObject *kwargs)
+     Py_XDECREF(write);
+     return NULL;
+   }
+-  if (PyObject_CallObject (write, argtuple) == NULL)
++
++  write_result = PyObject_CallObject (write, argtuple);
++  if (write_result == NULL)
+   {
+     Py_XDECREF(write);
+     Py_XDECREF(argtuple);
+     return NULL;
+   }
+ 
++  Py_DECREF(write_result);
+   Py_XDECREF(write);
+   Py_DECREF(argtuple);
+   Py_XDECREF(string);

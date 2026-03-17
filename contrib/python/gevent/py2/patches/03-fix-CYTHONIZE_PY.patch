@@ -1,0 +1,23 @@
+--- contrib/python/gevent/py2/ya.make	(index)
++++ contrib/python/gevent/py2/ya.make	(working tree)
+@@ -136,6 +136,20 @@ PY_SRCS(
+     gevent/resolver/cares.pyx
+     CYTHON_C_H
+     gevent/libev/corecext.pyx
++    CYTHONIZE_PY
++    gevent/_abstract_linkable.py=gevent._gevent_c_abstract_linkable
++    gevent/_greenlet_primitives.py=gevent._gevent_c_greenlet_primitives
++    gevent/_hub_local.py=gevent._gevent_c_hub_local
++    gevent/_hub_primitives.py=gevent._gevent_c_hub_primitives
++    gevent/_ident.py=gevent._gevent_c_ident
++    gevent/_imap.py=gevent._gevent_c_imap
++    gevent/_semaphore.py=gevent._gevent_c_semaphore
++    gevent/_tracer.py=gevent._gevent_c_tracer
++    gevent/_waiter.py=gevent._gevent_c_waiter
++    gevent/event.py=gevent._gevent_cevent
++    gevent/greenlet.py=gevent._gevent_cgreenlet
++    gevent/local.py=gevent._gevent_clocal
++    gevent/queue.py=gevent._gevent_cqueue
+ )
+ 
+ IF (PYTHON2)

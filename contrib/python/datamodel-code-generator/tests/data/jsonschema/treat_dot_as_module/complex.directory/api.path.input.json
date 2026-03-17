@@ -1,0 +1,13 @@
+{
+  "properties": {
+    "input": {
+      "default": "input",
+      "title": "Input"
+    },
+    "extType": {
+      "$ref": "schema.json"
+    }
+  },
+  "title": "Input",
+  "type": "object"
+}

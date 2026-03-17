@@ -1,0 +1,78 @@
+Metadata-Version: 2.4
+Name: traceloop-sdk
+Version: 0.52.6
+Summary: Traceloop Software Development Kit (SDK) for Python
+Project-URL: Repository, https://github.com/traceloop/openllmetry
+Project-URL: Documentation, https://traceloop.com/docs/openllmetry
+Author-email: Gal Kleinman <gal@traceloop.com>, Nir Gazit <nir@traceloop.com>, Tomer Friedman <tomer@traceloop.com>
+License-Expression: Apache-2.0
+Requires-Python: <4,>=3.10
+Requires-Dist: aiohttp<4,>=3.11.11
+Requires-Dist: colorama<0.5.0,>=0.4.6
+Requires-Dist: cuid<0.5,>=0.4
+Requires-Dist: deprecated<2,>=1.2.14
+Requires-Dist: jinja2<4,>=3.1.5
+Requires-Dist: opentelemetry-api<2,>=1.38.0
+Requires-Dist: opentelemetry-exporter-otlp-proto-grpc<2,>=1.38.0
+Requires-Dist: opentelemetry-exporter-otlp-proto-http<2,>=1.38.0
+Requires-Dist: opentelemetry-instrumentation-agno
+Requires-Dist: opentelemetry-instrumentation-alephalpha
+Requires-Dist: opentelemetry-instrumentation-anthropic
+Requires-Dist: opentelemetry-instrumentation-bedrock
+Requires-Dist: opentelemetry-instrumentation-chromadb
+Requires-Dist: opentelemetry-instrumentation-cohere
+Requires-Dist: opentelemetry-instrumentation-crewai
+Requires-Dist: opentelemetry-instrumentation-google-generativeai
+Requires-Dist: opentelemetry-instrumentation-groq
+Requires-Dist: opentelemetry-instrumentation-haystack
+Requires-Dist: opentelemetry-instrumentation-lancedb
+Requires-Dist: opentelemetry-instrumentation-langchain
+Requires-Dist: opentelemetry-instrumentation-llamaindex
+Requires-Dist: opentelemetry-instrumentation-logging>=0.59b0
+Requires-Dist: opentelemetry-instrumentation-marqo
+Requires-Dist: opentelemetry-instrumentation-mcp
+Requires-Dist: opentelemetry-instrumentation-milvus
+Requires-Dist: opentelemetry-instrumentation-mistralai
+Requires-Dist: opentelemetry-instrumentation-ollama
+Requires-Dist: opentelemetry-instrumentation-openai
+Requires-Dist: opentelemetry-instrumentation-openai-agents
+Requires-Dist: opentelemetry-instrumentation-pinecone
+Requires-Dist: opentelemetry-instrumentation-qdrant
+Requires-Dist: opentelemetry-instrumentation-redis>=0.59b0
+Requires-Dist: opentelemetry-instrumentation-replicate
+Requires-Dist: opentelemetry-instrumentation-requests>=0.59b0
+Requires-Dist: opentelemetry-instrumentation-sagemaker
+Requires-Dist: opentelemetry-instrumentation-sqlalchemy>=0.59b0
+Requires-Dist: opentelemetry-instrumentation-threading>=0.59b0
+Requires-Dist: opentelemetry-instrumentation-together
+Requires-Dist: opentelemetry-instrumentation-transformers
+Requires-Dist: opentelemetry-instrumentation-urllib3>=0.59b0
+Requires-Dist: opentelemetry-instrumentation-vertexai
+Requires-Dist: opentelemetry-instrumentation-voyageai
+Requires-Dist: opentelemetry-instrumentation-watsonx
+Requires-Dist: opentelemetry-instrumentation-weaviate
+Requires-Dist: opentelemetry-instrumentation-writer
+Requires-Dist: opentelemetry-sdk<2,>=1.38.0
+Requires-Dist: opentelemetry-semantic-conventions-ai<0.5.0,>=0.4.13
+Requires-Dist: pydantic>=1
+Requires-Dist: tenacity<10.0,>=8.2.3
+Provides-Extra: datasets
+Requires-Dist: pandas; extra == 'datasets'
+Description-Content-Type: text/markdown
+
+# traceloop-sdk
+
+Traceloop’s Python SDK allows you to easily start monitoring and debugging your LLM execution. Tracing is done in a non-intrusive way, built on top of OpenTelemetry. You can choose to export the traces to Traceloop, or to your existing observability stack.
+
+```python
+Traceloop.init(app_name="joke_generation_service")
+
+@workflow(name="joke_creation")
+def create_joke():
+    completion = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": "Tell me a joke about opentelemetry"}],
+    )
+
+    return completion.choices[0].message.content
+```

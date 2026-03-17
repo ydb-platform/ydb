@@ -1,0 +1,19 @@
+[console_scripts]
+gdal2tiles = osgeo_utils.gdal2tiles:main
+gdal2xyz = osgeo_utils.gdal2xyz:main
+gdal_calc = osgeo_utils.gdal_calc:main
+gdal_edit = osgeo_utils.gdal_edit:main
+gdal_fillnodata = osgeo_utils.gdal_fillnodata:main
+gdal_merge = osgeo_utils.gdal_merge:main
+gdal_pansharpen = osgeo_utils.gdal_pansharpen:main
+gdal_polygonize = osgeo_utils.gdal_polygonize:main
+gdal_proximity = osgeo_utils.gdal_proximity:main
+gdal_retile = osgeo_utils.gdal_retile:main
+gdal_sieve = osgeo_utils.gdal_sieve:main
+gdalattachpct = osgeo_utils.gdalattachpct:main
+gdalcompare = osgeo_utils.gdalcompare:main
+gdalmove = osgeo_utils.gdalmove:main
+ogr_layer_algebra = osgeo_utils.ogr_layer_algebra:main
+ogrmerge = osgeo_utils.ogrmerge:main
+pct2rgb = osgeo_utils.pct2rgb:main
+rgb2pct = osgeo_utils.rgb2pct:main

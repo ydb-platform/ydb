@@ -1,0 +1,13 @@
+codetable[1] marsClass  "mars/class.table" = "od"    : dump, string_type, lowercase;
+codetable[1] marsType   "mars/type.table" = "an"     : dump, string_type, lowercase;
+codetable[2] marsStream "mars/stream.table" = "oper" : dump, string_type, lowercase;
+ksec1expver[4] experimentVersionNumber = "0001" : dump;
+
+#alias typeOfProcessedData=marsType;
+alias ls.dataType = marsType;
+alias mars.class  = marsClass;
+alias mars.type   = marsType;
+alias mars.stream = marsStream;
+alias mars.expver = experimentVersionNumber;
+
+alias mars.domain  =  globalDomain; # For now...

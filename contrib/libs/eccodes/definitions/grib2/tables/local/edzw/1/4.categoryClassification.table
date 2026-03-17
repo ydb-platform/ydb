@@ -1,0 +1,11 @@
+# Local tabel for category classification
+#
+# Notes:
+# (1) Implies ordering of the associated (warning) levels (integer values >= 0): The greater the level the greater the severity.
+# (2) Implies ordering of the associated (warning) levels (integer values >= 0): The greater the level the greater the intensity.
+#
+#0 0 Reserved
+1 1 Severities (see Note 1)
+2 2 Intensities (see Note 2)
+255 255 Conforms to Missing
+65535 65535 Missing

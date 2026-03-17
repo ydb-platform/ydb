@@ -1,0 +1,19 @@
+codetable[2] tiggeModel 'grib2/local/[localSubSectionCentre:l]/models.table';
+codetable[2] tiggeCentre 'grib2/local/[localSubSectionCentre:l]/centres.table';
+concept tiggeLAMName {
+  "MOGREPS-MO- EUA" = {tiggeCentre=0;tiggeModel=0;}
+  "AEMet-SREPS-MM-EUAT"= {tiggeCentre=1;tiggeModel=1;}
+  "SRNWP-PEPS"= {tiggeCentre=1;tiggeModel=2;}
+  "COSMOLEPS-ARPASIMC-EU"= {tiggeCentre=2;tiggeModel=3;}
+  "NORLAMEPS" = {tiggeCentre=3;tiggeModel=4;}
+  "ALADIN-LAEF" = {tiggeCentre=4;tiggeModel=5;}
+  "COSMO-DE EPS" = {tiggeCentre=5;tiggeModel=6;}
+  "COSMO-SREPS-BO-EU" = {tiggeCentre=2;tiggeModel=7;}
+  "GLAMEPS" = {tiggeCentre=6;tiggeModel=8;}
+  "PEARCE" = {tiggeCentre=7;tiggeModel=9;}
+  "DMI- HIRLAM" = {tiggeCentre=8;tiggeModel=10;}
+  "OMSZ- ALADIN-EPS" = {tiggeCentre=9;tiggeModel=11;}
+  "OMSZ- ALADIN-EPS" = {tiggeCentre=10;tiggeModel=11;}
+  "OMSZ- ALADIN-EPS" = {tiggeCentre=11;tiggeModel=11;}
+}
+

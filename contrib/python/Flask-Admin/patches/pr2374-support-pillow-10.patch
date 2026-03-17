@@ -1,0 +1,47 @@
+From 96b92deef8b087e86a9dc3e84381d254ea5c0342 Mon Sep 17 00:00:00 2001
+From: Theodore Ni <3806110+tjni@users.noreply.github.com>
+Date: Tue, 8 Aug 2023 21:52:31 -0700
+Subject: [PATCH] Add support for Pillow 10
+
+---
+ flask_admin/form/upload.py | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/flask_admin/form/upload.py b/flask_admin/form/upload.py
+index 009a79f3e..deb0e06ed 100644
+--- a/flask_admin/form/upload.py
++++ b/flask_admin/form/upload.py
+@@ -21,6 +21,20 @@
+ 
+ try:
+     from PIL import Image, ImageOps
++
++    # to support pillow < 9.1.0
++    if not hasattr(Image, 'Resampling'):
++        from enum import IntEnum
++
++        class Resampling(IntEnum):
++            NEAREST = 0
++            BOX = 4
++            BILINEAR = 2
++            HAMMING = 5
++            BICUBIC = 3
++            LANCZOS = 1
++
++        Image.Resampling = Resampling
+ except ImportError:
+     Image = None
+     ImageOps = None
+@@ -464,10 +478,10 @@ def _resize(self, image, size):
+ 
+         if image.size[0] > width or image.size[1] > height:
+             if force:
+-                return ImageOps.fit(self.image, (width, height), Image.ANTIALIAS)
++                return ImageOps.fit(self.image, (width, height), Image.Resampling.LANCZOS)
+             else:
+                 thumb = self.image.copy()
+-                thumb.thumbnail((width, height), Image.ANTIALIAS)
++                thumb.thumbnail((width, height), Image.Resampling.LANCZOS)
+                 return thumb
+ 
+         return image

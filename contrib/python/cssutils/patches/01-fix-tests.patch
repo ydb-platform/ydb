@@ -1,0 +1,23 @@
+--- contrib/python/cssutils/cssutils/tests/test_cssutils.py	(index)
++++ contrib/python/cssutils/cssutils/tests/test_cssutils.py	(working tree)
+@@ -121,1 +121,1 @@ class CSSutilsTestCase(basetest.BaseTestCase):
+-        monkeypatch.chdir(os.path.dirname(__file__))
++        monkeypatch.chdir(os.path.dirname('../cssutils'))
+--- contrib/python/cssutils/cssutils/tests/test_parse.py	(index)
++++ contrib/python/cssutils/cssutils/tests/test_parse.py	(working tree)
+@@ -144,4 +144,4 @@ class CSSParserTestCase(basetest.BaseTestCase):
+-        with pytest.raises(urllib.error.HTTPError):
+-            parser.parseUrl(
+-                'http://cthedot.de/not-present.css',
+-            )
++        #with pytest.raises(urllib.error.HTTPError):
++        #    parser.parseUrl(
++        #        'http://cthedot.de/not-present.css',
++        #    )
+--- contrib/python/cssutils/cssutils/tests/basetest.py	(index)
++++ contrib/python/cssutils/cssutils/tests/basetest.py	(working tree)
+@@ -16,1 +16,3 @@ import cssutils
+-    return resources.files('cssutils') / 'tests' / 'sheets' / sheet_name
++    import os
++    import yatest.common as yc
++    return yc.test_source_path(os.path.join("..", "cssutils", "tests", "sheets", sheet_name))

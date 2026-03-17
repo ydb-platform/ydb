@@ -1,0 +1,11 @@
+commit 69f47894d4ffad52dbd633d65e5d6ba933a0b20a (HEAD -> eigen-unused-fixes)
+author: splinter
+date: 2021-05-05T19:08:58+03:00
+
+    Fix eigen unused for tf-2.4
+
+--- a/Eigen/src/Core/util/Macros.h
++++ b/Eigen/src/Core/util/Macros.h
+@@ -912,1 +912,1 @@
+-    #define eigen_plain_assert(x)
++    #define eigen_plain_assert(x) do { if (0) { EIGEN_UNUSED_VARIABLE(x); } } while (0)

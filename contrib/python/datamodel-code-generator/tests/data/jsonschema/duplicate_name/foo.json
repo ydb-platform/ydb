@@ -1,0 +1,12 @@
+{
+  "$id": "foo.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Foo",
+  "type": "object",
+  "definitions": {
+    "logLevels": {
+      "description": "Supported logging levels",
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "Cat": {
+      "properties": {
+        "pet_type": {
+          "const": "cat"
+        }
+      },
+      "required": [
+        "pet_type"
+      ],
+      "type": "object"
+    },
+    "Dog": {
+      "properties": {
+        "pet_type": {
+          "const": "dog"
+        }
+      },
+      "required": [
+        "pet_type"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "pet": {
+      "discriminator": {
+        "propertyName": "pet_type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Cat"
+        },
+        {
+          "$ref": "#/$defs/Dog"
+        }
+      ],
+      "title": "Pet"
+    }
+  },
+  "required": [
+    "pet"
+  ],
+  "title": "Animal",
+  "type": "object"
+} 

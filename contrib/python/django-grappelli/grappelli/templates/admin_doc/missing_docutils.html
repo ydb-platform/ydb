@@ -1,0 +1,19 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-docutils{% endblock %}
+{% block title %}Please install docutils{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">{% trans "Home" %}</a></li>
+        <li>Documentation</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Documentation</h1>
+    <div class="g-d-c grp-rte">
+        <p>The admin documentation system requires Python's <a href="http://docutils.sf.net/">docutils</a> library.</p>
+        <p>Please ask your administrators to install <a href="http://docutils.sf.net/">docutils</a>.</p>
+    </div>
+{% endblock %}

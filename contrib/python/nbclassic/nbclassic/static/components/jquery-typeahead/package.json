@@ -1,0 +1,59 @@
+{
+  "name": "jquery-typeahead",
+  "version": "2.11.1",
+  "description": "jQuery plugin that provides Typeahead (autocomplete) Search preview from Json object(s) via same domain Ajax request or cross domain Jsonp and offers data compression inside Local Storage. The plugin is built with a lot of options and callbacks to allow customization.",
+  "author": {
+    "name": "Tom Bertrand"
+  },
+  "main": "dist/jquery.typeahead.min.js",
+  "keywords": [
+    "search",
+    "typeahead",
+    "ajax",
+    "json",
+    "jsonp",
+    "input",
+    "autocomplete"
+  ],
+  "homepage": "http://www.runningcoder.org/jquerytypeahead/",
+  "bugs": "https://github.com/running-coder/jquery-typeahead/issues",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/running-coder/jquery-typeahead.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@babel/register": "^7.6.2",
+    "jquery": ">=1.7.2",
+    "lz-string": "^1.4.4"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.6.4",
+    "@babel/preset-env": "^7.6.3",
+    "gulp": "^4.0.2",
+    "gulp-autoprefixer": "5.0.0",
+    "gulp-clean-css": "^4.2.0",
+    "gulp-cli": "^2.2.0",
+    "gulp-jshint": "^2.1.0",
+    "gulp-rename": "^1.4.0",
+    "gulp-replace": "^1.0.0",
+    "gulp-sass": "^4.0.2",
+    "gulp-uglify": "^3.0.2",
+    "jest": "^24.9.0",
+    "jshint": "^2.10.2",
+    "prettier": "^1.18.2",
+    "prettier-eslint": "^9.0.0",
+    "prettier-eslint-cli": "^5.0.0",
+    "sinon": "^7.5.0",
+    "uglify-save-license": "^0.4.1"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "jest": {
+    "testURL": "http://localhost/",
+    "setupFiles": [
+      "<rootDir>/test/jestSetupFile.js"
+    ]
+  }
+}

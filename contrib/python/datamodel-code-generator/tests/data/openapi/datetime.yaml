@@ -1,0 +1,21 @@
+openapi: "3.0.0"
+components:
+  schemas:
+    InventoryItem:
+      required:
+#      - id
+#      - name
+      - releaseDate
+      type: object
+      properties:
+#        id:
+#          type: string
+#          format: uuid
+#          example: d290f1ee-6c54-4b01-90e6-d701748f0851
+#        name:
+#          type: string
+#          example: Widget Adapter
+        releaseDate:
+          type: string
+          format: date-time
+          example: 2016-08-29T09:12:33.001Z

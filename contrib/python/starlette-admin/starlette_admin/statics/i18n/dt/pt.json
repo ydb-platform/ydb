@@ -1,0 +1,176 @@
+{
+	"aria": {
+		"sortAscending": ": Ordenar colunas de forma ascendente",
+		"sortDescending": ": Ordenar colunas de forma descendente"
+	},
+	"buttons": {
+		"collection": "Coleção",
+		"colvis": "Visibilidade de colunas",
+		"colvisRestore": "Restaurar visibilidade",
+		"copy": "Copiar",
+		"copyKeys": "Pressionar CTRL ou u2318 + C para copiar a informação para a área de transferência. Para cancelar, clique nesta mensagem ou pressione ESC.",
+		"copySuccess": {
+			"1": "Uma linha copiada para a área de transferência",
+			"_": "%ds linhas copiadas para a área de transferência"
+		},
+		"copyTitle": "Copiar para a área de transferência",
+		"createState": "Criar",
+		"csv": "CSV",
+		"excel": "Excel",
+		"pageLength": {
+			"-1": "Mostrar todas as linhas",
+			"_": "Mostrar %d linhas"
+		},
+		"pdf": "PDF",
+		"print": "Imprimir",
+		"removeAllStates": "Remover Todos",
+		"removeState": "Remover",
+		"renameState": "Renomear",
+		"savedStates": "Gravados",
+		"stateRestore": "Estado %d",
+		"updateState": "Atualizar"
+	},
+	"datetime": {
+		"amPm": [
+			"am",
+			"pm"
+		],
+		"hours": "horas",
+		"minutes": "minutos",
+		"months": [
+			"Janeiro",
+			"Fevereiro",
+			"Março",
+			"Abril",
+			"Maio",
+			"Junho",
+			"Julho",
+			"Agosto",
+			"Setembro",
+			"Outubro",
+			"Novembro",
+			"Dezembro"
+		],
+		"next": "próximo",
+		"previous": "anterior",
+		"seconds": "segundos",
+		"unknown": "desconhecido",
+		"weekdays": [
+			"Seg",
+			"Ter",
+			"Qua",
+			"Qui",
+			"Sex",
+			"Sáb",
+			"Dom"
+		]
+	},
+	"decimal": ",",
+	"emptyTable": "Não foi encontrado nenhum registo",
+	"info": "Mostrando os registos _START_ a _END_ num total de _TOTAL_",
+	"infoEmpty": "Mostrando 0 os registos num total de 0",
+	"infoFiltered": "(filtrado num total de _MAX_ registos)",
+	"infoThousands": ".",
+	"lengthMenu": "Mostrar _MENU_ registos",
+	"loadingRecords": "Carregando...",
+	"paginate": {
+		"first": "Primeiro",
+		"last": "Último",
+		"next": "Seguinte",
+		"previous": "Anterior"
+	},
+	"processing": "Processando...",
+	"search": "Procurar:",
+	"searchBuilder": {
+		"add": "Adicionar condição",
+		"search": "Buscar",
+		"button": {
+			"0": "<i class=\"fa-solid fa-filter\"></i> Construtor de pesquisa",
+			"_": "<i class=\"fa-solid fa-filter\"></i> Construtor de pesquisa (%d)"
+		},
+		"clearAll": "Limpar tudo",
+		"condition": "Condição",
+		"conditions": {
+			"array": {
+				"contains": "Contém",
+				"empty": "Vazio",
+				"equals": "Igual",
+				"not": "Diferente",
+				"notEmpty": "Não está vazio",
+				"without": "Sem"
+			},
+			"date": {
+				"after": "Depois",
+				"before": "Antes",
+				"between": "Entre",
+				"empty": "Vazio",
+				"equals": "Igual",
+				"not": "Diferente",
+				"notBetween": "Não está entre",
+				"notEmpty": "Não está vazio"
+			},
+			"number": {
+				"between": "Entre",
+				"empty": "Vazio",
+				"equals": "Igual",
+				"gt": "Maior que",
+				"gte": "Maior ou igual a",
+				"lt": "Menor que",
+				"lte": "Menor ou igual a",
+				"not": "Diferente",
+				"notBetween": "Não está entre",
+				"notEmpty": "Não está vazio"
+			},
+			"string": {
+				"contains": "Contém",
+				"empty": "Vazio",
+				"endsWith": "Termina em",
+				"equals": "Igual",
+				"not": "Diferente",
+				"notContains": "Não contém",
+				"notEmpty": "Não está vazio",
+				"notEndsWith": "Não termina com",
+				"notStartsWith": "Não começa com",
+				"startsWith": "Começa em"
+			}
+		},
+		"data": "Dados",
+		"deleteTitle": "Excluir condição de filtragem",
+		"leftTitle": "Excluir critério",
+		"logicAnd": "E",
+		"logicOr": "Ou",
+		"rightTitle": "Incluir critério",
+		"title": {
+			"0": "Construtor de pesquisa",
+			"_": "Construtor de pesquisa (%d)"
+		},
+		"value": "Valor"
+	},
+	"select": {
+		"cells": {
+			"1": "1 célula selecionada",
+			"_": "%d células selecionadas"
+		},
+		"columns": {
+			"1": "1 coluna selecionada",
+			"_": "%d colunas selecionadas"
+		},
+		"rows": {
+			"1": "%d linha selecionada",
+			"_": "%d linhas selecionadas"
+		}
+	},
+	"starlette-admin": {
+		"buttons": {
+			"export": "Exportar"
+		},
+		"conditions": {
+			"empty": "Vazia",
+			"false": "Falso",
+			"notEmpty": "Não está vazio",
+			"true": "Verdadeiro"
+		}
+	},
+	"thousands": ".",
+	"zeroRecords": "Não foram encontrados resultados"
+}

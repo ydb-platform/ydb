@@ -1,0 +1,50 @@
+[
+  {
+    "country_code": "ES",
+    "bic": "NTSBESM1",
+    "bank_code": "1563",
+    "name": "N26 BANK GMBH, SUCURSAL EN ESPAÑA",
+    "short_name": "N26 BANK GMBH, SUCURSAL EN ESPAÑA",
+    "primary": true
+  },
+  {
+    "country_code": "ES",
+    "primary": true,
+    "bank_code": "0075",
+    "bic": "BSCHESMM",
+    "name": "BANCO POPULAR ESPA\u00d1OL, S.A.",
+    "short_name": "POPULAR ESPA\u00d1OL"
+  },
+  {
+    "country_code": "ES",
+    "primary": true,
+    "bank_code": "0116",
+    "bic": "BSCHESMM",
+    "name": "BANCO POPULAR INDUSTRIAL, S.A.(EUROBANCO)",
+    "short_name": "POPULAR IND."
+  },
+  {
+    "country_code": "ES",
+    "primary": true,
+    "bank_code": "2066",
+    "bic": "UCJAES2MXXX",
+    "name": "UNICAJA BANCO, S.A.",
+    "short_name": "UNICAJA"
+  },
+  {
+    "country_code": "ES",
+    "primary": true,
+    "bank_code": "6717",
+    "bic": "BNXTESM2",
+    "name": "BNEXT ELECTRONIC ISSUER, EDE, S.L.",
+    "short_name": "Bnext"
+  },
+  {
+    "country_code": "ES",
+    "primary": true,
+    "bank_code": "6723",
+    "bic": "MODRESB2",
+    "name": "MODULR FINANCE B.V., SPAIN BRANCH",
+    "short_name": "MODULR FINANCE"
+  }
+]

@@ -1,0 +1,186 @@
+# Hebrew translations for WTForms.
+# Copyright (C) 2020 WTForms Team
+# This file is distributed under the same license as the WTForms project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2020.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: WTForms 2.0dev\n"
+"Report-Msgid-Bugs-To: wtforms+i18n@jamescrasta.com\n"
+"POT-Creation-Date: 2020-04-22 09:05-0700\n"
+"PO-Revision-Date: 2017-04-19 00:41+0300\n"
+"Last-Translator: Tomer Levy <tmrlvi@gmail.com>\n"
+"Language: he\n"
+"Language-Team: he <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.8.0\n"
+
+#: wtforms/validators.py:68
+#, python-format
+msgid "Invalid field name '%s'."
+msgstr "שם שדה לא תקין: '%s'"
+
+#: wtforms/validators.py:76
+#, python-format
+msgid "Field must be equal to %(other_name)s."
+msgstr "שדה חייב להיות זהה ל-%(other_name)s."
+
+#: wtforms/validators.py:109
+#, python-format
+msgid "Field must be at least %(min)d character long."
+msgid_plural "Field must be at least %(min)d characters long."
+msgstr[0] "שדה חייב להכיל לפחות %(min)d תו."
+msgstr[1] "שדה חייב להכיל לפחות %(min)d תווים."
+
+#: wtforms/validators.py:112
+#, python-format
+msgid "Field cannot be longer than %(max)d character."
+msgid_plural "Field cannot be longer than %(max)d characters."
+msgstr[0] "שדה אינו יכול להכיל יותר מ-%(max)d תו"
+msgstr[1] "שדה אינו יכול להכיל יותר מ-%(max)d תווים"
+
+#: wtforms/validators.py:115
+#, python-format
+msgid "Field must be exactly %(max)d character long."
+msgid_plural "Field must be exactly %(max)d characters long."
+msgstr[0] ""
+msgstr[1] ""
+
+#: wtforms/validators.py:118
+#, python-format
+msgid "Field must be between %(min)d and %(max)d characters long."
+msgstr "שדה חייב להכיל בין %(min)d ל-%(max)d תווים"
+
+#: wtforms/validators.py:154
+#, python-format
+msgid "Number must be at least %(min)s."
+msgstr "מספר חייב להיות לפחות %(min)s."
+
+#: wtforms/validators.py:156
+#, python-format
+msgid "Number must be at most %(max)s."
+msgstr "מספר חייב להיות לכל היותר %(max)s."
+
+#: wtforms/validators.py:158
+#, python-format
+msgid "Number must be between %(min)s and %(max)s."
+msgstr "מספר חייב להיות בין %(min)s ו-%(max)s."
+
+#: wtforms/validators.py:218 wtforms/validators.py:258
+msgid "This field is required."
+msgstr "חובה למלא שדה זה."
+
+#: wtforms/validators.py:290
+msgid "Invalid input."
+msgstr "קלט לא תקין."
+
+#: wtforms/validators.py:355
+msgid "Invalid email address."
+msgstr "כתובת מייל לא תקינה."
+
+#: wtforms/validators.py:388
+msgid "Invalid IP address."
+msgstr "כתובת IP לא תקינה."
+
+#: wtforms/validators.py:430
+msgid "Invalid Mac address."
+msgstr "כתובת Mac לא תקינה."
+
+#: wtforms/validators.py:465
+msgid "Invalid URL."
+msgstr "URL לא תקין."
+
+#: wtforms/validators.py:485
+msgid "Invalid UUID."
+msgstr "UUID לא תקין."
+
+#: wtforms/validators.py:515
+#, python-format
+msgid "Invalid value, must be one of: %(values)s."
+msgstr "ערך לא חוקי, חייב להיות מתוך: %(values)s."
+
+#: wtforms/validators.py:547
+#, python-format
+msgid "Invalid value, can't be any of: %(values)s."
+msgstr "ערך לא חוקי, לא יכול להיות מתוך: %(values)s."
+
+#: wtforms/csrf/core.py:98 wtforms/ext/csrf/form.py:47
+msgid "Invalid CSRF Token"
+msgstr "מזהה CSRF לא תקין"
+
+#: wtforms/csrf/session.py:61 wtforms/ext/csrf/session.py:58
+msgid "CSRF token missing"
+msgstr "מזהה CSRF חסר"
+
+#: wtforms/csrf/session.py:69 wtforms/ext/csrf/session.py:66
+msgid "CSRF failed"
+msgstr "CSRF נכשל"
+
+#: wtforms/csrf/session.py:74 wtforms/ext/csrf/session.py:71
+msgid "CSRF token expired"
+msgstr "מזהה CSRF פג תוקף"
+
+#: wtforms/ext/appengine/fields.py:87 wtforms/ext/appengine/fields.py:164
+#: wtforms/ext/appengine/fields.py:166 wtforms/ext/django/fields.py:95
+#: wtforms/ext/sqlalchemy/fields.py:125 wtforms/ext/sqlalchemy/fields.py:127
+#: wtforms/ext/sqlalchemy/fields.py:180 wtforms/ext/sqlalchemy/fields.py:185
+#: wtforms/fields/core.py:513
+msgid "Not a valid choice"
+msgstr "לא בחירה חוקית"
+
+#: wtforms/ext/appengine/fields.py:185
+msgid "Not a valid list"
+msgstr "לא רשימה תקינה"
+
+#: wtforms/ext/appengine/fields.py:204
+msgid "Not a valid integer list"
+msgstr "לא רישמת מספרים תקינה"
+
+#: wtforms/ext/dateutil/fields.py:63
+msgid "Please input a date/time value"
+msgstr "אנא הכניסוו תאריך/זמן"
+
+#: wtforms/ext/dateutil/fields.py:75 wtforms/ext/dateutil/fields.py:83
+msgid "Invalid date/time input"
+msgstr "קלט תאריך/זמן לא תקין"
+
+#: wtforms/fields/core.py:505
+msgid "Invalid Choice: could not coerce"
+msgstr ""
+
+#: wtforms/fields/core.py:539
+msgid "Invalid choice(s): one or more data inputs could not be coerced"
+msgstr "בחירה\\ות לא תקינה: לא ניתן לכפות סוג על קלט אחד או יותר"
+
+#: wtforms/fields/core.py:546
+#, python-format
+msgid "'%(value)s' is not a valid choice for this field"
+msgstr "'%(value)s' אינו בחירה תקינה עבור השדה הזה"
+
+#: wtforms/fields/core.py:629 wtforms/fields/core.py:639
+msgid "Not a valid integer value"
+msgstr "לא מספר שלם תקין"
+
+#: wtforms/fields/core.py:705
+msgid "Not a valid decimal value"
+msgstr "לא מספר עשרוני"
+
+#: wtforms/fields/core.py:732
+msgid "Not a valid float value"
+msgstr "לא מספר מסוג float"
+
+#: wtforms/fields/core.py:793
+msgid "Not a valid datetime value"
+msgstr "לא ערך תאריך-זמן תקין"
+
+#: wtforms/fields/core.py:810
+msgid "Not a valid date value"
+msgstr "לא תאריך תקין"
+
+#: wtforms/fields/core.py:827
+msgid "Not a valid time value"
+msgstr ""
+

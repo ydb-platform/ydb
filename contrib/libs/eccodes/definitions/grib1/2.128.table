@@ -1,0 +1,255 @@
+# CODE TABLE 2, 128 Flag indication relative to section 2 and 3
+001 001 STRF Stream function m**2 s**-1 -
+002 002 VPOT Velocity potential m**2 s**-1 -
+003 003 PT Potential temperature K -
+004 004 EQPT Equivalent potential temperature K -
+005 005 SEPT Saturated equivalent potential temperature K -
+006 006 None Reserved for Metview - -
+007 007 None Reserved for Metview - -
+008 008 None Reserved for Metview - -
+009 009 None Reserved for Metview - -
+010 010 None Reserved for Metview - -
+011 011 UDVW U component of divergent wind m s**-1 -
+012 012 VDVW V component of divergent wind m s**-1 -
+013 013 URTW U component of rotational wind m s**-1 -
+014 014 VRTW V component of rotational wind m s**-1 -
+015 015 None Reserved for Metview - -
+016 016 None Reserved for Metview - -
+017 017 None Reserved for Metview - -
+018 018 None Reserved for Metview - -
+019 019 None Reserved for Metview - -
+020 020 None Reserved for Metview - -
+021 021 UCTP Unbalanced component of temperature K -
+022 022 UCLN Unbalanced component of logarithm of surface pressure - -
+023 023 UCDV Unbalanced component of divergence s**-1 -
+024 024 None Reserved for future unbalanced components - -
+025 025 None Reserved for future unbalanced components - -
+026 026 CL Lake cover (0-1) -
+027 027 CVL Low vegetation cover (0-1) -
+028 028 CVH High vegetation cover (0-1) -
+029 029 TVL Type of low vegetation - Table index
+030 030 TVH Type of high vegetation - Table index
+031 031 CI Sea-ice cover (0-1) -
+032 032 ASN Snow albedo (0-1) -
+033 033 RSN Snow density kg m**-3 -
+034 034 SSTK Sea surface temperature K K
+035 035 ISTL1 Ice surface temperature layer 1 K -
+036 036 ISTL2 Ice surface temperature layer 2 K -
+037 037 ISTL3 Ice surface temperature layer 3 K -
+038 038 ISTL4 Ice surface temperature layer 4 K -
+039 039 SWVL1 Volumetric soil water layer 1 m**3 m**-3 -
+040 040 SWVL2 Volumetric soil water layer 2 m**3 m**-3 -
+041 041 SWVL3 Volumetric soil water layer 3 m**3 m**-3 -
+042 042 SWVL4 Volumetric soil water layer 4 m**3 m**-3 -
+043 043 SLT Soil type - -
+044 044 ES Snow evaporation m of water Accumulated field
+045 045 SMLT Snowmelt m of water Accumulated field
+046 046 SDUR Solar duration s -
+047 047 DSRP Direct solar radiation w m**-2 Incident on a plane perpendicular to the Sun's direction
+048 048 MAGSS Magnitude of surface stress N m**-2 s Accumulated field
+049 049 10FG 10 metre wind gust m s**-1 Maximum since previous post-processing
+050 050 LSPF Large-scale precipitation fraction s Accumulated field
+051 051 MX2T24 Maximum 2 metre temperature K During previous 24 hours
+052 052 - Minimum 2 metre temperature K During previous 24 hours
+053 053 MONT Montgomery potential m**2 s**-2 -
+054 054 PRES Pressure Pa -
+055 055 - Mean 2 metre temperature in past 24 hours K 6-hourly intervals
+056 056 MN2D24 Mean 2 metre dewpoint temperature in past 24 hours K 6-hourly intervals
+57 57 UVB Downward UV radiation at the surface w m**-2 s Ultra-violet band B. Accumulated field.
+58 58 PAR Photosynthetically active radiation at the surface w m**-2 s Accumulated field.
+59 59 CAPE Convective available potential energy J kg**-1 -
+060 060 PV Potential vorticity K m**2 kg**-1 s**-1 -
+061 061 TPO Total precipitation from observations Millimetres*100 + number of stations Rainfall amount found by averaging over a number of observing stations
+062 062 OBCT Observation count - Count of observations used in calculating value at a gridpoint
+063 063 - Start time for skin temperature difference s Seconds from reference time
+064 064 - Finish time for skin temperature difference s Seconds from reference time
+065 065 - Skin temperature difference K -
+066 066 - Leaf area index, low vegetation m**2 / m**2 -
+067 067 - Leaf area index, high vegetation m**2 / m**2 -
+068 068 - Minimum stomatal resistance, low vegetation s m**2
+069 069 - Minimum stomatal resistance, high vegetation s m**2
+070 070 - Biome cover, low vegetation [0,1]
+071 071 - Biome cover, high vegetation [0,1]
+72 72 - Unused
+73 73 - Unused
+74 74 - Unused
+75 75 - Unused
+76 76 - Unused
+77 77 - Unused
+78 78 TCLW Total column liquid water kg m**-2
+79 79 TCIW Total column ice water kg m**-2
+80 80 80 Experimental product Undefined Contents may vary
+81 81 81 Experimental product Undefined Contents may vary
+82 82 82 Experimental product Undefined Contents may vary
+83 83 83 Experimental product Undefined Contents may vary
+84 84 84 Experimental product Undefined Contents may vary
+85 85 85 Experimental product Undefined Contents may vary
+86 86 86 Experimental product Undefined Contents may vary
+87 87 87 Experimental product Undefined Contents may vary
+88 88 88 Experimental product Undefined Contents may vary
+89 89 89 Experimental product Undefined Contents may vary
+90 90 90 Experimental product Undefined Contents may vary
+91 91 91 Experimental product Undefined Contents may vary
+92 92 92 Experimental product Undefined Contents may vary
+93 93 93 Experimental product Undefined Contents may vary
+94 94 94 Experimental product Undefined Contents may vary
+95 95 95 Experimental product Undefined Contents may vary
+96 96 96 Experimental product Undefined Contents may vary
+97 97 97 Experimental product Undefined Contents may vary
+98 98 98 Experimental product Undefined Contents may vary
+99 99 99 Experimental product Undefined Contents may vary
+100 100 100 Experimental product Undefined Contents may vary
+101 101 101 Experimental product Undefined Contents may vary
+102 102 102 Experimental product Undefined Contents may vary
+103 103 103 Experimental product Undefined Contents may vary
+104 104 104 Experimental product Undefined Contents may vary
+105 105 105 Experimental product Undefined Contents may vary
+106 106 106 Experimental product Undefined Contents may vary
+107 107 107 Experimental product Undefined Contents may vary
+108 108 108 Experimental product Undefined Contents may vary
+109 109 109 Experimental product Undefined Contents may vary
+110 110 110 Experimental product Undefined Contents may vary
+111 111 111 Experimental product Undefined Contents may vary
+112 112 112 Experimental product Undefined Contents may vary
+113 113 113 Experimental product Undefined Contents may vary
+114 114 114 Experimental product Undefined Contents may vary
+115 115 115 Experimental product Undefined Contents may vary
+116 116 116 Experimental product Undefined Contents may vary
+117 117 117 Experimental product Undefined Contents may vary
+118 118 118 Experimental product Undefined Contents may vary
+119 119 119 Experimental product Undefined Contents may vary
+121 121 MX2T6 Maximum temperature at 2 metres K During previous 6 hours
+122 122 MN2T6 Minimum temperature at 2 metres K During previous 6 hours
+123 123 10FG6 10 metre wind gust m s**-1 During previous 6 hours
+124 124 - Unused - -
+125 125 - Vertically integrated total energy J m**-2 Integrated over a number of model levels
+126 126 - Generic parameter for sensitive area prediction Various Originating centre dependent
+127 127 AT Atmospheric tide - Not GRIB data
+128 128 BV Budget values - Not GRIB data
+129 129 Z Geopotential m**2 s**-2 At the surface: orography
+130 130 T Temperature K -
+131 131 U U velocity m s**-1 -
+132 132 V V velocity m s**-1 -
+133 133 Q Specific humidity kg kg**-1 -
+134 134 SP Surface pressure Pa -
+135 135 W Vertical velocity Pa s**-1 -
+136 136 TCW Total column water kg m**-2 Liquid + ice + vapour
+137 137 TCWV Total column water vapour kg m**-2 -
+138 138 VO Vorticity (relative) s**-1 -
+139 139 STL1 Soil temperature level 1 K Soil temperature (ST) before 19930804
+140 140 SWL1 Soil wetness level 1 m of water Surface soil wetness (SSW) before 19930804
+141 141 SD Snow depth m of water equivalent -
+142 142 LSP Large scale precipitation m Accumulated field
+143 143 CP Convective precipitation m Accumulated field
+144 144 SF Snowfall (convective + stratiform) m of water equivalent Accumulated field
+145 145 BLD Boundary layer dissipation W m**-2 s Accumulated field
+146 146 SSHF Surface sensible heat flux W m**-2 s Accumulated field
+147 147 SLHF Surface latent heat flux W m**-2 s Accumulated field
+148 148 CHNK Charnock - Surface stress (SS) before 19980519
+149 149 SNR Surface net radiation W m**-2 s Accumulated field
+150 150 TNR Top net radiation - -
+151 151 MSL Mean sea level pressure Pa -
+152 152 LNSP Logarithm of surface pressure - -
+153 153 SWHR Short-wave heating rate K Accumulated field
+154 154 LWHR Long-wave heating rate K Accumulated field
+155 155 D Divergence s**-1 -
+156 156 GH Height m Geopotential height
+157 157 R Relative humidity % -
+158 158 TSP Tendency of surface pressure Pa s**-1 -
+159 159 BLH Boundary layer height m -
+160 160 SDOR Standard deviation of orography - -
+161 161 ISOR Anisotropy of sub-gridscale orography - -
+162 162 ANOR Angle of sub-gridscale orography rad -
+163 163 SLOR Slope of sub-gridscale orography - -
+164 164 TCC Total cloud cover (0 - 1) -
+165 165 10U 10 metre U wind component m s**-1 -
+166 166 10V 10 metre V wind component m s**-1 -
+167 167 2T 2 metre temperature K -
+168 168 2D 2 metre dewpoint temperature K -
+169 169 SSRD Surface solar radiation downwards W m**-2 s Accumulated field
+170 170 STL2 Soil temperature level 2 K Deep soil temperature (DST) before 19930804
+171 171 SWL2 Soil wetness level 2 m of water Deep soil wetness (DSW) before 19930804. Scaled: depth surf water layer 7cm deep
+172 172 LSM Land-sea mask (0, 1) -
+173 173 SR Surface roughness m -
+174 174 AL Albedo (0 - 1) -
+175 175 STRD Surface thermal radiation downwards W m**-2 s Accumulated field
+176 176 SSR Surface solar radiation W m**-2 s Accumulated field
+177 177 STR Surface thermal radiation W m**-2 s Accumulated field
+178 178 TSR Top solar radiation W m**-2 s Accumulated field
+179 179 TTR Top thermal radiation W m**-2 s Accumulated field
+180 180 EWSS East-West surface stress N m**-2 s Accumulated field
+181 181 NSSS North-South surface stress N m**-2 s Accumulated field
+182 182 E Evaporation m of water Accumulated field
+183 183 STL3 Soil temperature level 3 K Climatological deep soil temperature (CDST) before 19930804
+184 184 SWL3 Soil wetness level 3 m of water Climatological deep soil wetness (CDSW) before 19930804.Scaled depth surf water 7cm deep
+185 185 CCC Convective cloud cover (0 - 1) -
+186 186 LCC Low cloud cover (0 - 1) -
+187 187 MCC Medium cloud cover (0 - 1) -
+188 188 HCC High cloud cover (0 - 1) -
+189 189 SUND Sunshine duration s Accumulated field
+190 190 EWOV East-West component of sub-grid orographic variance m**2 -
+191 191 NSOV North-South component of sub-grid orographic variance m**2 -
+192 192 NWOV North-West/South-East component of sub-grid orographic variance m**2 -
+193 193 NEOV North-East/South-West component of sub-grid orographic variance m**2 -
+194 194 BTMP Brightness temperature K -
+195 195 LGWS Latitudinal component of gravity wave stress N m**-2 s Accumulated field
+196 196 MGWS Meridional component of gravity wave stress N m**-2 s Accumulated field
+197 197 GWD Gravity wave dissipation W m**-2 s Accumulated field
+198 198 SRC Skin reservoir content m of water -
+199 199 VEG Vegetation fraction (0 - 1) -
+200 200 VSO Variance of sub-gridscale orography m**2 -
+201 201 MX2T Maximum temperature at 2 metres since previous post-processing K -
+202 202 MN2T Minimum temperature at 2 metres since previous post-processing K -
+203 203 O3 Ozone mass mixing ratio kg kg**-1 -
+204 204 PAW Precipiation analysis weights - -
+205 205 RO Runoff m Accumulated field
+206 206 TCO3 Total column ozone kg m**-2 Before 20010612 was in Dobsons. 1 Dobson = 2.1415E-5 kg m**-2
+207 207 10SI 10 metre wind speed m s**-1 -
+208 208 TSRC Top net solar radiation, clear sky W m**-2 s Accumulated field
+209 209 TTRC Top net thermal radiation, clear sky W m**-2 s Accumulated field
+210 210 SSRC Surface net solar radiation, clear sky W m**-2 s Accumulated field
+211 211 STRC Surface net thermal radiation, clear sky W m**-2 s Accumulated field
+212 212 SI Solar insolation W m**-2 s Accumulated field
+213 213 - Unused - -
+214 214 DHR Diabatic heating by radiation K -
+215 215 DHVD Diabatic heating by vertical diffusion K -
+216 216 DHCC Diabatic heating by cumulus convection K -
+217 217 DHLC Diabatic heating large-scale condensation K -
+218 218 VDZW Vertical diffusion of zonal wind m s**-1 -
+219 219 VDMW Vertical diffusion of meridional wind m s**-1 -
+220 220 EWGD East-West gravity wave drag tendency m s**-1 -
+221 221 NSGD North-South gravity wave drag tendency m s**-1 -
+222 222 CTZW Convective tendency of zonal wind m s**-1 -
+223 223 CTMW Convective tendency of meridional wind m s**-1 -
+224 224 VDH Vertical diffusion of humidity kg kg**-1 -
+225 225 HTCC Humidity tendency by cumulus convection kg kg**-1 -
+226 226 HTLC Humidity tendency large-scale condensation kg kg**-1 -
+227 227 CRNH Change from removing negative humidity kg kg**-1 -
+228 228 TP Total precipitation m Accumulated
+229 229 IEWS Instantaneous X surface stress N m**-2 -
+230 230 INSS Instantaneous Y surface stress N m**-2 -
+231 231 ISHF Instantaneous surface heat flux W m**-2 -
+232 232 IE Instantaneous moisture flux kg m**-2 s Evaporation
+233 233 ASQ Apparent surface humidity kg kg**-1 -
+234 234 LSRH Logarithm of surface roughness length for heat - -
+235 235 SKT Skin temperature K -
+236 236 STL4 Soil temperature level 4 K -
+237 237 SWL4 Soil wetness level 4 m Scaled to depth of surface water layer 7cm deep
+238 238 TSN Temperature of snow layer K -
+239 239 CSF Convective snowfall m of water equivalent Accumulated field
+240 240 LSF Large-scale snowfall m of water equivalent Accumulated field
+241 241 ACF Accumulated cloud fraction tendency (-1 to 1) -
+242 242 ALW Accumulated liquid water tendency (-1 to 1) -
+243 243 FAL Forecast albedo (0 - 1) -
+244 244 FSR Forecast surface roughness m -
+245 245 FLSR Forecast log of surface roughness for heat - -
+246 246 CLWC Cloud liquid water content kg kg**-1 -
+247 247 CIWC Cloud ice water content kg kg**-1 -
+248 248 CC Fraction of cloud cover (0 - 1) -
+249 249 AIW Accumulated ice water tendency (-1 to 1) -
+250 250 ICE Ice age 1,0 0 first-year, 1 multi-year
+251 251 ATTE Adiabatic tendency of temperature K -
+252 252 ATHE Adiabatic tendency of humidity kg kg**-1 -
+253 253 ATZE Adiabatic tendency of zonal wind m s**-1 -
+254 254 ATMW Adiabatic tendency of meridional wind m s**-1 -
+255 255 - Indicates a missing value - -

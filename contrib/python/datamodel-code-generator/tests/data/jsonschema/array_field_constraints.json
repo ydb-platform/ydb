@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "TestSchema",
+  "description": "For the test",
+  "properties": {
+    "numbers": {
+      "type": "array",
+      "description": "A list of numbers",
+      "items": {
+        "type": "string",
+        "pattern": "^\\d{1,15}$",
+        "description": "Just a number",
+        "examples": [
+          "1",
+          "5464446",
+          "684572369854259"
+        ]
+      }
+    }
+  },
+  "required": [
+    "numbers"
+  ]
+}
+

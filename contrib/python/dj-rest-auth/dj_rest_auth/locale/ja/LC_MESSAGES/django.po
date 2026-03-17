@@ -1,0 +1,128 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2020-11-27 02:05+0900\n"
+"PO-Revision-Date: 2020-11-27 02:20+0900\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"X-Generator: Poedit 2.4.1\n"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\serializers.py:66
+msgid "View is not defined, pass it as a context variable"
+msgstr "View が定義されていません。コンテキスト変数として渡してください。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\serializers.py:71
+msgid "Define adapter_class in view"
+msgstr "View で「adapter_class」を定義してください"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\serializers.py:91
+msgid "Define callback_url in view"
+msgstr "View で「callback_url」を定義してください"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\serializers.py:95
+msgid "Define client_class in view"
+msgstr "View で「client_class」を定義してください"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\serializers.py:124
+msgid "Incorrect input. access_token or code is required."
+msgstr "入力が正しくありません。 アクセストークンまたはコードが必要です。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\serializers.py:133
+msgid "Incorrect value"
+msgstr "値が正しくありません"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\serializers.py:147
+msgid "User is already registered with this e-mail address."
+msgstr "ユーザーはすでにこのメールアドレスに登録されています。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\serializers.py:193
+msgid "A user is already registered with this e-mail address."
+msgstr "ユーザーはすでにこのメールアドレスに登録されています。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\serializers.py:201
+msgid "The two password fields didn't match."
+msgstr "2つのパスワードフィールドが一致しませんでした。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\views.py:48
+msgid "Verification e-mail sent."
+msgstr "確認メールを送信しました。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\registration\views.py:101
+msgid "ok"
+msgstr "はい"
+
+#: .\venv\lib\site-packages\dj_rest_auth\serializers.py:35
+msgid "Must include \"email\" and \"password\"."
+msgstr "「メール」と「パスワード」を含める必要があります。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\serializers.py:46
+msgid "Must include \"username\" and \"password\"."
+msgstr "「ユーザー名」と「パスワード」を含める必要があります。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\serializers.py:59
+msgid "Must include either \"username\" or \"email\" and \"password\"."
+msgstr ""
+"「ユーザー名」または「メール」と「パスワード」のいずれかを含める必要がありま"
+"す。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\serializers.py:104
+msgid "User account is disabled."
+msgstr "ユーザーアカウントが無効になっています。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\serializers.py:112
+msgid "E-mail is not verified."
+msgstr "メールは検証されていません。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\serializers.py:121
+msgid "Unable to log in with provided credentials."
+msgstr "提供された資格情報でログインできません。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\serializers.py:293
+msgid "Your old password was entered incorrectly. Please enter it again."
+msgstr ""
+"使っていたパスワードが間違って入力されました。 もう一度入力してください。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\views.py:175
+msgid "Successfully logged out."
+msgstr "正常にログアウトしました。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\views.py:199
+msgid "Refresh token was not included in request data."
+msgstr "更新トークンはリクエストデータに含まれていませんでした。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\views.py:207
+#: .\venv\lib\site-packages\dj_rest_auth\views.py:211
+msgid "An error has occurred."
+msgstr "エラーが発生しました。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\views.py:216
+msgid ""
+"Neither cookies or blacklist are enabled, so the token has not been deleted "
+"server side. Please make sure the token is deleted client side."
+msgstr ""
+"Cookieもブラックリストも有効になっていないため、トークンはサーバー側で削除さ"
+"れていません。 トークンがクライアント側で削除されていることを確認してくださ"
+"い。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\views.py:268
+msgid "Password reset e-mail has been sent."
+msgstr "パスワードリセットメールが送信されました。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\views.py:295
+msgid "Password has been reset with the new password."
+msgstr "パスワードが変更されました。"
+
+#: .\venv\lib\site-packages\dj_rest_auth\views.py:318
+msgid "New password has been saved."
+msgstr "新しいパスワードが保存されました。"

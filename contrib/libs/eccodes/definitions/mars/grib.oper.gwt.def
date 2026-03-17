@@ -1,0 +1,5 @@
+alias mars.step = stepRange;
+
+# We need this because 'postProcessing' is defined later
+meta ecpt_model sprintf("%s", postProcessing) : no_copy;
+alias mars.model = ecpt_model;

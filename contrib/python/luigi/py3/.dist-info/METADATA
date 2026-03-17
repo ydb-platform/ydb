@@ -1,0 +1,457 @@
+Metadata-Version: 2.4
+Name: luigi
+Version: 3.7.2
+Summary: Workflow mgmgt + task scheduling + dependency resolution.
+Project-URL: Homepage, https://github.com/spotify/luigi
+Author: The Luigi Authors
+License:                                  Apache License
+                                   Version 2.0, January 2004
+                                http://www.apache.org/licenses/
+        
+           TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+        
+           1. Definitions.
+        
+              "License" shall mean the terms and conditions for use, reproduction,
+              and distribution as defined by Sections 1 through 9 of this document.
+        
+              "Licensor" shall mean the copyright owner or entity authorized by
+              the copyright owner that is granting the License.
+        
+              "Legal Entity" shall mean the union of the acting entity and all
+              other entities that control, are controlled by, or are under common
+              control with that entity. For the purposes of this definition,
+              "control" means (i) the power, direct or indirect, to cause the
+              direction or management of such entity, whether by contract or
+              otherwise, or (ii) ownership of fifty percent (50%) or more of the
+              outstanding shares, or (iii) beneficial ownership of such entity.
+        
+              "You" (or "Your") shall mean an individual or Legal Entity
+              exercising permissions granted by this License.
+        
+              "Source" form shall mean the preferred form for making modifications,
+              including but not limited to software source code, documentation
+              source, and configuration files.
+        
+              "Object" form shall mean any form resulting from mechanical
+              transformation or translation of a Source form, including but
+              not limited to compiled object code, generated documentation,
+              and conversions to other media types.
+        
+              "Work" shall mean the work of authorship, whether in Source or
+              Object form, made available under the License, as indicated by a
+              copyright notice that is included in or attached to the work
+              (an example is provided in the Appendix below).
+        
+              "Derivative Works" shall mean any work, whether in Source or Object
+              form, that is based on (or derived from) the Work and for which the
+              editorial revisions, annotations, elaborations, or other modifications
+              represent, as a whole, an original work of authorship. For the purposes
+              of this License, Derivative Works shall not include works that remain
+              separable from, or merely link (or bind by name) to the interfaces of,
+              the Work and Derivative Works thereof.
+        
+              "Contribution" shall mean any work of authorship, including
+              the original version of the Work and any modifications or additions
+              to that Work or Derivative Works thereof, that is intentionally
+              submitted to Licensor for inclusion in the Work by the copyright owner
+              or by an individual or Legal Entity authorized to submit on behalf of
+              the copyright owner. For the purposes of this definition, "submitted"
+              means any form of electronic, verbal, or written communication sent
+              to the Licensor or its representatives, including but not limited to
+              communication on electronic mailing lists, source code control systems,
+              and issue tracking systems that are managed by, or on behalf of, the
+              Licensor for the purpose of discussing and improving the Work, but
+              excluding communication that is conspicuously marked or otherwise
+              designated in writing by the copyright owner as "Not a Contribution."
+        
+              "Contributor" shall mean Licensor and any individual or Legal Entity
+              on behalf of whom a Contribution has been received by Licensor and
+              subsequently incorporated within the Work.
+        
+           2. Grant of Copyright License. Subject to the terms and conditions of
+              this License, each Contributor hereby grants to You a perpetual,
+              worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+              copyright license to reproduce, prepare Derivative Works of,
+              publicly display, publicly perform, sublicense, and distribute the
+              Work and such Derivative Works in Source or Object form.
+        
+           3. Grant of Patent License. Subject to the terms and conditions of
+              this License, each Contributor hereby grants to You a perpetual,
+              worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+              (except as stated in this section) patent license to make, have made,
+              use, offer to sell, sell, import, and otherwise transfer the Work,
+              where such license applies only to those patent claims licensable
+              by such Contributor that are necessarily infringed by their
+              Contribution(s) alone or by combination of their Contribution(s)
+              with the Work to which such Contribution(s) was submitted. If You
+              institute patent litigation against any entity (including a
+              cross-claim or counterclaim in a lawsuit) alleging that the Work
+              or a Contribution incorporated within the Work constitutes direct
+              or contributory patent infringement, then any patent licenses
+              granted to You under this License for that Work shall terminate
+              as of the date such litigation is filed.
+        
+           4. Redistribution. You may reproduce and distribute copies of the
+              Work or Derivative Works thereof in any medium, with or without
+              modifications, and in Source or Object form, provided that You
+              meet the following conditions:
+        
+              (a) You must give any other recipients of the Work or
+                  Derivative Works a copy of this License; and
+        
+              (b) You must cause any modified files to carry prominent notices
+                  stating that You changed the files; and
+        
+              (c) You must retain, in the Source form of any Derivative Works
+                  that You distribute, all copyright, patent, trademark, and
+                  attribution notices from the Source form of the Work,
+                  excluding those notices that do not pertain to any part of
+                  the Derivative Works; and
+        
+              (d) If the Work includes a "NOTICE" text file as part of its
+                  distribution, then any Derivative Works that You distribute must
+                  include a readable copy of the attribution notices contained
+                  within such NOTICE file, excluding those notices that do not
+                  pertain to any part of the Derivative Works, in at least one
+                  of the following places: within a NOTICE text file distributed
+                  as part of the Derivative Works; within the Source form or
+                  documentation, if provided along with the Derivative Works; or,
+                  within a display generated by the Derivative Works, if and
+                  wherever such third-party notices normally appear. The contents
+                  of the NOTICE file are for informational purposes only and
+                  do not modify the License. You may add Your own attribution
+                  notices within Derivative Works that You distribute, alongside
+                  or as an addendum to the NOTICE text from the Work, provided
+                  that such additional attribution notices cannot be construed
+                  as modifying the License.
+        
+              You may add Your own copyright statement to Your modifications and
+              may provide additional or different license terms and conditions
+              for use, reproduction, or distribution of Your modifications, or
+              for any such Derivative Works as a whole, provided Your use,
+              reproduction, and distribution of the Work otherwise complies with
+              the conditions stated in this License.
+        
+           5. Submission of Contributions. Unless You explicitly state otherwise,
+              any Contribution intentionally submitted for inclusion in the Work
+              by You to the Licensor shall be under the terms and conditions of
+              this License, without any additional terms or conditions.
+              Notwithstanding the above, nothing herein shall supersede or modify
+              the terms of any separate license agreement you may have executed
+              with Licensor regarding such Contributions.
+        
+           6. Trademarks. This License does not grant permission to use the trade
+              names, trademarks, service marks, or product names of the Licensor,
+              except as required for reasonable and customary use in describing the
+              origin of the Work and reproducing the content of the NOTICE file.
+        
+           7. Disclaimer of Warranty. Unless required by applicable law or
+              agreed to in writing, Licensor provides the Work (and each
+              Contributor provides its Contributions) on an "AS IS" BASIS,
+              WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+              implied, including, without limitation, any warranties or conditions
+              of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+              PARTICULAR PURPOSE. You are solely responsible for determining the
+              appropriateness of using or redistributing the Work and assume any
+              risks associated with Your exercise of permissions under this License.
+        
+           8. Limitation of Liability. In no event and under no legal theory,
+              whether in tort (including negligence), contract, or otherwise,
+              unless required by applicable law (such as deliberate and grossly
+              negligent acts) or agreed to in writing, shall any Contributor be
+              liable to You for damages, including any direct, indirect, special,
+              incidental, or consequential damages of any character arising as a
+              result of this License or out of the use or inability to use the
+              Work (including but not limited to damages for loss of goodwill,
+              work stoppage, computer failure or malfunction, or any and all
+              other commercial damages or losses), even if such Contributor
+              has been advised of the possibility of such damages.
+        
+           9. Accepting Warranty or Additional Liability. While redistributing
+              the Work or Derivative Works thereof, You may choose to offer,
+              and charge a fee for, acceptance of support, warranty, indemnity,
+              or other liability obligations and/or rights consistent with this
+              License. However, in accepting such obligations, You may act only
+              on Your own behalf and on Your sole responsibility, not on behalf
+              of any other Contributor, and only if You agree to indemnify,
+              defend, and hold each Contributor harmless for any liability
+              incurred by, or claims asserted against, such Contributor by reason
+              of your accepting any such warranty or additional liability.
+        
+           END OF TERMS AND CONDITIONS
+        
+           APPENDIX: How to apply the Apache License to your work.
+        
+              To apply the Apache License to your work, attach the following
+              boilerplate notice, with the fields enclosed by brackets "[]"
+              replaced with your own identifying information. (Don't include
+              the brackets!)  The text should be enclosed in the appropriate
+              comment syntax for the file format. We also recommend that a
+              file or class name and description of purpose be included on the
+              same "printed page" as the copyright notice for easier
+              identification within third-party archives.
+        
+           Copyright 2012-2021 Spotify AB
+        
+           Licensed under the Apache License, Version 2.0 (the "License");
+           you may not use this file except in compliance with the License.
+           You may obtain a copy of the License at
+        
+               http://www.apache.org/licenses/LICENSE-2.0
+        
+           Unless required by applicable law or agreed to in writing, software
+           distributed under the License is distributed on an "AS IS" BASIS,
+           WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+           See the License for the specific language governing permissions and
+           limitations under the License.
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: System :: Monitoring
+Requires-Python: <3.13,>=3.8.0
+Requires-Dist: python-daemon; sys_platform != 'win32'
+Requires-Dist: python-daemon<2.2.0; sys_platform == 'win32'
+Requires-Dist: python-dateutil<3,>=2.7.5
+Requires-Dist: tenacity<9,>=8
+Requires-Dist: tornado<7,>=5.0
+Requires-Dist: typing-extensions>=4.12.2
+Provides-Extra: jsonschema
+Requires-Dist: jsonschema; extra == 'jsonschema'
+Provides-Extra: prometheus
+Requires-Dist: prometheus-client<0.15,>=0.5; extra == 'prometheus'
+Provides-Extra: toml
+Requires-Dist: toml<2.0.0; extra == 'toml'
+Description-Content-Type: text/x-rst
+
+
+.. note::
+	For the latest source, discussion, etc, please visit the
+	`GitHub repository <https://github.com/spotify/luigi>`_
+.. figure:: https://raw.githubusercontent.com/spotify/luigi/master/doc/luigi.png
+   :alt: Luigi Logo
+   :align: center
+
+.. image:: https://img.shields.io/endpoint.svg?url=https%3A%2F%2Factions-badge.atrox.dev%2Fspotify%2Fluigi%2Fbadge&label=build&logo=none&%3Fref%3Dmaster&style=flat
+    :target: https://actions-badge.atrox.dev/spotify/luigi/goto?ref=master
+
+.. image:: https://img.shields.io/codecov/c/github/spotify/luigi/master.svg?style=flat
+    :target: https://codecov.io/gh/spotify/luigi?branch=master
+
+.. image:: https://img.shields.io/pypi/v/luigi.svg?style=flat
+   :target: https://pypi.python.org/pypi/luigi
+
+.. image:: https://img.shields.io/pypi/l/luigi.svg?style=flat
+   :target: https://pypi.python.org/pypi/luigi
+
+.. image:: https://readthedocs.org/projects/luigi/badge/?version=stable
+    :target: https://luigi.readthedocs.io/en/stable/?badge=stable
+    :alt: Documentation Status
+
+Luigi is a Python (3.8, 3.9, 3.10, 3.11, 3.12 tested) package that helps you build complex
+pipelines of batch jobs. It handles dependency resolution, workflow management,
+visualization, handling failures, command line integration, and much more.
+
+Getting Started
+---------------
+
+Run ``pip install luigi`` to install the latest stable version from `PyPI
+<https://pypi.python.org/pypi/luigi>`_. `Documentation for the latest release
+<https://luigi.readthedocs.io/en/stable/>`__ is hosted on readthedocs.
+
+Run ``pip install luigi[toml]`` to install Luigi with `TOML-based configs
+<https://luigi.readthedocs.io/en/stable/configuration.html>`__ support.
+
+For the bleeding edge code, ``pip install
+git+https://github.com/spotify/luigi.git``. `Bleeding edge documentation
+<https://luigi.readthedocs.io/en/latest/>`__ is also available.
+
+Background
+----------
+
+The purpose of Luigi is to address all the plumbing typically associated
+with long-running batch processes. You want to chain many tasks,
+automate them, and failures *will* happen. These tasks can be anything,
+but are typically long running things like
+`Hadoop <http://hadoop.apache.org/>`_ jobs, dumping data to/from
+databases, running machine learning algorithms, or anything else.
+
+There are other software packages that focus on lower level aspects of
+data processing, like `Hive <http://hive.apache.org/>`__,
+`Pig <http://pig.apache.org/>`_, or
+`Cascading <http://www.cascading.org/>`_. Luigi is not a framework to
+replace these. Instead it helps you stitch many tasks together, where
+each task can be a `Hive query <https://luigi.readthedocs.io/en/latest/api/luigi.contrib.hive.html>`__,
+a `Hadoop job in Java <https://luigi.readthedocs.io/en/latest/api/luigi.contrib.hadoop_jar.html>`_,
+a  `Spark job in Scala or Python <https://luigi.readthedocs.io/en/latest/api/luigi.contrib.spark.html>`_,
+a Python snippet,
+`dumping a table <https://luigi.readthedocs.io/en/latest/api/luigi.contrib.sqla.html>`_
+from a database, or anything else. It's easy to build up
+long-running pipelines that comprise thousands of tasks and take days or
+weeks to complete. Luigi takes care of a lot of the workflow management
+so that you can focus on the tasks themselves and their dependencies.
+
+You can build pretty much any task you want, but Luigi also comes with a
+*toolbox* of several common task templates that you use. It includes
+support for running
+`Python mapreduce jobs <https://luigi.readthedocs.io/en/latest/api/luigi.contrib.hadoop.html>`_
+in Hadoop, as well as
+`Hive <https://luigi.readthedocs.io/en/latest/api/luigi.contrib.hive.html>`__,
+and `Pig <https://luigi.readthedocs.io/en/latest/api/luigi.contrib.pig.html>`__,
+jobs. It also comes with
+`file system abstractions for HDFS <https://luigi.readthedocs.io/en/latest/api/luigi.contrib.hdfs.html>`_,
+and local files that ensures all file system operations are atomic. This
+is important because it means your data pipeline will not crash in a
+state containing partial data.
+
+Visualiser page
+---------------
+
+The Luigi server comes with a web interface too, so you can search and filter
+among all your tasks.
+
+.. figure:: https://raw.githubusercontent.com/spotify/luigi/master/doc/visualiser_front_page.png
+   :alt: Visualiser page
+
+Dependency graph example
+------------------------
+
+Just to give you an idea of what Luigi does, this is a screen shot from
+something we are running in production. Using Luigi's visualiser, we get
+a nice visual overview of the dependency graph of the workflow. Each
+node represents a task which has to be run. Green tasks are already
+completed whereas yellow tasks are yet to be run. Most of these tasks
+are Hadoop jobs, but there are also some things that run locally and
+build up data files.
+
+.. figure:: https://raw.githubusercontent.com/spotify/luigi/master/doc/user_recs.png
+   :alt: Dependency graph
+
+Philosophy
+----------
+
+Conceptually, Luigi is similar to `GNU
+Make <http://www.gnu.org/software/make/>`_ where you have certain tasks
+and these tasks in turn may have dependencies on other tasks. There are
+also some similarities to `Oozie <http://oozie.apache.org/>`_
+and `Azkaban <https://azkaban.github.io/>`_. One major
+difference is that Luigi is not just built specifically for Hadoop, and
+it's easy to extend it with other kinds of tasks.
+
+Everything in Luigi is in Python. Instead of XML configuration or
+similar external data files, the dependency graph is specified *within
+Python*. This makes it easy to build up complex dependency graphs of
+tasks, where the dependencies can involve date algebra or recursive
+references to other versions of the same task. However, the workflow can
+trigger things not in Python, such as running
+`Pig scripts <https://luigi.readthedocs.io/en/latest/api/luigi.contrib.pig.html>`_
+or `scp'ing files <https://luigi.readthedocs.io/en/latest/api/luigi.contrib.ssh.html>`_.
+
+Who uses Luigi?
+---------------
+
+We use Luigi internally at `Spotify <https://www.spotify.com>`_ to run
+thousands of tasks every day, organized in complex dependency graphs.
+Most of these tasks are Hadoop jobs. Luigi provides an infrastructure
+that powers all kinds of stuff including recommendations, toplists, A/B
+test analysis, external reports, internal dashboards, etc.
+
+Since Luigi is open source and without any registration walls, the exact number
+of Luigi users is unknown. But based on the number of unique contributors, we
+expect hundreds of enterprises to use it. Some users have written blog posts
+or held presentations about Luigi:
+
+* `Spotify <https://www.spotify.com>`_ `(presentation, 2014) <http://www.slideshare.net/erikbern/luigi-presentation-nyc-data-science>`__
+* `Foursquare <https://foursquare.com/>`_ `(presentation, 2013) <http://www.slideshare.net/OpenAnayticsMeetup/luigi-presentation-17-23199897>`__
+* `Mortar Data (Datadog) <https://www.datadoghq.com/>`_ `(documentation / tutorial) <http://help.mortardata.com/technologies/luigi>`__
+* `Stripe <https://stripe.com/>`_ `(presentation, 2014) <http://www.slideshare.net/PyData/python-as-part-of-a-production-machine-learning-stack-by-michael-manapat-pydata-sv-2014>`__
+* `Buffer <https://buffer.com/>`_ `(blog, 2014) <https://buffer.com/resources/buffers-new-data-architecture/>`__
+* `SeatGeek <https://seatgeek.com/>`_ `(blog, 2015) <http://chairnerd.seatgeek.com/building-out-the-seatgeek-data-pipeline/>`__
+* `Treasure Data <https://www.treasuredata.com/>`_ `(blog, 2015) <http://blog.treasuredata.com/blog/2015/02/25/managing-the-data-pipeline-with-git-luigi/>`__
+* `Growth Intelligence <http://growthintel.com/>`_ `(presentation, 2015) <http://www.slideshare.net/growthintel/a-beginners-guide-to-building-data-pipelines-with-luigi>`__
+* `AdRoll <https://www.adroll.com/>`_ `(blog, 2015) <http://tech.adroll.com/blog/data/2015/09/22/data-pipelines-docker.html>`__
+* 17zuoye `(presentation, 2015) <https://speakerdeck.com/mvj3/luiti-an-offline-task-management-framework>`__
+* `Custobar <https://www.custobar.com/>`_ `(presentation, 2016) <http://www.slideshare.net/teemukurppa/managing-data-workflows-with-luigi>`__
+* `Blendle <https://launch.blendle.com/>`_ `(presentation) <http://www.anneschuth.nl/wp-content/uploads/sea-anneschuth-streamingblendle.pdf#page=126>`__
+* `TrustYou <http://www.trustyou.com/>`_ `(presentation, 2015) <https://speakerdeck.com/mfcabrera/pydata-berlin-2015-processing-hotel-reviews-with-python>`__
+* `Groupon <https://www.groupon.com/>`_ / `OrderUp <https://orderup.com>`_ `(alternative implementation) <https://github.com/groupon/luigi-warehouse>`__
+* `Red Hat - Marketing Operations <https://www.redhat.com>`_ `(blog, 2017) <https://github.com/rh-marketingops/rh-mo-scc-luigi>`__
+* `GetNinjas <https://www.getninjas.com.br/>`_ `(blog, 2017) <https://labs.getninjas.com.br/using-luigi-to-create-and-monitor-pipelines-of-batch-jobs-eb8b3cd2a574>`__
+* `voyages-sncf.com <https://www.voyages-sncf.com/>`_ `(presentation, 2017) <https://github.com/voyages-sncf-technologies/meetup-afpy-nantes-luigi>`__
+* `Open Targets <https://www.opentargets.org/>`_ `(blog, 2017) <https://blog.opentargets.org/using-containers-with-luigi>`__
+* `Leipzig University Library <https://ub.uni-leipzig.de>`_ `(presentation, 2016) <https://de.slideshare.net/MartinCzygan/build-your-own-discovery-index-of-scholary-eresources>`__ / `(project) <https://finc.info/de/datenquellen>`__
+* `Synetiq <https://synetiq.net/>`_ `(presentation, 2017) <https://www.youtube.com/watch?v=M4xUQXogSfo>`__
+* `Glossier <https://www.glossier.com/>`_ `(blog, 2018) <https://medium.com/glossier/how-to-build-a-data-warehouse-what-weve-learned-so-far-at-glossier-6ff1e1783e31>`__
+* `Data Revenue <https://www.datarevenue.com/>`_ `(blog, 2018) <https://www.datarevenue.com/en/blog/how-to-scale-your-machine-learning-pipeline>`_
+* `Uppsala University <http://pharmb.io>`_ `(tutorial) <http://uppnex.se/twiki/do/view/Courses/EinfraMPS2015/Luigi.html>`_   / `(presentation, 2015) <https://www.youtube.com/watch?v=f26PqSXZdWM>`_ / `(slides, 2015) <https://www.slideshare.net/SamuelLampa/building-workflows-with-spotifys-luigi>`_ / `(poster, 2015) <https://pharmb.io/poster/2015-sciluigi/>`_ / `(paper, 2016) <https://doi.org/10.1186/s13321-016-0179-6>`_ / `(project) <https://github.com/pharmbio/sciluigi>`_
+* `GIPHY <https://giphy.com/>`_ `(blog, 2019) <https://engineering.giphy.com/luigi-the-10x-plumber-containerizing-scaling-luigi-in-kubernetes/>`__
+* `xtream <https://xtreamers.io/>`__ `(blog, 2019) <https://towardsdatascience.com/lessons-from-a-real-machine-learning-project-part-1-from-jupyter-to-luigi-bdfd0b050ca5>`__
+* `CIAN <https://cian.ru/>`__ `(presentation, 2019) <https://www.highload.ru/moscow/2019/abstracts/6030>`__
+
+Some more companies are using Luigi but haven't had a chance yet to write about it:
+
+* `Schibsted <http://www.schibsted.com/>`_
+* `enbrite.ly <http://enbrite.ly/>`_
+* `Dow Jones / The Wall Street Journal <http://wsj.com>`_
+* `Hotels.com <https://hotels.com>`_
+* `Newsela <https://newsela.com>`_
+* `Squarespace <https://www.squarespace.com/>`_
+* `OAO <https://adops.com/>`_
+* `Grovo <https://grovo.com/>`_
+* `Weebly <https://www.weebly.com/>`_
+* `Deloitte <https://www.Deloitte.co.uk/>`_
+* `Stacktome <https://stacktome.com/>`_
+* `LINX+Neemu+Chaordic <https://www.chaordic.com.br/>`_
+* `Foxberry <https://www.foxberry.com/>`_
+* `Okko <https://okko.tv/>`_
+* `ISVWorld <http://isvworld.com/>`_
+* `Big Data <https://bigdata.com.br/>`_
+* `Movio <https://movio.co.nz/>`_
+* `Bonnier News <https://www.bonniernews.se/>`_
+* `Starsky Robotics <https://www.starsky.io/>`_
+* `BaseTIS <https://www.basetis.com/>`_
+* `Hopper <https://www.hopper.com/>`_
+* `VOYAGE GROUP/Zucks <https://zucks.co.jp/en/>`_
+* `Textpert <https://www.textpert.ai/>`_
+* `Tracktics <https://www.tracktics.com/>`_
+* `Whizar <https://www.whizar.com/>`_
+* `xtream <https://www.xtreamers.io/>`__
+* `Skyscanner <https://www.skyscanner.net/>`_
+* `Jodel <https://www.jodel.com/>`_
+* `Mekar <https://mekar.id/en/>`_
+* `M3 <https://corporate.m3.com/en/>`_
+* `Assist Digital <https://www.assistdigital.com/>`_
+* `Meltwater <https://www.meltwater.com/>`_
+* `DevSamurai <https://www.devsamurai.com/>`_
+* `Veridas <https://veridas.com/>`_
+* `Aidentified <https://www.aidentified.com/>`_
+
+We're more than happy to have your company added here. Just send a PR on GitHub.
+
+External links
+--------------
+
+* `Mailing List <https://groups.google.com/d/forum/luigi-user/>`_ for discussions and asking questions. (Google Groups)
+* `Releases <https://pypi.python.org/pypi/luigi>`_ (PyPI)
+* `Source code <https://github.com/spotify/luigi>`_ (GitHub)
+* `Hubot Integration <https://github.com/houzz/hubot-luigi>`_ plugin for Slack, Hipchat, etc (GitHub)
+
+Authors
+-------
+
+Luigi was built at `Spotify <https://www.spotify.com>`_, mainly by
+`Erik Bernhardsson <https://github.com/erikbern>`_ and
+`Elias Freider <https://github.com/freider>`_.
+`Many other people <https://github.com/spotify/luigi/graphs/contributors>`_
+have contributed since open sourcing in late 2012.
+`Arash Rouhani <https://github.com/tarrasch>`_ was the chief maintainer from 2015 to 2019, and now
+Spotify's Data Team maintains Luigi.

@@ -1,0 +1,3906 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 00c911d2c36ef01ec560bc9d60dbba65
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1997-1999, 2000-2001 Tim Janik and Red Hat, Inc.
+         * Copyright (C) 2010 Christian Persch
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gobject/gparamspecs.c [2:3]
+        gobject/gvaluetypes.c [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 01283fdaa817c9bbbf4cc64c3a20617b
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2010 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gwin32inputstream.c [3:3]
+        gio/gwin32inputstream.h [3:3]
+        gio/gwin32outputstream.c [3:3]
+        gio/gwin32outputstream.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 01411f463508ef0d63d42d39eef90fac
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2014 Patrick Griffis
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gosxappinfo.h [3:3]
+        gio/gosxappinfo.m [3:3]
+        gio/gosxcontenttype.m [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0147f216a5fc145f8816aa9b71063471
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2015-2022 Christian Hergert <christian@hergert.me>
+         * Copyright (C) 2015 Garrett Regier <garrettregier@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gobject/gbindinggroup.c [3:4]
+        gobject/gbindinggroup.h [3:4]
+        gobject/gsignalgroup.c [3:4]
+        gobject/gsignalgroup.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 040f11930d7a53ae3c5dea2442359ffc
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           Copyright (C) 2006 John McCutchan <john@johnmccutchan.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/inotify/inotify-missing.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07dac90e7834ad5276f95cbe39c49402
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2007, 2008 Ryan Lortie
+         * Copyright © 2010 Codethink Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gvariant-core.c [2:3]
+        glib/gvariant-core.h [2:3]
+        glib/gvariant-internal.h [2:3]
+        glib/gvariant-serialiser.c [2:3]
+        glib/gvariant-serialiser.h [2:3]
+        glib/gvariant.c [2:3]
+        glib/gvariant.h [2:3]
+        glib/gvarianttype.c [2:3]
+        glib/gvarianttype.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07e586e791de5bcf20bedac2b3a1b9d8
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright 2004  Red Hat, Inc.  
+         *  Copyright 2009-2010  Collabora Ltd.
+         *  Copyright 2009  Nokia Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gkeyfile.c [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 08d96ed2ca784e2f9301da0465478c01
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2001 Hans Breuer
+         * Copyright 2004 Tor Lillqvist
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gdir.c [6:7]
+        glib/gdir.h [6:6]
+        glib/gthread-win32.c [5:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 08fa1ebd00695d4fcdec5461a7e3a950
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 1998 Sebastian Wilhelmi; University of Karlsruhe
+         *                Owen Taylor
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/deprecated/gthread-deprecated.c [5:6]
+        glib/gthread.c [5:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b88ae20a0460ad8c5f318ec6b565479
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999 Tom Tromey
+         * Copyright (C) 2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/guniprop.c [3:4]
+        glib/gutf8.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d93fe96911cc90524fb4f6af10aac3c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+         * Copyright (C) 2014 Руслан Ижбулатов
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gwin32appinfo.c [3:4]
+        gio/gwin32appinfo.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1485075eecfdd87130c0f43ba9e1a0a8
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1998 Tor Lillqvist
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gmodule/gmodule-win32.c [5:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 149a216faae064e8349e3b12a9610b1f
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2018 Endless Mobile, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gwin32notificationbackend.c [4:4]
+        glib/gutilsprivate.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 190bc279cc4088e8d08a1a21ff2c7673
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2015 Collabora Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdatagrambased.c [3:3]
+        gio/gdatagrambased.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 19120c637b310305d7f9200854b3858a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1998-2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gmain.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 19681c00cb9937df78c1c1f19e7400e2
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2005  Red Hat
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gdatasetprivate.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ceb08067d233e88e32fecb82a30cbf5
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2014 Canonical Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gtranslit.c [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1d371bec9a7f465a565fc3f4bcb54541
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999, 2000 Scott Wimer
+         * Copyright (C) 2004, Matthias Clasen <mclasen@redhat.com>
+         * Copyright (C) 2005 - 2007, Marco Barisione <marco@barisione.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gregex.c [3:5]
+        glib/gregex.h [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1d919f5c9e8e462017269494e5a3ef48
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright 2001,2005 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gunicollate.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1fa5b424925025620da721a506c59553
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999 Tom Tromey
+         * Copyright (C) 2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/guniprop.c [3:4]
+        glib/gutf8.c [3:4]
+        gobject/gtypemodule.c [2:2]
+        gobject/gtypemodule.h [2:2]
+        gobject/gtypeplugin.c [2:2]
+        gobject/gtypeplugin.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21b81de4af738d3008b0ab759a2de744
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 2005  Alexander Larsson <alexl@redhat.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gbase64.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22322d065f0e543dd933e5efb1e5e527
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1998, 2000 Tim Janik
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gmodule/gmodule-dl.c [2:2]
+        gmodule/gmodule-win32.c [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2232bf7ccb53356374da58184eacdf2a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 2006 Alexander Larsson <alexl@redhat.com>
+         *  Copyright (C) 2000-2003 Ximian Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gbase64.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22abf03ccc33b26dcbd776d798a13b50
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2009 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gasyncinitable.c [3:3]
+        gio/gasyncinitable.h [3:3]
+        gio/gcharsetconverter.c [3:3]
+        gio/gcharsetconverter.h [3:3]
+        gio/gconverter.c [3:3]
+        gio/gconverter.h [3:3]
+        gio/gconverterinputstream.c [3:3]
+        gio/gconverterinputstream.h [3:3]
+        gio/gconverteroutputstream.c [3:3]
+        gio/gconverteroutputstream.h [3:3]
+        gio/ginitable.c [3:3]
+        gio/ginitable.h [3:3]
+        gio/giostream.c [3:4]
+        gio/giostream.h [3:4]
+        gio/gzlibcompressor.c [3:3]
+        gio/gzlibcompressor.h [3:3]
+        gio/gzlibdecompressor.c [3:3]
+        gio/gzlibdecompressor.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22e09e77f12479c06887e79ec4b19908
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright Red Hat Inc., 2000
+         * Authors: Havoc Pennington <hp@redhat.com>, Owen Taylor <otaylor@redhat.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gconvert.c [4:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2307c148430c122b09c431781f75fd2c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2016 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gnetworkmonitorportal.c [3:3]
+        gio/gnetworkmonitorportal.h [3:3]
+        gio/gportalsupport.c [3:3]
+        gio/gportalsupport.h [3:3]
+        gio/gproxyresolverportal.c [3:3]
+        gio/gproxyresolverportal.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 241c1698200f7dc82ac8dac1eb1341ad
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 1998 Owen Taylor
+         * Copyright 2008 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gpoll.c [5:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 27ce5b20ad9e78f7531aaba48cf9f5ae
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 1999, 2000 Tom Tromey
+         *  Copyright 2000, 2005 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gunicode.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 299f7fa4ca2af6a4a92299c5ce87a8d7
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2008, 2009 Codethink Limited
+         * Copyright © 2009 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/giostream.h [3:4]
+        gio/gsocketclient.h [3:4]
+        gio/gtcpconnection.c [3:3]
+        gio/gtcpconnection.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2baa2c03a9e2e8504d46fb402d09d904
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2012,2013 Colin Walters <walters@verbum.org>
+         * Copyright © 2012,2013 Canonical Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsubprocesslauncher.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2ce8389fcd27e7d370c1062af647c69e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1997, 1998 Tim Janik
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gscanner.c [5:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 30ed85e83df3be174d9fcc800ec5e95c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 2006 Alexander Larsson <alexl@redhat.com>
+         *  Copyright (C) 2000-2003 Ximian Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gbase64.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 30fd3596162946676f2dc91d903bd450
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2008 Ryan Lortie
+         * Copyright © 2010 Codethink Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gbitlock.c [2:3]
+        glib/gbitlock.h [2:3]
+        glib/gvarianttypeinfo.c [2:3]
+        glib/gvarianttypeinfo.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 32b72a5b575e56ced23069bc258cbcc7
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           Copyright (C) 2000-2006 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/libcharset/localcharset.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 339ef1d4a828b11391d4f9b7808144ba
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2008 Christian Kellner, Samuel Cormier-Iijima
+         * Copyright © 2009 codethink
+         * Copyright © 2009 Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsocketlistener.c [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 33c0651ee85868262d47eec5534a191d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           Copyright (C) 1992,95-97,99,2000,01,02,04,07 Free Software Foundation, Inc.
+           Written by Mike Haertel, September 1988.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gqsort.c [38:39]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 340df797563a9f06b27121610bb1fc92
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2011  Stef Walter  <stefw@collabora.co.uk>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/ghmac.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 35e960802c7f9487d44bfcafbcdb29d0
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2008, 2010 Collabora, Ltd.
+         * Copyright (C) 2008 Nokia Corporation. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsocks5proxy.c [3:4]
+        gio/gsocks5proxy.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 36ddc1acc5c477c8fada319d936051f1
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2020 Canonical Ltd.
+         * Copyright © 2021 Alexandros Theodotou
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gstrvbuilder.c [2:3]
+        glib/gstrvbuilder.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3745e423dce1edf411c2ae6963d9f53c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2004 Tor Lillqvist
+         * Copyright 2018 Руслан Ижбулатов
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gstdio-private.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 37ec441469e13779de345461f0af19e4
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           Copyright (C) 1995, 1996, 1997, 1998 Free Software Foundation, Inc.  */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gcharset.c [679:679]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 398ebf51b72d2f7f90a2e7b6ac9e8711
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2018 Collabora ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gvalgrind.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3aedf95541f6d7b8099b3c186b8a1b7c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2003 Noah Levitt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gunicodeprivate.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c7fff93b2f0fb5be3900d0ca987ef60
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           Copyright (C) 2000-2003 Free Software Foundation, Inc.
+           This file is part of the GNU CHARSET Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/libcharset/localcharset.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e4b38960dabd6f1e06c9e7b4092d50e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2008 Red Hat, Inc.
+         * Copyright (C) 2018 Igalia S.L.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gnetworkaddress.c [5:6]
+        gio/gnetworkaddress.h [3:3]
+        gio/gnetworkingprivate.h [3:3]
+        gio/gnetworkservice.c [5:5]
+        gio/gnetworkservice.h [3:3]
+        gio/gresolver.c [5:6]
+        gio/gresolver.h [3:4]
+        gio/gsocketaddressenumerator.c [3:3]
+        gio/gsocketaddressenumerator.h [3:3]
+        gio/gsocketconnectable.c [3:3]
+        gio/gsocketconnectable.h [3:3]
+        gio/gsrvtarget.c [5:5]
+        gio/gsrvtarget.h [3:3]
+        gio/gthreadedresolver.c [5:6]
+        gio/gthreadedresolver.h [3:3]
+        gio/xdgmime/xdgmimeicon.c [6:6]
+        gio/xdgmime/xdgmimeicon.h [6:6]
+        glib/ghostutils.c [4:4]
+        glib/ghostutils.h [2:2]
+        glib/gpoll.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 427b359bb4cadc5943e69a8763f3bc88
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2008 Red Hat, Inc.
+         * Copyright (C) 2018 Igalia S.L.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gnetworkaddress.c [5:6]
+        gio/gresolver.c [5:6]
+        gio/gresolver.h [3:4]
+        gio/gsocketclient.c [3:5]
+        gio/gthreadedresolver.c [5:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43555356a8a497eb79ae28bd8bbdf423
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gdatetime.c [3:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43761c63dfc63827bc8cff7c6268420b
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2011-2018 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gtask.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43b8172eae401d01f2876c1862db53a7
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2017 Collabora Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/giomodule-priv.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4502d84dde42fc4914b5ef2051789fd8
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2018-2019  Patrick Griffis, James Westman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gosxutils.m [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4618f23565d7a3354871013dbe225d68
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2000-2001 Red Hat, Inc.
+         * Copyright (C) 2005 Imendio AB
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gobject/gclosure.c [2:3]
+        gobject/gclosure.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 467116f9b159b8bf87659ef49661b03e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2011 Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gnetworkmonitor.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 467c4c41448b21d4f83b0cea762ec44d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2008 codethink
+         * Copyright © 2009 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/giostream.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 477d11a72f03ce45444dfe3f197eb963
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2010 Red Hat, Inc
+         * Copyright © 2015 Collabora, Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdtlsclientconnection.c [3:4]
+        gio/gdtlsclientconnection.h [3:4]
+        gio/gdtlsconnection.c [3:4]
+        gio/gdtlsconnection.h [3:4]
+        gio/gdtlsserverconnection.c [3:4]
+        gio/gdtlsserverconnection.h [3:4]
+        gio/gdummytlsbackend.c [3:4]
+        gio/gsocket.c [3:6]
+        gio/gtlsbackend.c [3:4]
+        gio/gtlsbackend.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4822142141b98064ee0055953d43666d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2019 Руслан Ижбулатов
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/giowin32-private.c [3:3]
+        glib/gwin32-private.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 48cea7356ca9bfb09f92b2b6f1a4f375
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2008-2011 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gnetworking.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49c1da242b3e4e43a89558ca6119e090
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2015 Canonical Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gcontextspecificgroup.c [2:2]
+        gio/gcontextspecificgroup.h [2:2]
+        gio/gio-autocleanups.h [2:2]
+        gio/inotify/inotify-kernel.c [2:3]
+        glib/glib-autocleanups.h [2:2]
+        gobject/gobject-autocleanups.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4b2b8a119db7cc41b59e0da9e4f5bc67
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006 Dave Benson
+         * Released under the terms of the GNU Lesser General Public License
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gchecksum.c [818:819]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ff9b30f5c1aff0d5268af9c00f0cec1
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2009, 2010 Codethink Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdelayedsettingsbackend.c [2:2]
+        gio/gdelayedsettingsbackend.h [2:2]
+        gio/gsettings.c [2:2]
+        gio/gsettings.h [2:2]
+        gio/gsettingsbackend.c [2:3]
+        gio/gsettingsbackend.h [2:3]
+        gio/gsettingsbackendinternal.h [2:3]
+        glib/gbytes.c [2:3]
+        glib/gbytes.h [2:3]
+        glib/gvariant-internal.h [2:3]
+        glib/gvariant-parser.c [2:2]
+        glib/gvariant.h [2:3]
+        glib/gvarianttype.c [2:3]
+        glib/gvarianttype.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 50888ca9e0ec532ad428c0d040649fd2
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2017 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gopenuriportal.c [3:3]
+        gio/gopenuriportal.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 516c95154ee6cdc6afc2e0ab6180ec3e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2012 Colin Walters <walters@verbum.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsubprocess.h [3:3]
+        gio/gsubprocesslauncher-private.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 54e7d4598580d5659c23b25669e31946
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2008 Christian Kellner, Samuel Cormier-Iijima
+         * Copyright © 2009 Codethink Limited
+         * Copyright © 2009 Red Hat, Inc
+         * Copyright © 2015 Collabora, Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsocket.c [3:6]
+        gio/gsocketclient.c [3:5]
+        gio/gsocketclient.h [3:4]
+        gio/gsocketconnection.c [3:5]
+        gio/gsocketlistener.c [3:5]
+        gio/gsocketlistener.h [3:5]
+        gio/gsocketservice.c [3:4]
+        gio/gsocketservice.h [3:4]
+        gio/gthreadedsocketservice.c [3:4]
+        gio/gthreadedsocketservice.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 57222b0eb7d76481b0d93c2183905dd9
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+         *               2009 Benjamin Otte
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gfileinfo-priv.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 579471938fcc53027b544eff63809080
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2018  Emmanuele Bassi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/garcbox.c [3:3]
+        glib/grcbox.c [3:3]
+        glib/grcbox.h [3:3]
+        glib/grcboxprivate.h [3:3]
+        glib/grefcount.c [3:3]
+        glib/grefcount.h [3:3]
+        glib/grefstring.c [3:3]
+        glib/grefstring.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58af44d01524b999869ba5fbdfecdcb0
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2010 Collabora, Ltd
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gtlsfiledatabase.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 59773ec453b723aeb8f32879b42887fd
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2011 Canonical Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdbusmenumodel.c [2:2]
+        gio/gdbusmenumodel.h [2:2]
+        gio/gmenu.c [2:2]
+        gio/gmenu.h [2:2]
+        gio/gmenuexporter.c [2:2]
+        gio/gmenuexporter.h [2:2]
+        gio/gmenumodel.c [2:2]
+        gio/gmenumodel.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a649bfea891ce326fd193cab9b3ef0d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2013 Collabora Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gioprivate.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5af71ef7f8de0fbdd406e963533e0e05
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2000-2001 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gobject/gboxed.c [2:2]
+        gobject/gboxed.h [2:2]
+        gobject/gclosure.c [2:3]
+        gobject/gclosure.h [2:3]
+        gobject/glib-types.h [2:2]
+        gobject/gsignal.c [2:2]
+        gobject/gsignal.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5cbee79ef7a0fb19ce4514854a528b2e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2018 Руслан Ижбулатов
+         * Copyright (C) 2022 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gwin32sid.c [3:4]
+        gio/gwin32sid.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ecbd97f318eedd0c863b0bf247fb933
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2012 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/giowin32-priv.h [3:3]
+        gio/gpollableutils.h [3:3]
+        gio/gsubprocesslauncher.c [3:4]
+        glib/gcharsetprivate.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 636ddaa3745d63b4386438a904b33aaa
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1995, A.M. Kuchling
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gchecksum.c [479:479]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 639018099aa483a6c7e71f2c92a34639
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2010 Codethink Limited
+         * Copyright © 2011 Canonical Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gactiongroupexporter.c [2:3]
+        gio/gactiongroupexporter.h [2:3]
+        gio/gdbusactiongroup-private.h [2:3]
+        gio/gdbusactiongroup.c [2:3]
+        gio/gdbusactiongroup.h [2:3]
+        gio/gremoteactiongroup.h [2:2]
+        gio/gsettingsschema.c [2:3]
+        gio/gsettingsschema.h [2:3]
+        glib/glib-init.c [2:2]
+        glib/glib-init.h [2:2]
+        glib/gwakeup.c [2:2]
+        glib/gwakeup.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 63aefc065cca6fad1571a1ebb371abd8
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1998-1999, 2000-2001 Tim Janik and Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gobject/genums.c [2:2]
+        gobject/genums.h [2:2]
+        gobject/gobject.c [2:2]
+        gobject/gobject.h [2:2]
+        gobject/gtype-private.h [2:2]
+        gobject/gtype.c [2:2]
+        gobject/gtype.h [2:2]
+        gobject/gvaluecollector.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 63c365acc2d8e6f32d49f323e9996230
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+         * Copyright (C) 2015 Chun-wei Fan
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/win32/gwin32fsmonitorutils.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 66066470f54b65338bb182c18548af32
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2020 Руслан Ижбулатов <lrn1986@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gwin32file-sync-stream.h [3:3]
+        gio/gwin32packageparser.c [3:3]
+        gio/gwin32packageparser.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6725e3553f70bea4254f939c6f02617f
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2020 Canonical Ltd.
+         * Copyright © 2021 Alexandros Theodotou
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gstrvbuilder.c [2:3]
+        glib/gstrvbuilder.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 673c770df66859b21597a75690172efe
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2010 Collabora, Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdummyproxyresolver.c [3:3]
+        gio/gdummyproxyresolver.h [3:3]
+        gio/ghttpproxy.c [3:4]
+        gio/ghttpproxy.h [3:3]
+        gio/gproxyaddress.c [3:3]
+        gio/gproxyaddress.h [3:3]
+        gio/gproxyaddressenumerator.c [3:3]
+        gio/gproxyaddressenumerator.h [3:3]
+        gio/gproxyresolver.c [3:3]
+        gio/gproxyresolver.h [3:3]
+        gio/gsocks4aproxy.c [3:3]
+        gio/gsocks4aproxy.h [3:3]
+        gio/gsocks4proxy.c [3:3]
+        gio/gsocks4proxy.h [3:3]
+        gio/gtlsdatabase.c [3:3]
+        gio/gtlsdatabase.h [3:3]
+        gio/gtlsfiledatabase.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 68d0b9d12e9d870d0cac8b0c4483c747
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2005 Tim Janik
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gslice.c [2:2]
+        glib/gslice.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a89a3458535f047f8437c25dba675ba
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2011 Ryan Lortie
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gatomic.c [2:2]
+        glib/gatomic.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6c4fb5a9588cf566e547dc50a5287fd1
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2014 NICE s.r.l.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsimpleiostream.c [2:2]
+        gio/gsimpleiostream.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d7bb945b47e24b43be7f4e394b1d18e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2015 Lars Uebernickel
+         * Copyright 2015 Ryan Lortie
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/glistmodel.c [2:3]
+        gio/glistmodel.h [2:3]
+        gio/gliststore.c [2:3]
+        gio/gliststore.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6f89756c3c5cd081087973aac0d66c58
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 1999, 2003 Red Hat Software
+         *  Copyright (C) 2004       Anders Carlsson <andersca@gnome.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/goption.c [3:4]
+        glib/goption.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7137035e1e6972e236766641e77d392c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2015 Lars Uebernickel
+         * Copyright 2015 Ryan Lortie
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/glistmodel.c [2:3]
+        gio/glistmodel.h [2:3]
+        gio/gliststore.c [2:3]
+        gio/gliststore.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 726ebb429b83caa850677a816ec9de31
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1994, 1996, 1997 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gpoll.c [495:495]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 72d350381b156e7e1847ad8d56790dc6
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999, 2000 Scott Wimer
+         * Copyright (C) 2004, Matthias Clasen <mclasen@redhat.com>
+         * Copyright (C) 2005 - 2007, Marco Barisione <marco@barisione.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gregex.c [3:5]
+        glib/gregex.h [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 72f616a13c581822e2185eece7430a6f
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gappinfo.c [3:3]
+        gio/gappinfo.h [3:3]
+        gio/gasynchelper.c [3:3]
+        gio/gasynchelper.h [3:3]
+        gio/gasyncresult.c [3:3]
+        gio/gasyncresult.h [3:3]
+        gio/gbufferedinputstream.c [3:4]
+        gio/gbufferedinputstream.h [3:3]
+        gio/gbufferedoutputstream.c [3:3]
+        gio/gbufferedoutputstream.h [3:3]
+        gio/gbytesicon.h [3:3]
+        gio/gcancellable.c [3:3]
+        gio/gcancellable.h [3:3]
+        gio/gcontenttype-win32.c [5:5]
+        gio/gcontenttype.c [5:5]
+        gio/gcontenttype.h [3:3]
+        gio/gcontenttypeprivate.h [3:3]
+        gio/gdatainputstream.c [3:5]
+        gio/gdatainputstream.h [3:3]
+        gio/gdataoutputstream.c [3:3]
+        gio/gdataoutputstream.h [3:3]
+        gio/gdesktopappinfo.c [3:4]
+        gio/gdesktopappinfo.h [3:3]
+        gio/gdrive.c [3:3]
+        gio/gdrive.h [3:3]
+        gio/gdummyfile.c [3:3]
+        gio/gdummyfile.h [3:3]
+        gio/gemblemedicon.c [5:5]
+        gio/gemblemedicon.h [3:3]
+        gio/gfile.c [5:5]
+        gio/gfile.h [3:3]
+        gio/gfileattribute-priv.h [3:3]
+        gio/gfileattribute.c [3:3]
+        gio/gfileattribute.h [3:3]
+        gio/gfileenumerator.c [3:3]
+        gio/gfileenumerator.h [3:3]
+        gio/gfileicon.c [3:3]
+        gio/gfileicon.h [3:3]
+        gio/gfileinfo.c [3:3]
+        gio/gfileinfo.h [3:3]
+        gio/gfileinputstream.c [3:3]
+        gio/gfileinputstream.h [3:3]
+        gio/gfileiostream.c [3:3]
+        gio/gfileiostream.h [3:3]
+        gio/gfilemonitor.c [3:3]
+        gio/gfilemonitor.h [3:3]
+        gio/gfilenamecompleter.c [3:3]
+        gio/gfilenamecompleter.h [3:3]
+        gio/gfileoutputstream.c [3:3]
+        gio/gfileoutputstream.h [3:3]
+        gio/gfilterinputstream.c [3:3]
+        gio/gfilterinputstream.h [3:3]
+        gio/gfilteroutputstream.c [3:3]
+        gio/gfilteroutputstream.h [3:3]
+        gio/gicon.c [3:3]
+        gio/gicon.h [3:3]
+        gio/ginputstream.c [3:3]
+        gio/ginputstream.h [3:3]
+        gio/gio.h [3:3]
+        gio/gioenums.h [3:3]
+        gio/gioerror.c [3:3]
+        gio/gioerror.h [3:3]
+        gio/giomodule-priv.h [3:3]
+        gio/giomodule.c [3:3]
+        gio/giomodule.h [3:3]
+        gio/gioscheduler.c [3:3]
+        gio/gioscheduler.h [3:3]
+        gio/giotypes.h [3:3]
+        gio/gloadableicon.c [3:3]
+        gio/gloadableicon.h [3:3]
+        gio/glocalfile.c [3:3]
+        gio/glocalfile.h [3:3]
+        gio/glocalfileenumerator.c [3:3]
+        gio/glocalfileenumerator.h [3:3]
+        gio/glocalfileinfo.c [5:5]
+        gio/glocalfileinfo.h [3:3]
+        gio/glocalfileinputstream.c [3:3]
+        gio/glocalfileinputstream.h [3:3]
+        gio/glocalfileiostream.c [3:3]
+        gio/glocalfilemonitor.c [3:3]
+        gio/glocalfilemonitor.h [3:3]
+        gio/glocalfileoutputstream.c [3:3]
+        gio/glocalfileoutputstream.h [3:3]
+        gio/glocalvfs.c [3:3]
+        gio/glocalvfs.h [3:3]
+        gio/gmemoryinputstream.c [3:3]
+        gio/gmemoryinputstream.h [3:3]
+        gio/gmemoryoutputstream.c [3:3]
+        gio/gmemoryoutputstream.h [3:3]
+        gio/gmountoperation.c [3:3]
+        gio/gmountoperation.h [3:3]
+        gio/gmountprivate.h [3:3]
+        gio/gnativevolumemonitor.c [3:3]
+        gio/gnativevolumemonitor.h [3:3]
+        gio/goutputstream.c [3:3]
+        gio/goutputstream.h [3:3]
+        gio/gpollfilemonitor.c [3:3]
+        gio/gpollfilemonitor.h [3:3]
+        gio/gresource.h [3:3]
+        gio/gresourcefile.c [3:3]
+        gio/gseekable.c [3:3]
+        gio/gseekable.h [3:3]
+        gio/gsimpleasyncresult.c [3:3]
+        gio/gsimpleasyncresult.h [3:3]
+        gio/gthemedicon.c [3:3]
+        gio/gthemedicon.h [3:3]
+        gio/gunionvolumemonitor.c [5:5]
+        gio/gunionvolumemonitor.h [3:3]
+        gio/gunixinputstream.c [3:3]
+        gio/gunixinputstream.h [3:3]
+        gio/gunixmount.c [5:5]
+        gio/gunixmount.h [3:3]
+        gio/gunixmounts.c [5:5]
+        gio/gunixmounts.h [3:3]
+        gio/gunixoutputstream.c [3:3]
+        gio/gunixoutputstream.h [3:3]
+        gio/gunixvolume.c [5:5]
+        gio/gunixvolume.h [3:3]
+        gio/gunixvolumemonitor.c [5:5]
+        gio/gunixvolumemonitor.h [3:3]
+        gio/gvfs.c [3:3]
+        gio/gvfs.h [3:3]
+        gio/gvolume.c [3:3]
+        gio/gvolume.h [3:3]
+        gio/gvolumemonitor.c [5:5]
+        gio/gvolumemonitor.h [5:5]
+        gio/gwin32appinfo.c [3:4]
+        gio/gwin32appinfo.h [3:4]
+        gio/gwin32mount.c [3:4]
+        gio/gwin32mount.h [3:4]
+        gio/gwin32volumemonitor.c [3:4]
+        gio/gwin32volumemonitor.h [3:4]
+        gio/inotify/ginotifyfilemonitor.c [3:4]
+        gio/inotify/ginotifyfilemonitor.h [3:4]
+        gio/win32/gwin32filemonitor.c [3:4]
+        gio/win32/gwin32filemonitor.h [3:3]
+        gio/win32/gwin32fsmonitorutils.c [3:4]
+        gio/win32/gwin32fsmonitorutils.h [3:4]
+        gio/win32/gwinhttpfile.c [3:4]
+        gio/win32/gwinhttpfile.h [3:4]
+        gio/win32/gwinhttpfileinputstream.c [3:4]
+        gio/win32/gwinhttpfileinputstream.h [3:4]
+        gio/win32/gwinhttpfileoutputstream.c [3:4]
+        gio/win32/gwinhttpfileoutputstream.h [3:4]
+        gio/win32/gwinhttpvfs.c [3:4]
+        gio/win32/gwinhttpvfs.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 737a58d88349b02c9194ee06d2a7dc5c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2003  Red Hat, Inc.
+         * Copyright (C) 2003  Jonathan Blandford <jrb@alum.mit.edu>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/xdgmime/xdgmime.h [6:7]
+        gio/xdgmime/xdgmimeglob.c [6:7]
+        gio/xdgmime/xdgmimeglob.h [6:7]
+        gio/xdgmime/xdgmimeint.c [6:7]
+        gio/xdgmime/xdgmimeint.h [6:7]
+        gio/xdgmime/xdgmimemagic.c [6:7]
+        gio/xdgmime/xdgmimemagic.h [6:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 75343ea6801674d47ccd3aefa07397aa
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           Copyright (C) 2007 John McCutchan
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/inotify/inotify-helper.c [5:5]
+        gio/inotify/inotify-helper.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77946e68962c0dc4319ce04cee8d3cda
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gdatetime.c [3:7]
+        glib/gdatetime.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77a5fb1510a5b1487679a86e03d14682
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999, 2000 Scott Wimer
+         * Copyright (C) 2004, Matthias Clasen <mclasen@redhat.com>
+         * Copyright (C) 2005 - 2007, Marco Barisione <marco@barisione.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gregex.c [3:5]
+        glib/gregex.h [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77bf7d32b849531e84a5c179840f3240
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+         * Copyright (C) 2014 Chun-wei Fan
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/win32/gwin32fsmonitorutils.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77e5cf2847a9e71644765f7ddaf271c6
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           Copyright (C) 2005 John McCutchan
+           Copyright © 2015 Canonical Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/inotify/inotify-kernel.c [2:3]
+        gio/inotify/inotify-kernel.h [2:2]
+        gio/inotify/inotify-missing.c [5:5]
+        gio/inotify/inotify-path.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 78e7c595d364a3cebf1dfea049c7a442
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 1999, 2003 Red Hat Software
+         *  Copyright (C) 2004       Anders Carlsson <andersca@gnome.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/goption.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 79f2f6d13cdba8d64d3e3dcdc7a8ae22
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2010, 2013 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsimpleproxyresolver.c [3:3]
+        gio/gsimpleproxyresolver.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7a8aa11e044cecc2fbf317b25e441f75
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2008-2010 Red Hat, Inc.
+         * Copyright (C) 2012 Collabora Ltd. <http://www.collabora.co.uk/>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gtestdbus.c [3:4]
+        gio/gtestdbus.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7bf91388d0b716fc34e184958529d1b9
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2011 Collabora, Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gtlsinteraction.c [3:3]
+        gio/gtlsinteraction.h [3:3]
+        gio/gtlspassword.c [3:3]
+        gio/gtlspassword.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7d8e081300b37b5904d648f8b9c1a6a8
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+         * Copyright (C) 2008 Hans Breuer
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gwin32mount.c [3:4]
+        gio/gwin32mount.h [3:4]
+        gio/gwin32volumemonitor.c [3:4]
+        gio/gwin32volumemonitor.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7dc2c0951abd6d850dcf468944d713c0
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2013 Canonical Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gappinfoprivate.h [3:3]
+        gio/gbytesicon.c [3:3]
+        gio/gpropertyaction.c [2:2]
+        gio/gpropertyaction.h [2:2]
+        gio/thumbnail-verify.c [1:1]
+        gio/thumbnail-verify.h [1:1]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7eb54ce8d09e0f2bd65bc796a5b4fbce
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2003,2004  Red Hat, Inc.
+         * Copyright (C) 2003,2004  Jonathan Blandford <jrb@alum.mit.edu>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/xdgmime/xdgmime.c [6:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 801eb21dc882f801e93b74aaedac1345
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+         * Copyright (C) 2007 Jürg Billeter
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gbufferedinputstream.c [3:4]
+        gio/gdatainputstream.c [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 810626deb1d7541421caa55f3ab27b1a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2011 Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gresource.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 811f55d8dd312f8d29721b852890ce81
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2011 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/ginetaddressmask.c [3:3]
+        gio/ginetaddressmask.h [3:3]
+        gio/gnetworkmonitor.h [3:3]
+        gio/gnetworkmonitorbase.c [3:3]
+        gio/gnetworkmonitorbase.h [3:3]
+        gio/gnetworkmonitornetlink.c [3:3]
+        gio/gnetworkmonitornetlink.h [3:3]
+        gio/gnetworkmonitornm.h [3:3]
+        gio/gtask.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8267046ad135957ec3b00c5463900507
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2005 Matthias Clasen
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gmappedfile.c [4:4]
+        glib/gmappedfile.h [4:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 82dfa5db16b1e50cecb614edf69f5033
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2011 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gnetworking.c [5:5]
+        gio/gresourcefile.h [3:3]
+        glib/gcharset.c [3:3]
+        glib/gcharset.h [3:3]
+        glib/glib-private.c [2:2]
+        glib/glib-private.h [2:2]
+        glib/glib-unix.c [2:2]
+        glib/glib-unix.h [2:2]
+        glib/gmain-internal.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8374da12acbed266cf181ce6a6529597
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2010 Red Hat, Inc
+         * Copyright © 2015 Collabora, Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdtlsclientconnection.c [3:4]
+        gio/gdtlsconnection.c [3:4]
+        gio/gdtlsserverconnection.c [3:4]
+        gio/gtlsbackend.c [3:4]
+        gio/gtlsclientconnection.c [3:3]
+        gio/gtlsconnection.c [3:3]
+        gio/gtlsserverconnection.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 842542e0c6ad89b5c9c9a829ba3dc926
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+         * Copyright (C) 2008 Novell, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/win32/gwinhttpfile.c [3:4]
+        gio/win32/gwinhttpfile.h [3:4]
+        gio/win32/gwinhttpfileinputstream.c [3:4]
+        gio/win32/gwinhttpfileinputstream.h [3:4]
+        gio/win32/gwinhttpfileoutputstream.c [3:4]
+        gio/win32/gwinhttpfileoutputstream.h [3:4]
+        gio/win32/gwinhttpvfs.c [3:4]
+        gio/win32/gwinhttpvfs.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 850d3c2bd30a8467d19a3cf91096599a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright 2000 Red Hat, Inc.
+         *  g_execvpe implementation based on GNU libc execvp:
+         *   Copyright 1991, 92, 95, 96, 97, 98, 99 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gshell.c [3:5]
+        glib/gspawn-private.h [3:5]
+        glib/gspawn.c [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 874370751005d321b3c239d33b05a10c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1998, 1999, 2000 Tim Janik and Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/glib-object.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8984fc8a04a3363e3bf8e8eb05f1a394
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2008 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gmount.c [5:5]
+        gio/gmount.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8a5ed34f2739853849695eee97c53f7c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1998 Tim Janik
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gdataset.c [5:5]
+        glib/ghook.c [5:5]
+        glib/gnode.c [5:5]
+        glib/gquark.c [2:3]
+        glib/gqueue.c [5:5]
+        gmodule/gmodule.c [2:2]
+        gmodule/gmodule.h [2:2]
+        gmodule/gmoduleconf-unix.h [2:2]
+        gmodule/gmoduleconf-win.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8bd880d21c084a542f9f81b1aee22c4a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2012,2013 Colin Walters <walters@verbum.org>
+         * Copyright © 2012,2013 Canonical Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsubprocesslauncher.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8d856e6d646bd428a36215564c1fdb72
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           Copyright (C) 2000-2001 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/libcharset/README [29:29]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8f0c11aa1835fae641f4ad582e7e0a20
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2010 Collabora, Ltd.
+         * Copyright (C) 2014 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/ghttpproxy.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8f3e412c892df5c7bf3a67fbb0945f7a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2021 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gpowerprofilemonitorportal.c [3:3]
+        gio/gpowerprofilemonitorportal.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8f8660818d1792a61a260dfea042c828
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2022 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gmemorymonitorwin32.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 905e18b712f0df39a22e174e1b111319
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1995-1999,2000,2001 Free Software Foundation, Inc.
+         * Written by Ulrich Drepper <drepper@cygnus.com>, 1995.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gunicollate.c [175:176]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 90a2e3d50dee3dc26df23c3cde9ecd7a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2018, Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gtrashportal.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 96f037c82d67a0f198b43cf7d7fc7199
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2009 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/glocalfileiostream.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 993fb3b3c2c5e0ca07599a149500e224
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1991, 1992, 1996, 1997,1999,2004 Free Software Foundation, Inc.
+         * Copyright (C) 2000 Eazel, Inc.
+         * Copyright (C) 1995-1997  Peter Mattis, Spencer Kimball and Josh MacDonald
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gqsort.c [2:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 99e4c5171035a1765e4e38fe96785816
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1995-1997, 2002  Peter Mattis, Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gi18n-lib.h [2:2]
+        glib/gi18n.h [2:2]
+        glib/gprintf.c [2:2]
+        glib/gprintf.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9aae3dc8dc681b353f72b40b4a9a375e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           Copyright (C) 2006 John McCutchan
+           Copyright (C) 2009 Codethink Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/inotify/inotify-path.c [5:6]
+        gio/inotify/inotify-sub.c [5:5]
+        gio/inotify/inotify-sub.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9b12b11997557a208470d84124333219
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *   This document is Copyright (C) 2008 by Claus Tondering.
+         *   E-mail: claus@tondering.dk. (Please include the word
+         *   "calendar" in the subject line.)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gdatetime.c [35:37]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9b33ce94bd726ed2a2f744cf227abf11
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2015-2022 Christian Hergert <christian@hergert.me>
+         * Copyright (C) 2015 Garrett Regier <garrettregier@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gobject/gbindinggroup.c [3:4]
+        gobject/gbindinggroup.h [3:4]
+        gobject/gsignalgroup.c [3:4]
+        gobject/gsignalgroup.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9b5c9175803bda38ef8cb455838f94b0
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2008 Clemens N. Buss <cebuzz@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gemblem.c [3:3]
+        gio/gemblem.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f2a51b7db465b42d74f9461e6b1fd00
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007
+         * Soeren Sandmann (sandmann@daimi.au.dk)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gsequence.c [2:3]
+        glib/gsequence.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f92b612c9afb794bd7fa9002f661e4e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2013 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gcredentialsprivate.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f9f3d5a0ff25f81f8ddc7d4329fabb1
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1997-1999, 2000-2001 Tim Janik and Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gobject/gparam.c [2:2]
+        gobject/gparam.h [2:2]
+        gobject/gparamspecs.c [2:3]
+        gobject/gparamspecs.h [2:2]
+        gobject/gvalue.c [2:2]
+        gobject/gvalue.h [2:2]
+        gobject/gvaluetypes.c [2:3]
+        gobject/gvaluetypes.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9fc132efcb85c44deb222feb1e07ae4b
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2012, 2013 Red Hat, Inc.
+         * Copyright © 2012, 2013 Canonical Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsubprocess.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a134c50960c757b561547a631176503f
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 1998 Owen Taylor and Tor Lillqvist
+         * Copyright 1999-2000 Tor Lillqvist and Craig Setera
+         * Copyright 2001-2003 Andrew Lanoix
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/giowin32.c [5:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a19807e0af02970d03566b9b41282e44
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2000, 2002-2003 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gmarkup.c [2336:2336]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a27b5cb47435e37141000360d755e4b9
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2010 Codethink Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gaction.c [2:2]
+        gio/gaction.h [2:2]
+        gio/gactiongroup.c [2:2]
+        gio/gactiongroup.h [2:2]
+        gio/gactiongroupexporter.c [2:3]
+        gio/gactiongroupexporter.h [2:3]
+        gio/gactionmap.c [2:2]
+        gio/gactionmap.h [2:2]
+        gio/gapplication.c [2:2]
+        gio/gapplication.h [2:2]
+        gio/gapplicationcommandline.c [2:2]
+        gio/gapplicationcommandline.h [3:3]
+        gio/gapplicationimpl-dbus.c [2:2]
+        gio/gdbusactiongroup-private.h [2:3]
+        gio/gdbusactiongroup.c [2:3]
+        gio/gdbusactiongroup.h [2:3]
+        gio/gkeyfilesettingsbackend.c [2:3]
+        gio/gmemorysettingsbackend.c [2:2]
+        gio/gnullsettingsbackend.c [2:2]
+        gio/gpermission.c [2:2]
+        gio/gpermission.h [2:2]
+        gio/gremoteactiongroup.c [2:2]
+        gio/gsettingsschema-internal.h [2:2]
+        gio/gsettingsschema.c [2:3]
+        gio/gsettingsschema.h [2:3]
+        gio/gsimpleaction.c [2:2]
+        gio/gsimpleaction.h [2:2]
+        gio/gsimpleactiongroup.c [2:2]
+        gio/gsimpleactiongroup.h [2:2]
+        gio/gsimplepermission.c [2:2]
+        gio/gsimplepermission.h [2:2]
+        gio/gvdb/gvdb-format.h [2:2]
+        gio/gvdb/gvdb-reader.c [2:2]
+        gio/gvdb/gvdb-reader.h [2:2]
+        gio/strinfo.c [2:2]
+        glib/gbitlock.c [2:3]
+        glib/gbitlock.h [2:3]
+        glib/gdatetime.c [3:7]
+        glib/gdatetime.h [2:3]
+        glib/gtimezone.c [2:2]
+        glib/gtimezone.h [2:2]
+        glib/gvariant-core.c [2:3]
+        glib/gvariant-core.h [2:3]
+        glib/gvariant-serialiser.c [2:3]
+        glib/gvariant-serialiser.h [2:3]
+        glib/gvariant.c [2:3]
+        glib/gvarianttypeinfo.c [2:3]
+        glib/gvarianttypeinfo.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a53dacefa63062ae90da4100d0e05449
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2019 Red Hat, Inc.
+         * Copyrgith 2021 Igalia S.L.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gpowerprofilemonitordbus.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a6f6deeed156d5f38b2b380b9f99b654
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2014 Руслан Ижбулатов <lrn1986@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gwin32registrykey.c [3:3]
+        gio/gwin32registrykey.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a6f89cd7ec0136d2e0ff6a3996b601f3
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2009-10 Sam Thursfield
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gregistrysettingsbackend.c [2:2]
+        gio/gregistrysettingsbackend.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7143aa290115ab11cb2e93c0e9b6d0d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright 2004  Red Hat, Inc.  
+         *  Copyright 2009-2010  Collabora Ltd.
+         *  Copyright 2009  Nokia Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gkeyfile.c [3:5]
+        glib/gkeyfile.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8fba51f6a094266acb6a20fa9be412e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2005-2006 Emmanuele Bassi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gbookmarkfile.c [3:3]
+        glib/gbookmarkfile.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL aaf25436775ec6d5d75312607ab67d9d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2009,2010 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gio_trace.h [3:3]
+        glib/glib_trace.h [3:3]
+        gobject/gobject_trace.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab13f7af6e72999d8328743072658177
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2008, 2010 Collabora, Ltd.
+         * Copyright (C) 2008 Nokia Corporation. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsocks5proxy.c [3:4]
+        gio/gsocks5proxy.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL b586ca58bd2f87176efae77409414bcd
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2004  Red Hat, Inc.
+         * Copyright (C) 2004  Matthias Clasen <mclasen@redhat.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/xdgmime/xdgmimealias.c [6:7]
+        gio/xdgmime/xdgmimeparent.c [6:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL b776fa09823c0e0e3ebd3c67df95defc
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright 2000, 2003 Red Hat, Inc.
+         *  Copyright 2007, 2008 Ryan Lortie <desrt@desrt.ca>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gmarkup.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL b7cd921e9b03779e3e82f7b3c482af6d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2007 Imendio AB
+         * Authors: Tim Janik, Sven Herzberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gtestutils.c [2:3]
+        glib/gtestutils.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL b8be4d1a51b86395b0d843970925f222
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2000 Sebastian Wilhelmi; University of Karlsruhe
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gasyncqueue.c [5:5]
+        glib/gthreadpool.c [5:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL b97871855ce4c857341221a0b0fa3975
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2020 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/guri.c [2:2]
+        glib/guri.h [2:2]
+        glib/guriprivate.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL b9ffc5e44150b619b0318d64ae41b0b1
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 1998 Owen Taylor
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/giochannel.c [5:5]
+        glib/giounix.c [5:5]
+        glib/gmain.c [5:5]
+        glib/gpoll.c [5:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ba3f18d0258c78520b1f7dcbc8c3f735
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 2003 Free Software Foundation, Inc.
+           This file is part of the GNU CHARSET Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/libcharset/libcharset.h [1:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL bad0e6ac85e31b8d8b7bf1c542b1f567
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+          Copyright (c) 2011, 2012 Dmitry Matveev <me@dmitrymatveev.co.uk>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/kqueue/dep-list.c [2:2]
+        gio/kqueue/dep-list.h [2:2]
+        gio/kqueue/gkqueuefilemonitor.c [2:2]
+        gio/kqueue/kqueue-helper.c [2:2]
+        gio/kqueue/kqueue-helper.h [2:2]
+        gio/kqueue/kqueue-missing.c [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL bb0f859b37adc42ceb43a865a882bd1a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2007 Red Hat Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gutils.c [2119:2119]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL bfd0f97c9e2125b4fcf3db262d73e494
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gdatetime.c [3:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c02dae550bda1bedba8902bd9c2b33dd
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2003,2004  Red Hat, Inc.
+         * Copyright (C) 2003,2004  Jonathan Blandford <jrb@alum.mit.edu>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/xdgmime/xdgmime.c [6:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c07ea271ca21f89af9048b3893445a4e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2015 Patrick Griffis
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gcocoanotificationbackend.m [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [428:433]
+        gmodule/COPYING [428:433]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c18343de584853913aee3ca2f42999eb
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 1998-2001 Sebastian Wilhelmi; University of Karlsruhe
+         * Copyright 2001 Hans Breuer
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gthread-win32.c [5:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c1d246697c5fb36d537a7049028a8f2a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2018 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gtrashportal.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c3e64f3daa6d41e7764981b1fdb9f334
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2003  Red Hat, Inc.
+         * Copyright (C) 2003  Jonathan Blandford <jrb@alum.mit.edu>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/xdgmime/xdgmime.h [6:7]
+        gio/xdgmime/xdgmimeglob.c [6:7]
+        gio/xdgmime/xdgmimeglob.h [6:7]
+        gio/xdgmime/xdgmimeint.c [6:7]
+        gio/xdgmime/xdgmimeint.h [6:7]
+        gio/xdgmime/xdgmimemagic.c [6:7]
+        gio/xdgmime/xdgmimemagic.h [6:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c4596f51ad6f4b02c9f80450c75de0a9
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2020 Endless Mobile, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gtrace-private.h [2:2]
+        glib/gtrace.c [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c4f6080747a31d986d5ee4f08010cfa4
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 1998 Sebastian Wilhelmi; University of Karlsruhe
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gthread-posix.c [5:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c646a005f9b7615514edc0c219651893
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           * Copyright (C) 1991,92,94,95,96,97,98,99,2000,01,02
+           *        Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gstrfuncs.c [1062:1063]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c6aca106009b8ff0ae3ecc2100252950
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1995-1997  Peter Mattis, Spencer Kimball and Josh MacDonald
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/deprecated/gcache.c [2:2]
+        glib/deprecated/gcache.h [2:2]
+        glib/deprecated/gcompletion.c [2:2]
+        glib/deprecated/gcompletion.h [2:2]
+        glib/deprecated/gmain.h [2:2]
+        glib/deprecated/grel.c [2:2]
+        glib/deprecated/grel.h [2:2]
+        glib/deprecated/gthread-deprecated.c [2:2]
+        glib/deprecated/gthread.h [2:2]
+        glib/galloca.h [2:2]
+        glib/garray.c [2:2]
+        glib/garray.h [2:2]
+        glib/gasyncqueue.c [2:2]
+        glib/gasyncqueue.h [2:2]
+        glib/gasyncqueueprivate.h [2:2]
+        glib/gbacktrace.c [2:2]
+        glib/gbacktrace.h [2:2]
+        glib/gconstructor.h [2:2]
+        glib/gconvert.h [2:2]
+        glib/gdataset.c [2:2]
+        glib/gdataset.h [2:2]
+        glib/gdate.c [2:2]
+        glib/gdate.h [2:2]
+        glib/gdir.c [2:2]
+        glib/gdir.h [2:2]
+        glib/genviron.h [2:2]
+        glib/gerror.c [2:2]
+        glib/ggettext.h [2:2]
+        glib/ghash.c [2:2]
+        glib/ghash.h [2:2]
+        glib/ghook.c [2:2]
+        glib/ghook.h [2:2]
+        glib/giochannel.c [2:2]
+        glib/giochannel.h [2:2]
+        glib/giounix.c [2:2]
+        glib/giowin32.c [2:2]
+        glib/glib.h [2:2]
+        glib/glist.c [2:2]
+        glib/glist.h [2:2]
+        glib/gmacros.h [2:2]
+        glib/gmain.c [2:2]
+        glib/gmem.c [2:2]
+        glib/gmem.h [2:2]
+        glib/gmessages.c [2:2]
+        glib/gmessages.h [2:2]
+        glib/gnode.c [2:2]
+        glib/gnode.h [2:2]
+        glib/gpoll.c [2:2]
+        glib/gprimes.c [2:2]
+        glib/gprimes.h [2:2]
+        glib/gprintfint.h [2:2]
+        glib/gqsort.c [2:4]
+        glib/gqsort.h [2:2]
+        glib/gquark.c [2:3]
+        glib/gquark.h [2:2]
+        glib/gqueue.c [2:2]
+        glib/gqueue.h [2:2]
+        glib/grand.c [2:2]
+        glib/grand.h [2:2]
+        glib/gscanner.c [2:2]
+        glib/gscanner.h [2:2]
+        glib/gslist.c [2:2]
+        glib/gslist.h [2:2]
+        glib/gstrfuncs.c [2:2]
+        glib/gstrfuncs.h [2:2]
+        glib/gstring.c [2:2]
+        glib/gstring.h [2:2]
+        glib/gstringchunk.c [2:2]
+        glib/gstringchunk.h [2:2]
+        glib/gthread-posix.c [2:2]
+        glib/gthread-win32.c [2:2]
+        glib/gthread.c [2:2]
+        glib/gthread.h [2:2]
+        glib/gthreadpool.c [2:2]
+        glib/gthreadpool.h [2:2]
+        glib/gtimer.c [2:2]
+        glib/gtimer.h [2:2]
+        glib/gtrashstack.h [2:2]
+        glib/gtree.c [2:2]
+        glib/gtree.h [2:2]
+        glib/gtypes.h [2:2]
+        glib/gutils.h [2:2]
+        glib/gversion.h [2:2]
+        glib/gversionmacros.h [2:2]
+        glib/gwin32.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8be33e0cedcf9e6fa704e87c570db31
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2010 Codethink Limited
+         * Copyright © 2010 Novell, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gkeyfilesettingsbackend.c [2:3]
+        gio/gsettings-mapping.c [2:2]
+        gio/gsettings-mapping.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8ec280f5bf967002de7de1a95b6efd8
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           Copyright (C) 2000-2017 Julian Seward.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/valgrind.h [15:15]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c93665a83959d560411d2ae082165e1a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+        * Copyright © 2016 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gportalnotificationbackend.c [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca304665f1599e0bbdcab5afef6add80
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2010 Red Hat, Inc.
+         * Copyright © 2015 Collabora, Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdtlsclientconnection.h [3:4]
+        gio/gdtlsconnection.h [3:4]
+        gio/gdtlsserverconnection.h [3:4]
+        gio/gdummytlsbackend.c [3:4]
+        gio/gdummytlsbackend.h [3:3]
+        gio/gpollableinputstream.c [3:3]
+        gio/gpollableinputstream.h [3:3]
+        gio/gpollableoutputstream.c [3:3]
+        gio/gpollableoutputstream.h [3:3]
+        gio/gpollableutils.c [3:3]
+        gio/gsettingsbackend.c [2:3]
+        gio/gsettingsbackend.h [2:3]
+        gio/gsettingsbackendinternal.h [2:3]
+        gio/gtlsbackend.h [3:4]
+        gio/gtlscertificate.c [3:3]
+        gio/gtlscertificate.h [3:3]
+        gio/gtlsclientconnection.h [3:3]
+        gio/gtlsconnection.h [3:3]
+        gio/gtlsserverconnection.h [3:3]
+        gio/gunixcredentialsmessage.c [3:4]
+        gio/gunixcredentialsmessage.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL cbd7b8407f1e5e1c00edb4334519b6cf
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2008 Christian Kellner, Samuel Cormier-Iijima
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/ginetaddress.c [3:3]
+        gio/ginetaddress.h [3:3]
+        gio/ginetsocketaddress.c [3:3]
+        gio/ginetsocketaddress.h [3:3]
+        gio/gnativesocketaddress.c [3:3]
+        gio/gnativesocketaddress.h [3:3]
+        gio/gsocket.c [3:6]
+        gio/gsocket.h [2:3]
+        gio/gsocketaddress.c [3:3]
+        gio/gsocketaddress.h [3:3]
+        gio/gsocketconnection.c [3:5]
+        gio/gsocketconnection.h [2:3]
+        gio/gsocketinputstream.c [3:4]
+        gio/gsocketinputstream.h [3:4]
+        gio/gsocketlistener.c [3:5]
+        gio/gsocketlistener.h [3:5]
+        gio/gsocketoutputstream.c [3:4]
+        gio/gsocketoutputstream.h [3:4]
+        gio/gunixsocketaddress.c [3:3]
+        gio/gunixsocketaddress.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+         51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [4:6]
+        gmodule/COPYING [4:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf77de5fb8d7face619245b550fe0fe5
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2009 Benjamin Otte <otte@gnome.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gobject/gatomicarray.c [2:2]
+        gobject/gatomicarray.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d0c6ad1b2910ff73fc785a47f1cef4fd
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1991,92,93,94,95,96,97,98,99 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gfileutils.c [1463:1463]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d2ad452a4e511be3881aaf1b87f5d672
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2019 Red Hat, Inc
+         * Copyright 2021 Igalia S.L.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gpowerprofilemonitor.c [3:4]
+        gio/gpowerprofilemonitor.h [3:4]
+        gio/gpowerprofilemonitordbus.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d351f7c54a89c5ca17845e2e62d53371
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gdatetime.c [3:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d3d427df38b8749572c26fab6963379b
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2009, 2010 Codethink Limited
+         * Copyright © 2011 Collabora Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gbytes.c [2:3]
+        glib/gbytes.h [2:3]
+        glib/ghmac.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4eaeb647d20ac13447af4b077da1e0e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2022 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/giowin32-afunix.h [3:3]
+        gio/gwin32sid.c [3:4]
+        gio/gwin32sid.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d6512395b4812ca8c592d1b68ae1709a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 1998 Owen Taylor and Tor Lillqvist
+         * Copyright 1999-2000 Tor Lillqvist and Craig Setera
+         * Copyright 2001-2003 Andrew Lanoix
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/giowin32.c [5:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d68970ca86b1f95a2626448a10dfaa29
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2019 Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gmemorymonitor.c [3:3]
+        gio/gpowerprofilemonitor.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d6990f3d442509393bb590d23bb68e70
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2005  Matthias Clasen <mclasen@redhat.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/xdgmime/xdgmimecache.c [6:6]
+        gio/xdgmime/xdgmimecache.h [6:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d839278476de433677c2cff3361feff7
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2010 Collabora Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gproxy.c [3:3]
+        gio/gproxy.h [5:5]
+        gio/gtcpwrapperconnection.c [3:3]
+        gio/gtcpwrapperconnection.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL da60c0bdc483083a8edb72434f1519fc
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2012, 2013 Red Hat, Inc.
+         * Copyright © 2012, 2013 Canonical Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsubprocess.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL dad35176705d93ce9ff26ceb19ed144f
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2004  Red Hat, Inc.
+         * Copyright (C) 2004  Matthias Clasen <mclasen@redhat.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/xdgmime/xdgmimealias.c [6:7]
+        gio/xdgmime/xdgmimealias.h [6:7]
+        gio/xdgmime/xdgmimeparent.c [6:7]
+        gio/xdgmime/xdgmimeparent.h [6:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL dbb16a264aeb3e94ef724e42a89684c3
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2008 Christian Kellner, Samuel Cormier-Iijima
+         *           © 2008 codethink
+         * Copyright © 2009 Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsocketconnection.c [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL dc0ca85588a3adb9b650060a3483a46d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2011 William Hua
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gnextstepsettingsbackend.m [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL dc2a9b192fa29ffa7e99a9b1d6b4e452
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2014-2018 Jan-Michael Brummer <jan.brummer@tabos.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gwin32networkmonitor.c [3:3]
+        gio/gwin32networkmonitor.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL dd22b584cd9146220596467f3cb99011
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2019 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gmemorymonitor.h [3:3]
+        gio/gmemorymonitordbus.c [3:3]
+        gio/gmemorymonitordbus.h [3:3]
+        gio/gmemorymonitorportal.c [3:3]
+        gio/gmemorymonitorportal.h [3:3]
+        gio/gpowerprofilemonitor.h [3:4]
+        gio/gpowerprofilemonitordbus.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL dd5ebbda74b2d47de62db8da34290eb8
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2001 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gobject/gsourceclosure.c [2:2]
+        gobject/gsourceclosure.h [2:2]
+        gobject/gvaluearray.c [2:2]
+        gobject/gvaluearray.h [2:2]
+        gobject/gvaluetransform.c [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ded26104ce85411f550ac84644e1b6d9
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2012 Red Hat, Inc.
+         * Copyright © 2012-2013 Canonical Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsubprocesslauncher.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL def8909d07c5c8c5b5f748d5eb02e411
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1995-1998  Peter Mattis, Spencer Kimball and Josh MacDonald
+         * Copyright (C) 1998-1999  Tor Lillqvist
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gwin32.c [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL dfd9966463e1ce0a528f50f9d0820d00
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+         * Copyright (C) 2007 Jürg Billeter
+         * Copyright © 2009 Codethink Limited
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdatainputstream.c [3:5]
+        gio/gsocket.c [3:6]
+        gio/gsocket.h [2:3]
+        gio/gsocketconnection.h [2:3]
+        gio/gsocketcontrolmessage.c [3:3]
+        gio/gsocketcontrolmessage.h [3:3]
+        gio/gsocketinputstream.h [3:4]
+        gio/gsocketlistener.h [3:5]
+        gio/gsocketoutputstream.h [3:4]
+        gio/gsocketservice.c [3:4]
+        gio/gsocketservice.h [3:4]
+        gio/gthreadedsocketservice.c [3:4]
+        gio/gthreadedsocketservice.h [3:4]
+        gio/gunixconnection.c [3:3]
+        gio/gunixconnection.h [3:3]
+        gio/gunixcredentialsmessage.c [3:4]
+        gio/gunixcredentialsmessage.h [3:4]
+        gio/gunixfdlist.c [3:3]
+        gio/gunixfdlist.h [3:3]
+        gio/gunixfdmessage.c [3:3]
+        gio/gunixfdmessage.h [3:3]
+        gio/inotify/inotify-path.c [5:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e0b612054091af0b71ebbb76f431dc0b
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 2003 Sebastian Wilhelmi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gthreadprivate.h [5:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e0de90050c0013738f0f8aba2a77bebb
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright 2004  Red Hat, Inc.  
+         *  Copyright 2009-2010  Collabora Ltd.
+         *  Copyright 2009  Nokia Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gkeyfile.c [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e13ec65eb1bf5cf58311af3bb153c534
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2021 Endless OS Foundation, LLC
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdebugcontroller.c [3:3]
+        gio/gdebugcontroller.h [3:3]
+        gio/gdebugcontrollerdbus.c [3:3]
+        gio/gdebugcontrollerdbus.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e1793e180fa2cbcbf97ce0df15c4dc71
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+         * Copyright (C) 2007 Sebastian Dröge.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/inotify/ginotifyfilemonitor.c [3:4]
+        gio/inotify/ginotifyfilemonitor.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e2cd1cb8a88ffafc649fe9fe0ce646fa
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright (C) 1999, 2000 Tom Tromey
+         *  Copyright 2000, 2005 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gunicode.h [3:4]
+        glib/gunidecomp.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e47670f0202e764d11e6d30b1539a810
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2000-2003 Tim Janik
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gbsearcharray.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e58c19667977ea0cef09bef9075b84f3
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2008, 2009 codethink
+         * Copyright © 2009 Red Hat, Inc
+         * Copyright © 2018 Igalia S.L.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsocketclient.c [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e63656ae29574fa83b255546822f70de
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1991, 1992, 1996, 1997,1999,2004 Free Software Foundation, Inc.
+         * Copyright (C) 2000 Eazel, Inc.
+         * Copyright (C) 1995-1997  Peter Mattis, Spencer Kimball and Josh MacDonald
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gqsort.c [2:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e6eb9bd9dfbda417cb2a23515776bf6c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright 2000, 2003 Red Hat, Inc.
+         *  Copyright 2007, 2008 Ryan Lortie <desrt@desrt.ca>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gmarkup.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e85b13d4c6406c152a10f52620b086e1
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2014 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gnetworkmonitornm.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e96582964a8792e6860317ac951898b3
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1995-1997, 1999  Peter Mattis, Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gpattern.c [2:2]
+        glib/gpattern.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e99a07e4f19e927417ce812c9faf1e3f
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2020 Руслан Ижбулатов
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gwin32file-sync-stream.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL eb6b3dab0411487e99cc5246abdd80ad
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2013 Lars Uebernickel
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gfdonotificationbackend.c [2:2]
+        gio/ggtknotificationbackend.c [2:2]
+        gio/gnotification-private.h [2:2]
+        gio/gnotification.c [2:2]
+        gio/gnotification.h [2:2]
+        gio/gnotificationbackend.c [2:2]
+        gio/gnotificationbackend.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL eba49636b3b435b280c5b093536d683a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2001 Hans Breuer
+         * Copyright 2004 Tor Lillqvist
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gdir.c [6:7]
+        glib/gstdio-private.c [3:4]
+        glib/gstdio.c [3:3]
+        glib/gstdio.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec0e3b0eb6094f5d57e4ae0dda29f5e7
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2007  Emmanuele Bassi  <ebassi@gnome.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gchecksum.c [3:3]
+        glib/gchecksum.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec215c39e1084ca847e8f877edf4cf8e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright 2000 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gerror.h [3:3]
+        glib/gfileutils.c [3:3]
+        glib/gfileutils.h [3:3]
+        glib/gmarkup.h [3:3]
+        glib/gshell.c [3:5]
+        glib/gshell.h [3:3]
+        glib/gspawn-private.h [3:5]
+        glib/gspawn-win32.c [3:4]
+        glib/gspawn.c [3:5]
+        glib/gspawn.h [3:3]
+        glib/gunibreak.c [3:3]
+        glib/gunidecomp.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ecdb94c5cd4e00c766cd4805929b2775
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1995-1998  Peter Mattis, Spencer Kimball and Josh MacDonald
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/genviron.c [2:2]
+        glib/ggettext.c [2:2]
+        glib/gtrashstack.c [2:2]
+        glib/gutils.c [2:2]
+        glib/gversion.c [2:2]
+        glib/gwin32.c [2:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ed93476c82794798c6fa5210269e44cc
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2006-2007 Red Hat, Inc.
+         * Copyright © 2007 Ryan Lortie
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdesktopappinfo.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ef5bfebce2a5a85cb87f4ceef32a2f35
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2021 Ole André Vadla Ravnås
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/giounix-private.c [2:2]
+        gio/giounix-private.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f10dbc1cb1a75cd814621897565d484d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2020 Frederic Martinsons
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gconvertprivate.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f1ebef334b46646fdb5b908991b709d2
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright © 2008 Christian Kellner, Samuel Cormier-Iijima
+         *           © 2009 codethink
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gsocketinputstream.c [3:4]
+        gio/gsocketoutputstream.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f294684e567ef8fe426ec011bac22e9e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *  Copyright 2000 Red Hat, Inc.
+         *  Copyright 2003 Tor Lillqvist
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gspawn-win32.c [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f3d20bb6f7476422f09f46d81235b771
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2016 Endless Mobile, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gdocumentportal.c [3:3]
+        gio/gdocumentportal.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4388b91a0cf2e69e8d136d220482eaf
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2008-2010 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gcredentials.c [3:3]
+        gio/gcredentials.h [3:3]
+        gio/gdbusaddress.c [3:3]
+        gio/gdbusaddress.h [3:3]
+        gio/gdbusauth.c [3:3]
+        gio/gdbusauth.h [3:3]
+        gio/gdbusauthmechanism.c [3:3]
+        gio/gdbusauthmechanism.h [3:3]
+        gio/gdbusauthmechanismanon.c [3:3]
+        gio/gdbusauthmechanismanon.h [3:3]
+        gio/gdbusauthmechanismexternal.c [3:3]
+        gio/gdbusauthmechanismexternal.h [3:3]
+        gio/gdbusauthmechanismsha1.c [3:3]
+        gio/gdbusauthmechanismsha1.h [3:3]
+        gio/gdbusauthobserver.c [3:3]
+        gio/gdbusauthobserver.h [3:3]
+        gio/gdbusconnection.c [3:3]
+        gio/gdbusconnection.h [3:3]
+        gio/gdbuserror.c [3:3]
+        gio/gdbuserror.h [3:3]
+        gio/gdbusinterface.c [3:3]
+        gio/gdbusinterface.h [3:3]
+        gio/gdbusinterfaceskeleton.c [3:3]
+        gio/gdbusinterfaceskeleton.h [3:3]
+        gio/gdbusintrospection.c [3:3]
+        gio/gdbusintrospection.h [3:3]
+        gio/gdbusmessage.c [3:3]
+        gio/gdbusmessage.h [3:3]
+        gio/gdbusmethodinvocation.c [3:3]
+        gio/gdbusmethodinvocation.h [3:3]
+        gio/gdbusnameowning.c [3:3]
+        gio/gdbusnameowning.h [3:3]
+        gio/gdbusnamewatching.c [3:3]
+        gio/gdbusnamewatching.h [3:3]
+        gio/gdbusobject.c [3:3]
+        gio/gdbusobject.h [3:3]
+        gio/gdbusobjectmanager.c [3:3]
+        gio/gdbusobjectmanager.h [3:3]
+        gio/gdbusobjectmanagerclient.c [3:3]
+        gio/gdbusobjectmanagerclient.h [3:3]
+        gio/gdbusobjectmanagerserver.c [3:3]
+        gio/gdbusobjectmanagerserver.h [3:3]
+        gio/gdbusobjectproxy.c [3:3]
+        gio/gdbusobjectproxy.h [3:3]
+        gio/gdbusobjectskeleton.c [3:3]
+        gio/gdbusobjectskeleton.h [3:3]
+        gio/gdbusprivate.c [3:3]
+        gio/gdbusprivate.h [3:3]
+        gio/gdbusproxy.c [3:3]
+        gio/gdbusproxy.h [3:3]
+        gio/gdbusserver.c [3:3]
+        gio/gdbusserver.h [3:3]
+        gio/gdbusutils.c [3:3]
+        gio/gdbusutils.h [3:3]
+        gio/gtestdbus.c [3:4]
+        gio/gtestdbus.h [3:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f5aee0da7ae1aef4a85c3986b439fb9b
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 2017 Руслан Ижбулатов
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/gstdioprivate.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f624433d465639045cb3cb7ea39bf774
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2021  Iain Lane, Xavier Claessens
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/glib-typeof.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f6e392d0f7fbe21653a24fe0c197c5f4
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2010  Intel Corp.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gobject/gbinding.c [3:3]
+        gobject/gbinding.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f8f9e17884c47df8df67a23cfb7abba0
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2013-2015, 2017 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/guuid.c [3:3]
+        glib/guuid.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL fc9b8950f213f7635a47a4d3987c465d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2010 Christian Kellner
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gio/gfiledescriptorbased.c [3:3]
+        gio/gfiledescriptorbased.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL fdd78e2697e32f8dce8da44eee29d968
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Copyright 1998 Owen Taylor and Tor Lillqvist
+         * Copyright 1999-2000 Tor Lillqvist and Craig Setera
+         * Copyright 2001-2003 Andrew Lanoix
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        glib/giowin32.c [5:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make

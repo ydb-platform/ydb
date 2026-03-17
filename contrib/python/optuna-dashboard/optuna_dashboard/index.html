@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Optuna Dashboard</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script defer src="/static/bundle.js"></script>
+    <style>
+        .optuna-loading-wrapper {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .optuna-loading-message {
+            font-weight: 700;
+            font-size: 32px;
+            color: gray;
+        }
+
+        .optuna-animation {
+            -webkit-transition-property: -webkit-transform;
+            -webkit-transition-duration: 6s;
+            -webkit-animation-name: rotate;
+            -webkit-animation-iteration-count: infinite;
+            -webkit-animation-timing-function: ease;
+
+            -moz-transition-property: -moz-transform;
+            -moz-animation-name: rotate;
+            -moz-animation-duration: 6s;
+            -moz-animation-iteration-count: infinite;
+            -moz-animation-timing-function: ease;
+
+            transition-property: transform;
+            animation-name: rotate;
+            animation-duration: 6s;
+            animation-iteration-count: infinite;
+            animation-timing-function: ease;
+        }
+
+        @-webkit-keyframes rotate {
+            from {-webkit-transform: rotate(-1080deg); opacity: 0; }
+            50% { -webkit-transform: rotate(0deg); opacity: 1; }
+            to {-webkit-transform: rotate(1080deg); opacity: 0;}
+        }
+
+        @-moz-keyframes rotate {
+            from {-moz-transform: rotate(-1080deg); opacity: 0; }
+            50% { -moz-transform: rotate(0deg); opacity: 1; }
+            to {-moz-transform: rotate(1080deg); opacity: 0;}
+        }
+
+        @keyframes rotate {
+            from {transform: rotate(-1080deg); opacity: 0; }
+            50% { transform: rotate(0deg); opacity: 1; }
+            to {transform: rotate(1080deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="dashboard">
+        <span class="optuna-loading-wrapper">
+            <svg class="optuna-animation" xmlns="http://www.w3.org/2000/svg" width="294.7" height="280" viewBox="0 0 221 210">
+                <path fill="rgb(6, 71, 135)" d="M104.5.6c-31.2 4.6-55 16.5-74.5 37A107.3 107.3 0 0 0 3.2 84.9a78.4 78.4 0 0 0-2.6 24.6c0 12.5.3 16.4 2.2 23.5a114.2 114.2 0 0 0 19.5 38 114 114 0 0 0 103.3 37.5 111.6 111.6 0 0 0 83.1-63.1 100.3 100.3 0 0 0 11-44.9c.4-11.5.1-15.7-1.5-23.5a85.3 85.3 0 0 0-25.1-47.1 98 98 0 0 0-49.4-27c-8-2-31.9-3.4-39.2-2.3zm35.3 16.8A90 90 0 0 1 206.7 80a112 112 0 0 1 0 40.8 103.3 103.3 0 0 1-73.7 72 76.6 76.6 0 0 1-25 2.5 77 77 0 0 1-23.2-2.1 99.6 99.6 0 0 1-68.4-66.7 64 64 0 0 1-2.8-22.5c-.1-11.3.3-14.8 2.2-21.4C25.5 49.2 53.6 25 92.5 16.9a156 156 0 0 1 47.3.5z"/>
+                <path fill="rgb(12, 97, 152)" d="M94.6 29.5A88.3 88.3 0 0 0 68 39.1c-17 8.8-30.5 22-38.1 37.4a56.4 56.4 0 0 0-6.7 32c.9 18.9 7.2 32.1 22.7 47.5 13 12.8 25.8 20 44.9 25.2 11 3 31.5 2.9 42.7-.1a85.5 85.5 0 0 0 61.1-60.1c2.3-8.8 2.4-26.3.1-35a78.6 78.6 0 0 0-55.2-54.6 74.9 74.9 0 0 0-23.5-3c-9.9-.2-16.7.1-21.4 1.1zm37.2 11.1a61 61 0 0 1 29.7 17.9 55 55 0 0 1 18.6 43.6c.3 39.1-30.4 68.9-71.1 69.1-16.9 0-30-4.1-42.5-13.4A59.7 59.7 0 0 1 47.1 83c15.6-33 51.5-51 84.7-42.4z"/>
+                <path fill="rgb(39, 126, 170)" d="M96 57.6a58.6 58.6 0 0 0-40 35 43 43 0 0 0 1.6 30.4 62.8 62.8 0 0 0 20.2 22.6 70.7 70.7 0 0 0 28.8 10c34.6 3.2 64.7-28.1 58-60.4a50 50 0 0 0-37.3-37.7c-7.2-1.9-24-1.8-31.3.1zm31.9 16.1A32 32 0 0 1 148 93.4c.7 2.4 1.1 6.8.8 11.5a28 28 0 0 1-3.8 13.9 43.4 43.4 0 0 1-18.8 17.9c-5.2 2.5-6.7 2.8-16.7 2.8-9.8 0-11.6-.3-16.7-2.7-17.2-8-24.7-25.5-17.6-41a43.9 43.9 0 0 1 52.7-22.1z"/>
+                <path fill="rgb(77, 154, 184)" d="M109.5 86.9c-12.1 3-20.9 13.7-19.1 23.4 2.6 14.1 25 17.3 37.4 5.4 4.5-4.3 6.4-8.1 6.4-13.1.2-11.4-11.6-18.8-24.7-15.7zm7.7 11.8c4.5 4 .5 13.3-5.7 13.3-4.3 0-6.5-2.2-6.5-6.6 0-6.6 7.6-10.9 12.2-6.7z"/>
+            </svg>
+            <p class="optuna-loading-message">NOW LOADING</p>
+        </span>
+    </div>
+</body>
+</html>

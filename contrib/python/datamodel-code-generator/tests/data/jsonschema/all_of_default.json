@@ -1,0 +1,29 @@
+{
+    "type": "object",
+    "title": "Item",
+    "allOf": [{
+            "title": "Entity",
+            "type": "object"
+    }],
+    "required": [
+        "test",
+        "testarray"
+    ],
+    "properties": {
+        "test": {
+            "type": "string",
+            "default": "test123"
+        },
+        "testarray": {
+            "title": "test array",
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "minItems": 1,
+            "default": [
+                "test123"
+            ]
+        }
+    }
+}

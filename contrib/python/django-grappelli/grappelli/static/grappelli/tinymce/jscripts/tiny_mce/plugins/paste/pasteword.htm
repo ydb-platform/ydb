@@ -1,0 +1,21 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<title>{#paste.paste_word_desc}</title>
+	<script type="text/javascript" src="../../tiny_mce_popup.js"></script>
+	<script type="text/javascript" src="js/pasteword.js"></script>
+	<base target="_self" />
+</head>
+<body onresize="PasteWordDialog.resize();" style="display:none; overflow:visible;">
+    <form name="source" onsubmit="return PasteWordDialog.insert();" action="#">
+        <div class="title">{#paste.paste_word_desc}</div>
+        <p class="helptext">{#paste_dlg.word_title}</p>
+        <div id="iframecontainer"></div>
+        <div class="mceActionPanel grp-module grp-submit-row">
+            <ul>
+                <li class="grp-float-left"><input type="button" id="cancel" class="grp-button grp-cancel-link" name="cancel" value="{#cancel}" onclick="tinyMCEPopup.close();" /></li>
+                <li><input type="submit" id="insert" class="grp-button grp-default" name="insert" value="{#insert}" onclick="saveContent();" /></li>
+            </ul>
+        </div>
+    </form>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/all_of_ref_self.json",
+  "type": "object",
+  "properties": {
+    "version": {
+      "allOf": [
+        { "$ref": "#/$defs/version" }
+      ]
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "null"
+    }
+  }
+}

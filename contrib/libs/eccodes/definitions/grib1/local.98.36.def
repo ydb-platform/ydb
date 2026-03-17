@@ -1,0 +1,55 @@
+# (C) Copyright 2005- ECMWF.
+# MARS labelling for long window 4Dvar system
+
+constant GRIBEXSection1Problem = 56 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber           : dump;
+alias number = perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble  : dump;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+# Hours
+unsigned[2] offsetToEndOf4DvarWindow : dump;
+unsigned[2] lengthOf4DvarWindow : dump;
+alias anoffset=offsetToEndOf4DvarWindow;
+
+pad padding_local1_1(1);
+
+#1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=1;
+
+if (stepType is "instant" ) {
+    if (type is "em" || type is "es" ) {
+      alias productDefinitionTemplateNumber=epsStatisticsPoint;
+    } else {
+        if (numberOfForecastsInEnsemble!=0) {
+            if ((perturbationNumber/2)*2 == perturbationNumber) {
+                alias typeOfEnsembleForecast=two;
+            } else {
+                alias typeOfEnsembleForecast=three;
+            }
+            alias productDefinitionTemplateNumber=epsPoint;
+        } else {
+            alias productDefinitionTemplateNumber=zero;
+        }
+    }
+} else {
+    if (type is "em" || type is "es" ) {
+      alias productDefinitionTemplateNumber=epsStatisticsContinous;
+    } else {
+        if (numberOfForecastsInEnsemble!=0) {
+            if ((perturbationNumber/2)*2 == perturbationNumber) {
+                alias typeOfEnsembleForecast=two;
+            } else {
+                alias typeOfEnsembleForecast=three;
+            }
+            alias productDefinitionTemplateNumber=epsContinuous;
+        } else {
+            alias productDefinitionTemplateNumber=eight;
+        }
+    }
+}

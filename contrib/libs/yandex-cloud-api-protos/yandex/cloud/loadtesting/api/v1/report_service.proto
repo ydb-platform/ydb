@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1;loadtesting";
+option java_package = "yandex.cloud.api.loadtesting.api.v1";
+
+import "google/api/annotations.proto";
+import "yandex/cloud/loadtesting/api/v1/report/kpi.proto";
+import "yandex/cloud/loadtesting/api/v1/report/kpi_value.proto";
+import "yandex/cloud/loadtesting/api/v1/report/table/report.proto";
+import "yandex/cloud/loadtesting/api/v1/report/status.proto";
+import "yandex/cloud/validation.proto";
+
+// A set of methods for managing test reports.
+service ReportService {
+  // Returns a report table for the specified test.
+  rpc GetTable(GetTableReportRequest) returns (GetTableReportResponse) {
+    option (google.api.http) = { get: "/loadtesting/api/v1/reports/{test_id}/table" };
+  }
+
+  // Returns a list of KPI values for tests matching the specified filter.
+  rpc CalculateKpiValues(CalculateReportKpiValuesRequest) returns (CalculateReportKpiValuesResponse) {
+    option (google.api.http) = { post: "/loadtesting/api/v1/reports/calculateKpiValues" body: "*" };
+  }
+}
+
+message GetTableReportRequest {
+  // ID of the test for which report table will be returned.
+  string test_id = 1 [(required) = true];
+}
+
+message GetTableReportResponse {
+  // Status of report table.
+  report.Status status = 1;
+
+  // Result for all test cases combined ("overall" test case).
+  report.table.Report overall = 2;
+
+  // Results for individual test cases, mapped as `case_name:report`.
+  map<string, report.table.Report> cases = 3;
+}
+
+message CalculateReportKpiValuesRequest {
+  // ID of the folder containing tests.
+  string folder_id = 1 [(required) = true, (length) = "<=54"];
+
+  // Test filter selector to calculate KPI values for.
+  string test_filter = 2 [(required) = true, (length) = "<=1000"];
+
+  // Test case to calculate KPI values for.
+  //
+  // If not specified, KPI values will be calculated for 'overall' case.
+  string test_case = 3 [(length) = "<=100"];
+
+  // KPI to be calculated.
+  report.Kpi kpi = 4 [(required) = true];
+}
+
+message CalculateReportKpiValuesResponse {
+  // ID of the folder.
+  string folder_id = 1;
+
+  // Actual KPI values.
+  repeated report.KpiValue values = 2;
+}

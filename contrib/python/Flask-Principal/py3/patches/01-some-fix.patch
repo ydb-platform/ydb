@@ -1,0 +1,10 @@
+--- contrib/python/Flask-Principal/py3/flask_principal.py	(index)
++++ contrib/python/Flask-Principal/py3/flask_principal.py	(working tree)
+@@ -481,6 +481,6 @@ class Principal(object):
+ 
+     def _is_static_route(self):
+         return (
+-            self.skip_static and
++            self.skip_static and self._static_path and
+             request.path.startswith(self._static_path)
+         )

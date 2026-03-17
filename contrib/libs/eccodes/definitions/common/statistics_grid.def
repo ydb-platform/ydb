@@ -1,0 +1,22 @@
+# (C) Copyright 2005- ECMWF.
+
+meta dirty_statistics dirty(computeStatistics) ;
+when (changed(values)) { set dirty_statistics=1;}
+
+meta computeStatistics statistics(missingValue,values);
+
+meta maximum vector(computeStatistics,0) : dump;
+meta minimum vector(computeStatistics,1) : dump;
+meta average vector(computeStatistics,2) : dump;
+meta standardDeviation vector(computeStatistics,4) : dump;
+meta skewness   vector(computeStatistics,5) : dump;
+meta kurtosis   vector(computeStatistics,6) : dump;
+meta isConstant vector(computeStatistics,7) : dump;
+
+alias statistics.avg = average;
+alias statistics.max = maximum;
+alias statistics.min = minimum;
+alias statistics.sd = standardDeviation;
+alias statistics.skew = skewness;
+alias statistics.kurt = kurtosis;
+alias statistics.const = isConstant;

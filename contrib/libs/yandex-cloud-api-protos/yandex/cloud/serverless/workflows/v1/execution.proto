@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.workflows.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/workflows/v1;workflows";
+option java_package = "yandex.cloud.api.serverless.workflows.v1";
+
+message Execution {
+  // Workflow execution status.
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // Workflow execution is being queued.
+    QUEUED = 1;
+    // Workflow execution is running.
+    RUNNING = 2;
+    // Workflow execution is being paused.
+    PAUSED = 3;
+    // Workflow execution is stopped.
+    STOPPED = 4;
+    // Workflow execution is failed.
+    FAILED = 5;
+    // Workflow execution is finished.
+    FINISHED = 6;
+  }
+  reserved 3;
+  // ID of the Workflow execution. Generated at creation time.
+  string id = 1;
+  // ID of the Workflow.
+  string workflow_id = 2;
+  // Input data for the Workflow execution.
+  ExecutionInput input = 4;
+  // Result of the Workflow execution.
+  ExecutionResult result = 5;
+  // Error details, in case Workflow execution failed.
+  ExecutionError error = 6;
+  // Status of the Workflow execution
+  Status status = 7;
+  // Start timestamp for the Workflow execution.
+  google.protobuf.Timestamp started_at = 8;
+  // Duration of the Workflow execution.
+  google.protobuf.Duration duration = 9;
+}
+
+message ExecutionPreview {
+  reserved 3;
+  // ID of the Workflow execution. Generated at creation time.
+  string id = 1;
+  // ID of the Workflow.
+  string workflow_id = 2;
+  // Status of the Workflow execution
+  Execution.Status status = 4;
+  // Start timestamp for the Workflow execution.
+  google.protobuf.Timestamp started_at = 5;
+  // Duration of the Workflow execution.
+  google.protobuf.Duration duration = 6;
+}
+
+message ExecutionInput {
+  oneof input {
+    option (exactly_one) = true;
+    // JSON input data for the Workflow execution.
+    string input_json = 1;
+    // Input value for the Workflow execution.
+    google.protobuf.Value input_value = 2;
+  }
+}
+
+message ExecutionResult {
+  oneof result {
+    option (exactly_one) = true;
+    // JSON result of the Workflow execution.
+    string result_json = 1;
+  }
+}
+
+message ExecutionError {
+  // Error message of the Workflow execution.
+  string message = 1;
+  // Error code of the Workflow execution.
+  string error_code = 2;
+}

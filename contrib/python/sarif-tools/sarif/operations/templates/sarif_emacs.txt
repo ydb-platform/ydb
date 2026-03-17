@@ -1,0 +1,18 @@
+-*- compilation -*-
+
+Sarif Summary: {{ report_type }}
+Document generated on: {{ report_date }}
+Total number of distinct issues of all severities ({{ severities }}): {{ total }}
+{% if filtered -%}
+<p>{{ filtered }}</p>
+{%- endif %}
+
+{% for problem in problems %}
+Severity : {{ problem.type }} [{{ problem.count }}]
+{% for error in problem.details -%}
+{% for line in error.details -%}
+{{ line.Location }}:{{ line.Line }}: {{ error.code }}
+{% endfor %}
+{% endfor %}
+{% endfor -%}
+

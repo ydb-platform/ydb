@@ -1,0 +1,29 @@
+/*++
+Copyright (c) 2012 Microsoft Corporation
+
+Module Name:
+
+    qfnra_tactic.h
+
+Abstract:
+
+    Tactic for QF_NRA
+
+Author:
+
+    Leonardo (leonardo) 2012-02-28
+    Mengyu Zhao (Linxi) and Shaowei Cai, ported from https://github.com/hybridSMT/hybridSMT.git
+Notes:
+
+--*/
+#pragma once
+
+#include "util/params.h"
+class ast_manager;
+class tactic;
+
+tactic * mk_qfnra_tactic(ast_manager & m, params_ref const & p = params_ref());
+/*
+  ADD_TACTIC("qfnra", "builtin strategy for solving QF_NRA problems.", "mk_qfnra_tactic(m, p)")
+*/
+

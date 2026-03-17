@@ -1,0 +1,38 @@
+# В этом файле определяется порядок команд, в котором их следует подавать на устройство.
+# - Если порядок команды не важен - ее можно не писать сюда совсем.
+# - Если команда начинается с undo и прописан параметр %order_reverse - команда считается
+#   обратной, но занимает место между прямыми там, где указано.
+
+# Фичи должны быть включены прежде всего
+feature %order_reverse
+ntp enable
+ntp server
+# Далее нужно будет указать команды и их порядок
+sflow
+ip prefix-list
+ipv6 prefix-list
+route-map
+interface *
+    description
+    ip vrf forwarding
+    ipv6 address
+    mtu
+    lldp-agent
+        set lldp
+        lldp tlv
+        dcbx
+        exit
+    sflow
+ip community-list
+router bgp *
+    bgp ~
+    neighbor */(\w+_?-?)+/ peer-group
+    neighbor */(\w+_?-?)+/ remote-as
+    neighbor */[\da-f\.\:]+/ peer-group
+    neighbor */[\da-f\.\:]+/ remote-as
+    neighbor * description *
+    neighbor * fall-over bfd
+    neighbor * advertisement-interval *
+    address-family ~
+        max-paths ebgp *
+        neighbor * activate

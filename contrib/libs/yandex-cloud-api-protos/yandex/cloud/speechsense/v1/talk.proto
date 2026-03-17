@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1;
+
+option java_package = "yandex.cloud.api.speechsense.v1";
+option java_outer_classname = "TalkProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1;speechsense";
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/speechsense/v1/analysis/assistants.proto";
+import "yandex/cloud/speechsense/v1/analysis/conversation_statistics.proto";
+import "yandex/cloud/speechsense/v1/analysis/interrupts_statistics.proto";
+import "yandex/cloud/speechsense/v1/analysis/silence_statistics.proto";
+import "yandex/cloud/speechsense/v1/analysis/speech_statistics.proto";
+import "yandex/cloud/speechsense/v1/analysis/summarization.proto";
+import "yandex/cloud/speechsense/v1/analysis/transcription.proto";
+import "yandex/cloud/speechsense/v1/analysis/text_classifiers.proto";
+import "yandex/cloud/speechsense/v1/analysis/points.proto";
+
+message Talk {
+  // talk id
+  string id = 1;
+  string organization_id = 2;
+  string space_id = 3;
+  string connection_id = 4;
+  repeated string project_ids = 5;
+  // audition info
+  string created_by = 6;
+  google.protobuf.Timestamp created_at = 7;
+  string modified_by = 8;
+  google.protobuf.Timestamp modified_at = 9;
+
+  // key-value representation of talk fields with values
+  repeated Field talk_fields = 10;
+
+  // various ml analysis results
+  yandex.cloud.speechsense.v1.analysis.Transcription transcription = 11;
+  yandex.cloud.speechsense.v1.analysis.SpeechStatistics speech_statistics = 12;
+  yandex.cloud.speechsense.v1.analysis.SilenceStatistics silence_statistics = 13;
+  yandex.cloud.speechsense.v1.analysis.InterruptsStatistics interrupts_statistics = 14;
+  yandex.cloud.speechsense.v1.analysis.ConversationStatistics conversation_statistics = 15;
+  yandex.cloud.speechsense.v1.analysis.Points points = 16;
+  yandex.cloud.speechsense.v1.analysis.TextClassifiers text_classifiers = 17;
+  yandex.cloud.speechsense.v1.analysis.Summarization summarization = 18;
+  yandex.cloud.speechsense.v1.analysis.Assistants assistants = 20;
+
+  TalkState talk_state = 19;
+}
+
+message TalkState {
+  ProcessingState processing_state = 1;
+  repeated AlgorithmProcessingInfo algorithm_processing_infos = 2;
+}
+
+// connection field value
+message Field {
+  // name of the field
+  string name = 1;
+  // field value
+  string value = 2;
+  // field type
+  FieldType type = 3;
+}
+
+message AlgorithmProcessingInfo {
+  Algorithm algorithm = 1;
+  ProcessingState processing_state = 2;
+}
+
+// connection field type
+enum FieldType {
+  FIELD_TYPE_UNSPECIFIED = 0;
+  FIELD_TYPE_STRING = 1;
+  FIELD_TYPE_NUMBER = 2;
+  FIELD_TYPE_DECIMAL = 3;
+  FIELD_TYPE_BOOLEAN = 4;
+  FIELD_TYPE_DATE = 5;
+  FIELD_TYPE_JSON = 6;
+}
+
+enum ProcessingState {
+  PROCESSING_STATE_UNSPECIFIED = 0;
+  PROCESSING_STATE_NOT_STARTED = 1;
+  PROCESSING_STATE_PROCESSING = 2;
+  PROCESSING_STATE_SUCCESS = 3;
+  PROCESSING_STATE_FAILED = 4;
+}
+
+enum Algorithm {
+  ALGORITHM_UNSPECIFIED = 0;
+  ALGORITHM_SPEECHKIT = 1;
+  ALGORITHM_YGPT = 2;
+  ALGORITHM_CLASSIFIER = 3;
+  ALGORITHM_SUMMARIZATION = 4;
+  ALGORITHM_EMBEDDING = 5;
+  ALGORITHM_STATISTICS = 6;
+  ALGORITHM_ASSISTANT = 7;
+}

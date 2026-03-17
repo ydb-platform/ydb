@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1.workload.oidc;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1/workload/oidc;oidc";
+option java_package = "yandex.cloud.api.iam.v1.workload.oidc";
+
+// A OIDC workload identity federation.
+message Federation {
+
+  // Id of the OIDC workload identity federation.
+  string id = 1;
+
+  // Name of the OIDC workload identity federation
+  // The name is unique within the folder. 3-63 characters long.
+  string name = 2;
+
+  // ID of the folder that the OIDC workload identity federation belongs to.
+  string folder_id = 3;
+
+  // Description of the service account. 0-256 characters long.
+  string description = 4;
+
+  // True - the OIDC workload identity federation is enabled and can be used for authentication.
+  // False - the OIDC workload identity federation is disabled and cannot be used for authentication.
+  bool enabled = 5;
+
+  // List of trusted values for aud claim.
+  repeated string audiences = 6;
+
+  // URL of the external IdP server to be used for authentication.
+  string issuer = 7;
+
+  // URL reference to trusted keys in format of JSON Web Key Set.
+  string jwks_url = 8;
+
+  // Resource labels as `` key:value `` pairs
+  map<string, string> labels = 9;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 10;
+}

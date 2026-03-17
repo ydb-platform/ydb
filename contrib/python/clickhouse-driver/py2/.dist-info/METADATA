@@ -1,0 +1,201 @@
+Metadata-Version: 2.1
+Name: clickhouse-driver
+Version: 0.2.0
+Summary: Python driver with native interface for ClickHouse
+Home-page: https://github.com/mymarilyn/clickhouse-driver
+Author: Konstantin Lebedev
+Author-email: kostyan.lebedev@gmail.com
+License: MIT
+Project-URL: Documentation, https://clickhouse-driver.readthedocs.io
+Keywords: ClickHouse db database cloud analytics
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: SQL
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Database
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*
+Requires-Dist: pytz
+Requires-Dist: tzlocal (<3.0)
+Requires-Dist: enum34 ; python_version < "3.4"
+Requires-Dist: ipaddress ; python_version < "3.4"
+Provides-Extra: lz4
+Requires-Dist: lz4 (<=3.0.1) ; extra == 'lz4'
+Requires-Dist: clickhouse-cityhash (>=1.0.2.1) ; extra == 'lz4'
+Provides-Extra: numpy
+Requires-Dist: numpy (>=1.12.0) ; extra == 'numpy'
+Requires-Dist: pandas (>=0.24.0) ; extra == 'numpy'
+Provides-Extra: zstd
+Requires-Dist: zstd ; extra == 'zstd'
+Requires-Dist: clickhouse-cityhash (>=1.0.2.1) ; extra == 'zstd'
+
+ClickHouse Python Driver
+========================
+
+.. image:: https://img.shields.io/pypi/v/clickhouse-driver.svg
+    :target: https://pypi.org/project/clickhouse-driver
+
+.. image:: https://coveralls.io/repos/github/mymarilyn/clickhouse-driver/badge.svg?branch=master
+    :target: https://coveralls.io/github/mymarilyn/clickhouse-driver?branch=master
+
+.. image:: https://img.shields.io/pypi/l/clickhouse-driver.svg
+    :target: https://pypi.org/project/clickhouse-driver
+
+.. image:: https://img.shields.io/pypi/pyversions/clickhouse-driver.svg
+    :target: https://pypi.org/project/clickhouse-driver
+
+.. image:: https://img.shields.io/pypi/dm/clickhouse-driver.svg
+    :target: https://pypi.org/project/clickhouse-driver
+
+.. image:: https://travis-ci.org/mymarilyn/clickhouse-driver.svg?branch=master
+   :target: https://travis-ci.org/mymarilyn/clickhouse-driver
+
+ClickHouse Python Driver with native (TCP) interface support.
+
+Asynchronous wrapper is available here: https://github.com/mymarilyn/aioch
+
+Features
+========
+
+- External data for query processing.
+
+- Query settings.
+
+- Compression support.
+
+- TLS support (since server version 1.1.54304).
+
+- Types support:
+
+  * Float32/64
+  * [U]Int8/16/32/64
+  * Date/DateTime('timezone')/DateTime64('timezone')
+  * String/FixedString(N)
+  * Enum8/16
+  * Array(T)
+  * Nullable(T)
+  * UUID
+  * Decimal
+  * IPv4/IPv6
+  * LowCardinality(T)
+  * SimpleAggregateFunction(F, T)
+  * Tuple(T1, T2, ...)
+  * Nested
+
+- Query progress information.
+
+- Block by block results streaming.
+
+- Reading query profile info.
+
+- Receiving server logs.
+
+- Multiple hosts support.
+
+- Python DB API 2.0 specification support.
+
+Documentation
+=============
+
+Documentation is available at https://clickhouse-driver.readthedocs.io.
+
+Usage
+=====
+
+There are two ways to communicate with server:
+
+- using pure Client;
+- using DB API.
+
+Pure Client example:
+
+    .. code-block:: python
+
+        >>> from clickhouse_driver import Client
+        >>>
+        >>> client = Client('localhost')
+        >>>
+        >>> client.execute('SHOW TABLES')
+        [('test',)]
+        >>> client.execute('DROP TABLE IF EXISTS test')
+        []
+        >>> client.execute('CREATE TABLE test (x Int32) ENGINE = Memory')
+        []
+        >>> client.execute(
+        ...     'INSERT INTO test (x) VALUES',
+        ...     [{'x': 100}]
+        ... )
+        1
+        >>> client.execute('INSERT INTO test (x) VALUES', [[200]])
+        1
+        >>> client.execute(
+        ...     'INSERT INTO test (x) '
+        ...     'SELECT * FROM system.numbers LIMIT %(limit)s',
+        ...     {'limit': 3}
+        ... )
+        []
+        >>> client.execute('SELECT sum(x) FROM test')
+        [(303,)]
+
+DB API example:
+
+    .. code-block:: python
+
+        >>> from clickhouse_driver import connect
+        >>>
+        >>> conn = connect('clickhouse://localhost')
+        >>> cursor = conn.cursor()
+        >>>
+        >>> cursor.execute('SHOW TABLES')
+        >>> cursor.fetchall()
+        [('test',)]
+        >>> cursor.execute('DROP TABLE IF EXISTS test')
+        >>> cursor.fetchall()
+        []
+        >>> cursor.execute('CREATE TABLE test (x Int32) ENGINE = Memory')
+        >>> cursor.fetchall()
+        []
+        >>> cursor.executemany(
+        ...     'INSERT INTO test (x) VALUES',
+        ...     [{'x': 100}]
+        ... )
+        >>> cursor.rowcount
+        1
+        >>> cursor.executemany('INSERT INTO test (x) VALUES', [[200]])
+        >>> cursor.rowcount
+        1
+        >>> cursor.execute(
+        ...     'INSERT INTO test (x) '
+        ...     'SELECT * FROM system.numbers LIMIT %(limit)s',
+        ...     {'limit': 3}
+        ... )
+        >>> cursor.rowcount
+        0
+        >>> cursor.execute('SELECT sum(x) FROM test')
+        >>> cursor.fetchall()
+        [(303,)]
+
+License
+=======
+
+ClickHouse Python Driver is distributed under the `MIT license
+<http://www.opensource.org/licenses/mit-license.php>`_.
+
+

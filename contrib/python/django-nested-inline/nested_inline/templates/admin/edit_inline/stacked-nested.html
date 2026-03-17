@@ -1,0 +1,96 @@
+{% load i18n static %}
+<div class="inline-group{% if recursive_formset %} {{ recursive_formset.formset.prefix|default:"Root" }}-nested-inline {% if prev_prefix %} {{ prev_prefix }}-{{ loopCounter }}-nested-inline{% endif %} nested-inline{% endif %}" id="{{ inline_admin_formset.formset.prefix }}-group">
+{% with recursive_formset=inline_admin_formset stacked_template='admin/edit_inline/stacked-nested.html' tabular_template='admin/edit_inline/tabular-nested.html'%}
+  <h2>{{ recursive_formset.opts.verbose_name_plural|title }}</h2>
+{{ recursive_formset.formset.management_form }}
+{{ recursive_formset.formset.non_form_errors }}
+
+{% for inline_admin_form in recursive_formset %}<div class="inline-related{% if forloop.last %} empty-form last-related{% endif %}" id="{{ recursive_formset.formset.prefix }}-{% if not forloop.last %}{{ forloop.counter0 }}{% else %}empty{% endif %}">
+    <h3><b>{{ recursive_formset.opts.verbose_name|title }}:</b>&nbsp;<span class="inline_label">{% if inline_admin_form.original %}{{ inline_admin_form.original }}{% else %}#{{ forloop.counter }}{% endif %}</span>
+    {% if inline_admin_form.show_url %}<a href="../../../r/{{ inline_admin_form.original_content_type_id }}/{{ inline_admin_form.original.id }}/">{% trans "View on site" %}</a>{% endif %}
+        {% if recursive_formset.formset.can_delete and inline_admin_form.original %}<span class="delete">{{ inline_admin_form.deletion_field.field }} {{ inline_admin_form.deletion_field.label_tag }}</span>{% endif %}
+  </h3>
+  {% if inline_admin_form.form.non_field_errors %}{{ inline_admin_form.form.non_field_errors }}{% endif %}
+  {% with stacked_prefix=inline_admin_formset.formset.prefix %}
+    {% for fieldset in inline_admin_form %}
+      {% include "admin/includes/fieldset.html" %}
+    {% endfor %}
+  {% endwith %}
+  {% if inline_admin_form.pk_field %}{{ inline_admin_form.pk_field.field }}{% endif %}
+  {{ inline_admin_form.fk_field.field }}
+  {% if inline_admin_form.form.nested_formsets %}
+    {% for inline_admin_formset in inline_admin_form.form.nested_formsets %}
+      {% if inline_admin_formset.opts.template == stacked_template %}
+        {% include stacked_template with prev_prefix=recursive_formset.formset.prefix loopCounter=forloop.parentloop.counter0 %}
+      {% else %}
+        {% include tabular_template with prev_prefix=recursive_formset.formset.prefix loopCounter=forloop.parentloop.counter0 %}
+      {% endif %}
+      <div class="nested-inline-bottom-border"></div>
+    {% endfor %}
+  {% endif %}
+</div>{% endfor %}
+</div>
+
+<script {% if request.csp_nonce %} nonce="{{ request.csp_nonce }}" {% endif %} type="text/javascript">
+(function($) {
+    $(document).ready(function() {
+        var rows = "#{{ recursive_formset.formset.prefix }}-group .inline-related";
+        var updateInlineLabel = function(row) {
+            $(rows).find(".inline_label").each(function(i) {
+                var count = i + 1;
+                $(this).html($(this).html().replace(/(#\d+)/g, "#" + count));
+            });
+        };
+        var reinitDateTimeShortCuts = function() {
+            // Reinitialize the calendar and clock widgets by force, yuck.
+            if (typeof DateTimeShortcuts != "undefined") {
+                $(".datetimeshortcuts").remove();
+                DateTimeShortcuts.init();
+            }
+        };
+        var updateSelectFilter = function() {
+            // If any SelectFilter widgets were added, instantiate a new instance.
+            if (typeof SelectFilter != "undefined"){
+                $(".selectfilter").each(function(index, value){
+                  var namearr = value.name.split('-');
+                  SelectFilter.init(value.id, namearr[namearr.length-1], false, "{% static "admin/" %}");
+                });
+                $(".selectfilterstacked").each(function(index, value){
+                  var namearr = value.name.split('-');
+                  SelectFilter.init(value.id, namearr[namearr.length-1], true, "{% static "admin/" %}");
+                });
+            }
+        };
+        var initPrepopulatedFields = function(row) {
+            row.find('.prepopulated_field').each(function() {
+                var field = $(this);
+                var input = field.find('input, select, textarea');
+                var dependency_list = input.data('dependency_list') || [];
+                var dependencies = [];
+                $.each(dependency_list, function(i, field_name) {
+                  dependencies.push('#' + row.find('.form-row .field-' + field_name).find('input, select, textarea').attr('id'));
+                });
+                if (dependencies.length) {
+                    input.prepopulate(dependencies, input.attr('maxlength'));
+                }
+            });
+        };
+        $(rows).formset({
+            prefix: "{{ recursive_formset.formset.prefix }}",
+            addText: "{% blocktrans with verbose_name=recursive_formset.opts.verbose_name|title %}Add another {{ verbose_name }}{% endblocktrans %}",
+            formCssClass: "dynamic-{{ recursive_formset.formset.prefix }}",
+            deleteCssClass: "inline-deletelink",
+            deleteText: "{% trans "Remove" %}",
+            emptyCssClass: "empty-form",
+            removed: updateInlineLabel,
+            added: (function(row) {
+                initPrepopulatedFields(row);
+                reinitDateTimeShortCuts();
+                updateSelectFilter();
+                updateInlineLabel(row);
+            })
+        });
+    });
+})(django.jQuery);
+</script>
+{% endwith %}

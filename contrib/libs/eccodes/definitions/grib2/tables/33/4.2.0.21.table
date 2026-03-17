@@ -1,0 +1,27 @@
+# Product discipline 0 - Meteorological products, parameter category 21: thermodynamic properties
+0 0 Column integrated potential + internal energy (J m-2)
+1 1 Column integrated kinetic energy (J m-2)
+2 2 Column integrated total energy (J m-2)
+3 3 Column integrated enthalpy (J m-2)
+4 4 Column integrated water enthalpy (J m-2)
+5 5 Column integrated eastward enthalpy flux (W m-1)
+6 6 Column integrated northward enthalpy flux (W m-1)
+7 7 Column integrated eastward potential energy flux (W m-1)
+8 8 Column integrated northward potential energy flux (W m-1)
+9 9 Column integrated eastward kinetic energy flux (W m-1)
+10 10 Column integrated northward kinetic energy flux (W m-1)
+11 11 Column integrated eastward total energy flux (W m-1)
+12 12 Column integrated northward total energy flux (W m-1)
+13 13 Divergence of column integrated enthalpy flux (W m-2)
+14 14 Divergence of column integrated potential energy flux (W m-2)
+15 15 Divergence of column integrated water potential energy flux (W m-2)
+16 16 Divergence of column integrated kinetic energy flux (W m-2)
+17 17 Divergence of column integrated total energy flux (W m-2)
+18 18 Divergence of column integrated water enthalpy flux (W m-2)
+19 19 Column integrated eastward heat flux (W m-1)
+20 20 Column integrated northward heat flux (W m-1)
+21 21 Column integrated potential+internal+latent energy (J m-2)
+22 22 Eady growth rate (day-1)
+# 23-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

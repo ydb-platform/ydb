@@ -1,0 +1,3 @@
+# 360 year dates
+meta dayOfTheYearDate   g1day_of_the_year_date(centuryOfReferenceTimeOfData,yearOfCentury,month,day) : dump;
+alias mars.date       = dayOfTheYearDate;

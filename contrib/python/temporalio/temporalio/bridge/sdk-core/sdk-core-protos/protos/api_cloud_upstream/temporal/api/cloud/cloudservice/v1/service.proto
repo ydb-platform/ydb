@@ -1,0 +1,435 @@
+syntax = "proto3";
+
+package temporal.api.cloud.cloudservice.v1;
+
+option go_package = "go.temporal.io/api/cloud/cloudservice/v1;cloudservice";
+option java_package = "io.temporal.api.cloud.cloudservice.v1";
+option java_multiple_files = true;
+option java_outer_classname = "ServiceProto";
+option ruby_package = "Temporalio::Api::Cloud::CloudService::V1";
+option csharp_namespace = "Temporalio.Api.Cloud.CloudService.V1";
+
+import "temporal/api/cloud/cloudservice/v1/request_response.proto";
+import "google/api/annotations.proto";
+
+// WARNING: This service is currently experimental and may change in
+// incompatible ways.
+service CloudService {
+    // Gets all known users
+    rpc GetUsers(GetUsersRequest) returns (GetUsersResponse) {
+        option (google.api.http) = {
+            get: "/cloud/users",
+        };
+    }
+    
+    // Get a user
+    rpc GetUser(GetUserRequest) returns (GetUserResponse) {
+        option (google.api.http) = {
+            get: "/cloud/users/{user_id}",
+        };
+    }
+
+    // Create a user
+    rpc CreateUser(CreateUserRequest) returns (CreateUserResponse) {
+        option (google.api.http) = {
+            post: "/cloud/users",
+            body: "*"
+        };
+    }
+
+    // Update a user
+    rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse) {
+        option (google.api.http) = {
+            post: "/cloud/users/{user_id}",
+            body: "*"
+        };
+    }
+
+    // Delete a user
+    rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/users/{user_id}",
+        };
+    }
+
+    // Set a user's access to a namespace
+    rpc SetUserNamespaceAccess(SetUserNamespaceAccessRequest) returns (SetUserNamespaceAccessResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/users/{user_id}/access",
+            body: "*"
+        };
+    }
+
+    // Get the latest information on an async operation
+    rpc GetAsyncOperation(GetAsyncOperationRequest) returns (GetAsyncOperationResponse) {
+        option (google.api.http) = {
+            get: "/cloud/operations/{async_operation_id}",
+        };
+    }
+
+    // Create a new namespace
+    rpc CreateNamespace (CreateNamespaceRequest) returns (CreateNamespaceResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces",
+            body: "*"
+        };
+    }
+
+    // Get all namespaces
+    rpc GetNamespaces (GetNamespacesRequest)  returns (GetNamespacesResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces",
+        };
+    }
+
+    // Get a namespace
+    rpc GetNamespace (GetNamespaceRequest) returns (GetNamespaceResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces/{namespace}",
+        };
+    }
+
+    // Update a namespace
+    rpc UpdateNamespace (UpdateNamespaceRequest) returns (UpdateNamespaceResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}",
+            body: "*"
+        };
+    }
+
+    // Rename an existing customer search attribute
+    rpc RenameCustomSearchAttribute (RenameCustomSearchAttributeRequest) returns (RenameCustomSearchAttributeResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/rename-custom-search-attribute",
+            body: "*"
+        };
+    }
+
+    // Delete a namespace
+    rpc DeleteNamespace (DeleteNamespaceRequest) returns (DeleteNamespaceResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/namespaces/{namespace}",
+        };
+    }
+
+    // Failover a multi-region namespace
+    rpc FailoverNamespaceRegion (FailoverNamespaceRegionRequest) returns (FailoverNamespaceRegionResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/failover-region",
+            body: "*"
+        };
+    }
+
+    // Add a new region to a namespace
+    rpc AddNamespaceRegion (AddNamespaceRegionRequest) returns (AddNamespaceRegionResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/add-region",
+            body: "*"
+        };
+    }
+
+    // Delete a region from a namespace
+    rpc DeleteNamespaceRegion (DeleteNamespaceRegionRequest) returns (DeleteNamespaceRegionResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/namespaces/{namespace}/regions/{region}",
+        };
+    }
+
+    // Get all regions
+    rpc GetRegions (GetRegionsRequest) returns (GetRegionsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/regions",
+        };
+    }
+
+    // Get a region
+    rpc GetRegion (GetRegionRequest) returns (GetRegionResponse) {
+        option (google.api.http) = {
+            get: "/cloud/regions/{region}",
+        };
+    }
+
+    // Get all known API keys
+    rpc GetApiKeys (GetApiKeysRequest) returns (GetApiKeysResponse) {
+        option (google.api.http) = {
+            get: "/cloud/api-keys",
+        };
+    }
+
+    // Get an API key
+    rpc GetApiKey (GetApiKeyRequest) returns (GetApiKeyResponse) {
+        option (google.api.http) = {
+            get: "/cloud/api-keys/{key_id}",
+        };
+    }
+
+    // Create an API key
+    rpc CreateApiKey (CreateApiKeyRequest) returns (CreateApiKeyResponse) {
+        option (google.api.http) = {
+            post: "/cloud/api-keys",
+            body: "*"
+        };
+    }
+
+    // Update an API key
+    rpc UpdateApiKey (UpdateApiKeyRequest) returns (UpdateApiKeyResponse) {
+        option (google.api.http) = {
+            post: "/cloud/api-keys/{key_id}",
+            body: "*"
+        };
+    }
+
+    // Delete an API key
+    rpc DeleteApiKey (DeleteApiKeyRequest) returns (DeleteApiKeyResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/api-keys/{key_id}",
+        };
+    }
+
+    // Gets nexus endpoints
+    rpc GetNexusEndpoints(GetNexusEndpointsRequest) returns (GetNexusEndpointsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/nexus/endpoints",
+        };
+    }
+    
+    // Get a nexus endpoint
+    rpc GetNexusEndpoint(GetNexusEndpointRequest) returns (GetNexusEndpointResponse) {
+        option (google.api.http) = {
+            get: "/cloud/nexus/endpoints/{endpoint_id}",
+        };
+    }
+
+    // Create a nexus endpoint
+    rpc CreateNexusEndpoint(CreateNexusEndpointRequest) returns (CreateNexusEndpointResponse) {
+        option (google.api.http) = {
+            post: "/cloud/nexus/endpoints",
+            body: "*"
+        };
+    }
+
+    // Update a nexus endpoint
+    rpc UpdateNexusEndpoint(UpdateNexusEndpointRequest) returns (UpdateNexusEndpointResponse) {
+        option (google.api.http) = {
+            post: "/cloud/nexus/endpoints/{endpoint_id}",
+            body: "*"
+        };
+    }
+
+    // Delete a nexus endpoint
+    rpc DeleteNexusEndpoint(DeleteNexusEndpointRequest) returns (DeleteNexusEndpointResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/nexus/endpoints/{endpoint_id}",
+        };
+    }
+
+    // Get all user groups
+    rpc GetUserGroups (GetUserGroupsRequest) returns (GetUserGroupsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/user-groups",
+        };
+    }
+
+    // Get a user group
+    rpc GetUserGroup (GetUserGroupRequest) returns (GetUserGroupResponse) {
+        option (google.api.http) = {
+            get: "/cloud/user-groups/{group_id}",
+        };
+    }
+
+    // Create new a user group
+    rpc CreateUserGroup (CreateUserGroupRequest) returns (CreateUserGroupResponse) {
+        option (google.api.http) = {
+            post: "/cloud/user-groups",
+            body: "*"
+        };
+    }
+
+    // Update a user group
+    rpc UpdateUserGroup (UpdateUserGroupRequest) returns (UpdateUserGroupResponse) {
+        option (google.api.http) = {
+            post: "/cloud/user-groups/{group_id}",
+            body: "*"
+        };
+    }
+
+    // Delete a user group
+    rpc DeleteUserGroup (DeleteUserGroupRequest) returns (DeleteUserGroupResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/user-groups/{group_id}",
+        };
+    }
+
+    // Set a user group's access to a namespace
+    rpc SetUserGroupNamespaceAccess (SetUserGroupNamespaceAccessRequest) returns (SetUserGroupNamespaceAccessResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/user-groups/{group_id}/access",
+            body: "*"
+        };
+    }
+
+    // Add a member to the group, can only be used with Cloud group types.
+    rpc AddUserGroupMember(AddUserGroupMemberRequest) returns (AddUserGroupMemberResponse) {
+        option (google.api.http) = {
+            post: "/cloud/user-groups/{group_id}/members",
+            body: "*"
+        };
+    }
+
+    // Remove a member from the group, can only be used with Cloud group types.
+    rpc RemoveUserGroupMember(RemoveUserGroupMemberRequest) returns (RemoveUserGroupMemberResponse) {
+        option (google.api.http) = {
+            post: "/cloud/user-groups/{group_id}/remove-member",
+            body: "*"
+        };
+    }
+
+    rpc GetUserGroupMembers(GetUserGroupMembersRequest) returns (GetUserGroupMembersResponse) {
+        option (google.api.http) = {
+            get: "/cloud/user-groups/{group_id}/members",
+        };
+    }
+
+    // Create a service account.
+    rpc CreateServiceAccount(CreateServiceAccountRequest) returns (CreateServiceAccountResponse) {
+        option (google.api.http) = {
+            post: "/cloud/service-accounts",
+            body: "*"
+        };
+    }
+
+    // Get a service account.
+    rpc GetServiceAccount(GetServiceAccountRequest) returns (GetServiceAccountResponse) {
+        option (google.api.http) = {
+            get: "/cloud/service-accounts/{service_account_id}",
+        };
+    }
+
+    // Get service accounts.
+    rpc GetServiceAccounts(GetServiceAccountsRequest) returns (GetServiceAccountsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/service-accounts",
+        };
+    }
+
+    // Update a service account.
+    rpc UpdateServiceAccount(UpdateServiceAccountRequest) returns (UpdateServiceAccountResponse) {
+        option (google.api.http) = {
+            post: "/cloud/service-accounts/{service_account_id}",
+            body: "*"
+        };
+    }
+
+    // Delete a service account.
+    rpc DeleteServiceAccount(DeleteServiceAccountRequest) returns (DeleteServiceAccountResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/service-accounts/{service_account_id}",
+        };
+    }
+
+    // WARNING: Pre-Release Feature
+    // Get usage data across namespaces
+    rpc GetUsage(GetUsageRequest) returns (GetUsageResponse) {
+        option (google.api.http) = {
+            get: "/cloud/usage",
+        };
+    }
+
+    // Get account information.
+    rpc GetAccount (GetAccountRequest) returns (GetAccountResponse) {
+        option (google.api.http) = {
+            get: "/cloud/account",
+        };
+    }
+
+    // Update account information.
+    rpc UpdateAccount (UpdateAccountRequest) returns (UpdateAccountResponse) {
+        option (google.api.http) = {
+            post: "/cloud/account",
+            body: "*"
+	};
+    }
+
+    // Create an export sink
+    rpc CreateNamespaceExportSink(CreateNamespaceExportSinkRequest) returns (CreateNamespaceExportSinkResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/export-sinks",
+            body: "*"
+        };
+    }
+
+    // Get an export sink 
+    rpc GetNamespaceExportSink(GetNamespaceExportSinkRequest) returns (GetNamespaceExportSinkResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces/{namespace}/export-sinks/{name}"
+        };
+    }
+
+    // Get export sinks
+    rpc GetNamespaceExportSinks(GetNamespaceExportSinksRequest) returns (GetNamespaceExportSinksResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces/{namespace}/export-sinks"
+        };
+    }
+
+    // Update an export sink
+    rpc UpdateNamespaceExportSink(UpdateNamespaceExportSinkRequest) returns (UpdateNamespaceExportSinkResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/export-sinks/{spec.name}",
+            body: "*"
+        };
+    }
+
+    // Delete an export sink
+    rpc DeleteNamespaceExportSink(DeleteNamespaceExportSinkRequest) returns (DeleteNamespaceExportSinkResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/namespaces/{namespace}/export-sinks/{name}"
+        };
+    }
+
+    // Validates an export sink configuration by delivering an empty test file to the specified sink.
+    // This operation verifies that the sink is correctly configured, accessible, and ready for data export.
+    rpc ValidateNamespaceExportSink(ValidateNamespaceExportSinkRequest) returns (ValidateNamespaceExportSinkResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/export-sinks/validate",
+            body: "*"
+        };
+    }
+
+    // Update the tags for a namespace
+     rpc UpdateNamespaceTags(UpdateNamespaceTagsRequest) returns (UpdateNamespaceTagsResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/update-tags"
+            body: "*"
+        };
+    }
+
+    // Creates a connectivity rule
+    rpc CreateConnectivityRule(CreateConnectivityRuleRequest) returns (CreateConnectivityRuleResponse) {
+        option (google.api.http) = {
+            post: "/cloud/connectivity-rules"
+            body: "*"
+        };
+    }
+
+    // Gets a connectivity rule by id
+    rpc GetConnectivityRule(GetConnectivityRuleRequest) returns (GetConnectivityRuleResponse) {
+        option (google.api.http) = {
+            get: "/cloud/connectivity-rules/{connectivity_rule_id}"
+        };
+    }
+
+    // Lists connectivity rules by account
+    rpc GetConnectivityRules(GetConnectivityRulesRequest) returns (GetConnectivityRulesResponse) {
+        option (google.api.http) = {
+            get: "/cloud/connectivity-rules"
+        };
+    }
+
+    // Deletes a connectivity rule by id
+    rpc DeleteConnectivityRule(DeleteConnectivityRuleRequest) returns (DeleteConnectivityRuleResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/connectivity-rules/{connectivity_rule_id}"
+        };
+    }
+}

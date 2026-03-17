@@ -1,0 +1,31 @@
+# (C) Copyright 2005- ECMWF.
+# Surface temperature or sea-ice data
+
+template mars_labeling "grib1/mars_labeling.def";
+
+#pad padding_loc17_1(2);
+
+unsigned[1] perturbationNumber : dump;
+alias number = perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble : dump;
+
+# Need a proper date (sst_date)
+unsigned[3] dateOfSSTFieldUsed : dump ;
+
+unsigned[1] typeOfSSTFieldUsed : dump ;
+
+unsigned[1] countOfICEFieldsUsed : dump ;
+
+position offsetICEFieldsUsed;
+ICEFieldsUsed list(countOfICEFieldsUsed) {
+  unsigned[3] dateOfIceFieldUsed : dump ;
+  #  d3date dateOfIceFieldUsed ;
+  unsigned[1] satelliteNumber : dump ;
+}
+
+# paddingToMultipleOf40Bytes
+padtomultiple padding_loc17_2(offsetICEFieldsUsed,40);
+position offsetAfterPadding;
+
+constant GRIBEXSection1Problem = ( offsetAfterPadding - offsetICEFieldsUsed ) % 40;

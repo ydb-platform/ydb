@@ -1,0 +1,116 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Zlib                 01bfb3959c2e1439904e6804e7d2384b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE [5:22]
+
+SKIP     LicenseRef-scancode-free-unknown 24175313f51b2a362029a6f4d8a7cc64
+BELONGS ya.make
+    License text:
+        http://opensource.org/licenses/alphabetical
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        LICENSE [26:26]
+
+SKIP     LicenseRef-scancode-free-unknown 31142b55f3403dd9e4a15856d7a00191
+BELONGS ya.make
+    License text:
+        OSI approved open source license such as those listed at
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        LICENSE [25:25]
+
+KEEP     LicenseRef-scancode-free-unknown 3f3f476b538e7b097281b86b0607b7d7
+BELONGS ya.make
+    License text:
+        Classifier: License :: OSI Approved
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : TAG
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        .dist-info/METADATA [13:13]
+
+SKIP     LicenseRef-scancode-free-unknown 4e69946bd4318d48dfeb1b71daed9f43
+BELONGS ya.make
+    License text:
+        essence any OSI approved open source license.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        .dist-info/METADATA [83:83]
+        README.rst [64:64]
+
+KEEP     LicenseRef-scancode-free-unknown b4bf7f147a1c50a03f293b9bcd886109
+BELONGS ya.make
+    License text:
+        License: OSI Approved
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : TAG
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        .dist-info/METADATA [8:8]
+
+SKIP     LicenseRef-scancode-unknown-license-reference bcc92bc629ecc73d06b78963bfb79608
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: .dist-info/METADATA at line 81, README.rst at line 62
+    License text:
+        See `LICENSE
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        .dist-info/METADATA [81:81]
+        README.rst [62:62]

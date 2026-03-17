@@ -1,0 +1,162 @@
+[
+  {
+    "name": "Liechtensteinische Landesbank Aktiengesellschaft",
+    "short_name": "Liechtensteinische Landesbank Aktiengesellschaft",
+    "bank_code": "08800",
+    "bic": "LILALI2XXXX",
+    "country_code": "LI",
+    "primary": true
+  },
+  {
+    "name": "Neue Bank AG",
+    "short_name": "Neue Bank AG",
+    "bank_code": "08802",
+    "bic": "NBANLI22XXX",
+    "country_code": "LI",
+    "primary": true
+  },
+  {
+    "name": "BENDURA BANK AG",
+    "short_name": "BENDURA BANK AG",
+    "bank_code": "08803",
+    "bic": "HYIBLI22XXX",
+    "country_code": "LI",
+    "primary": true
+  },
+  {
+    "name": "VP Bank AG",
+    "short_name": "VP Bank AG",
+    "bank_code": "08805",
+    "bic": "VPBVLI2XXXX",
+    "country_code": "LI",
+    "primary": true
+  },
+  {
+    "name": "Kaiser Partner Privatbank AG",
+    "short_name": "Kaiser Partner Privatbank AG",
+    "bank_code": "08806",
+    "bic": "SERBLI22XXX",
+    "country_code": "LI",
+    "primary": true
+  },
+  {
+    "name": "LGT Bank AG",
+    "short_name": "LGT Bank AG",
+    "bank_code": "08810",
+    "bic": "BLFLLI2XXXX",
+    "country_code": "LI",
+    "primary": true
+  },
+  {
+    "name": "Bank Frick AG",
+    "short_name": "Bank Frick AG",
+    "bank_code": "08811",
+    "bic": "BFRILI22XXX",
+    "country_code": "LI",
+    "primary": true
+  },
+  {
+    "name": "SIGMA Bank AG",
+    "short_name": "SIGMA Bank AG",
+    "bank_code": "08812",
+    "bic": "VOAGLI22XXX",
+    "country_code": "LI",
+    "primary": true
+  },
+  {
+    "name": "Amnis Europe AG",
+    "short_name": "Amnis Europe AG",
+    "bank_code": "30111",
+    "bic": "AMNSLI22XXX",
+    "country_code": "LI",
+    "primary": false
+  },
+  {
+    "name": "Liechtensteinische Landesbank Aktiengesellschaft",
+    "short_name": "Liechtensteinische Landesbank Aktiengesellschaft",
+    "bank_code": "30172",
+    "bic": "LILALI2XXXX",
+    "country_code": "LI",
+    "primary": false
+  },
+  {
+    "name": "Neue Bank AG",
+    "short_name": "Neue Bank AG",
+    "bank_code": "30173",
+    "bic": "NBANLI22XXX",
+    "country_code": "LI",
+    "primary": false
+  },
+  {
+    "name": "VP Bank AG",
+    "short_name": "VP Bank AG",
+    "bank_code": "30174",
+    "bic": "VPBVLI2XXXX",
+    "country_code": "LI",
+    "primary": false
+  },
+  {
+    "name": "LGT Bank AG",
+    "short_name": "LGT Bank AG",
+    "bank_code": "30175",
+    "bic": "BLFLLI2XXXX",
+    "country_code": "LI",
+    "primary": false
+  },
+  {
+    "name": "BENDURA BANK AG",
+    "short_name": "BENDURA BANK AG",
+    "bank_code": "30288",
+    "bic": "HYIBLI22XXX",
+    "country_code": "LI",
+    "primary": false
+  },
+  {
+    "name": "Kaiser Partner Privatbank AG",
+    "short_name": "Kaiser Partner Privatbank AG",
+    "bank_code": "30289",
+    "bic": "SERBLI22XXX",
+    "country_code": "LI",
+    "primary": false
+  },
+  {
+    "name": "Bank Frick AG",
+    "short_name": "Bank Frick AG",
+    "bank_code": "30290",
+    "bic": "BFRILI22XXX",
+    "country_code": "LI",
+    "primary": false
+  },
+  {
+    "name": "SIGMA Bank AG",
+    "short_name": "SIGMA Bank AG",
+    "bank_code": "30291",
+    "bic": "VOAGLI22XXX",
+    "country_code": "LI",
+    "primary": false
+  },
+  {
+    "name": "Amnis Europe AG",
+    "short_name": "Amnis Europe AG",
+    "bank_code": "83047",
+    "bic": "AMNSLI22XXX",
+    "country_code": "LI",
+    "primary": true
+  },
+  {
+    "name": "Banking Circle (Liechtenstein) AG",
+    "short_name": "Banking Circle (Liechtenstein) AG",
+    "bank_code": "83049",
+    "bic": "BCIRLI22XXX",
+    "country_code": "LI",
+    "primary": true
+  },
+  {
+    "name": "RMS Sicherheits-Anstalt",
+    "short_name": "RMS Sicherheits-Anstalt",
+    "bank_code": "83053",
+    "bic": null,
+    "country_code": "LI",
+    "primary": true
+  }
+]

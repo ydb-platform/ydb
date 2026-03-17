@@ -1,0 +1,204 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-11-12 15:36+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Yevhen Hostishchev\n"
+"Language-Team: \n"
+"Language: uk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n % 1 == 0 && n % 10 == 1 && n % 100 != "
+"11 ? 0 : n % 1 == 0 && n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % "
+"100 > 14) ? 1 : n % 1 == 0 && (n % 10 ==0 || (n % 10 >=5 && n % 10 <=9) || "
+"(n % 100 >=11 && n % 100 <=14 )) ? 2: 3);\n"
+
+#: admin.py templates/admin/import_export/change_list_import_item.html
+#: templates/admin/import_export/import.html
+msgid "Import"
+msgstr "Імпорт"
+
+#: admin.py
+#, python-format
+msgid "%s through import_export"
+msgstr "%s через import_export"
+
+#: admin.py
+#, python-brace-format
+msgid "Import finished: {} new, {} updated, {} deleted and {} skipped {}."
+msgstr "Імпорт завершено: {} додано, {} оновлено, {} видалено and {} проігноровано {}."
+
+#: admin.py
+#, python-format
+msgid ""
+"%(exc_name)s encountered while trying to read file. Ensure you have chosen "
+"the correct format for the file."
+msgstr ""
+"Під час читання фалу виникла проблема %(exc_name)s. Переконайтесь, що ви обрали "
+"правильний формат для файлу."
+
+#: admin.py
+msgid ""
+"No valid data to import. Ensure your file has the correct headers or data "
+"for import."
+msgstr ""
+"Бракує даних для імпорту. Переконайтесь, що ваш файл містить правильні "
+"заголовки та значення для імпорту."
+
+#: admin.py templates/admin/import_export/change_form.html
+#: templates/admin/import_export/change_list_export_item.html
+#: templates/admin/import_export/export.html
+msgid "Export"
+msgstr "Експорт"
+
+#: admin.py
+#, python-format
+msgid "Export selected %(verbose_name_plural)s"
+msgstr "Експортувати вибрані %(verbose_name_plural)s"
+
+#: formats/base_formats.py
+msgid "export failed due to IllegalCharacterError"
+msgstr "помилка експорту через недопустимі символі"
+
+#: forms.py
+msgid "Resource"
+msgstr "Ресурс"
+
+#: forms.py
+msgid "Format"
+msgstr "Формат"
+
+#: forms.py
+msgid "File to import"
+msgstr "Файл для імпорту"
+
+#: forms.py
+msgid "Form is not validated, call `is_valid` first"
+msgstr "Форма не перевірена, скористайтесь `is_valid` одразу"
+
+#: forms.py
+#, python-format
+msgid "Select at least 1 field for \"%(resource_name)s\" to export"
+msgstr "Виберіть щонайменше 1 поле \"%(resource_name)s\" для експорту"
+
+#: resources.py
+#, python-format
+msgid ""
+"The following fields are declared in 'import_id_fields' but are not present "
+"in the resource fields: %s"
+msgstr ""
+"Наступні поля були вказані в 'import_id_fields', але не присутні в "
+"полях ресурсу: %s"
+
+#: resources.py
+#, python-format
+msgid ""
+"The following fields are declared in 'import_id_fields' but are not present "
+"in the file headers: %s"
+msgstr ""
+"Наступні поля були вказані в 'import_id_fields', але не присутні в "
+"заголовках файлу: %s"
+
+#: results.py
+#, python-format
+msgid "call to force_str() on instance failed: %s"
+msgstr "помилка виклику force_str() на екземплярі: %s"
+
+#: templates/admin/import_export/base.html
+msgid "Home"
+msgstr "Домівка"
+
+#: templates/admin/import_export/export.html
+#, python-format
+msgid "Export %(len)s selected item."
+msgid_plural "Export %(len)s selected items."
+msgstr[0] "Експорт %(len)s вибраної колонки."
+msgstr[1] "Експорт %(len)s вибраних колонок."
+
+#: templates/admin/import_export/export.html
+#: templates/admin/import_export/resource_fields_list.html
+msgid "This exporter will export the following fields: "
+msgstr "Цей експорт вивантажить наступні поля: "
+
+#: templates/admin/import_export/export.html
+msgid "Select all"
+msgstr "Вибрати все"
+
+#: templates/admin/import_export/export.html
+#: templates/admin/import_export/import.html
+msgid "Submit"
+msgstr "Ок"
+
+#: templates/admin/import_export/import.html
+msgid ""
+"Below is a preview of data to be imported. If you are satisfied with the "
+"results, click 'Confirm import'"
+msgstr ""
+"Нижче - попередній перегляд даних, що будуть імпортовані. Якщо вас все "
+"влаштовує, натисніть 'Підтвердити імпорт'"
+
+#: templates/admin/import_export/import.html
+msgid "Confirm import"
+msgstr "Підтвердити імпорт"
+
+#: templates/admin/import_export/import.html
+msgid "Errors"
+msgstr "Помилки"
+
+#: templates/admin/import_export/import.html
+msgid "Line number"
+msgstr "Номер рядка"
+
+#: templates/admin/import_export/import.html
+msgid "Some rows failed to validate"
+msgstr "Деякі рядки не пройшли перевірку"
+
+#: templates/admin/import_export/import.html
+msgid ""
+"Please correct these errors in your data where possible, then reupload it "
+"using the form above."
+msgstr ""
+"Будь ласка, виправте помилки у вашому файлі та завантажте його знову "
+"використовуючи форму вище."
+
+#: templates/admin/import_export/import.html
+msgid "Row"
+msgstr "Рядок"
+
+#: templates/admin/import_export/import.html
+msgid "Non field specific"
+msgstr "Невідома помилка"
+
+#: templates/admin/import_export/import.html
+msgid "Preview"
+msgstr "Попередній перегляд"
+
+#: templates/admin/import_export/import.html
+msgid "New"
+msgstr "Нових"
+
+#: templates/admin/import_export/import.html
+msgid "Skipped"
+msgstr "Пропущено"
+
+#: templates/admin/import_export/import.html
+msgid "Delete"
+msgstr "Видалено"
+
+#: templates/admin/import_export/import.html
+msgid "Update"
+msgstr "Оновлено"
+
+#: templates/admin/import_export/resource_fields_list.html
+msgid "This importer will import the following fields: "
+msgstr "Цей імпорт вивантажить наступні колонки: "
+
+#: widgets.py
+msgid "Value could not be parsed."
+msgstr "Не вдалося розібрати значення."
+
+#: widgets.py
+msgid "use_natural_foreign_keys and key_is_id cannot both be True"
+msgstr "use_natural_foreign_keys та key_is_id не можуть бути True одночасно"

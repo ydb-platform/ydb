@@ -1,0 +1,201 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.idp.application.saml;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/idp/application/saml;saml";
+option java_package = "yandex.cloud.api.organizationmanager.v1.idp.application.saml";
+
+// A SAML application resource.
+message Application {
+  // Represents the status of a SAML application.
+  enum Status {
+    // The status is not specified.
+    STATUS_UNSPECIFIED = 0;
+    // The application is in the process of being created.
+    CREATING = 1;
+    // The application is active and can be used for authentication.
+    ACTIVE = 2;
+    // The application is suspended. I.e. authentication via this application is disabled.
+    SUSPENDED = 3;
+    // The application is in the process of being deleted.
+    DELETING = 4;
+  }
+
+  // Unique identifier of the SAML application.
+  string id = 1;
+
+  // ID of the organization that the application belongs to.
+  string organization_id = 2;
+
+  // Name of the SAML application.
+  string name = 3;
+
+  // Description of the SAML application.
+  string description = 4;
+
+  // Current status of the SAML application.
+  Status status = 5;
+
+  // Resource labels as `` key:value `` pairs.
+  map<string, string> labels = 6;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 7;
+
+  // Modification timestamp.
+  google.protobuf.Timestamp updated_at = 8;
+
+  // Service provider configuration for the SAML application.
+  ServiceProvider service_provider = 9;
+
+  // Security settings for the SAML application.
+  SecuritySettings security_settings = 10;
+
+  // Attribute mapping configuration for the SAML application.
+  AttributeMapping attribute_mapping = 11;
+
+  // Group claims settings for the SAML application.
+  GroupClaimsSettings group_claims_settings = 12;
+
+  // Identity provider metadata for the SAML application.
+  IdentityProviderMetadata identity_provider_metadata = 13;
+}
+
+// Identity provider metadata for SAML applications.
+message IdentityProviderMetadata {
+  // Identity provider issuer identifier.
+  string issuer = 1;
+
+  // Identity provider Single Sign-On URL.
+  string sso_url = 2;
+
+  // Identity provider metadata URL.
+  string metadata_url = 3;
+
+  // Identity provider Single Logout URL.
+  string slo_url = 4;
+}
+
+// Service provider configuration for SAML applications.
+message ServiceProvider {
+  // Service provider entity ID.
+  string entity_id = 1 [(required) = true, (length) = "<=8000"];
+
+  // Assertion Consumer Service URLs.
+  repeated AssertionConsumerServiceURL acs_urls = 2 [(size) = "1-100"];
+
+  // Single Logout Service URLs.
+  repeated SingleLogoutServiceURL slo_urls = 3 [(size) = "0-100"];
+}
+
+// Assertion Consumer Service URL configuration.
+message AssertionConsumerServiceURL {
+  // The URL where SAML responses are sent.
+  string url = 1 [(required) = true, (length) = "<=8000"];
+
+  // Optional index for the assertion consumer service.
+  google.protobuf.Int64Value index = 2;
+}
+
+// Single Logout Service URL configuration.
+message SingleLogoutServiceURL {
+  // Protocol bindings supported by the logout endpoint.
+  enum ProtocolBinding {
+    // The protocol binding is not specified.
+    PROTOCOL_BINDING_UNSPECIFIED = 0;
+    // HTTP POST binding.
+    HTTP_POST = 1;
+    // HTTP Redirect binding.
+    HTTP_REDIRECT = 2;
+  }
+
+  // The URL where logout requests are sent.
+  string url = 1 [(required) = true, (length) = "<=8000"];
+
+  // Optional separate URL for logout responses.
+  string response_url = 2 [(length) = "<=8000"];
+
+  // Protocol binding supported by the logout endpoint.
+  ProtocolBinding protocol_binding = 3 [(required) = true];
+}
+
+// Security settings for SAML applications.
+message SecuritySettings {
+  // Signature modes for SAML messages.
+  enum SignatureMode {
+    // The signature mode is not specified.
+    SIGNATURE_MODE_UNSPECIFIED = 0;
+    // Sign individual assertions.
+    ASSERTIONS = 1;
+    // Sign the entire response.
+    RESPONSE = 2;
+    // Sign both the response and individual assertions.
+    RESPONSE_AND_ASSERTIONS = 3;
+  }
+
+  // Signature mode for SAML messages.
+  SignatureMode signature_mode = 1;
+
+  // ID of the signature certificate to use.
+  string signature_certificate_id = 2;
+}
+
+// Attribute mapping configuration for SAML applications.
+message AttributeMapping {
+  // NameID configuration for the SAML application.
+  NameId name_id = 1 [(required) = true];
+  // List of attribute mappings.
+  repeated Attribute attributes = 2 [(size) = "<=50"];
+}
+
+// NameID configuration for SAML applications.
+message NameId {
+  // Format of the NameID.
+  Format format = 1 [(required) = true];
+  // Value of the NameID.
+  string value = 2 [(required) = true];
+
+  // NameID formats supported by SAML.
+  enum Format {
+    // The NameID format is not specified.
+    FORMAT_UNSPECIFIED = 0;
+    // Persistent NameID format.
+    // This provides a stable, opaque identifier for the user.
+    PERSISTENT = 1;
+    // Email NameID format.
+    // This uses the user's email address as the identifier.
+    EMAIL = 2;
+  }
+}
+
+// Attribute mapping for SAML applications.
+message Attribute {
+  // Name of the SAML attribute.
+  string name = 1 [(required) = true, (length) = "<=8000"];
+  // Value of the SAML attribute.
+  string value = 2 [(required) = true, (length) = "<=50"];
+}
+
+// Group claims settings for SAML applications.
+message GroupClaimsSettings {
+  // Distribution type for group claims.
+  GroupDistributionType group_distribution_type = 1;
+  // Name of the SAML attribute that contains group information.
+  string group_attribute_name = 2 [(length) = "<=8000"];
+}
+
+// Group distribution types for SAML applications.
+enum GroupDistributionType {
+  // The group distribution type is not specified.
+  GROUP_DISTRIBUTION_TYPE_UNSPECIFIED = 0;
+  // No groups are provided to the application.
+  NONE = 1;
+  // Only assigned groups are provided to the application.
+  ASSIGNED_GROUPS = 2;
+  // All groups are provided to the application.
+  ALL_GROUPS = 3;
+}

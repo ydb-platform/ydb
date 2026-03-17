@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package yandex.cloud.certificatemanager.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/certificatemanager/v1;certificatemanager";
+option java_package = "yandex.cloud.api.certificatemanager.v1";
+
+// A set of methods for managing certificate content.
+service CertificateContentService {
+
+  // Returns chain and private key of the specified certificate.
+  rpc Get(GetCertificateContentRequest) returns (GetCertificateContentResponse) {
+    option (google.api.http) = {get: "/certificate-manager/v1/certificates/{certificate_id}:getContent"};
+  }
+
+  rpc GetEx(GetExCertificateContentRequest) returns (GetExCertificateContentResponse) {
+    option (google.api.http) = {get: "/certificate-manager/v1/certificates:getEx"};
+  }
+}
+
+enum PrivateKeyFormat {
+  PRIVATE_KEY_FORMAT_UNSPECIFIED = 0;
+  PKCS1 = 1;
+  PKCS8 = 2;
+}
+
+message GetCertificateContentResponse {
+  reserved 2;
+  // ID of the certificate.
+  string certificate_id = 1;
+
+  // PEM-encoded certificate chain content of the certificate.
+  repeated string certificate_chain = 3;
+
+  // PEM-encoded private key content of the certificate.
+  string private_key = 4;
+}
+
+message GetCertificateContentRequest {
+  // ID of the certificate to download content.
+  string certificate_id = 1;
+
+  // Optional ID of the version.
+  string version_id = 2;
+
+  // Desired format of private key
+  PrivateKeyFormat private_key_format = 3;
+}
+
+message GetExCertificateContentRequest {
+  oneof identifier {
+    option (exactly_one) = true;
+    string certificate_id = 1 [(length) = "<=50"];
+    FolderAndName folder_and_name = 2;
+  }
+  reserved 3 to 20;
+  string version_id = 21 [(length) = "<=50"];
+  PrivateKeyFormat private_key_format = 22;
+}
+
+
+message GetExCertificateContentResponse {
+  string certificate_id = 1;
+  string version_id = 2;
+  repeated string certificate_chain = 3;
+  string private_key = 4;
+}
+
+message FolderAndName {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  string certificate_name = 2 [(required) = true, (length) = "<=100"];
+}

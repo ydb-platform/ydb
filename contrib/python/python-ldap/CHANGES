@@ -1,0 +1,1985 @@
+Released 3.4.4 2022-11-17
+
+Fixes:
+* Reconnect race condition in ReconnectLDAPObject is now fixed
+* Socket ownership is now claimed once we've passed it to libldap
+* LDAP_set_option string formats are now compatible with Python 3.12
+
+Doc/
+* Security Policy was created
+* Broken article links are fixed now
+* Bring Conscious Language improvements
+
+Infrastructure:
+* Add testing and document support for Python 3.10, 3.11, and 3.12
+
+
+----------------------------------------------------------------
+Released 3.4.3 2022-09-15
+
+This is a minor release to bring back the removed OPT_X_TLS option.
+Please note, it's still a deprecated option and it will be removed in 3.5.0.
+
+The following deprecated option has been brought back:
+- ``OPT_X_TLS``
+
+Fixes:
+* Sphinx documentation is now successfully built
+* pypy3 tests stability was improved
+* setup.py deprecation warning is now resolved
+
+
+----------------------------------------------------------------
+Released 3.4.2 2022-07-06
+
+This is a minor release to provide out-of-the-box compatibility with the merge
+of libldap and libldap_r that happened with OpenLDAP's 2.5 release.
+
+The following undocumented functions are deprecated and scheduled for removal:
+- ``ldap.cidict.strlist_intersection``
+- ``ldap.cidict.strlist_minus``
+- ``ldap.cidict.strlist_union``
+
+The following deprecated option has been removed:
+- ``OPT_X_TLS``
+
+Doc/
+* SASL option usage has been clarified
+
+Lib/
+* ppolicy control definition has been updated to match Behera draft 11
+
+Modules/
+* By default, compile against libldap, checking whether it provides a
+  threadsafe implementation at runtime
+* When decoding controls, the module can now distinguish between no value
+  (now exposed as ``None``) and an empty value (exposed as ``b''``)
+* Several new OpenLDAP options are now supported:
+  * ``OPT_SOCKET_BIND_ADDRESSES``
+  * ``OPT_TCP_USER_TIMEOUT``
+  * ``OPT_X_SASL_MAXBUFSIZE``
+  * ``OPT_X_SASL_SECPROPS``
+  * ``OPT_X_TLS_ECNAME``
+  * ``OPT_X_TLS_PEERCERT``
+  * ``OPT_X_TLS_PROTOCOL``-related options and constants
+
+Fixes:
+* Encoding/decoding of boolean controls has been corrected
+* ldap.schema.models.Entry is now usable
+* ``method`` keyword to ReconnectLDAPObject.bind_s is now usable
+
+
+----------------------------------------------------------------
+Released 3.4.0 2021-11-26
+
+This release requires Python 3.6 or above,
+and is tested with Python 3.6 to 3.10.
+Python 2 is no longer supported.
+
+New code in the python-ldap project is available under the MIT licence
+(available in ``LICENCE.MIT`` in the source). Several contributors have agreed
+to apply this licence their previous contributions as well.
+See the ``README`` for details.
+
+The following undocumented functions are deprecated and scheduled for removal:
+- ``ldap.cidict.strlist_intersection``
+- ``ldap.cidict.strlist_minus``
+- ``ldap.cidict.strlist_union``
+
+Security fixes:
+* Fix inefficient regular expression which allows denial-of-service attacks
+  when parsing specially-crafted LDAP schema.
+  (GHSL-2021-117)
+
+Changes:
+* On MacOS, remove option to make LDAP connections from a file descriptor
+  when built with the system libldap (which lacks the underlying function,
+  ``ldap_init_fd``)
+* Attribute values of the post read control are now ``bytes``
+  instead of ISO8859-1 decoded ``str``
+* ``LDAPUrl`` now treats urlscheme as case-insensitive
+* Several OpenLDAP options are now supported:
+  * ``OPT_X_TLS_REQUIRE_SAN``
+  * ``OPT_X_SASL_SSF_EXTERNAL``
+  * ``OPT_X_TLS_PEERCERT``
+
+Fixes:
+* The ``copy()`` method of ``cidict`` was added back. It was unintentionally
+  removed in 3.3.0
+* Fixed getting/setting ``SASL`` options on big endian platforms
+* Unknown LDAP result code are now converted to ``LDAPexception``,
+  rather than raising a ``SystemError``.
+
+slapdtest:
+* Show stderr of slapd -Ttest
+* ``SlapdObject`` uses directory-based configuration of ``slapd``
+* ``SlapdObject`` startup is now faster
+
+Infrastructure:
+* CI now runs on GitHub Actions rather than Travis CI.
+
+
+----------------------------------------------------------------
+Released 3.3.0 2020-06-18
+
+Highlights:
+* ``LDAPError`` now contains additional fields, such as ctrls, result, msgid
+* ``passwd_s`` can now extract the newly generated password
+* LDAP connections can now be made from a file descriptor
+
+This release is tested on Python 3.8, and the beta of Python 3.9.
+
+The following undocumented functions are deprecated and scheduled for removal:
+- ``ldap.cidict.strlist_intersection``
+- ``ldap.cidict.strlist_minus``
+- ``ldap.cidict.strlist_union``
+
+Modules/
+* Ensure ReconnectLDAPObject is not left in an inconsistent state after
+  a reconnection timeout
+* Syncrepl now correctly parses SyncInfoMessage when the message is a syncIdSet
+* Release GIL around global get/set option call
+* Do not leak serverctrls in result functions
+* Don't overallocate memory in attrs_from_List()
+* Fix thread support check for Python 3
+* With OpenLDAP 2.4.48, use the new header openldap.h
+
+Lib/
+* Fix some edge cases regarding quoting in the schema tokenizer
+* Fix escaping a single space in ldap.escape_dn_chars
+* Fix string formatting in ldap.compare_ext_s
+* Prefer iterating dict instead of calling dict.keys()
+
+Doc/
+* Clarify the relationship between initialize() and LDAPObject()
+* Improve documentation of TLS options
+* Update FAQ to include Samba AD-DC error message
+  "Operation unavailable without authentication"
+* Fix several incorrect examples and demos
+  (but note that these are not yet tested)
+* Update Debian installation instructions for Debian Buster
+* Typo fixes in docs and docstrings
+
+Test/
+* Test and document error cases in ldap.compare_s
+* Test if reconnection is done after connection loss
+* Make test certificates valid for the far future
+* Use slapd -Tt instead of slaptest
+
+Infrastructure:
+* Mark the LICENCE file as a license for setuptools
+* Use "unittest discover" rather than "setup.py test" to run tests
+
+
+----------------------------------------------------------------
+Released 3.2.0 2019-03-13
+
+Lib/
+* Add support for X-ORIGIN in ldap.schema's ObjectClass
+* Make initialize() pass extra keyword arguments to LDAPObject
+* ldap.controls.sss: use str instead of basestring on Python 3
+* Provide ldap._trace_* atributes in non-debug mode
+
+Doc/
+* Fix ReST syntax for links to set_option and get_option
+
+Tests/
+* Use intersphinx to link to Python documentation
+* Correct type of some attribute values to bytes
+* Use system-specific ENOTCONN value
+
+Infrastructure:
+* Add testing and document support for Python 3.7
+* Add Python 3.8-dev to Tox and CI configuration
+* Add Doc/requirements.txt for building on Read the Docs
+
+
+----------------------------------------------------------------
+Released 3.1.0 2018-05-25
+
+This release brings two minor API changes:
+- Long-deprecated functions `ldap.open()` and `ldap.init()` are removed
+- `LDAPObject.compare_s()` and `compare_ext_s` return bool instead of 0 or 1
+
+All changes since 3.0.0:
+
+Lib/
+* Remove long deprecated functions ldap.open() and ldap.init()
+* LDAPObject.compare_s() and LDAPObject.compare_ext_s() now return a bool
+  instead of 1 or 0.
+* Make iteration over cidict yield same values as keys()
+* Fail if pyasn1 is not installed
+* Fix parsing of PPolicyControl ASN.1 structure
+* Use items() when appropriate in dict iteration
+* Add support for tracing LDAP calls. Tracing can now be enabled with
+  the env var PYTHON_LDAP_TRACE_LEVEL and redirected to a file with
+  PYTHON_LDAP_TRACE_FILE.
+  (This is mainly intended for debugging and internal testing; the
+  configuration or output may change in future versions.)
+
+Modules/
+* Fix ref counting bug in LDAPmessage_to_python
+
+Doc/
+* Remove warning about unreleased version
+* Doc: Replace Mac OS X -> macOS
+
+Tests/
+* Add tests and coverage for tracing
+* Disable warnings-as-errors for Python 3.4
+* Fix assertTrue to assertEqual
+* Mark several test values as bytes
+
+Lib/slapdtest/
+* Fix error message for missing commands
+* Make SlapdObject a context manager
+* Disable SASL external when missing SASL support
+* Make SlapdObject.root_dn a property
+* In SlapdObject, build include directives dynamically
+* Move import statements to top level
+
+Code style:
+* Add Makefile rules for automatic formatting of C and Python code
+* Reformat and indent all C files
+* Trim white space throughout the project
+
+Infrastructure:
+* Add py3-trace tox environment to Travis CI config
+* Add new Pytest cache directory to gitignore
+
+General:
+* Update all pypi.python.org URLs to pypi.org
+
+
+----------------------------------------------------------------
+Released 3.0.0 2018-03-12
+
+Notable changes since 2.4.45 (please see detailed logs below):
+* Python 3 support and bytes_mode
+  see: https://python-ldap.readthedocs.io/en/latest/bytes_mode.html
+* The module `ldap.async` is renamed to `ldap.asyncsearch`
+* New dependencies: pyasn1, pyasn1_modules
+* Dropped support for Python 2.6 and 3.3
+
+
+Changes since 3.0.0b4:
+
+Lib/
+* Add bytes_strictness to allow configuring behavior on bytes/text mismatch
+
+Modules/
+* Add argument name to bytes mode TypeError
+* Use correct integer types for BER encode/decode (fix for big endian machines)
+
+Test/
+* Set $LDAPNOINIT in all tests
+* Add test for secure TLS default
+* Ignore SASL methods in DSE test (fix for restricted environments)
+* Remove filterstr workaround from syncrepl test
+* Explicitly set TLS_REQUIRE_CERT option to TLS_HARD in test_tls_ext_noca
+
+Doc/
+* Link to bytes mode from text-string arguments in the ldap module
+
+Infrastructure:
+* Include lber in list of libraries in setup.cfg
+
+----------------------------------------------------------------
+Released 3.0.0b4 2018-01-10
+
+Changes since 3.0.0b3:
+
+Removed support for Python 3.3, which reached its end-of-life 2017-09-29.
+
+Lib/
+* Make default argument values work under bytes_mode
+* Update use of map() to use list/set comprehensions instead
+
+Test/
+* Refactor syncrepl tests to run with bytes_mode
+
+Doc/
+* Document all_records attribute of LDIFRecordList
+
+
+----------------------------------------------------------------
+Released 3.0.0b3 2017-12-20
+
+Changes since 3.0.0b2:
+
+The functions `ldap.open()`, `ldap.init()`, `ldif.CreateLDIF()`
+and `ldif.ParseLDIF()`, which were deprecated for over a decade,
+are scheduled for removal in python-ldap 3.1.
+
+Infrastructure:
+* Require setuptools to build
+* Start running automatic tests on PyPy
+
+Lib/
+* When raising LDAPBytesWarning, give helpful code locations
+* Use modern Python idioms in several places
+* Avoid reimplementing UserDict.get() in cidict and models.Entry
+
+Doc/
+* Use https links
+
+Test/
+* Add reproducer for openldap's NSS shutdown/restart issue
+* Make testing on non-Linux platforms easier
+
+
+----------------------------------------------------------------
+Released 3.0.0b2 2017-12-11
+
+Changes since 3.0.0b1:
+
+The module `ldap.async` is renamed to `ldap.asyncsearch`, due to
+`async` becoming a keyword in Python 3.7.
+The old module name is deprecated, but will be available as long
+as Python 3.6 is supported.
+
+Lib/
+* Use custom ldap.LDAPBytesWarning class
+* Rename ldap.async to ldap.asyncsearch
+
+Modules/
+* Support None for set_option(OPT_TIMEOUT) and OPT_NETWORK_TIMEOUT
+* Fix error reporting of LDAPObject.set_option()
+* Change memory handling in attrs_from_List()
+
+Test/
+* Remove workaround for OpenLDAP NSS issue
+
+Demo/
+* Use uniform shebang in all demos
+
+Doc/
+* Provide build deps for Alpine and CentOS
+* Move sample workflow out of the main Contributing guide
+
+Infrastructure:
+* Add valgrind target to check for memory leaks
+* Minimal configuration for pytest
+
+
+----------------------------------------------------------------
+Released 3.0.0b1 2017-12-04
+
+Changes since 2.4.45:
+(this list includes changes from 2.5.x)
+
+New dependencies (automatically installed when using pip):
+* pyasn1 0.3.7+
+* pyasn1_modules 0.1.5+
+
+Python 3 support and bytes_mode:
+* merged from the pyldap fork (https://github.com/pyldap)
+* please see documentation on bytes_mode and text/bytes handling:
+    https://python-ldap.readthedocs.io/en/latest/bytes_mode.html
+
+Removed support for Python 2.6.
+
+Infrastructure:
+* Move to Git
+* Don't define search path for includes and libs in the default setup.cfg
+* Include sasl/sasl.h from the standard path
+* Re-format README to ReStructured Text
+* Setup for automatic testing using Travis CI
+* Add coverage reporting for Python and C
+* Add install requires into setup.py
+* Remove distclean.sh in favor of make clean
+* Use `package`, `depends`, `install_requires` in setup.py
+* Add make target for scan-build (static analysis using clang)
+* Add make target and suppression file for Valgrind (memory checker)
+
+Modules/
+* Remove unused LDAPberval helper functions
+* Fix type conversion in page control
+* Fix multiple ref leaks in error-handling code
+* Fix reference leak in result4
+* Fix several compiler warnings
+* Fix memory leak in whoami
+* Fix internal error handling of LDAPControl_to_List()
+* Fix two memory leaks and release GIL in encode_assertion_control
+* Allow set_option() to set timeouts to infinity
+and, thanks to Michael Ströder:
+* removed unused code schema.c
+* moved code from version.c to ldapmodule.c
+* removed obsolete back-ward compability constants from common.h
+* build checks whether LDAP_API_VERSION is OpenLDAP 2.4.x
+* _ldap.__author__ and _ldap.__license__ also set from ldap.pkginfo
+* assume C extension API for Python 2.7+
+
+Lib/
+* Avoid eval() for getting module-level variables to fix running under pytest
+* Compability changes for pyasn1 0.3 or newer
+and, thanks to Michael Ströder:
+* ldap.__version__, ldap.__author__ and ldap.__license__ now
+  imported from new sub-module ldap.pkginfo also to setup.py
+* Added safety assertion when importing _ldap:
+  ldap.pkginfo.__version__ must match _ldap.__version__
+* removed stand-alone module dsml
+* slapdtest.SlapdObject.restart() just restarts slapd
+  without cleaning any data
+* The methods SSSResponseControl.decodeControlValue() and
+  VLVResponseControl.decodeControlValue() now follow the coding
+  convention to use camel-cased ASN.1 name as class attribute name.
+  The old class names are still set for back-ward compability
+  but should not be used in new code because they might be removed
+  in a later release.
+* removed SSSRequestControl from ldap.controls.KNOWN_RESPONSE_CONTROLS
+* removed all dependencies on modules string and types
+* removed use of .has_key()
+* removed class ldap.ldapobject.NonblockingLDAPObject
+* new global constant ldap.LIBLDAP_API_INFO
+* right after importing _ldap there is a call into libldap to initialize it
+* method .decodeControlValue() of SSSResponseControl and VLVResponseControl
+  does not set class attribute result_code anymore
+* always use bytes() for UUID() constructor in ldap.syncrepl
+* module ldif now uses functions b64encode() and b64decode()
+* fixed pickling and restoring of ReconnectLDAPObject
+
+Lib/slapdtest
+* Automatically try some common locations for SCHEMADIR
+* Ensure server is stopped when the process exits
+* Check for LDAP schema and slapd binaries
+* slapdtest is now a package and includes testing certificates
+
+Tests/
+* Expand cidict membership test
+* Add test suite for binds
+* Add test suite for edits
+* Add a smoke-check for listall() and attribute_types()
+* Add test case for SASL EXTERNAL auth
+* Add tests for start_tls
+* In CI, treat compiler warnings as fatal errors
+* Added tests for ldap.syncrepl
+and, thanks to Michael Ströder:
+* added explicit reconnect tests for ReconnectLDAPObject
+* scripts do not directly call SlapdTestCase.setUpClass() anymore
+* added LDIF test with folded, base64-encoded attribute
+* added more tests for sub-module ldap.dn
+
+Doc/
+* Build documentation without the compiled C extension
+* Merge contents from python-ldap.org
+* Move reference documentation in its own section
+* Document return value of {modify,add,delete}_ext_s() as a tuple
+* Add tests for documentation (build & spelling)
+* Link to documentation of old versions
+* Add a contributing guide
+
+----------------------------------------------------------------
+Released 2.4.45 2017-10-09
+
+Changes since 2.4.44:
+
+Lib/
+* Fixed reraising of wrong exception in SimpleLDAPObject._ldap_call()
+  (thanks to Aigars Grins)
+
+Tests/
+* removed work-around in t_cext.py
+
+----------------------------------------------------------------
+Released 2.4.44 2017-09-08
+
+Changes since 2.4.43:
+
+Modules/
+* more fine-grained GIL releasing in function l_ldap_result4()
+
+----------------------------------------------------------------
+Released 2.4.43 2017-09-06
+
+Changes since 2.4.42:
+
+Lib/
+* fixed passing all arguments from LDAPObject.sasl_non_interactive_bind_s()
+  to LDAPObject.sasl_interactive_bind_s()
+
+Tests/
+* added test for LDAPObject.sasl_external_bind_s()
+
+Doc/
+* added docs for SASL bind methods
+* more references
+* better sorting of LDAPObject methods
+
+----------------------------------------------------------------
+Released 2.4.42 2017-09-04
+
+Changes since 2.4.41:
+
+Lib/
+* added new SlapdObject methods _ln_schema_files() and
+  _create_sub_dirs()
+* SlapdObject methods setup_rundir() and gen_config()
+  are now "public" methods
+* removed pseudo test script from module ldap.cidict
+
+Tests/
+* added sub-module for testing class ldap.cidict.cidict
+* avoid deprecated method alias unittest.TestCase.assertEquals
+
+----------------------------------------------------------------
+Released 2.4.41 2017-07-12
+
+Changes since 2.4.40:
+
+Lib/
+* Added support for increment: lines in LDIF changes records
+
+----------------------------------------------------------------
+Released 2.4.40 2017-06-27
+
+Changes since 2.4.39:
+
+Modules/
+* fixed memory leaks when using extended controls
+  (thanks to Erik Cumps)
+
+----------------------------------------------------------------
+Released 2.4.39 2017-05-31
+
+Changes since 2.4.38:
+
+Lib/
+* fixed errno-related ldap.TIMEOUT regression
+
+Lib/slapdtest.py
+* Removed obsolete assert statements
+
+----------------------------------------------------------------
+Released 2.4.38 2017-04-28
+
+Changes since 2.4.37:
+
+Lib/slapdtest.py
+* SlapdObject now evaluates env var SLAPD for optionally pointing
+  to OpenLDAP's slapd executable (e.g. with OpenLDAP LTB builds)
+* added LDAPI support in slaptest.SlapdObject which is internally used
+  in methods ldapadd() and ldapwhoami()
+* added method slaptest.SlapdObject.ldapmodify()
+* fixed enabling logger in slaptest
+* directory name now contains port to be able to run several SlapdObject
+  instances side-by-side (e.g. with replication)
+* added authz-regexp mapping to rootdn for user running the test
+* internally use SASL/EXTERNAL via LDAPI to bind
+* SlapdObject.server_id used as serverID in slapd.conf for MMR
+* Removed method SlapdObject.started() because SlapdTestCase.setUpClass()
+  will be used to add initial entries
+
+Tests/
+* ReconnectLDAPObject is also tested by sub-classing test class
+
+----------------------------------------------------------------
+Released 2.4.37 2017-04-27
+
+Changes since 2.4.36:
+
+Lib/
+* fixed errno-related regression introduced in 2.4.35
+
+Tests/
+* added more checks to t_cext.py
+* renamed t_search.py to t_ldapobject.py and code-cleaning
+* added test for errno-related regression to t_ldapobject.py
+
+----------------------------------------------------------------
+Released 2.4.36 2017-04-26
+
+Changes since 2.4.35:
+
+Lib/
+* gracefully handle KeyError in LDAPObject._ldap_call() when
+  using errno
+* added new stand-alone module slapdtest (formerly Tests/slapd.py)
+  for general use (still experimental)
+
+Tests/
+* re-factored t_cext.py and t_search.py
+* set env var LDAPNOINIT=1 in t_cext.py and t_search.py to avoid
+  interference with locally installed .ldaprc or ldap.conf
+* by default back-mdb is now used for slapd-based tests
+  which requires fairly recent OpenLDAP builds but implements
+  full feature set
+* env vars can be set for slapd.py to tweak path names
+  of executables, temporary and schema data to be used
+* new class SlapdTestCase
+
+----------------------------------------------------------------
+Released 2.4.35 2017-04-25
+
+Changes since 2.4.33:
+(2.4.34 is missing because of foolish pypi version madness)
+
+Modules/
+* use errno in a safer way
+* set errno as LDAPError class item
+* do not use strerror() which is not thread-safe and platform-specific
+
+Lib/
+* LDAPObject._ldap_call() sets LDAPError info to value returned
+  by platform-neutral os.stderror()
+
+----------------------------------------------------------------
+Released 2.4.33 2017-04-25
+
+Changes since 2.4.32:
+
+Lib/
+* faster implementation of ldap.schema.tokenizer.split_tokens()
+  (thanks to Christian Heimes)
+* removed unused 2nd argument of ldap.schema.tokenizer.split_tokens()
+* fixed method calls in ReconnectLDAPObject (thanks to Philipp Hahn)
+
+Modules/
+* an empty info message is replaced with strerror(errno) if errno is non-zero
+  which gives more information e.g. in case of ldap.SERVER_DOWN
+  (thanks to Markus Klein)
+* removed superfluous ldap_memfree(error) from LDAPerror()
+  (thanks to Markus Klein)
+
+Tests/
+* re-factored t_ldap_schema_tokenizer.py
+
+----------------------------------------------------------------
+Released 2.4.32 2017-02-14
+
+Changes since 2.4.31:
+
+Running tests made easier:
+- python setup.py test
+- added tox.ini
+
+----------------------------------------------------------------
+Released 2.4.31 2017-02-14
+
+Changes since 2.4.30:
+
+Tests/
+* new test scripts t_ldap_schema_tokenizer.py and t_ldap_modlist.py
+  on former raw scripts (thanks to Petr Viktorin)
+* new test-cases in t_ldapurl.py based on former raw scripts
+  (thanks to Petr Viktorin)
+* new test-cases in t_ldap_dn.py
+* moved a script to Demo/
+
+----------------------------------------------------------------
+Released 2.4.30 2017-02-08
+
+Changes since 2.4.29:
+
+Lib/
+* compability fix in ldap.controls.deref to be compatible to
+  recent pyasn1 0.2.x (thanks to Ilya Etingof)
+
+----------------------------------------------------------------
+Released 2.4.29 2017-01-25
+
+Changes since 2.4.28:
+
+Modules/
+* Fixed checking for empty server error message
+  (thanks to Bradley Baetz)
+* Fixed releasing GIL when calling ldap_start_tls_s()
+  (thanks to Lars Munch)
+
+----------------------------------------------------------------
+Released 2.4.28 2016-11-17
+
+Changes since 2.4.27:
+
+Lib/
+* LDAPObject.unbind_ext_s() invokes LDAPObject._trace_file.flush()
+  only if LDAPObject._trace_level is non-zero and Python is running
+  in debug mode
+* LDAPObject.unbind_ext_s() now ignores AttributeError
+  in case LDAPObject._trace_file has no flush() method
+* added dummy method ldap.logger.logging_file_class.flush() because
+  LDAPObject.unbind_ext_s() invokes it
+
+----------------------------------------------------------------
+Released 2.4.27 2016-08-01
+
+Changes since 2.4.26:
+
+Lib/
+* added 'strf_secs' and 'strp_secs' to ldap.functions.__all__
+* fixed regression introduced with 2.4.26:
+  ldif.LDIFParser did not fully parse LDIF records without trailing empty
+  separator line
+
+----------------------------------------------------------------
+Released 2.4.26 2016-07-24
+
+Changes since 2.4.25:
+
+Installation:
+* added ldap.controls.sss to py_modules in setup.py
+
+Lib/
+* LDAPObject.unbind_ext() now removes class attribute
+  LDAPObject._l to completely invalidate C wrapper object
+* LDAPObject.unbind_ext() now flushes trace file
+* ldap.ldapobject.SimpleLDAPObject:
+  added convenience methods read_rootdse_s() and get_naming_contexts()
+* added functions ldap.strf_secs() and ldap.strp_secs()
+* added function ldap.filter.time_span_filter()
+* Refactored ldif.LDIFParser
+  * ldif.LDIFParser.version ís now Integer
+  * ignore multiple empty lines between records
+* Fixed ldap.dn.is_dn()
+
+Modules/
+* Fixed #69 Segmentation fault on whoami_s after unbind
+  (thanks to Christian Heimes and Petr Viktorin)
+
+Tests/
+* Fixed result3() being used instead of correct result4()
+  (see #66, thanks to David D. Riddle)
+* Tests/slapd.py honors env var $TMP instead of just using
+  hard-coded /var/tmp
+* Tests/slapd.py now expects schema to be in /etc/openldap/
+* Tests/t_ldapurl.py now independent of module ldap
+* Tests/t_ldif.py now has more test-cases including change records
+* added some more test scripts for sub-modules ldap.dn, ldap.filter and
+  ldap.functions (not complete yet)
+
+----------------------------------------------------------------
+Released 2.4.25 2016-01-18
+
+Changes since 2.4.23:
+(2.4.24 is missing because of foolish pypi version madness)
+
+Lib/
+* Fix for attrlist=None regression introduced in 2.4.23
+  by ref count patch
+
+----------------------------------------------------------------
+Released 2.4.23 2016-01-17
+
+Changes since 2.4.22:
+
+Modules/
+* Ref count issue in attrs_from_List() was fixed
+  (thanks to Elmir Jagudin)
+
+----------------------------------------------------------------
+Released 2.4.22 2015-10-25
+
+Changes since 2.4.21:
+
+Lib/
+* LDIFParser now also accepts value-spec without a space
+  after the colon.
+* Added key-word argument authz_id to LDAPObject methods
+  sasl_non_interactive_bind_s(), sasl_external_bind_s() and
+  sasl_gssapi_bind_s()
+* Hmmpf! Added missing self to LDAPObject.fileno().
+* ReconnectLDAPObject.sasl_bind_s() now correctly uses
+  generic wrapper arguments *args,**kwargs
+* Correct method name LDIFParser.handle_modify()
+* Corrected __all__ in modules ldap.controls.pwdpolicy and
+  ldap.controls.openldap
+
+Doc/
+* Started missing docs for sub-module ldap.sasl.
+
+----------------------------------------------------------------
+Released 2.4.21 2015-09-25
+
+Changes since 2.4.20:
+
+Lib/
+* LDAPObject.read_s() now returns None instead of raising
+  ldap.NO_SUCH_OBJECT in case the search operation returned emtpy result.
+* ldap.resiter.ResultProcessor.allresults() now takes new key-word
+  argument add_ctrls which is internally passed to LDAPObject.result4()
+  and lets the method also return response control along with the search
+  results.
+* Added ldap.controls.deref implementing support for dereference control
+
+Tests/
+* Unit tests for module ldif (thanks to Petr Viktorin)
+
+----------------------------------------------------------------
+Released 2.4.20 2015-07-07
+
+Changes since 2.4.19:
+
+* New wrapping of OpenLDAP's function ldap_sasl_bind_s() allows
+  to intercept the SASL handshake (thanks to René Kijewski)
+
+Modules/
+* Added exceptions ldap.VLV_ERROR, ldap.X_PROXY_AUTHZ_FAILURE and
+  ldap.AUTH_METHOD_NOT_SUPPORTED
+
+Lib/
+* Abandoned old syntax when raising ValueError in modules ldif and
+  ldapurl, more information in some exceptions.
+* ldap.ldapobject.LDAPObject:
+  New convenience methods for SASL GSSAPI or EXTERNAL binds
+* Refactored parts in ldif.LDIFParser:
+  - New class attributes line_counter and byte_counter contain
+    amount of LDIF data read so far
+  - Renamed some internally used methods
+  - Added support for parsing change records currently limited to
+    changetype: modify
+  - New separate methods parse_entry_records() (also called by parse())
+    and parse_change_records()
+  - Stricter order checking of dn:, changetype:, etc.
+  - Removed non-existent 'AttrTypeandValueLDIF' from ldif.__all__
+* New mix-in class ldap.controls.openldap.SearchNoOpMixIn
+  adds convience method noop_search_st() to LDAPObject class
+* Added new modules which implement the control classes
+  for Virtual List View (see draft-ietf-ldapext-ldapv3-vlv) and
+  Server-side Sorting (see RFC 2891) (thanks to Benjamin Dauvergne)
+  Note: This is still experimental! Even the API can change later.
+
+----------------------------------------------------------------
+Released 2.4.19 2015-01-10
+
+Changes since 2.4.18:
+
+Lib/
+* Fixed missing ReconnectLDAPObject._reconnect_lock when pickling
+  (see SF#64, thanks to Dan O'Reilly)
+* Added ldap.controls.pagedresults which is pure Python implementation of
+  Simple Paged Results Control (see RFC 2696) and delivers the correct
+  result size
+
+----------------------------------------------------------------
+Released 2.4.18 2014-10-09
+
+Changes since 2.4.17:
+
+Lib/
+* Fixed raising exception in LDAPObject.read_s() when reading
+  an entry returns empty search result
+
+----------------------------------------------------------------
+Released 2.4.17 2014-09-27
+
+Changes since 2.4.16:
+
+Lib/
+* New hook syncrepl_refreshdone() in ldap.syncrepl.SyncReplConsumer
+  (thanks to Petr Spacek and Chris Mikkelson)
+
+Modules/
+* Added support for getting file descriptor of connection
+  with ldap.OPT_DESC
+
+----------------------------------------------------------------
+Released 2.4.16 2014-09-10
+
+Changes since 2.4.15:
+
+Lib/
+* New convenience function ldap.dn.is_dn()
+* New convenience function ldap.escape_str()
+* New convenience methods LDAPObject.read_s() and
+  LDAPObject.find_unique_entry()
+* Fixed invoking start_tls_s() in ReconnectLDAPObject.reconnect()
+  (thanks to Philipp Hahn)
+
+----------------------------------------------------------------
+Released 2.4.15 2014-03-24
+
+Changes since 2.4.14:
+
+Lib/
+* Added missing modules ldap.controls.openldap and
+  ldap.controls.pwdpolicy to setup.py
+* Added missing imports to ldap.controls.pwdpolicy
+* Fixed ldap.controls.pwdpolicy.decodeControlValue() to decode
+  string of digits
+* Support for X-SUBST in schema element class LDAPSyntax
+* Support for X-ORDERED and X-ORIGIN in schema element class AttributeType
+* ldapurl: New scope 'subordinates' defined in
+  draft-sermersheim-ldap-subordinate-scope
+
+Modules/
+* New constant ldap.SCOPE_SUBORDINATE derived from ldap.h for
+  draft-sermersheim-ldap-subordinate-scope
+* Fixed constant ldap.sasl.CB_GETREALM (thanks to Martin Pfeifer)
+
+----------------------------------------------------------------
+Released 2.4.14 2014-01-31
+
+Changes since 2.4.13:
+
+Lib/
+* Added ldap.controls.openldap.SearchNoOpControl
+* New method ldap.async.AsyncSearchHandler.afterFirstResult()
+  for doing something right after successfully receiving but before
+  processing first result
+* Better log data written when invoking ldap.LDAPLock.acquire() and
+  ldap.LDAPLock.release()
+* LDAPObject and friends now pass `desc' to ldap.LDAPLock() which
+  results in better logging
+* ldapobject.ReconnectLDAPObject now uses internal class-wide
+  lock for serializing reconnects
+* Method signature of ReconnectLDAPObject.reconnect() changed to be able
+  to call it with separate retry_max and retry_delay values
+
+Modules/
+* Added support for retrieving negotiated TLS version/cipher
+  with LDAPObject.get_option() with the help of upcoming OpenLDAP libs
+
+----------------------------------------------------------------
+Released 2.4.13 2013-06-27
+
+Changes since 2.4.12:
+
+Lib/
+* ldapobject.ReconnectLDAPObject._apply_last_bind() now sends
+  anonymous simple bind request even if the calling application
+  did not to provoke ldap.SERVER_DOWN in method reconnect()
+* ldapobject.ReconnectLDAPObject.reconnect() now also catches
+  ldap.TIMEOUT exception after reconnection attempt
+* Several other fixes for ldapobject.ReconnectLDAPObject
+  (thanks to Jonathan Giannuzzi)
+
+----------------------------------------------------------------
+Released 2.4.12 2013-06-01
+
+Changes since 2.4.11:
+
+Lib/
+* Truly optional import of PyAsn1Error exception which should
+  not fail anymore if pyasn1 is not installed
+
+----------------------------------------------------------------
+Released 2.4.11 2013-05-27
+
+Changes since 2.4.10:
+
+Lib/
+* ldap.controls.DecodeControlTuples() now simply ignores
+  PyAsn1Error exception raised during decoding malformed
+  response control values in case of non-critical controls.
+* ldif.LDIFWriter.unparse() does not simply skip empty
+  records anymore.
+
+----------------------------------------------------------------
+Released 2.4.10 2012-06-07
+
+Changes since 2.4.9:
+
+Lib/
+* ldapobject.ReconnectLDAPObject.reconnect() now preserves
+  order of options set with LDAPObject.set_option before.
+  This is needed e.g. for setting connection-specific TLS options.
+
+Demo/
+* Better version of Demo/pyasn1/syncrepl.py
+  (thanks to Ben Cooksley)
+
+----------------------------------------------------------------
+Released 2.4.9 2012-03-14
+
+Changes since 2.4.8:
+
+Lib/
+* ldapobject.ReconnectLDAPObject.reconnect() now does kind of
+  an internal locking to pause other threads while reconnecting
+  is pending.
+* Changes to bind- and startTLS-related operation methods of
+  class ReconnectLDAPObject for more robustness
+* New constant ldap.OPT_NAMES_DICT contains mapping from
+  integer to variable name for all option-related constants.
+
+----------------------------------------------------------------
+Released 2.4.8 2012-02-21
+
+Changes since 2.4.7:
+
+Lib/
+* Fixed overzealous check for non-unique NAMEs in
+  ldap.schema.subentry.SubSchema.__init__()
+* Fixed typos in control decoding method
+  ldap.controls.simple.OctetStringInteger.decodeControlValue()
+* Added experimental support for draft-vchu-ldap-pwd-policy
+
+----------------------------------------------------------------
+Released 2.4.7 2012-12-19
+
+Changes since 2.4.6:
+
+Lib/
+* Separate classes for request/response controls for RFC 3829
+* Fixed ldap.schema.subentry.SubSchema.attribute_types() to
+  also eliminate double attribute types in MAY clause of
+  DIT content rule
+
+Modules/
+* Fixed memory leak (thanks to David Malcolm)
+
+----------------------------------------------------------------
+Released 2.4.6 2011-11-27
+
+Changes since 2.4.5:
+
+Lib/
+* ldap.controls.ppolicy:
+  Another fix for decoding the password policy response control
+
+----------------------------------------------------------------
+Released 2.4.5 2011-11-25
+
+Changes since 2.4.4:
+
+Installation:
+* defines for SASL and SSL in setup.cfg to be more friendly to
+  Python setup tools (easy_install)
+
+Lib/
+* Fixed typo in ldap.functions._ldap_function_call() which
+  always released ldap._ldap_module_lock instead of local lock
+* ldap.controls.ppolicy:
+  Fixed decoding the password policy response control
+
+Demo/
+* Demo script for ldap.controls.ppolicy
+
+----------------------------------------------------------------
+Released 2.4.4 2011-10-26
+
+Changes since 2.4.3:
+
+Modules/
+* Format intermediate messages as 3-tuples instead of
+  4-tuples to match the format of other response messages.
+  (thanks to Chris Mikkelson)
+* Fixes for memory leaks (thanks to Chris Mikkelson)
+
+Lib/
+* New experimental(!) sub-module ldap.syncrepl implementing syncrepl
+  consumer (see RFC 4533, thanks to Chris Mikkelson)
+
+Doc/
+* Cleaned up rst files
+* Added missing classes
+
+----------------------------------------------------------------
+Released 2.4.3 2011-07-23
+
+Changes since 2.4.2:
+
+Lib/
+* Mostly corrected/updated __doc__ strings
+
+Doc/
+* Corrected rst files
+* Added missing modules, functions, classes, methods, parameters etc.
+  at least as auto-generated doc
+
+----------------------------------------------------------------
+Released 2.4.2 2011-07-21
+
+Changes since 2.4.1:
+
+Lib/
+
+Logging:
+* pprint.pformat() is now used when writing method/function
+  arguments to the trace log
+
+ldap.schema.subentry:
+* SubSchema.__init__() now has new key-word argument check_uniqueness
+  which enables checking whether OIDs are unique in the subschema subentry
+* Code-cleaning: consequent use of method SubSchema.getoid() instead of
+  accessing SubSchema.name2oid directly.
+* SubSchema.getoid() and SubSchema.getoid() now have key-word argument
+  raise_keyerror=0 and raise KeyError with appropriate description.
+
+----------------------------------------------------------------
+Released 2.4.1 2011-07-05
+
+Changes since 2.4.0:
+
+Modules:
+* New LDAP option OPT_X_TLS_PACKAGE available in OpenLDAP 2.4.26+
+  to determine the name of the SSL/TLS package OpenLDAP was
+  built with
+
+Lib/
+* ldap.modlist.modifyModlist(): New key-word argument
+  case_ignore_attr_types used to define attribute types for which
+  comparison of old and new values should be case-insensitive
+* Minor changes to which data is sent to debug output for various
+  trace levels
+* Now tag [1] is used in ldap.extop.dds.RefreshResponse in
+  compliance with RFC 2589 (fix available for OpenLDAP ITS#6886)
+* New sub-module ldap.controls.sessiontrack implements request control
+  as described in draft-wahl-ldap-session (needs pyasn1_modules)
+
+----------------------------------------------------------------
+Released 2.4.0 2011-06-02
+
+Changes since 2.3.13:
+
+* OpenLDAP 2.4.11+ required to build
+* Support for extracting LDAPv3 extended controls in
+  LDAP_RES_SEARCH_ENTRY responses
+  (see SF#2829057, thanks to Rich)
+* Generic support for LDAPv3 extended operations (thanks to Rich)
+
+Lib/
+* new class API in ldap.controls, not backwards-compatible!
+* new sub-modules for ldap.controls, some require pyasn1 and pyasn1_modules
+* New methods LDAPObject.result4() and LDAPObject.extop_result()
+* New (optional) class ldap.controls.AssertionControl
+* New helper module ldap.logger contains file-like object which
+  sends trace messages to logging.log()
+* Removed non-functional method LDAPObject.set_cache_options()
+* Removed unused dictionary ldap.controls.knownLDAPControls
+
+Modules/
+* ldapcontrol.c: Fixed encode_assertion_control() and function is no longer
+  hidden behind ifdef-statement
+
+----------------------------------------------------------------
+Released 2.3.13 2011-02-19
+
+Changes since 2.3.12:
+
+Modules/
+* Correct #ifdef-statement for LDAP_OPT_X_TLS_CRLFILE in
+  constants.c fixes build with older OpenLDAP libs
+* Support for LDAP_OPT_DEFBASE (see SF#3072016, thanks to Johannes)
+
+----------------------------------------------------------------
+Released 2.3.12 2010-08-05
+
+Changes since 2.3.11:
+
+Lib/
+* Removed tabs from various modules to make things work with python -tt.
+* Quick fix to ldif.is_dn() to let multi-valued RDNs pass as valid.
+  Is too liberal in some corner-cases though...
+* Fix to ldif.is_dn() to allow dashes in attribute type (see SF#3020292)
+* ldap.open() now outputs a deprecation warning
+* module-wide locking is now limited to calling _ldap.initialize().
+  Still ldap.functions._ldap_function_call() is used to wrap all
+  calls for writing debug log.
+
+Modules/
+* New LDAP options available in OpenLDAP 2.4.18+ supported in
+  LDAPObject.get/set_option():
+  ldap.OPT_X_KEEPALIVE_IDLE, ldap.OPT_X_KEEPALIVE_PROBES,
+  ldap.OPT_X_KEEPALIVE_INTERVAL,
+  ldap.OPT_X_TLS_CRLCHECK, ldap.OPT_X_TLS_CRLFILE
+
+Doc/
+* Various small updates/improvements
+
+----------------------------------------------------------------
+Released 2.3.11 2010-02-26
+
+Changes since 2.3.10:
+
+Lib/
+* Fixed LDAP URL parsing with four ? but no real extensions
+* ldap.ldapobject.LDAPObject.rename_s() now also accepts arguments
+  serverctrls and clientctrls
+* Removed untested and undocumented class ldap.ldapobject.SmartLDAPObject
+* Removed broken method ldap.ldapobject.LDAPObject.manage_dsa_it()
+
+Modules/
+* Make use of LDAP_OPT_X_TLS_NEWCTX only if available in
+  OpenLDAP libs used for the build
+* Fixed #ifdef-statements for OPT_X_TLS_PROTOCOL_MIN
+
+Doc/
+* Some updates and corrections regarding description of use of
+  LDAPv3 controls
+* Some more descriptions for constants
+* Removed comments related to old LaTeX-based documentation system
+
+----------------------------------------------------------------
+Released 2.3.10 2009-10-30
+
+Changes since 2.3.9:
+
+Lib/
+* The diagnosticMessage returned by a server is written to the trace
+  output also for successful operations.
+* Fixed handling of LDAP URL extensions with implicit value None which are
+  mapped to class attributes of LDAPUrl.
+* Fixed handling of LDAP URLs with ? being part of extensions.
+* Fixed exceptions raised by get_option/set_option (SF#1964993)
+* ldap.functions: Fixed import trace-related variables from base-module ldap
+* Fixed ldap.resiter missing in RPMs built with python setup.py bdist_rpm
+* Fix in class ldap.schema.models.SchemaElement:
+  repr() was liberally used in methods key_attr() and key_list() to enclose
+  values in quotes.
+
+Modules/
+* Changed internal API List_to_LDAPControls() to LDAPControls_from_object()
+* Supported was added for retrieving the SASL username during SASL bind with
+  ldap_get_option(LDAP_OPT_X_SASL_USERNAME) if available in libldap.
+* New LDAP option constant ldap.OPT_X_TLS_NEWCTX supported
+  in LDAPObject.set_option()
+* New LDAP option constants supported in LDAPObject.get/set_option():
+  ldap.OPT_X_TLS_PROTOCOL_MIN, ldap.OPT_CONNECT_ASYNC, ldap.OPT_X_TLS_DHFILE
+* Fixed setting _ldap.OPT_ON and _ldap.OPT_OFF
+* l_ldap_result3(): controls are now parsed for all response types (SF#2829057)
+
+Doc/
+* Added example for ldap.resiter
+
+----------------------------------------------------------------
+Released 2.3.9 2009-07-26
+
+Changes since 2.3.8:
+
+Lib/
+* All modules (ldap, ldif, dsml and ldapurl) have common version number now
+* Non-exported function ldif.needs_base64() was abandoned and is now
+  implemented as method LDIFWriter._needs_base64_encoding().
+  This allows sub-classes of LDIFWriter to implement determining whether
+  attribute values have to be base64-encoded in a different manner and is
+  the same approach like in class dsml.DSMLWriter.
+* LDAPUrlExtension._parse() now gracefully handles LDAP URL extensions
+  without explicit exvalue as being set with implicit value None.
+
+Modules/
+* New LDAP option constant ldap.OPT_X_SASL_NOCANON supported
+  in LDAPObject.get/set_option()
+
+----------------------------------------------------------------
+Released 2.3.8 2009-04-30
+
+Changes since 2.3.7:
+
+Lib/
+* ldap.schema.models: More fault-tolerant parsing of SYNTAX in
+  AttributeTypeDescription
+* ldap.schema.tokenizer.split_tokens():
+  More tolerant parsing of items separated only with a DOLLAR without
+  surrounding white-spaces (because WSP is declared as zero or more spaces
+  in RFC 4512)
+
+----------------------------------------------------------------
+Released 2.3.7 2009-04-09
+
+Changes since 2.3.6:
+
+Lib/
+* urllib.quote() is now used in LDAPUrlExtension.unparse() to quote
+  all special URL characters in extension values
+
+Modules/
+* Fixed ldapcontrol.c not to raise ldap.ENCODING_ERROR in
+  function encode_rfc2696() on 64-bit systems
+* Fixed seg fault if error code in a LDAP response was outside
+  the known error codes and could not be mapped to a specific
+  exception class (thanks to Sean)
+* errors.c: LDAP_ERROR_MAX set to LDAP_PROXIED_AUTHORIZATION_DENIED
+  if available in OpenLDAP header
+* new exception class ldap.PROXIED_AUTHORIZATION_DENIED
+  if available in OpenLDAP header
+* Fixed functions.c not to raise ldap.ENCODING_ERROR in
+  function l_ldap_str2dn() on 64-bit systems (see SF#2725356)
+
+----------------------------------------------------------------
+Released 2.3.6 2009-02-22
+
+Changes since 2.3.5:
+
+Lib/
+* Importing ldap.str2dn() which directly imported _ldap.str2dn()
+  is prohibited now (see SF#2181141)
+
+Modules/
+* get_option(): Added support for reading more SASL options.
+  (OPT_X_SASL_MECH, OPT_X_SASL_REALM, OPT_X_SASL_AUTHCID and
+  OPT_X_SASL_AUTHZID)
+* Added some explicit type casts to fix issues while building
+  with SunStudio
+* Fixed compiling issue with GCC 4.4
+  (see SF#2555793, thanks to Matej and Martin)
+
+Doc/
+* Clarified not to use ldap_get_dn() directly
+* Fixed description of ldap.SASL_AVAIL and ldap.TLS_AVAIL
+  (see SF#2555804, thanks to Matej and Martin)
+
+----------------------------------------------------------------
+Released 2.3.5 2008-07-06
+
+Changes since 2.3.4:
+
+Lib/
+* Fixed methods ldap.cidict.__contains__() and
+  ldap.schema.models.Entry.__contains__()
+* FWIW method LDAPObject.cancel_s() returns a result now
+* Fixed ldap.schema.models.NameForm: Class attribute oc is now
+  of type string, not tuple to be compliant with RFC 4512
+----------------------------------------------------------------
+Released 2.3.4 2008-03-29
+
+Changes since 2.3.3:
+
+Modules/
+* Fixed seg fault when calling LDAPObject.get_option()
+  (see SF#1926507, thanks to Matej)
+
+----------------------------------------------------------------
+Released 2.3.3 2008-03-26
+
+Changes since 2.3.2:
+
+Fixed backward-compability when building with OpenLDAP 2.3.x libs.
+
+----------------------------------------------------------------
+Released 2.3.2 2008-03-26
+
+Changes since 2.3.1:
+
+Lib/
+* ldap.dn.escape_dn_chars() now really adheres to
+  RFC 4514 section 2.4 by escaping null characters and a
+  space occurring at the beginning of the string
+* New method ldap.cidict.cidict.__contains__()
+* ldap.dn.explode_dn() and ldap.dn.explode_rdn()
+  have a new optional key-word argument flags which is
+  passed to ldap.dn.str2dn().
+
+Modules/
+* Removed unused OPT_PRIVATE_EXTENSION_BASE from constants.c
+
+Doc/
+* Various additions, updates, polishing (thanks to James).
+
+----------------------------------------------------------------
+Released 2.3.1 2007-07-25
+
+Changes since 2.3.0:
+
+* Support for setuptools (building .egg, thanks to Torsten)
+* Support for matched values control (RFC 3876, thanks to Andreas)
+
+Lib/
+* Fixed ldif (see SF#1709111, thanks to Dmitry)
+* ldap.schema.models:
+  SUP now separated by $ (method __str__() of classes
+  AttributeType, ObjectClass and DITStructureRule, thanks to Stefan)
+
+Modules/
+* Added constant MOD_INCREMENT to support
+  modify+increment extension (see RFC 4525, thanks to Andreas)
+----------------------------------------------------------------
+Released 2.3.0 2007-03-27
+
+Changes since 2.2.1:
+
+* OpenLDAP 2.3+ required now to build.
+* Added support for Cancel operation ext. op. if supported
+in OpenLDAP API of the libs used for the build.
+
+Modules/
+* Removed deprecated code for setting options by name
+* Added l_ldap_cancel()
+* Some modifications related to PEP 353 for
+  Python 2.5 on 64-bit platforms (see SF#1467529, thanks to Matej)
+* Added new function l_ldap_str2dn(), removed functions
+  l_ldap_explode_dn() and l_ldap_explode_rdn()
+  (see SF#1657848, thanks to David)
+
+Lib/
+* Added method ldapobject.LDAPObject.cancel()
+* ldap.schema.subentry.urlfetch() now can do non-anonymous
+  simple bind if the LDAP URL provided contains extensions
+  'bindname' and 'X-BINDPW'. (see SF#1589206)
+* ldap.filter.escape_filter_chars() has new a key-word argument
+  escape_mode now which defines which chars to be escaped
+  (see SF#1193271).
+* Various important fixes to ldapobject.ReconnectLDAPObject
+* Moved all DN-related functions to sub-module ldap.dn,
+  import them in ldap.functions for backward compability
+* ldap.dn.explode_dn() and ldap.dn.explode_rdn() use the new
+  wrapper function ldap.dn.str2dn() (related to SF#1657848)
+* changetype issue partially fixed (see SF#1683746)
+
+----------------------------------------------------------------
+Released 2.2.1 2006-11-15
+
+Changes since 2.2.0:
+
+Modules/
+* Fix for Python 2.5 free(): invalid pointer (see SF#1575329)
+* passwd() accepts None for arguments user, oldpw, newpw
+  (see SF#1440151)
+
+Lib/
+* ldif.LDIFWriter.unparse() now accepts instances of
+  derived dict and list classes (see SF#1489898)
+
+----------------------------------------------------------------
+Released 2.2.0 2006-04-10
+
+Changes since 2.0.11:
+
+* OpenLDAP 2.2+ required now to build.
+
+Modules/
+* Dropped all occurences of '#ifdef #LDAP_VENDOR_VERSION'.
+* Fixed wrong tuple size in l_ldap_result3() (see SF#1368108)
+* Fixed get_option(ldap.OPT_API_INFO) (see SF#1440165)
+* Fixed memory leak in l_ldap_result3() when all=0
+  (see SF#1457325)
+* Fixed memory leak in l_ldap_result3() in error cases
+  (see SF#1464085)
+
+Lib/
+* Fixed ldap.schema.models.DITStructureRule.__str__() to
+  separate SUP rule-ids with a single space instead of ' $ '
+* Fixed ldap.async.Dict
+* Added ldap.async.IndexedDict
+* ldap.schema.subentry.SubSchema.attribute_types() has new
+  key-word argument ignore_dit_content_rule
+----------------------------------------------------------------
+Released 2.0.11 2005-11-07
+
+Changes since 2.0.10:
+
+Lib/
+* Class ldap.ldapobject.LDAPObject:
+  Each method returns a result now
+* Class ldap.ldapobject.ReconnectLDAPObject:
+  Some methods called the wrong methods of LDAPObject. Fixed.
+* Added new class ldap.async.Dict
+* Slightly cleaned up ldap.schema.subentry.attribute_types()
+* New sub-module ldap.resiter which simply provides a mix-in
+  class for ldap.ldapobject.LDAPObject with a generator method
+  allresults().
+  Obviously this only works with Python 2.3+. And
+  it's still experimental.
+
+----------------------------------------------------------------
+Released 2.0.10 2005-09-23
+
+Changes since 2.0.9:
+
+Lib/
+* Switched back to old implementation of
+  ldap.schema.tokenizer.split_tokens() since the new one
+  had a bug which deletes the spaces from DESC
+* ldap.INSUFFICIENT_ACCESS is now ignored in
+  ldap.ldapobject.LDAPObject.search_subschemasubentry_s()
+
+----------------------------------------------------------------
+Released 2.0.9 2005-07-28
+
+Changes since 2.0.8:
+
+Modules/
+* Removed __doc__ strings from ldapcontrol.c to "fix"
+  build problems with Python versions 2.2 and earlier.
+
+----------------------------------------------------------------
+Released 2.0.8 2005-06-22 at Linuxtag 2005, Karlsruhe, Germany
+
+Changes since 2.0.7:
+
+* Preliminary support for receiving LDAP controls added.
+  Contributor:
+  - Andreas Ames
+
+Lib/
+- Added classes in module ldif to ldif.__all__ to fix
+  from ldif import *
+- Removed BitString syntax from
+  ldap.schema.models.NOT_HUMAN_READABLE_LDAP_SYNTAXES
+  since the LDAP encoding is in fact human-readable
+- ldapurl.LDAPUrlExtension.unparse() outputs empty string
+  if LDAPUrlExtension.exvalue is None
+- Added ldap.controls.SimplePagedResultsControl
+
+----------------------------------------------------------------
+Released 2.0.7 2005-04-29
+
+Changes since 2.0.6:
+
+* Added preliminary support for sending LDAP controls
+  with a request.
+  Contributors:
+  - Deepak Giridharagopal
+  - Ingo Steuwer
+  (Receiving controls in LDAP results still not supported.)
+
+Modules:
+* LDAPObject.c: removed l_ldap_manage_dsa_it()
+* LDAPObject.c: Added missing #ifdef around l_ldap_passwd()
+  for compability with older OpenLDAP libs.
+
+Lib/
+* New algorithm in ldap.schema.tokenizer.split_tokens()
+  contributed by Wido Depping which is more robust
+  when parsing very broken schema elements
+  (e.g. Oracle's OID).
+* Fixed argument list (position of timeout) when calling
+  LDAPObject.search_ext_s() from search_st() and search_s().
+* LDAPObject.search_ext_s() correctly calls search_ext_s() now.
+* Re-implemented LDAPObject.manage_dsa_it() without calling _ldap.
+
+----------------------------------------------------------------
+Released 2.0.6 2004-12-03
+
+Changes since 2.0.5:
+
+Lib/
+* Added sub-module ldap.dn
+* Added function ldap.dn.escape_dn_chars()
+* Special check when implicitly setting SUP 'top' to
+  structural object classes without SUP defined to avoid
+  a loop in the super class chain.
+
+----------------------------------------------------------------
+Released 2.0.5 2004-11-11
+
+Changes since 2.0.4:
+
+Some small improvements for SASL:
+The noisy output during SASL bind is avoided now. Interaction
+with output on stderr can be enabled by the calling application
+by explicitly defining SASL flags.
+
+Removed obsolete directory Win32/.
+
+Lib/
+* Make sure that ldap.sasl.sasl.cb_value_dict is a dictionary
+  even when the caller passes in None to argument cb_value_dict
+* Added new key-word arg sasl_flags to method
+  LDAPObject.sasl_interactive_bind_s()
+
+Modules/
+* l_ldap_sasl_interactive_bind_s():
+  New key-word arg sasl_flags passed to
+  ldap_sasl_interactive_bind_s()
+
+----------------------------------------------------------------
+Released 2.0.4 2004-10-27
+
+Changes since 2.0.3:
+
+Modules/
+* Applied some fixes for 64-bit platforms to LDAPObject.c
+* Constants ldap.TLS_AVAIL and ldap.SASL_AVAIL will indicate
+  whether python-ldap was built with support for SSL/TLS
+  and/or SASL
+
+setup.py and Modules/
+* Applied some fixes for building under Win32
+
+----------------------------------------------------------------
+Released 2.0.3 2004-10-06
+
+Changes since 2.0.2:
+
+* Added support for LDAP Password Modify Extended Operation
+  (see RFC 3062)
+
+Demo/:
+* Added passwd_ext_op.py
+
+Modules/
+* Added l_ldap_passwd() in LDAPObject.c
+
+Lib/
+* Added methods passwd() and passwd_s() to
+  ldap.ldapobject.LDAPObject
+
+----------------------------------------------------------------
+Released 2.0.2 2004-07-29
+
+Changes since 2.0.1:
+
+Modules/
+* Fixed detecting appropriate OpenLDAP libs version for
+  determining whether ldap_whoami_s() is available or not.
+  This fixes build problems with OpenLDAP libs 2.1.0 up
+  to 2.1.12.
+
+----------------------------------------------------------------
+Released 2.0.1 2004-06-29
+
+Changes since 2.0.0:
+
+dsml:
+* Fixed wrong exception message format string
+
+ldap.schema.models:
+* Fixed Entry.__delitem__() to delete really everything
+  when deleting an attribute dictionary item.
+
+----------------------------------------------------------------
+Released 2.0.0 2004-05-18
+
+Changes since 2.0.0pre21:
+
+ldif:
+* Empty records are simply ignored in ldif.LDIFWriter.unparse()
+
+Modules/
+* New method result2() returns 3-tuple containing the msgid
+  of the outstanding operation.
+
+ldap.ldapobject:
+* New _ldap wrapper method LDAPObject.result2() (see above)
+  which is now used by LDAPObject.result().
+
+----------------------------------------------------------------
+Released 2.0.0pre21 2004-03-29
+
+Changes since 2.0.0pre20:
+
+setup.py:
+* runtime_library_dirs is set
+
+Modules/
+* (Hopefully) fixed building with OpenLDAP 2.2 libs in errors.c
+* Removed meaningless repr() function from LDAPObject.c
+* Removed setting LDAP_OPT_PROTOCOL_VERSION in l_ldap_sasl_bind_s()
+* Modified string handling via berval instead of *char
+  in l_ldap_compare_ext() makes it possible to compare attribute
+  values with null chars.
+* Wrapped ldap_sasl_bind() for simple binds instead of ldap_bind()
+  since 1. the latter is marked deprecated and 2. ldap_sasl_bind()
+  allows password credentials with null chars.
+* Removed unused sources linkedlist.c and linkedlist.h
+* Function l_ldap_whoami_s() only added if built against
+  OpenLDAP 2.1.x+ libs (should preserve compability with 2.0 libs)
+
+ldap.ldapobject:
+* LDAPObject.bind() only allows simple binds since Kerberos V4
+  binds of LDAPv2 are not supported anymore. An assert statement
+  was added to make the coder aware of that.
+* Renamed former LDAPObject.sasl_bind_s() to
+  LDAPObject.sasl_interactive_bind_s() since it wraps OpenLDAP's
+  ldap_sasl_interactive_bind_s()
+
+----------------------------------------------------------------
+Released 2.0.0pre20 2004-03-19
+
+Changes since 2.0.0pre19:
+
+Modules/
+* Removed doc strings from functions.c
+* Removed probably unused wrapper function l_ldap_dn2ufn() since
+  ldap_dn2ufn() is deprecated in OpenLDAP 2.1+
+* Removed wrapper function l_ldap_is_ldap_url().
+* Removed macro add_int_r() from constants.c since it caused
+  incompability issues with OpenLDAP 2.2 libs
+  (Warning: all result types are Integers now! Use the constants!)
+* New wrapper function l_ldap_whoami_s()
+
+ldap.ldapobject:
+* New wrapper method LDAPObject.whoami_s()
+
+ldap.functions:
+* Removed is_ldap_url(). The more general function
+  ldapurl.isLDAPUrl() should be used instead.
+
+ldap.sasl:
+* Added class cram_md5 (for SASL mech CRAM-MD5)
+
+ldap.async:
+* Use constants for search result types (see note about
+  add_int_r() above).
+
+----------------------------------------------------------------
+Released 2.0.0pre19 2004-01-22
+
+Changes since 2.0.0pre18:
+
+Modules/
+* LDAPObject.c:
+  Most deprecated functions of OpenLDAP C API are not used anymore.
+* functions.c:
+  Removed unused default_ldap_port().
+* constants.c:
+  Removed unused or silly constants
+  AUTH_KRBV4, AUTH_KRBV41, AUTH_KRBV42, URL_ERR_BADSCOPE, URL_ERR_MEM
+* errors.c:
+  Fixed building with OpenLDAP 2.2.x
+  (errors caused by negative error constants in ldap.h)
+
+ldap.ldapobject.LDAPObject:
+* Removed unused wrapper methods uncache_entry(), uncache_request(),
+  url_search(), url_search_st() and url_search_s()
+* New wrapper methods for all the _ext() methods in _ldap.LDAPObject.
+
+ldap.modlist:
+* Some performance optimizations and simplifications
+  in function modifyModlist()
+
+----------------------------------------------------------------
+Released 2.0.0pre18 2003-12-09
+
+Changes since 2.0.0pre17:
+
+ldap.ldapobject:
+* Fixed missing ldap._ldap_function_call() in
+  ReconnectLDAPObject.reconnect()
+
+----------------------------------------------------------------
+Released 2.0.0pre17 2003-12-03
+
+Changes since 2.0.0pre16:
+
+ldap.functions:
+* Fixed ImportError when running python -O
+
+----------------------------------------------------------------
+Released 2.0.0pre16 2003-12-02
+
+Changes since 2.0.0pre15:
+
+Modules/
+* Removed definition of unused constant RES_EXTENDED_PARTIAL since
+  the corresponding symbol LDAP_RES_EXTENDED_PARTIAL seems to not
+  be available in OpenLDAP-HEAD (pre 2.2) anymore.
+
+All in Lib/
+* Fixed some subtle bugs/oddities mentioned by pychecker.
+
+dsml:
+* Renamed DSMLWriter._f to DSMLWriter._output_file
+* Added wrapper method DSMLWriter.unparse() which simply
+  calls DSMLWriter.writeRecord()
+
+ldap.ldapobject:
+* Simplified LDAPObject.search_subschemasubentry_s()
+
+ldap.functions:
+* Moved ldap._ldap_function_call() into ldap.functions.
+* apply() is not used anymore since it seems deprecated
+
+ldap.async:
+* Added class DSMLWriter
+
+ldap.schema:
+* Removed unused key-word argument strict from
+  ldap.schema.subentry.SubSchema.attribute_types()
+* Fixed backward compability issue (for Python prior to 2.2) in
+  ldap.schema.subentry.SubSchema.listall()
+----------------------------------------------------------------
+Released 2.0.0pre15 2003-11-11
+
+Changes since 2.0.0pre14:
+
+Modules/
+Follow rule "Always include Python.h first"
+
+ldap.schema.subentry:
+* Added new method SubSchema.get_structural_oc()
+* Added new method SubSchema.get_applicable_aux_classes()
+* Methods SubSchema.listall() and SubSchema.tree() have
+  new key-word argument schema_element_filters
+* Support for DIT content rules in SubSchema.attribute_types()
+
+----------------------------------------------------------------
+Released 2.0.0pre14 2003-10-03
+
+Changes since 2.0.0pre13:
+
+setup.py:
+* Some modifications to ease building for Win32
+* Added directory Build/ mainly intended for platform-specific
+  examples of setup.cfg
+* Fixed installing ldap.filter
+
+ldap.ldapobject:
+* Added class attribute LDAPObject.network_timeout mapped to
+  set_option(ldap.OPT_NETWORK_TIMEOUT,..)
+* LDAPObject.search_ext(): Pass arguments serverctrls,clientctrls
+  to _ldap.search_ext()
+
+ldap.sasl:
+* Added class ldap.sasl.external for handling
+  the SASL mechanism EXTERNAL
+* Dictionary ldap.sasl.saslmech_handler_class built during import
+  for all the known SASL mechanisms derived from class definitions
+
+ldap.schema:
+* More graceful handling of KeyError in SubSchema.attribute_types()
+* New method SubSchema.get_inheritedattr() for retrieving inherited
+  class attributes
+* New method SubSchema.get_inheritedobj() for retrieving a
+  schema element instance including all inherited class attributes
+
+----------------------------------------------------------------
+Released 2.0.0pre13 2003-06-02
+
+Changes since 2.0.0pre12:
+
+ldap.async:
+* Checking type of argument writer_obj relaxed in
+  LDIFWriter.__init__() since file-like objects are
+  not necessarily an instance of file.
+
+ldap.schema:
+* ldap.schema.subentry.SubSchema.attribute_types() now correctly
+  handles attribute types without NAME set
+* If SUP is not defined for a structural object class 'top' is
+  assumed to be the only super-class by default
+* '_' is now the abstract top node in SubSchema.tree() for all
+  schema element classes since ABSTRACT and AUXILIARY object
+  classes are not derived from 'top' by default
+
+----------------------------------------------------------------
+Released 2.0.0pre12 2003-05-27
+
+Changes since 2.0.0pre11:
+
+New sub-module ldap.filter:
+* Added functions escape_filter_chars() and filter_format()
+
+ldap.ldapobject:
+* Trace log writes LDAP URI of connection instead of module name
+* search_s() passes self.timeout as argument timeout when
+  calling search_ext_s()
+* Key-word arguments for simple_bind() and simple_bind_s()
+  with defaults for anonymous bind.
+* LDAPObject.protocol_version is set to LDAPv3 as default
+  (this might make code changes necessary in a real LDAPv2
+   environment)
+* Default for key-word argument trace_stack_limit passed to
+  __init__() is 5
+* Updated __doc__ strings
+* Aligned and tested ReconnectLDAPObject and SmartLDAPObject
+
+ldap.async:
+* LDIFWriter uses ldif.LDIFWriter instead of calling
+  function ldif.CreateLDIF
+* LDIFWriter accepts either file-like object or ldif.LDIFWriter
+  instance as argument for specifying the output
+
+ldif:
+* Abandoned argument all_records of LDIFRecordList.__init__()
+
+ldapurl:
+* urllib.unquote() used instead of urllib.unquote_plus()
+
+----------------------------------------------------------------
+Released 2.0.0pre11 2003-05-02
+
+Changes since 2.0.0pre10:
+
+ldap.ldapobject:
+* Cosmetic change: Named argument list for LDAPObject.compare()
+  instead of *args,**kwargs.
+* Fixed bug in ReconnectLDAPObject._apply_method_s() affecting
+  compability with Python 2.0. The bug was introduced with
+  2.0.0pre09 by dropping use of apply().
+
+ldap.modlist:
+* modifyModlist(): Only None is filtered from attribute value lists,
+  '' is preserved as valid attribute value. But filtering applies
+  to old_value and new_value now.
+
+ldap.schema:
+* Zero-length attribute values for schema elements are ignored
+  (needed on e.g. Active Directory)
+
+dsml:
+Added support for parsing and generating DSMLv1.
+Still experimental though.
+
+
+----------------------------------------------------------------
+Released 2.0.0pre10 2003-04-19
+
+Changes since 2.0.0pre09:
+
+ldap.schema:
+* Emulate BooleanType for compability with Python2.3 in assert
+  statements
+
+----------------------------------------------------------------
+Released 2.0.0pre09 2003-04-19
+
+Changes since 2.0.0pre08:
+
+Modified setup.py to support Cyrus-SASL 2.x.
+
+ldap.ldapobject:
+* apply() is not used anymore since it seems deprecated
+* Fixed __setstate__() and __getstate__() of ReconnectLDAPObject
+
+ldap.schema:
+* Completed classes for nameForms, dITStructureRules and
+  dITContentRules
+
+----------------------------------------------------------------
+Released 2.0.0pre08 2003-04-11
+
+Changes since 2.0.0pre07:
+
+ldap.schema:
+* For backward compability with Python versions prior to 2.2
+  Lib/ldap/schema/tokenizer.py and Lib/ldap/schema/models.py use
+  (()) instead of tuple() for creating empty tuples.
+
+----------------------------------------------------------------
+Released 2.0.0pre07 2003-04-03
+
+Changes since 2.0.0pre06:
+
+LDAPObject.c:
+  * Wrapped OpenLDAP's ldap_search_ext()
+  * Removed empty __doc__ strings
+  * Removed fileno
+  * Removed all stuff related to caching in OpenLDAP libs
+
+ldap.ldapobject:
+  * Fixed SASL rebind in ldap.ldapobject.ReconnectLDAPObject
+  * use search_ext() instead ldap_search()
+  * new class attribute timeout for setting a global time-out
+    value for all synchronous operations
+
+ldap.schema:
+* Fixed two typos in ldap.schema.models
+* Some attempts to improve performance of parser/tokenizer
+* Completely reworked to have separate OID dictionaries for
+  the different schema element classes
+* Fixed the Demo/schema*.py to reflect changes to ldap.schema
+
+Documentation updates and various __doc__ string modifications.
+
+ldapurl:
+  * Removed all Unicode stuff from module ldapurl
+  * Consistent URL encoding in module ldapurl
+
+ldif:
+  * Removed ldif.FileWriter
+  * Proper handling of FILL (see RFC 2849)
+
+----------------------------------------------------------------
+Released 2.0.0pre06 2002-09-23
+
+Changes since 2.0.0pre05:
+- Fine-grained locking when linking against libldap_r
+- New wrapper class ldap.ReconnectLDAPObject
+- Security fix to module ldapurl
+- Other fixes and improvements to whole package
+- LDAPv3 schema support
+  (still somewhat premature and undocumented)
+
+----------------------------------------------------------------
+Released 2.0.0pre05 2002-07-20
+
+----------------------------------------------------------------
+Released 2.0.0pre04 2002-02-09
+
+----------------------------------------------------------------
+Released 2.0.0pre02 2002-02-01
+
+----------------------------------------------------------------
+Released 1.10alpha3 2000-09-19

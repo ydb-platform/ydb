@@ -1,0 +1,11 @@
+{% extends "sqladmin/layout.html" %}
+{% block body %}
+<div class="page page-center">
+  <div class="container-tight py-4">
+    <div class="empty">
+      <div class="empty-header">{{ status_code }}</div>
+      <p class="empty-title">{{ message }}</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

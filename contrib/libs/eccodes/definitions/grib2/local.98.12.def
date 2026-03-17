@@ -1,0 +1,22 @@
+# Seasonal forecast monthly mean data for lagged systems
+
+unsigned[2] systemNumber : dump;
+unsigned[2] methodNumber : dump;
+
+alias local.systemNumber=systemNumber;
+alias local.methodNumber=methodNumber;
+
+unsigned[4] indexingDate: dump; # MARS archiving date (YYYYMMDD)
+unsigned[2] indexingTime: dump; # MARS archiving time (HHMM)
+transient indexingTimeHH = indexingTime/100 : hidden;
+transient indexingTimeMM = indexingTime - 100 * indexingTimeHH : hidden;
+meta indexingTimeHHMM sprintf("%.2d%.2d",indexingTimeHH,indexingTimeMM);
+
+alias mars.date = indexingDate;
+alias mars.time = indexingTimeHHMM;
+
+# ECC-1425
+meta marsForecastMonth g1forecastmonth(dataDate, forecastTime): read_only;
+alias forecastMonth = marsForecastMonth;
+
+pad padding_loc12_1(50);

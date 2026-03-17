@@ -1,0 +1,32 @@
+from django.conf.urls import url
+from django.contrib.admindocs import views
+
+urlpatterns = [
+    url(r'^$',
+        views.BaseAdminDocsView.as_view(template_name='admin_doc/index.html'),
+        name='django-admindocs-docroot'),
+    url(r'^bookmarklets/$',
+        views.BookmarkletsView.as_view(),
+        name='django-admindocs-bookmarklets'),
+    url(r'^tags/$',
+        views.TemplateTagIndexView.as_view(),
+        name='django-admindocs-tags'),
+    url(r'^filters/$',
+        views.TemplateFilterIndexView.as_view(),
+        name='django-admindocs-filters'),
+    url(r'^views/$',
+        views.ViewIndexView.as_view(),
+        name='django-admindocs-views-index'),
+    url(r'^views/(?P<view>[^/]+)/$',
+        views.ViewDetailView.as_view(),
+        name='django-admindocs-views-detail'),
+    url(r'^models/$',
+        views.ModelIndexView.as_view(),
+        name='django-admindocs-models-index'),
+    url(r'^models/(?P<app_label>[^\.]+)\.(?P<model_name>[^/]+)/$',
+        views.ModelDetailView.as_view(),
+        name='django-admindocs-models-detail'),
+    url(r'^templates/(?P<template>.*)/$',
+        views.TemplateDetailView.as_view(),
+        name='django-admindocs-templates'),
+]

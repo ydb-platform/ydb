@@ -1,0 +1,92 @@
+[
+  {
+    "passwd": "gCb0SBnpxkdLZdWe",
+    "mode": "crypt",
+    "dgst_len": 20,
+    "iters": 4,
+    "salt": "kSmmBSy5uyC4",
+    "pwhash": "$argon2i$v=19$m=131072,t=4,p=1$a1NtbUJTeTV1eUM0$gNxxt8jHCHaKDUcbdP3ugX9i+BA",
+    "maxmem": 131072
+  },
+  {
+    "passwd": "mu3KbBv3",
+    "mode": "crypt",
+    "dgst_len": 17,
+    "iters": 4,
+    "salt": "kvPMDFk4yT9sZI",
+    "pwhash": "$argon2i$v=19$m=32768,t=4,p=1$a3ZQTURGazR5VDlzWkk$V+L2XhLr+F/EevADgyfo+bM",
+    "maxmem": 32768
+  },
+  {
+    "passwd": "Bxrsg5L0A0",
+    "mode": "crypt",
+    "dgst_len": 17,
+    "iters": 3,
+    "salt": "Z5c5VUWXSJcSbr",
+    "pwhash": "$argon2i$v=19$m=65536,t=3,p=1$WjVjNVZVV1hTSmNTYnI$BqyrFpvLJUCFaf9cQAFH1Ms",
+    "maxmem": 65536
+  },
+  {
+    "passwd": "EQmTLQ2ET",
+    "mode": "crypt",
+    "dgst_len": 30,
+    "iters": 3,
+    "salt": "8aWdz2IL",
+    "pwhash": "$argon2i$v=19$m=32768,t=3,p=1$OGFXZHoySUw$U6F0Tm/c/gyjJyMi4SWjLS+8dpuiKFK0OZje6iEZ",
+    "maxmem": 32768
+  },
+  {
+    "passwd": "9wQdHVSks3tbXx",
+    "mode": "crypt",
+    "dgst_len": 19,
+    "iters": 5,
+    "salt": "HW4AgInQoU",
+    "pwhash": "$argon2i$v=19$m=65536,t=5,p=1$SFc0QWdJblFvVQ$IwHIJ6VP1vIV7xrKm+mlI1nupA",
+    "maxmem": 65536
+  },
+  {
+    "passwd": "XRGHrq53wJ1LWgV",
+    "mode": "crypt",
+    "dgst_len": 27,
+    "iters": 5,
+    "salt": "Dr57DsF3",
+    "pwhash": "$argon2i$v=19$m=131072,t=5,p=1$RHI1N0RzRjM$shLAeDv4NbeHN9Sce+jaoEHIjUTP6OnGOtZ1",
+    "maxmem": 131072
+  },
+  {
+    "passwd": "JVoDvUkiJgtm",
+    "mode": "crypt",
+    "dgst_len": 17,
+    "iters": 5,
+    "salt": "C5jzAUY8D",
+    "pwhash": "$argon2i$v=19$m=131072,t=5,p=1$QzVqekFVWThE$SqZ2XYLggynRZgYlsWFiXGI",
+    "maxmem": 131072
+  },
+  {
+    "passwd": "eZf6zOck",
+    "mode": "crypt",
+    "dgst_len": 16,
+    "iters": 3,
+    "salt": "ID0CNHQR",
+    "pwhash": "$argon2i$v=19$m=65536,t=3,p=1$SUQwQ05IUVI$ShibIsTX2z5mclt4TKyAkQ",
+    "maxmem": 65536
+  },
+  {
+    "passwd": "nPeXb5WW",
+    "mode": "crypt",
+    "dgst_len": 26,
+    "iters": 5,
+    "salt": "DibJwvJWarySIIic",
+    "pwhash": "$argon2i$v=19$m=16384,t=5,p=1$RGliSnd2SldhcnlTSUlpYw$3n/DLofidmz8LPnM925hbm+4He/iKjAlvG4",
+    "maxmem": 16384
+  },
+  {
+    "passwd": "Vgv3CCRnqkgTO2co",
+    "mode": "crypt",
+    "dgst_len": 17,
+    "iters": 5,
+    "salt": "MfmTsCzom",
+    "pwhash": "$argon2i$v=19$m=131072,t=5,p=1$TWZtVHNDem9t$1W2xtNO3w3BylGxOHuX/IZ0",
+    "maxmem": 131072
+  }
+]

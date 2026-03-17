@@ -1,0 +1,92 @@
+--- a/magick/resource.c
++++ b/magick/resource.c
+@@ -1403,7 +1403,6 @@ MagickExport MagickBooleanType ResourceComponentGenesis(void)
+     memory;
+ 
+   ssize_t
+-    files,
+     i,
+     number_threads,
+     pages,
+@@ -1360,7 +1359,8 @@ MagickExport MagickBooleanType ResourceComponentGenesis(void)
+   for (i=0; i < (ssize_t) NumberOfResourceTypes; i++)
+     if (resource_semaphore[i] == (SemaphoreInfo *) NULL)
+       ActivateSemaphoreInfo(&resource_semaphore[i]);
+-  (void) SetMagickResourceLimit(WidthResource,resource_info.width_limit);
++  // Arcadia-specific. Matches TImageSizeConsts::TooBigDimension from cv/library/imagesizes/sizes.h
++  (void) SetMagickResourceLimit(WidthResource,MagickULLConstant(16384));
+   limit=GetEnvironmentValue("MAGICK_WIDTH_LIMIT");
+   if (limit != (char *) NULL)
+     {
+@@ -1368,7 +1368,9 @@ MagickExport MagickBooleanType ResourceComponentGenesis(void)
+         100.0));
+       limit=DestroyString(limit);
+     }
+-  (void) SetMagickResourceLimit(HeightResource,resource_info.height_limit);
++
++  // Arcadia-specific. Matches TImageSizeConsts::TooBigDimension from cv/library/imagesizes/sizes.h
++  (void) SetMagickResourceLimit(HeightResource,MagickULLConstant(16384));
+   limit=GetEnvironmentValue("MAGICK_HEIGHT_LIMIT");
+   if (limit != (char *) NULL)
+     {
+@@ -1387,7 +1389,8 @@ MagickExport MagickBooleanType ResourceComponentGenesis(void)
+  #if defined(MAGICKCORE_PixelCacheThreshold)
+   memory=StringToMagickSizeType(MAGICKCORE_PixelCacheThreshold,100.0);
+ #endif
+-  (void) SetMagickResourceLimit(AreaResource,4*memory);
++  // Arcadia-specific. Matches TImageSizeConsts::MaxPicArea from cv/library/imagesizes/sizes.h
++  (void) SetMagickResourceLimit(AreaResource,80 * 1024 * 1024 * sizeof(PixelPacket));
+   limit=GetEnvironmentValue("MAGICK_AREA_LIMIT");
+   if (limit != (char *) NULL)
+     {
+@@ -1402,42 +1406,27 @@ MagickExport MagickBooleanType ResourceComponentGenesis(void)
+         StringToSizeType(limit,100.0));
+       limit=DestroyString(limit);
+     }
+-  (void) SetMagickResourceLimit(MapResource,2*memory);
++
++  // Avoid disk cache in Arcadia
++  (void) SetMagickResourceLimit(MapResource,MagickULLConstant(0));
+   limit=GetEnvironmentValue("MAGICK_MAP_LIMIT");
+   if (limit != (char *) NULL)
+     {
+       (void) SetMagickResourceLimit(MapResource,StringToSizeType(limit,100.0));
+       limit=DestroyString(limit);
+     }
+-  (void) SetMagickResourceLimit(DiskResource,MagickResourceInfinity);
++
++  // Avoid disk cache in Arcadia
++  (void) SetMagickResourceLimit(DiskResource,MagickULLConstant(0));
+   limit=GetEnvironmentValue("MAGICK_DISK_LIMIT");
+   if (limit != (char *) NULL)
+     {
+       (void) SetMagickResourceLimit(DiskResource,StringToSizeType(limit,100.0));
+       limit=DestroyString(limit);
+     }
+-  files=(-1);
+-#if defined(MAGICKCORE_HAVE_SYSCONF) && defined(_SC_OPEN_MAX)
+-  files=(ssize_t) sysconf(_SC_OPEN_MAX);
+-#endif
+-#if defined(MAGICKCORE_HAVE_GETRLIMIT) && defined(RLIMIT_NOFILE)
+-  if (files < 0)
+-    {
+-      struct rlimit
+-        resources;
+ 
+-      if (getrlimit(RLIMIT_NOFILE,&resources) != -1)
+-        files=(ssize_t) resources.rlim_cur;
+-  }
+-#endif
+-#if defined(MAGICKCORE_HAVE_GETDTABLESIZE) && defined(MAGICKCORE_POSIX_SUPPORT)
+-  if (files < 0)
+-    files=(ssize_t) getdtablesize();
+-#endif
+-  if (files < 0)
+-    files=64;
+-  (void) SetMagickResourceLimit(FileResource,MagickMax((size_t)
+-    (3*files/4),64));
++  // Avoid disk cache in Arcadia
++  (void) SetMagickResourceLimit(FileResource,MagickULLConstant(0));
+   limit=GetEnvironmentValue("MAGICK_FILE_LIMIT");
+   if (limit != (char *) NULL)
+     {

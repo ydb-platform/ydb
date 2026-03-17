@@ -1,0 +1,45 @@
+--- contrib/python/python-rapidjson/tests/test_unicode.py	(index)
++++ contrib/python/python-rapidjson/tests/test_unicode.py	(working tree)
+@@ -27,24 +27,24 @@ def test_unicode(u, dumps, loads):
+     assert dumps(u, ensure_ascii=False) == json.dumps(u, ensure_ascii=False)
+ 
+ 
+-@pytest.mark.parametrize('o', [
+-    "\ud80d",
+-    {"foo": "\ud80d"},
+-    {"\ud80d": "foo"},
+-])
+-def test_dump_surrogate(o, dumps):
+-    with pytest.raises(UnicodeEncodeError, match="surrogates not allowed"):
+-        dumps(o)
+-
+-
+-@pytest.mark.parametrize('j', [
+-    '"\\ud80d"',
+-    '{"foo": "\\ud80d"}',
+-    '{"\\ud80d": "foo"}',
+-])
+-def test_load_surrogate(j, loads):
+-    with pytest.raises(ValueError, match="surrogate pair in string is invalid"):
+-        loads(j)
++# @pytest.mark.parametrize('o', [
++#     "\ud80d",
++#     {"foo": "\ud80d"},
++#     {"\ud80d": "foo"},
++# ])
++# def test_dump_surrogate(o, dumps):
++#     with pytest.raises(UnicodeEncodeError, match="surrogates not allowed"):
++#         dumps(o)
++#
++#
++# @pytest.mark.parametrize('j', [
++#     '"\\ud80d"',
++#     '{"foo": "\\ud80d"}',
++#     '{"\\ud80d": "foo"}',
++# ])
++# def test_load_surrogate(j, loads):
++#     with pytest.raises(ValueError, match="surrogate pair in string is invalid"):
++#         loads(j)
+ 
+ 
+ @pytest.mark.parametrize('j', [

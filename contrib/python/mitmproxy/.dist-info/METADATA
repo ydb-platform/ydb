@@ -1,0 +1,117 @@
+Metadata-Version: 2.1
+Name: mitmproxy
+Version: 8.1.1
+Summary: An interactive, SSL/TLS-capable intercepting proxy for HTTP/1, HTTP/2, and WebSockets.
+Home-page: http://mitmproxy.org
+Author: Aldo Cortesi
+Author-email: aldo@corte.si
+License: MIT
+Project-URL: Documentation, https://docs.mitmproxy.org/stable/
+Project-URL: Source, https://github.com/mitmproxy/mitmproxy/
+Project-URL: Tracker, https://github.com/mitmproxy/mitmproxy/issues
+Platform: UNKNOWN
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console :: Curses
+Classifier: Operating System :: MacOS
+Classifier: Operating System :: POSIX
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Topic :: Security
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Internet :: Proxy Servers
+Classifier: Topic :: System :: Networking :: Monitoring
+Classifier: Topic :: Software Development :: Testing
+Classifier: Typing :: Typed
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: asgiref (<3.6,>=3.2.10)
+Requires-Dist: blinker (<1.5,>=1.4)
+Requires-Dist: Brotli (<1.1,>=1.0)
+Requires-Dist: certifi (>=2019.9.11)
+Requires-Dist: cryptography (<38,>=36)
+Requires-Dist: flask (<2.2,>=1.1.1)
+Requires-Dist: h11 (<0.14,>=0.11)
+Requires-Dist: h2 (<5,>=4.1)
+Requires-Dist: hyperframe (<7,>=6.0)
+Requires-Dist: kaitaistruct (<0.10,>=0.7)
+Requires-Dist: ldap3 (<2.10,>=2.8)
+Requires-Dist: msgpack (<1.1.0,>=1.0.0)
+Requires-Dist: passlib (<1.8,>=1.6.5)
+Requires-Dist: protobuf (<5,>=3.14)
+Requires-Dist: pyOpenSSL (<22.1,>=21.0)
+Requires-Dist: pyparsing (<3.1,>=2.4.2)
+Requires-Dist: pyperclip (<1.9,>=1.6.0)
+Requires-Dist: ruamel.yaml (<0.18,>=0.16)
+Requires-Dist: sortedcontainers (<2.5,>=2.3)
+Requires-Dist: tornado (<7,>=6.1)
+Requires-Dist: urwid (<2.2,>=2.1.1)
+Requires-Dist: wsproto (<1.2,>=1.0)
+Requires-Dist: publicsuffix2 (<3,>=2.20190812)
+Requires-Dist: zstandard (<0.19,>=0.11)
+Requires-Dist: pydivert (<2.2,>=2.0.3) ; sys_platform == "win32"
+Provides-Extra: dev
+Requires-Dist: click (<8.2,>=7.0) ; extra == 'dev'
+Requires-Dist: hypothesis (<7,>=5.8) ; extra == 'dev'
+Requires-Dist: parver (<2.0,>=0.1) ; extra == 'dev'
+Requires-Dist: pdoc (>=4.0.0) ; extra == 'dev'
+Requires-Dist: pyinstaller (==5.1) ; extra == 'dev'
+Requires-Dist: pytest-asyncio (<0.19,>=0.17.0) ; extra == 'dev'
+Requires-Dist: pytest-cov (<3.1,>=2.7.1) ; extra == 'dev'
+Requires-Dist: pytest-timeout (<2.2,>=1.3.3) ; extra == 'dev'
+Requires-Dist: pytest-xdist (<3,>=2.1.0) ; extra == 'dev'
+Requires-Dist: pytest (<8,>=6.1.0) ; extra == 'dev'
+Requires-Dist: requests (<3,>=2.9.1) ; extra == 'dev'
+Requires-Dist: tox (<4,>=3.5) ; extra == 'dev'
+Requires-Dist: wheel (<0.38,>=0.36.2) ; extra == 'dev'
+
+# mitmproxy
+
+[![Continuous Integration Status](https://github.com/mitmproxy/mitmproxy/workflows/CI/badge.svg?branch=main)](https://github.com/mitmproxy/mitmproxy/actions?query=branch%3Amain)
+[![Coverage Status](https://shields.mitmproxy.org/codecov/c/github/mitmproxy/mitmproxy/main.svg?label=codecov)](https://codecov.io/gh/mitmproxy/mitmproxy)
+[![Latest Version](https://shields.mitmproxy.org/pypi/v/mitmproxy.svg)](https://pypi.python.org/pypi/mitmproxy)
+[![Supported Python versions](https://shields.mitmproxy.org/pypi/pyversions/mitmproxy.svg)](https://pypi.python.org/pypi/mitmproxy)
+
+``mitmproxy`` is an interactive, SSL/TLS-capable intercepting proxy with a console
+interface for HTTP/1, HTTP/2, and WebSockets.
+
+``mitmdump`` is the command-line version of mitmproxy. Think tcpdump for HTTP.
+
+``mitmweb`` is a web-based interface for mitmproxy.
+
+## Installation
+
+The installation instructions are [here](https://docs.mitmproxy.org/stable/overview-installation).
+If you want to install from source, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## Documentation & Help
+
+General information, tutorials, and precompiled binaries can be found on the mitmproxy website.
+
+[![mitmproxy.org](https://shields.mitmproxy.org/badge/https%3A%2F%2F-mitmproxy.org-blue.svg)](https://mitmproxy.org/)
+
+The documentation for mitmproxy is available on our website:
+
+[![mitmproxy documentation stable](https://shields.mitmproxy.org/badge/docs-stable-brightgreen.svg)](https://docs.mitmproxy.org/stable/)
+[![mitmproxy documentation dev](https://shields.mitmproxy.org/badge/docs-dev-brightgreen.svg)](https://docs.mitmproxy.org/main/)
+
+If you have questions on how to use mitmproxy, please
+use GitHub Discussions!
+
+[![mitmproxy discussions](https://shields.mitmproxy.org/badge/help-github%20discussions-orange.svg)](https://github.com/mitmproxy/mitmproxy/discussions)
+
+## Contributing
+
+As an open source project, mitmproxy welcomes contributions of all forms.
+
+[![Dev Guide](https://shields.mitmproxy.org/badge/dev_docs-CONTRIBUTING.md-blue)](./CONTRIBUTING.md)
+
+Also, please feel free to join our developer Slack!
+
+[![Slack Developer Chat](https://shields.mitmproxy.org/badge/slack-mitmproxy-E01563.svg)](http://slack.mitmproxy.org/)
+
+

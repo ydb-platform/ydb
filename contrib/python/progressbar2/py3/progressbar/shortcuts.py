@@ -1,0 +1,22 @@
+from . import bar
+
+
+def progressbar(
+    iterator,
+    min_value: int = 0,
+    max_value=None,
+    widgets=None,
+    prefix=None,
+    suffix=None,
+    **kwargs,
+):
+    progressbar = bar.ProgressBar(
+        min_value=min_value,
+        max_value=max_value,
+        widgets=widgets,
+        prefix=prefix,
+        suffix=suffix,
+        **kwargs,
+    )
+
+    yield from progressbar(iterator)

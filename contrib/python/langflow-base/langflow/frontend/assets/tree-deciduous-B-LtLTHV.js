@@ -1,0 +1,1 @@
+import{a8 as e}from"./index-Cp3b7MWQ.js";const a=[["path",{d:"M8 19a4 4 0 0 1-2.24-7.32A3.5 3.5 0 0 1 9 6.03V6a3 3 0 1 1 6 0v.04a3.5 3.5 0 0 1 3.24 5.65A4 4 0 0 1 16 19Z",key:"oadzkq"}],["path",{d:"M12 19v3",key:"npa21l"}]],d=e("tree-deciduous",a);export{a as __iconNode,d as default};

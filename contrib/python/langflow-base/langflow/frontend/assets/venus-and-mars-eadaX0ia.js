@@ -1,0 +1,1 @@
+import{a8 as e}from"./index-Cp3b7MWQ.js";const a=[["path",{d:"M10 20h4",key:"ni2waw"}],["path",{d:"M12 16v6",key:"c8a4gj"}],["path",{d:"M17 2h4v4",key:"vhe59"}],["path",{d:"m21 2-5.46 5.46",key:"19kypf"}],["circle",{cx:"12",cy:"11",r:"5",key:"16gxyc"}]],t=e("venus-and-mars",a);export{a as __iconNode,t as default};

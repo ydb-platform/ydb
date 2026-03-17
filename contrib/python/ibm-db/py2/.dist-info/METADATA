@@ -1,0 +1,40 @@
+Metadata-Version: 2.1
+Name: ibm-db
+Version: 3.1.4
+Summary: Python DBI driver for DB2 (LUW, zOS, i5) and IDS
+Home-page: http://pypi.python.org/pypi/ibm_db/
+Download-URL: http://code.google.com/p/ibm-db/downloads/list
+Author: IBM Application Development Team
+Author-email: praveen.narayanappa1@ibm.com
+License: Apache License 2.0
+Keywords: database DB-API interface IBM Data Servers DB2 Informix IDS
+Platform: Linux32/64
+Platform: Win32/64
+Platform: MacOS64
+Platform: aix32/64
+Platform: ppc32/64
+Platform: sunamd32/64
+Platform: sun32/64
+Platform: ppc64le
+Platform: z/OS
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: Microsoft :: Windows :: Windows 10
+Classifier: Operating System :: Unix
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Database :: Front-Ends
+Description-Content-Type: text/markdown
+License-File: LICENSE
+
+Python DBI driver for IBM Db2 for LUW, IBM Informix, IBM Db2 for iSeries(AS400) and IBM Db2 for z/OS servers

@@ -1,0 +1,5 @@
+# (C) Copyright 2005- ECMWF.
+
+unsigned[2] totalNumberOfQuantiles : dump;
+#  quantile value, from 1 to totalNumberOfQuantiles
+unsigned[2] quantileValue  : dump;

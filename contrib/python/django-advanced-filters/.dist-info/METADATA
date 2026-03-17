@@ -1,0 +1,753 @@
+Metadata-Version: 2.1
+Name: django-advanced-filters
+Version: 2.0.0
+Summary: A Django application for advanced admin filters
+Home-page: https://github.com/modlinltd/django-advanced-filters
+Author: Pavel Savchenko
+Author-email: pavel@modlinltd.com
+License: MIT
+Keywords: django-admin admin advanced filters custom query
+Platform: UNKNOWN
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 2.2
+Classifier: Framework :: Django :: 3.2
+Classifier: Framework :: Django :: 4.0
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Requires-Python: >=3.6
+License-File: LICENSE
+Requires-Dist: simplejson (<4,>=3.6.5)
+Provides-Extra: test
+Requires-Dist: coveralls ; extra == 'test'
+Requires-Dist: factory-boy (==2.12.0) ; extra == 'test'
+Requires-Dist: pycodestyle (==2.5.0) ; extra == 'test'
+Requires-Dist: pytest-django (==3.9.0) ; extra == 'test'
+Requires-Dist: pytest-cov ; extra == 'test'
+
+Django Advanced Filters
+=======================
+
++-----------+------------------+---------------------+----------+------------+
+| Branch    | Build            | Coverage            | PyPI     | Gitter     |
++===========+==================+=====================+==========+============+
+| Master    | |Build-Master|   | |Coverage-Master|   | |PyPI|   | |Gitter|   |
++-----------+------------------+---------------------+----------+------------+
+| Develop   | |Build-Develop|  | |Coverage-Develop|  |          |            |
++-----------+------------------+---------------------+----------+------------+
+
+A django ModelAdmin mixin which adds advanced filtering abilities to the
+admin.
+
+Mimics the advanced search feature in
+`VTiger <https://www.vtiger.com/>`__, `see here for more
+info <https://www.vtiger.com/docs/creating-custom-filters>`__
+
+.. figure:: https://raw.githubusercontent.com/modlinltd/django-advanced-filters/develop/screenshot.png
+   :alt: Creating via a modal
+   :width: 768 px
+
+
+For release notes, see `Changelog <https://raw.githubusercontent.com/modlinltd/django-advanced-filters/develop/CHANGELOG.rst>`__
+
+Requirements
+============
+
+-  Django 2.2, >= 3.2 on Python 3.6+/PyPy3
+-  simplejson >= 3.6.5, < 4
+
+
+Installation & Set up
+=====================
+
+1. Install from pypi: ``pip install django-advanced-filters``
+2. Add ``'advanced_filters'`` to ``INSTALLED_APPS``.
+3. Add ``url(r'^advanced_filters/', include('advanced_filters.urls'))``
+   to your project's urlconf.
+4. Run ``python manage.py syncdb`` or ``python manage.py migrate`` (for django >= 1.7)
+
+Integration Example
+===================
+
+Extending a ModelAdmin is pretty straightforward:
+
+.. code-block:: python
+
+    from advanced_filters.admin import AdminAdvancedFiltersMixin
+
+    class ProfileAdmin(AdminAdvancedFiltersMixin, models.ModelAdmin):
+        list_filter = ('name', 'language', 'ts')   # simple list filters
+
+        # specify which fields can be selected in the advanced filter
+        # creation form
+        advanced_filter_fields = (
+            'name',
+            'language',
+            'ts',
+
+            # even use related fields as lookup fields
+            'country__name',
+            'posts__title',
+            'comments__content',
+        )
+
+Adding a new advanced filter (see below) will display a new list filter
+named "Advanced filters" which will list all the filter the currently
+logged in user is allowed to use (by default only those he/she created).
+
+Custom naming of fields
+-----------------------
+
+Initially, each field in ``advanced_filter_fields`` is resolved into an
+actual model field. That field's verbose\_name attribute is then used as
+the text of the displayed option. While uncommon, it occasionally makes
+sense to use a custom name, especially when following a relationship, as
+the context then changes.
+
+For example, when a profile admin allows filtering by a user name as
+well as a sales representative name, it'll get confusing:
+
+.. code-block:: python
+
+    class ProfileAdmin(AdminAdvancedFiltersMixin, models.ModelAdmin):
+        advanced_filter_fields = ('name', 'sales_rep__name')
+
+In this case the field options will both be named "name" (by default).
+
+To fix this, use custom naming:
+
+.. code-block:: python
+
+    class ProfileAdmin(AdminAdvancedFiltersMixin, models.ModelAdmin):
+        advanced_filter_fields = ('name', ('sales_rep__name', 'assigned rep'))
+
+Now, you will get two options, "name" and "assigned rep".
+
+Adding new advanced filters
+===========================
+
+By default the mixin uses a template which extends django's built-in
+``change_list`` template. This template is based off of grapelli's fork
+of this template (hence the 'grp' classes and funny looking javascript).
+
+The default template also uses the superb
+`magnificPopup <dimsemenov/Magnific-Popup>`__ which is currently bundled
+with the application.
+
+Regardless of the above, you can easily write your own template which
+uses context variables ``{{ advanced_filters }}`` and
+``{{ advanced_filters.formset }}``, to render the advanced filter
+creation form.
+
+Structure
+=========
+
+Each advanced filter has only a couple of required fields when
+constructed with the form; namely the title and a formset (consisting of
+a form for each sub-query or rule of the filter query).
+
+Each form in the formset requires the following fields: ``field``,
+``operator``, ``value``
+
+And allows the optional ``negate`` and ``remove`` fields.
+
+Let us go over each of the fields in a rule fieldset.
+
+Field
+-----
+
+The list of all available fields for this specific instance of the
+ModelAdmin as specific by the ```advanced_filter_fields``
+property. <#integration-example>`__
+
+The OR field
+~~~~~~~~~~~~
+
+``OR`` is an additional field that is added to every rule's available
+fields.
+
+It allows constructing queries with `OR
+statements <https://docs.djangoproject.com/en/dev/topics/db/queries/#complex-lookups-with-q-objects>`__.
+You can use it by creating an "empty" rule with this field "between" a
+set of 1 or more rules.
+
+Operator
+--------
+
+Query field suffixes which specify how the ``WHERE`` query will be
+constructed.
+
+The currently supported are as follows: ``iexact``, ``icontains``,
+``iregex``, ``range``, ``isnull``, ``istrue`` and ``isfalse``
+
+For more detail on what they mean and how they function, see django's
+`documentation on field
+lookups <https://docs.djangoproject.com/en/dev/ref/models/querysets/#field-lookups>`__.
+
+Value
+-----
+
+The value which the specific sub-query will be looking for, i.e the
+value of the field specified above, or in django query syntax:
+``.filter(field=value)``
+
+Negate
+------
+
+A boolean (check-box) field to specify whether this rule is to be
+negated, effectively making it a "exclude" sub-query.
+
+Remove
+------
+
+Similarly to other `django
+formsets <https://docs.djangoproject.com/en/dev/topics/forms/formsets/>`__,
+used to remove the selected line on submit.
+
+Editing previously created advanced filters
+===========================================
+
+The ``AdvancedFilterAdmin`` class (a subclass of ``ModelAdmin``) is
+provided and registered with ``AdvancedFilter`` in admin.py module.
+
+The model's change\_form template is overridden from grapelli's/django's
+standard template, to mirror the add form modal as closely as possible.
+
+*Note:* currently, adding new filters from the ModelAdmin change page is
+not supported.
+
+Query Serialization
+===================
+
+**TODO:** write a few words on how serialization of queries is done.
+
+Model correlation
+=================
+
+Since version 1.0, ``AdvancedFilter`` are tightly coupled with a specific model
+using the ``model`` field and the app\_label.Name template.
+On creation, ``model`` is populated based on the admin changelist it's created
+in.
+
+This change has a few benefits:
+
+1. The mixin can be used with multiple ``ModelAdmin`` classes while
+   performing specific query serialization and field validation that are
+   at the base of the filter functionality.
+
+2. Users can edit previously created filters outside of the
+   context of a changelist, as we do in the
+   ```AdvancedFilterAdmin`` <#editing-previously-created-advanced-filters>`__.
+
+3. Limit the ``AdvancedListFilters`` to limit queryset (and thus, the
+   underlying options) to a specified model.
+
+Views
+=====
+
+The GetFieldChoices view is required to dynamically (using javascript)
+fetch a list of valid field choices when creating/changing an
+``AdvancedFilter``.
+
+TODO
+====
+
+-  Add permission user/group selection functionality to the filter form
+-  Allow toggling of predefined templates (grappelli / vanilla django
+   admin), and front-end features.
+-  Support more (newer) python/django versions
+
+.. |Build-Master| image:: https://travis-ci.org/modlinltd/django-advanced-filters.svg?branch=master
+   :target: https://travis-ci.org/modlinltd/django-advanced-filters
+.. |Coverage-Master| image:: https://coveralls.io/repos/modlinltd/django-advanced-filters/badge.svg?branch=master
+   :target: https://coveralls.io/github/modlinltd/django-advanced-filters?branch=master
+.. |PyPI| image:: https://img.shields.io/pypi/pyversions/django-advanced-filters.svg
+   :target: https://pypi.python.org/pypi/django-advanced-filters
+.. |Gitter| image:: https://badges.gitter.im/Join%20Chat.svg
+   :target: https://gitter.im/modlinltd/django-advanced-filters?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
+.. |Build-Develop| image:: https://travis-ci.org/modlinltd/django-advanced-filters.svg?branch=develop
+   :target: https://travis-ci.org/modlinltd/django-advanced-filters
+.. |Coverage-Develop| image:: https://coveralls.io/repos/modlinltd/django-advanced-filters/badge.svg?branch=develop
+   :target: https://coveralls.io/github/modlinltd/django-advanced-filters?branch=develop
+
+Changelog
+=========
+
+2.0.0 - Support Django 3.2 and 4.0
+----------------------------------
+
+**BREAKING CHANGE:** This release is the first 2.x release, and drops support for EOL python and Django versions, all feature development will be done against 2.X branch.**
+
+Changes since 1.4.0:
+
+Features
+~~~~~~~~
+
+- Add support for python 3.10 and Django 4.0 (Merge 7bfb5b6)
+- Add compiled IT translation (Merge e39395f)
+
+Bug fixes
+~~~~~~~~~
+
+- Don't add empty form to AdvancedFilterFormSet.forms (Merge 7bfb5b6)
+
+Other
+~~~~~
+
+- Drop support for EOL Python 2.7 and 3.5 (Merge dfeb005)
+- Drop support for EOL Django 3.0 (Merge dfeb005)
+- Drop support for EOL Django up to 2.2 (Merge dfeb005)
+- Upgrade Python syntax with pyupgrade --py36-plus (Merge dfeb005)
+- Remove six (Merge dfeb005)
+- Remove unused import (Merge dfeb005)
+- Drop support for python 3.6 (Merge 7bfb5b6)
+- Correct support matrix (Merge 7bfb5b6)
+- Simplify url path import (Merge 7bfb5b6)
+- Remove standalone clean env from tox envlist (Merge 7bfb5b6)
+- Remove unused cached_property import (Merge 7bfb5b6)
+- Add Django 3.2 to classifiers (#163)
+- f-string for model_name string interpolation (Merge dfeb005)
+- remove unsupported django 3.1 from tox matrix (Merge 7bfb5b6)
+- update README and remove Django 3.1 classifier
+
+Contributors
+~~~~~~~~~~~~
+
+- Fabrizio Corallini
+- Dmytro Litvinov
+- Hugo van Kemenade
+- Pavel Savchenko
+
+1.4.0 - Latvian translation and minor fixes
+-------------------------------------------
+
+**NOTE: This release will be the last one to include features in 1.X branch, other than urgent hotfixes; version 2.X will drop support for EOL python and Django versions, and all future development will be done against 2.X branch**
+
+Changes since 1.3.0:
+
+Features
+~~~~~~~~
+
+- Add Latvian translation (#135)
+- Commit compiled translation files (Merge db448fa)
+
+Bug fixes
+~~~~~~~~~
+
+- switch from ugettext to gettext (#134)
+- don't use default dict (Merge db448fa)
+- correctly update extra_context (Merge db448fa)
+- support parallel coverage reporting (Merge db448fa)
+
+Other
+~~~~~
+
+- Fix CI for 2021 (#147)
+- Don't run tests in GitHub actions twice, one per PR is enough (da6fe7f24982a0fa69fcebff79d658b087de5e5b)
+- Ignore vscode settings (Merge db448fa)
+
+Contributors
+~~~~~~~~~~~~
+
+- Pavel Savchenko
+- Māris Nartišs
+
+
+1.3.0 - Django 3.1 and more
+---------------------------
+
+Apologies for the late release, and thanks to everyone that contributed.
+
+Bug fixes
+~~~~~~~~~
+
+- Add support for python 3.9 and django 3.1
+- import FieldDoesNotExist from django.core.exceptions
+
+Misc
+~~~~
+
+- Update django-braces
+- Update Admin to show model
+- Add Turkish translation
+- Correct travis.yml deprecated/dupe keywords
+
+Contributors
+~~~~~~~~~~~~
+
+- Pavel Savchenko
+- predatell
+- Özcan YARIMDÜNYA
+- Thu Trang Pham
+- João Batista
+
+
+1.2.0 - Django 3 and more
+-------------------------
+
+It's finally time to drop the dirty old rags and don some fresh colors.
+
+Thanks to effort from multiple contributors, this version includes support
+for newest Django version.
+
+Breaking Changes
+~~~~~~~~~~~~~~~~
+
+* Add support for Django 2.2 and 3.0
+* Drop support for Django < 1.9
+* Drop support for Python 3.3-3.4
+
+*django-advanced-filters now support only* **python 2.7, and 3.5 - 3.8.**
+
+Features
+~~~~~~~~
+
+- Switch deprecated force_text to force_str (Merge 0427d11)
+
+Bug fixes
+~~~~~~~~~
+
+- Avoid installing newer braces (Merge 0427d11)
+- Allow choices sort on None fields (Merge 142ecd0)
+
+Docs / Tests
+~~~~~~~~~~~~
+
+- Update dependencies stated in the README
+- Refactor some unittest test cases into pytest (Merge 41271b7)
+- Test the CleanWhiteSpacesMixin helper
+
+Misc
+~~~~
+
+- Update requirements for new test deps matrix (Merge 0427d11)
+- Replace deprecated assertEquals (Merge 41271b7)
+- Replace deprecated logger.warn with warning (Merge 41271b7)
+- Bump test dependencies (Merge 41271b7)
+- Update python and add Django classifiers
+
+
+Contributors
+~~~~~~~~~~~~
+
+- Petr Dlouhý
+- Alon Raizman
+- Hugo Maingonnat
+- Arpit
+- Pavel Savchenko
+
+
+1.1.1 - CHANGELOG rendering is hard
+-----------------------------------
+
+This release is for fixing the bug when installing with specific environment (
+locale that defaults to CP-1252).
+
+Bug fixes
+~~~~~~~~~
+
+- Add encoding='utf-8' to open() in setup.py (Merge 2fe81aa)
+
+Docs / Other
+~~~~~~~~~~~~
+
+- add CONTRIBUTING.rst with common processes (Merge ee7907e)
+- Update issue templates (Merge ee7907e)
+
+Contributors
+~~~~~~~~~~~~
+
+- Rebecca Turner
+- Pavel Savchenko
+
+
+1.1.0 - The future is bright
+----------------------------
+
+This release highlights support for Django 2.0 and 2.1 as well as
+deprecating support for versions Django < 1.7 and Python 2.6 and 3.3
+
+Bug fixes
+~~~~~~~~~
+
+- bump django-braces==1.13 for Django 2 support (Merge 80e055e)
+- use request context processor in test_project (Merge 80e055e)
+
+Misc.
+~~~~~
+
+- ignore .DS_Store
+- fixes for Django 2.0 and 1.11, update tests (Merge 80e055e)
+- test in Django 2.1 (Merge d8d236d)
+- add updated migrations of model attributes (Merge 80e055e)
+- fix ValueError while creating empty form (Merge d8d236d)
+- python 2.6 and django < 1.7 are deprecated
+- lower and upper bounds in install_requires
+- avoid all-catch except clause (Merge 80e055e)
+
+Tests
+~~~~~
+
+- correct tox env django spec for ver 1.11 (Merge 80e055e)
+- correct make_query assertion for Django>=2 (Merge 80e055e)
+- update pytest-django in diff. envs + tox (Merge d8d236d)
+
+Contributors
+~~~~~~~~~~~~
+
+- Goncalo Gomes
+- predatell
+- Petr Dlouhý
+- benny daon
+- Pavel Savchenko
+
+
+1.0.7.1 - Fix PyPi fail
+-----------------------
+
+- Equivalent to the prev version, bumped since we can't reupload the files to PyPi.
+
+1.0.7 - The holiday edition
+---------------------------
+
+This is mostly a minor release with the biggest being the `AdvancedFilterForm.Media` fix, 2 additional translations and bunch of docs cleanup (thanks everyone)!
+
+Changes since 1.0.6:
+
+Bug Fixes
+~~~~~~~~~
+
+- Fix AdvancedFilterForm Media declaration
+- Fix pep8: E128 on forms.py (Merge d7acb36)
+
+Features
+~~~~~~~~
+
+- Add Japanese locale (Merge d7acb36)
+- Add Spanish locale (Merge 1a482cf)
+
+Documentation:
+~~~~~~~~~~~~~~
+
+- a bit of polishing (Merge 4c88ea3)
+- removing confusing migrations paragraph (Merge 4c88ea3)
+
+Contributors:
+~~~~~~~~~~~~~
+
+- KINOSHITA Shinji
+- Pavel Savchenko
+- Benny Daon
+- Mathieu Richardoz
+- José Sánchez Moreno
+
+
+1.0.6 - Bout Time
+-----------------
+
+This release is long overdue, and includes some important fixes as well as general improvements to code and documentation.
+
+Bug Fixes
+~~~~~~~~~
+
+- fixing TypeError: can only concatenate tuple (not "list") to tuple
+- ensure select2 is included last (Merge 9831ba5)
+- add script to load jQuery globally
+- remove invalid template variables
+- fix input focusing error in chrome
+- fix error when one missing range parameter caused error + test (Merge 365b646)
+
+Features
+~~~~~~~~
+
+- don't override original change_list_templates in AdminAdvancedFiltersMixin
+- make date range placeholder more pleasant (Merge 365b646)
+- add created_at field
+- Russian locale provided
+
+Documentation
+~~~~~~~~~~~~~
+
+   - make it clear easy-select2 is not required anymore (Merge 9831ba5)
+   - Clarify how to import AdminAdvancedFiltersMixin in README
+
+Tests
+~~~~~
+
+   - add more fields/filter to test ModelAdmin
+
+Contributors
+~~~~~~~~~~~~
+
+   - Grigoriy Beziuk
+   - Никита Конин
+   - Pavel Savchenko
+   - Yuval Adam
+   - Petr Dlouhý
+
+
+1.0.5 - Compatibility bump
+--------------------------
+
+Bugs
+~~~~
+
+- updated AdvancedFilterQueryForm to include numeric comparison operators (Merge d3ee9f4)
+- Fixed a bug where editing an existing Advanced Filter defaulted all operators to 'Equals' (Merge d3ee9f4)
+- set AFQFormSet extra=0 instead of extra=1. I did this because having to check Delete is not clear to end users. (Merge d3ee9f4)
+- changed the Advanced Filter admin so you a User by default can only view/edit filters that they create (unless they are a superuser) (Merge d3ee9f4)
+- Fixed failing tests. Fixed bug where users weren't properly getting permissions to change or delete their filters (Merge d3ee9f4)
+- changed solution for extra form appearing on editing. Now initialize form checks for falsy value for extra rather than extra just being None (Merge d3ee9f4)
+- removed 'not instance from requirements for no extras (Merge d3ee9f4)
+- pep8 fix (Merge d3ee9f4)
+- Fixed labeling error with 'Greater Than or Equal To' (Merge d3ee9f4)
+- Changes URL declaration to avoid deprecated pattern
+- select2 only initializes if there are choices available. otherwise, the standard text input will be used (Merge 35d7063)
+- Revert "select2 only initializes if there are choices available. otherwise, the standard text input will be used" (Merge 35d7063)
+- updated query for choices for select2 field so that it will take only distinct choices. This allows max_choices to be the maximum unique choices. (Merge 35d7063)
+- Changes URL declaration to avoid deprecated pattern (Merge 35d7063)
+- refactored retrieval of choices so that the db is getting distinct values; added test (Merge 35d7063)
+- pep8 (Merge 35d7063)
+- Use order_by to avoid ambiguity
+- drop django-easy-select2 and include select2 directly
+
+Tests
+~~~~~
+
+- test with both Python 3.5 and Django 1.10
+- removed print statement from test (Merge 35d7063)
+- fixed failing test to account for new distinct for max choices (Merge 35d7063)
+- added test to make sure all operators are properly restored from Queries (Merge d3ee9f4)
+
+Contributors
+~~~~~~~~~~~~
+
+- Pavel Savchenko
+- PJ Passalacqua
+- Hermano Cabral
+
+
+1.0.4 - Unbreak Python 3
+------------------------
+
+This release contains a fix to allow distribution installation on Python 3 which was broken since 1.0.2
+
+1.0.3 - The Package Fix
+-----------------------
+
+This is a quick fix for packaging (setup.py) errors and documentation.
+
+Bugs
+~~~~
+
+-  add missing Django 1.7 migrations
+-  README updated to mention ``manage.py migrate`` command
+-  Use ReST for README and CHANGELOG: avoid conversion from markdown
+
+
+1.0.2 - A Better Future
+-----------------------
+
+This release features better test coverage and support for Django 1.9.
+
+Bugs
+~~~~
+
+-  stretch formset table to the modal container width
+-  toggle advanced ``vendor/jquery`` dir according to Django version
+-  retain support older Django versions
+-  clean up legacy tags in templates
+
+Tests
+~~~~~
+
+-  add admin views tests
+-  add Django 1.9 to test matrix
+-  other minor improvements
+
+Docs
+~~~~
+
+-  Improve README with a newer screenshot and pretty tables for badges
+
+Contributors:
+~~~~~~~~~~~~~
+
+-  Pavel Savchenko
+-  Leonardo J. Caballero G
+-  Schuyler Duveen
+
+1.0.1 - A Public Release
+------------------------
+
+Bugs
+~~~~
+
+-  proper support for py26 and py3X and different Django releases
+-  avoid querying all instances for choices
+-  resolve settings inside view and refine error handling
+
+Tests
+~~~~~
+
+-  add doctests to the ``form_helpers``
+-  add tests for ``forms``
+-  add test case ``views.TestGetFieldChoicesView``
+-  setup.py/travis: add ``test-reqs.txt`` as extras\_require
+-  refactor testing to use ``py.test`` and run ``tox`` from ``setup.py``
+-  travis: use latest version of each Django release
+
+Docs:
+~~~~~
+
+-  ``README``: explain what we test against
+
+1.0 - First contact
+-------------------
+
+Major changes
+~~~~~~~~~~~~~
+
+-  Add a new (required) field
+   ```AdvancedFilter.model`` <https://raw.githubusercontent.com/modlinltd/django-advanced-filters/develop/README.rst#model-correlation>`__
+-  Add parsing query dict into initialized formsets (allows for `editing
+   existing
+   instance <https://raw.githubusercontent.com/modlinltd/django-advanced-filters/develop/README.rst#editing-previously-created-advanced-filters>`__).
+-  Add
+   ```AdvancedFilterAdmin`` <#editing-previously-created-advanced-filters>`__
+   for actually accessing and `editing existing ``AdvancedFilter``
+   instances <https://raw.githubusercontent.com/modlinltd/django-advanced-filters/develop/README.rst#editing-previously-created-advanced-filters>`__.
+-  Use `Select2 <https://github.com/asyncee/django-easy-select2>`__ and
+   an AJAX view to dynamically populate ```field``
+   options <https://raw.githubusercontent.com/modlinltd/django-advanced-filters/develop/README.rst#fields>`__.
+-  Add proper support for nested serialization of queries.
+
+Minor changes
+~~~~~~~~~~~~~
+
+-  Implement more ```operators`` <https://raw.githubusercontent.com/modlinltd/django-advanced-filters/develop/README.rst#operators>`__ (``isnull``,
+   ``istrue`` and ``isfalse``)
+-  Allow `custom verbose naming of fields in
+   advanced\_filter\_fields <https://raw.githubusercontent.com/modlinltd/django-advanced-filters/develop/README.rst#custom-naming-of-fields>`__
+-  Add helper methods to the model to hide (and decouple) core
+   serialization functionality from users.
+-  Strip whitespace in field values validation
+-  Setup and packaging (``setup.py``/``MANIFEST.in``)
+-  Hide ``QSerializer`` calling logic in the model
+-  Allow modifying ``advanced_filter_form`` property (defaults to
+   ``AdvancedFilterForm``)
+-  Correct documentation regarding position of mixin in subclass (issue
+   #1)
+
+

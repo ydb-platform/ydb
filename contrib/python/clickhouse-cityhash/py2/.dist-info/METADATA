@@ -1,0 +1,64 @@
+Metadata-Version: 2.1
+Name: clickhouse-cityhash
+Version: 1.0.2.5
+Summary: Python-bindings for CityHash, a fast non-cryptographic hash algorithm
+Home-page: https://github.com/xzkostyan/clickhouse-cityhash
+Download-URL: https://github.com/xzkostyan/clickhouse-cityhash/tarball/master/1.0.2.5
+Author: Alexander [Amper] Marshalov
+Author-email: alone.amper+cityhash@gmail.com
+License: MIT
+Keywords: hash,hashing,cityhash
+Classifier: Development Status :: 4 - Beta
+Classifier: Operating System :: OS Independent
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: C++
+Classifier: Programming Language :: Cython
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Topic :: Internet
+Classifier: Topic :: Scientific/Engineering
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Utilities
+License-File: LICENSE
+
+CityHash
+========
+
+A fork of Python wrapper around `CityHash <https://github.com/google/cityhash>`__
+with downgraded version of algorithm. This fork used as 3-rd party library
+for hashing data in ClickHouse protocol. Unfortunately ClickHouse
+server comes with built-in old version of this algorithm.
+
+Please use original `python-cityhash <https://github.com/escherba/python-cityhash>`_
+package for other purposes.
+
+Getting Started
+---------------
+
+To use this package in your program, simply type
+
+.. code-block:: bash
+
+    pip install clickhouse-cityhash
+
+See Also
+--------
+For other fast non-cryptographic hashing implementations available as Python
+extensions, see `MetroHash <https://github.com/escherba/python-metrohash>`__
+and `xxh <https://github.com/lebedov/xxh>`__.
+
+Authors
+-------
+The Python bindings were originally written by Alexander [Amper] Marshalov and
+were subsequently edited for more speed/versatility and packaged for PyPI by
+Eugene Scherba. The original CityHash algorithm is by Google.
+
+License
+-------
+This software is licensed under the `MIT License
+<http://www.opensource.org/licenses/mit-license>`_.  See the included LICENSE
+file for more information.

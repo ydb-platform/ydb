@@ -1,0 +1,24 @@
+{
+  "$id": "https://example.com/root_id_self_ref.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Person": {
+      "$ref": "person.json"
+    },
+    "OriginalPerson": {
+      "$ref": "person.json"
+    },
+    "Pet": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "examples": ["dog", "cat"]
+        },
+        "owner": {
+           "$ref": "https://example.com/root_id_self_ref.json#/definitions/Person"
+        }
+      }
+    }
+  }
+}

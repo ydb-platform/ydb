@@ -1,0 +1,3 @@
+#assert(local=4)
+alias mars.hdate = dataDate;
+alias mars.date  = referenceDate;

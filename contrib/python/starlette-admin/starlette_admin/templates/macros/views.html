@@ -1,0 +1,70 @@
+{% macro extern_link(view) -%}
+    <li class="nav-item">
+        <a class="nav-link" href="{{ view.url }}" target="{{ view.target }}">
+            {% if view.icon %}
+                <span class="nav-link-icon d-md-none d-lg-inline-block">
+                    <i class="{{ view.icon }}"></i>
+                </span>
+            {% endif %}
+            <span class="nav-link-title">{{ view.label }}</span>
+        </a>
+    </li>
+{% endmacro %}
+{% macro custom_link(view) -%}
+    <li class="nav-item">
+        <a class="nav-link {% if view.is_active(request) %}active fw-bold{% endif %}"
+           href="{{ url_for(__name__,path=view.path) }}">
+            {% if view.icon %}
+                <span class="nav-link-icon d-md-none d-lg-inline-block">
+                    <i class="{{ view.icon }}"></i>
+                </span>
+            {% endif %}
+            <span class="nav-link-title">{{ view.label }}</span>
+        </a>
+    </li>
+{% endmacro %}
+{% macro model_link(view) -%}
+    <li class="nav-item">
+        <a class="nav-link {% if view.is_active(request) %}active fw-bold{% endif %}"
+           href="{{ url_for(__name__ ~ ':list', identity=view.identity) }}">
+            {% if view.icon %}
+                <span class="nav-link-icon d-md-none d-lg-inline-block">
+                    <i class="{{ view.icon }}"></i>
+                </span>
+            {% endif %}
+            <span class="nav-link-title">{{ view.label }}</span>
+        </a>
+    </li>
+{% endmacro %}
+{% macro dropdown_link(view) -%}
+    <li class="nav-item dropdown {% if view.is_active(request) %}active{% endif %}">
+        <a class="nav-link dropdown-toggle {% if view.is_active(request) %}show{% endif %}"
+           href="#"
+           data-bs-toggle="dropdown"
+           role="button">
+            {% if view.icon %}
+                <span class="nav-link-icon d-md-none d-lg-inline-block">
+                    <i class="{{ view.icon }}"></i>
+                </span>
+            {% endif %}
+            <span class="nav-link-title">{{ view.label }}</span>
+        </a>
+        <div class="dropdown-menu {% if view.is_active(request) or view.always_open %}show{% endif %}">
+            <div class="dropdown-menu-columns">
+                <div class="dropdown-menu-column">
+                    {% for item in view.views  if item.is_accessible(request) %}
+                        {% if (item| is_link) %}
+                            <a href="{{ item.url }}" class="dropdown-item" target="{{ item.target }}">{{ item.label }}</a>
+                        {% elif (item| is_custom_view) and item.add_to_menu %}
+                            <a href="{{ url_for(__name__ ,path=item.path) }}" class="dropdown-item{% if item.is_active(request) %} active fw-bold{% endif %}">{{ item.label }}</a>
+                        {% elif (item| is_model) %}
+                            <a href="{{ url_for(__name__ ~ ':list', identity=item.identity) }}" class="dropdown-item{% if item.is_active(request) %} active fw-bold {% endif %}">{{ item.label }}</a>
+                        {% elif (item | is_dropdown) %}
+                            {{ dropdown_link(item) }}
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </li>
+{% endmacro %}

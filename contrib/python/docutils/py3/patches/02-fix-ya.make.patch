@@ -1,0 +1,147 @@
+--- contrib/python/docutils/py3/ya.make	(index)
++++ contrib/python/docutils/py3/ya.make	(working tree)
+@@ -133,73 +130,71 @@ PY_SRCS(
+-    docutils/parsers/rst/include/README.txt
+-    docutils/parsers/rst/include/isoamsa.txt
+-    docutils/parsers/rst/include/isoamsb.txt
+-    docutils/parsers/rst/include/isoamsc.txt
+-    docutils/parsers/rst/include/isoamsn.txt
+-    docutils/parsers/rst/include/isoamso.txt
+-    docutils/parsers/rst/include/isoamsr.txt
+-    docutils/parsers/rst/include/isobox.txt
+-    docutils/parsers/rst/include/isocyr1.txt
+-    docutils/parsers/rst/include/isocyr2.txt
+-    docutils/parsers/rst/include/isodia.txt
+-    docutils/parsers/rst/include/isogrk1.txt
+-    docutils/parsers/rst/include/isogrk2.txt
+-    docutils/parsers/rst/include/isogrk3.txt
+-    docutils/parsers/rst/include/isogrk4-wide.txt
+-    docutils/parsers/rst/include/isogrk4.txt
+-    docutils/parsers/rst/include/isolat1.txt
+-    docutils/parsers/rst/include/isolat2.txt
+-    docutils/parsers/rst/include/isomfrk-wide.txt
+-    docutils/parsers/rst/include/isomfrk.txt
+-    docutils/parsers/rst/include/isomopf-wide.txt
+-    docutils/parsers/rst/include/isomopf.txt
+-    docutils/parsers/rst/include/isomscr-wide.txt
+-    docutils/parsers/rst/include/isomscr.txt
+-    docutils/parsers/rst/include/isonum.txt
+-    docutils/parsers/rst/include/isopub.txt
+-    docutils/parsers/rst/include/isotech.txt
+-    docutils/parsers/rst/include/mmlalias.txt
+-    docutils/parsers/rst/include/mmlextra-wide.txt
+-    docutils/parsers/rst/include/mmlextra.txt
+-    docutils/parsers/rst/include/s5defs.txt
+-    docutils/parsers/rst/include/xhtml1-lat1.txt
+-    docutils/parsers/rst/include/xhtml1-special.txt
+-    docutils/parsers/rst/include/xhtml1-symbol.txt
+-    docutils/writers/html4css1/html4css1.css
+-    docutils/writers/html4css1/template.txt
+-    docutils/writers/html5_polyglot/italic-field-names.css
+-    docutils/writers/html5_polyglot/math.css
+-    docutils/writers/html5_polyglot/minimal.css
+-    docutils/writers/html5_polyglot/plain.css
+-    docutils/writers/html5_polyglot/responsive.css
+-    docutils/writers/html5_polyglot/template.txt
+-    docutils/writers/html5_polyglot/tuftig.css
+-    docutils/writers/latex2e/default.tex
+-    docutils/writers/latex2e/docutils.sty
+-    docutils/writers/latex2e/titlepage.tex
+-    docutils/writers/latex2e/titlingpage.tex
+-    docutils/writers/latex2e/xelatex.tex
+-    docutils/writers/odf_odt/styles.odt
+-    docutils/writers/pep_html/pep.css
+-    docutils/writers/pep_html/template.txt
+-    docutils/writers/s5_html/themes/README.txt
+-    docutils/writers/s5_html/themes/big-black/__base__
+-    docutils/writers/s5_html/themes/big-black/framing.css
+-    docutils/writers/s5_html/themes/big-black/pretty.css
+-    docutils/writers/s5_html/themes/big-white/framing.css
+-    docutils/writers/s5_html/themes/big-white/pretty.css
+-    docutils/writers/s5_html/themes/default/framing.css
+-    docutils/writers/s5_html/themes/default/opera.css
+-    docutils/writers/s5_html/themes/default/outline.css
+-    docutils/writers/s5_html/themes/default/pretty.css
+-    docutils/writers/s5_html/themes/default/print.css
+-    docutils/writers/s5_html/themes/default/s5-core.css
+-    docutils/writers/s5_html/themes/default/slides.css
+-    docutils/writers/s5_html/themes/default/slides.js
+-    docutils/writers/s5_html/themes/medium-black/__base__
+-    docutils/writers/s5_html/themes/medium-black/pretty.css
+-    docutils/writers/s5_html/themes/medium-white/framing.css
+-    docutils/writers/s5_html/themes/medium-white/pretty.css
+-    docutils/writers/s5_html/themes/small-black/__base__
+-    docutils/writers/s5_html/themes/small-black/pretty.css
+-    docutils/writers/s5_html/themes/small-white/framing.css
+-    docutils/writers/s5_html/themes/small-white/pretty.css
++)
++
++RESOURCE(
++    docutils/parsers/rst/include/isoamsa.txt                    //docutils/parsers/rst/include/isoamsa.txt
++    docutils/parsers/rst/include/isoamsb.txt                    //docutils/parsers/rst/include/isoamsb.txt
++    docutils/parsers/rst/include/isoamsc.txt                    //docutils/parsers/rst/include/isoamsc.txt
++    docutils/parsers/rst/include/isoamsn.txt                    //docutils/parsers/rst/include/isoamsn.txt
++    docutils/parsers/rst/include/isoamso.txt                    //docutils/parsers/rst/include/isoamso.txt
++    docutils/parsers/rst/include/isoamsr.txt                    //docutils/parsers/rst/include/isoamsr.txt
++    docutils/parsers/rst/include/isobox.txt                     //docutils/parsers/rst/include/isobox.txt
++    docutils/parsers/rst/include/isocyr1.txt                    //docutils/parsers/rst/include/isocyr1.txt
++    docutils/parsers/rst/include/isocyr2.txt                    //docutils/parsers/rst/include/isocyr2.txt
++    docutils/parsers/rst/include/isodia.txt                     //docutils/parsers/rst/include/isodia.txt
++    docutils/parsers/rst/include/isogrk1.txt                    //docutils/parsers/rst/include/isogrk1.txt
++    docutils/parsers/rst/include/isogrk2.txt                    //docutils/parsers/rst/include/isogrk2.txt
++    docutils/parsers/rst/include/isogrk3.txt                    //docutils/parsers/rst/include/isogrk3.txt
++    docutils/parsers/rst/include/isogrk4-wide.txt               //docutils/parsers/rst/include/isogrk4-wide.txt
++    docutils/parsers/rst/include/isogrk4.txt                    //docutils/parsers/rst/include/isogrk4.txt
++    docutils/parsers/rst/include/isolat1.txt                    //docutils/parsers/rst/include/isolat1.txt
++    docutils/parsers/rst/include/isolat2.txt                    //docutils/parsers/rst/include/isolat2.txt
++    docutils/parsers/rst/include/isomfrk-wide.txt               //docutils/parsers/rst/include/isomfrk-wide.txt
++    docutils/parsers/rst/include/isomfrk.txt                    //docutils/parsers/rst/include/isomfrk.txt
++    docutils/parsers/rst/include/isomopf-wide.txt               //docutils/parsers/rst/include/isomopf-wide.txt
++    docutils/parsers/rst/include/isomopf.txt                    //docutils/parsers/rst/include/isomopf.txt
++    docutils/parsers/rst/include/isomscr-wide.txt               //docutils/parsers/rst/include/isomscr-wide.txt
++    docutils/parsers/rst/include/isomscr.txt                    //docutils/parsers/rst/include/isomscr.txt
++    docutils/parsers/rst/include/isonum.txt                     //docutils/parsers/rst/include/isonum.txt
++    docutils/parsers/rst/include/isopub.txt                     //docutils/parsers/rst/include/isopub.txt
++    docutils/parsers/rst/include/isotech.txt                    //docutils/parsers/rst/include/isotech.txt
++    docutils/parsers/rst/include/mmlalias.txt                   //docutils/parsers/rst/include/mmlalias.txt
++    docutils/parsers/rst/include/mmlextra-wide.txt              //docutils/parsers/rst/include/mmlextra-wide.txt
++    docutils/parsers/rst/include/mmlextra.txt                   //docutils/parsers/rst/include/mmlextra.txt
++    docutils/parsers/rst/include/s5defs.txt                     //docutils/parsers/rst/include/s5defs.txt
++    docutils/parsers/rst/include/xhtml1-lat1.txt                //docutils/parsers/rst/include/xhtml1-lat1.txt
++    docutils/parsers/rst/include/xhtml1-special.txt             //docutils/parsers/rst/include/xhtml1-special.txt
++    docutils/parsers/rst/include/xhtml1-symbol.txt              //docutils/parsers/rst/include/xhtml1-symbol.txt
++    docutils/writers/html4css1/html4css1.css                    //docutils/writers/html4css1/html4css1.css
++    docutils/writers/html4css1/template.txt                     //docutils/writers/html4css1/template.txt
++    docutils/writers/html5_polyglot/italic-field-names.css      //docutils/writers/html5_polyglot/italic-field-names.css
++    docutils/writers/html5_polyglot/math.css                    //docutils/writers/html5_polyglot/math.css
++    docutils/writers/html5_polyglot/minimal.css                 //docutils/writers/html5_polyglot/minimal.css
++    docutils/writers/html5_polyglot/plain.css                   //docutils/writers/html5_polyglot/plain.css
++    docutils/writers/html5_polyglot/responsive.css              //docutils/writers/html5_polyglot/responsive.css
++    docutils/writers/html5_polyglot/template.txt                //docutils/writers/html5_polyglot/template.txt
++    docutils/writers/html5_polyglot/tuftig.css                  //docutils/writers/html5_polyglot/tuftig.css
++    docutils/writers/latex2e/default.tex                        //docutils/writers/latex2e/default.tex
++    docutils/writers/latex2e/docutils.sty                       //docutils/writers/latex2e/docutils.sty
++    docutils/writers/latex2e/titlepage.tex                      //docutils/writers/latex2e/titlepage.tex
++    docutils/writers/latex2e/titlingpage.tex                    //docutils/writers/latex2e/titlingpage.tex
++    docutils/writers/latex2e/xelatex.tex                        //docutils/writers/latex2e/xelatex.tex
++    docutils/writers/odf_odt/styles.odt                         //docutils/writers/odf_odt/styles.odt
++    docutils/writers/pep_html/pep.css                           //docutils/writers/pep_html/pep.css
++    docutils/writers/pep_html/template.txt                      //docutils/writers/pep_html/template.txt
++    docutils/writers/s5_html/themes/big-black/framing.css       //docutils/writers/s5_html/themes/big-black/framing.css
++    docutils/writers/s5_html/themes/big-black/pretty.css        //docutils/writers/s5_html/themes/big-black/pretty.css
++    docutils/writers/s5_html/themes/big-white/framing.css       //docutils/writers/s5_html/themes/big-white/framing.css
++    docutils/writers/s5_html/themes/big-white/pretty.css        //docutils/writers/s5_html/themes/big-white/pretty.css
++    docutils/writers/s5_html/themes/default/framing.css         //docutils/writers/s5_html/themes/default/framing.css
++    docutils/writers/s5_html/themes/default/opera.css           //docutils/writers/s5_html/themes/default/opera.css
++    docutils/writers/s5_html/themes/default/outline.css         //docutils/writers/s5_html/themes/default/outline.css
++    docutils/writers/s5_html/themes/default/pretty.css          //docutils/writers/s5_html/themes/default/pretty.css
++    docutils/writers/s5_html/themes/default/print.css           //docutils/writers/s5_html/themes/default/print.css
++    docutils/writers/s5_html/themes/default/s5-core.css         //docutils/writers/s5_html/themes/default/s5-core.css
++    docutils/writers/s5_html/themes/default/slides.css          //docutils/writers/s5_html/themes/default/slides.css
++    docutils/writers/s5_html/themes/default/slides.js           //docutils/writers/s5_html/themes/default/slides.js
++    docutils/writers/s5_html/themes/medium-black/pretty.css     //docutils/writers/s5_html/themes/medium-black/pretty.css
++    docutils/writers/s5_html/themes/medium-white/framing.css    //docutils/writers/s5_html/themes/medium-white/framing.css
++    docutils/writers/s5_html/themes/medium-white/pretty.css     //docutils/writers/s5_html/themes/medium-white/pretty.css
++    docutils/writers/s5_html/themes/small-black/pretty.css      //docutils/writers/s5_html/themes/small-black/pretty.css
++    docutils/writers/s5_html/themes/small-white/framing.css     //docutils/writers/s5_html/themes/small-white/framing.css
++    docutils/writers/s5_html/themes/small-white/pretty.css      //docutils/writers/s5_html/themes/small-white/pretty.css

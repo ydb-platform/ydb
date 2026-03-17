@@ -1,0 +1,34 @@
+info:
+  title: FastAPI
+  version: 0.1.0
+openapi: 3.0.2
+paths:
+  /:
+    post:
+      operationId: read_root__post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Item'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Read Root
+components:
+  schemas:
+    Item:
+      properties:
+        bar:
+          title: Bar
+        foo:
+          title: Foo
+          type: string
+      required:
+      - foo
+      title: Item
+      type: object

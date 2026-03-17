@@ -1,0 +1,11 @@
+--- contrib/libs/gdal/port/cpl_config-linux.h	(index)
++++ contrib/libs/gdal/port/cpl_config-linux.h	(working tree)
+@@ -216,6 +216,8 @@
+ /* Define to 1 if you have the `gmtime_r' function. */
+ #define HAVE_GMTIME_R 1
+ 
++#define USE_SYSTEM_FAST_FLOAT 1
++
+ #endif /* GDAL_COMPILATION */
+ 
+ #endif

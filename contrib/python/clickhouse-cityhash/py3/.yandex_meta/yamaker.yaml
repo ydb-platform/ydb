@@ -1,0 +1,4 @@
+requirements:
+  - contrib/restricted/cityhash-1.0.2
+keep:
+  - clickhouse_cityhash/cityhash.pyx

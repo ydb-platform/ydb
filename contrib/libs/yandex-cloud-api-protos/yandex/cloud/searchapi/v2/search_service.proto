@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package yandex.cloud.searchapi.v2;
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/searchapi/v2/search_query.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/searchapi/v2;searchapi";
+option java_package = "yandex.cloud.api.search.v2";
+
+// A set of methods for async search the Yandex search database.
+service WebSearchAsyncService {
+  rpc Search (WebSearchRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "WebSearchResponse"
+    };
+    option (google.api.http) = { post: "/v2/web/searchAsync" body: "*" };
+  }
+}
+
+// A set of methods for searching the Yandex search database.
+service WebSearchService {
+  rpc Search (WebSearchRequest) returns (WebSearchResponse) {
+    option (google.api.http) = {post: "/v2/web/search" body: "*"};
+  }
+}
+
+message SortSpec {
+  enum SortOrder {
+    SORT_ORDER_UNSPECIFIED = 0;
+    // Reverse order from oldest to most recent.
+    SORT_ORDER_ASC = 1;
+    // Direct order from most recent to oldest (default).
+    SORT_ORDER_DESC = 2;
+  }
+
+  enum SortMode {
+    SORT_MODE_UNSPECIFIED = 0;
+    // Sort documents by relevance (default value).
+    SORT_MODE_BY_RELEVANCE = 1;
+    // Sort documents by update time.
+    SORT_MODE_BY_TIME = 2;
+  }
+
+  // Documents sorting mode.
+  SortMode sort_mode = 1;
+  // Documents sorting order.
+  SortOrder sort_order = 2;
+}
+
+message GroupSpec {
+  enum GroupMode {
+    GROUP_MODE_UNSPECIFIED = 0;
+    // Flat grouping. Each group contains a single document.
+    GROUP_MODE_FLAT = 1;
+    // Grouping by domain. Each group contains documents from one domain.
+    GROUP_MODE_DEEP = 2;
+  }
+
+  // Grouping method.
+  GroupMode group_mode = 1;
+  // Maximum number of groups that can be returned per page with search results.
+  int64 groups_on_page = 2 [(value) = "1-100"];
+  // Maximum number of documents that can be returned per group.
+  int64 docs_in_group = 3 [(value) = "1-3"];
+}
+
+message WebSearchRequest {
+  enum Localization {
+    LOCALIZATION_UNSPECIFIED = 0;
+    // Russian (default value)
+    LOCALIZATION_RU = 1;
+    // Ukrainian
+    LOCALIZATION_UK = 2;
+    // Belarusian
+    LOCALIZATION_BE = 3;
+    // Kazakh
+    LOCALIZATION_KK = 4;
+    // Turkish
+    LOCALIZATION_TR = 5;
+    // English
+    LOCALIZATION_EN = 6;
+  }
+
+  enum Format {
+    FORMAT_UNSPECIFIED = 0;
+    // XML format (default value)
+    FORMAT_XML = 1;
+    // HTML format
+    FORMAT_HTML = 2;
+  }
+
+  enum Period {
+    PERIOD_UNSPECIFIED = 0;
+    // All time
+    PERIOD_ALL_TIME = 1;
+    // Last 24 hours
+    PERIOD_DAY = 2;
+    // Last 2 weeks
+    PERIOD_2_WEEKS = 3;
+    // Last month
+    PERIOD_MONTH = 4;
+  }
+
+  // Search query.
+  SearchQuery query = 1 [(required) = true];
+  // The rules for sorting search results that define the sequence of the returned search results.
+  SortSpec sort_spec = 2;
+  // Grouping settings that are used to group documents from a single domain into a container.
+  GroupSpec group_spec = 3;
+  // The maximum number of passages that can be used when generating a document snippet.
+  int64 max_passages = 4 [(value) = "1-5"];
+  // ID of the search country or region that impacts the document ranking rules.
+  string region = 5 [(length) = "<=100"];
+  // The notification language for a search response.
+  Localization l10n = 6;
+  // ID of the folder.
+  string folder_id = 7 [(length) = "<=50"];
+  // Search results format.
+  Format response_format = 8;
+  // User-Agent request header value.
+  string user_agent = 9 [(length) = "<=300"];
+  // Search flags
+  SearchMetadata metadata = 10;
+  // Get results for the certain period
+  Period period = 11;
+}
+
+message WebSearchResponse {
+  // Search results, either in XML or HTML format depending on the request settings.
+  bytes raw_data = 1 [(required) = true];
+}

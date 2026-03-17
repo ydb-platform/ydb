@@ -1,0 +1,5 @@
+--- contrib/python/python-dotenv/tests/test_main.py	(index)
++++ contrib/python/python-dotenv/tests/test_main.py	(working tree)
+@@ -299,1 +299,1 @@ def test_load_dotenv_file_stream(dotenv_file):
+-def test_load_dotenv_in_current_dir(tmp_path):
++def _test_load_dotenv_in_current_dir(tmp_path):

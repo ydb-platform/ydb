@@ -1,0 +1,7 @@
+Project: openMVS
+URL: https://github.com/cdcseacave/openMVS
+License: BSD
+Version: a3b360016660a1397f6eb6c070c2c19bbb4c7590,  2017-05-01
+Local modifications:
+
+* Imported only the Interface.h file

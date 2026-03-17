@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package yandex.cloud.marketplace.stacklandlicenseapi.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/marketplace/stacklandlicenseapi/v1;stacklandlicenseapi";
+option java_package = "yandex.cloud.api.marketplace.stacklandlicenseapi.v1";
+
+// Product type enum
+enum ProductType {
+  // Unspecified product type.
+  PRODUCT_TYPE_UNSPECIFIED = 0;
+  // Stackland product.
+  PRODUCT_TYPE_STACKLAND = 1;
+  // DataLens product.
+  PRODUCT_TYPE_DATALENS = 2;
+  // AI Studio product.
+  PRODUCT_TYPE_AI_STUDIO = 3;
+  // SpeechSense product.
+  PRODUCT_TYPE_SPEECHSENSE = 4;
+  // Robotics AI product.
+  PRODUCT_TYPE_ROBOTICS_AI = 5;
+}
+
+// Usage data entry for a single installation
+message UsageEntry {
+  // Installation ID
+  string installation_id = 1 [(required) = true, (length) = "<=100"];
+
+  // Product type
+  ProductType product_type = 2;
+
+  // Usage metric type (e.g., "stackland.vcpu.cores")
+  string type = 3 [(required) = true, (length) = "<=100"];
+
+  // Usage value
+  int64 usage = 4;
+
+  // Timestamp of the usage (client-side timestamp)
+  google.protobuf.Timestamp timestamp = 5 [(required) = true];
+
+  // Hardware fingerprint for the installation
+  string hardware_fingerprint = 6 [(length) = "<=500"];
+
+  // License ID this usage applies to
+  string license_id = 7 [(required) = true, (length) = "<=100"];
+
+  // Requested license limit value (optional)
+  int64 requested_value = 8;
+
+  // Server-side timestamp set by license server
+  google.protobuf.Timestamp server_timestamp = 9 [(required) = true];
+
+  // Previous record's hash in the chain (64 hex characters)
+  string prev_record_hash = 10 [(required) = true, (length) = "64"];
+
+  // SHA-256 hash of this record (64 hex characters)
+  string record_hash = 11 [(required) = true, (length) = "64"];
+
+  // RSA-PSS signature of the record hash (base64-encoded)
+  string signature = 12 [(required) = true, (length) = "<=1000"];
+}
+
+// License limit for a specific metric type
+message LicenseLimit {
+  // Metric type (e.g., "stackland.vcpu.cores")
+  string type = 1;
+
+  // Limit value
+  int64 limit = 2;
+}
+
+// License information returned by the sync API
+message License {
+  // Unique license ID
+  string license_id = 1;
+
+  // Product type this license applies to
+  ProductType product_type = 2;
+
+  // Organization ID
+  string organization_id = 3;
+
+  // Billing account ID
+  string billing_account_id = 4;
+
+  // Timestamp when the license was issued
+  google.protobuf.Timestamp issued_at = 5;
+
+  // Timestamp when the license expires
+  google.protobuf.Timestamp valid_until = 6;
+
+  // List of limits for this license
+  repeated LicenseLimit limits = 7;
+
+  // Digital signature for this license
+  string signature = 8;
+}
+
+// Sync status enum
+enum SyncStatus {
+  // Unspecified sync status.
+  SYNC_STATUS_UNSPECIFIED = 0;
+  // Sync completed successfully.
+  OK = 1;
+  // Sync completed with warnings.
+  WARNING = 2;
+  // Sync failed with errors.
+  ERROR = 3;
+}
+
+// Request to synchronize licenses and submit usage data
+message SyncRequest {
+  // Organization ID
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Billing account ID
+  string billing_account_id = 2 [(required) = true, (length) = "<=50"];
+
+  // License server ID
+  string license_server_id = 3 [(required) = true, (length) = "<=100"];
+
+  // Usage data for audit
+  repeated UsageEntry usage = 4 [(size) = "<=1000"];
+}
+
+// Result of the sync operation
+message SyncUsageResult {
+  // List of licenses for different product types
+  repeated License licenses = 1;
+
+  // Overall sync status
+  SyncStatus sync_status = 2;
+
+  // Optional message (e.g., warnings or errors)
+  string message = 3;
+}
+
+// Metadata for sync operation
+message SyncUsageMetadata {
+  // Organization ID
+  string organization_id = 1;
+  // Billing account ID
+  string billing_account_id = 2;
+  // License server ID
+  string license_server_id = 3;
+}

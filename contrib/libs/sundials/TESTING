@@ -1,0 +1,28 @@
+Author: Chris White (white238@llnl.gov)
+
+To test sundials you have to use the cmake build system with examples enabled.
+
+To do so use the following commands:
+
+mkdir <build directory>
+cd <build directory>
+cmake <sundials directory> -DCMAKE_INSTALL_PREFIX=<prefix> -DCMAKE_PREFIX_PATH=<prefix> -DEXAMPLES_ENABLE=ON
+make
+make test
+
+This will create an out of source build, build sundials and all the examples, and
+run the tests (which are the examples).
+
+CMake has built in support for running tests in a nice and readable fashion which
+has been utitilized.  The current test system uses a test runner (test/testRunner)
+to run the tests and compare the output to checked in answers (test/answers) 
+which are deemed correct by the sundials team.  The test runner saves the current
+output to test/output; this is overwritten everytime "make test" is run.  If an example
+fails you may need to look at "<build directory>/Testing/Temporary/LastTest.log" which is
+the an output file created by CMake and saves all of the console output which "make test"
+hides from you.
+
+If a test needs command line arguments or a different level of precision for integers
+or floating point comparison, they are read in from test/testInfo.  The format is
+explained in that file.
+	

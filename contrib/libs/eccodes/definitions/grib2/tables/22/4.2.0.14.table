@@ -1,0 +1,5 @@
+# Code table 4.2 - Parameter number by product discipline and parameter category
+0 0 Total ozone (DU)
+1 1 Ozone mixing ratio (kg/kg)
+2 2 Total column integrated ozone (DU)
+255 255 Missing

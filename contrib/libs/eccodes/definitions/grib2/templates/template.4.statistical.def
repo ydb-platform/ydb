@@ -1,0 +1,126 @@
+# (C) Copyright 2005- ECMWF.
+
+# Year of end of overall time interval
+unsigned[2] yearOfEndOfOverallTimeInterval =0 : edition_specific;
+
+# Month of end of overall time interval
+unsigned[1] monthOfEndOfOverallTimeInterval =0 : edition_specific;
+
+# Day of end of overall time interval
+unsigned[1] dayOfEndOfOverallTimeInterval =0 : edition_specific;
+
+# Hour of end of overall time interval
+unsigned[1] hourOfEndOfOverallTimeInterval =0 : edition_specific;
+
+# Minute of end of overall time interval
+unsigned[1] minuteOfEndOfOverallTimeInterval =0 : edition_specific;
+
+# Second of end of overall time interval
+unsigned[1] secondOfEndOfOverallTimeInterval =0 : edition_specific;
+
+# Number of time range specifications describing the time intervals used to calculate the statistically-processed field
+unsigned[1] numberOfTimeRanges = 1 : edition_specific;
+alias n = numberOfTimeRanges;
+alias numberOfTimeRange = numberOfTimeRanges;
+
+# Total number of data values missing in statistical process
+unsigned[4] numberOfMissingInStatisticalProcess = 0 : edition_specific;
+alias totalNumberOfDataValuesMissingInStatisticalProcess=numberOfMissingInStatisticalProcess;
+
+statisticalProcessesList list(numberOfTimeRanges)
+{
+ # Statistical process used to calculate the processed field from the field at each time increment during the time range
+ codetable[1] typeOfStatisticalProcessing ('4.10.table',masterDir,localDir) : edition_specific;
+
+ # Type of time increment between successive fields used in the statistical processing
+ codetable[1] typeOfTimeIncrement ('4.11.table',masterDir,localDir) = 2 : edition_specific;
+ alias typeOfTimeIncrementBetweenSuccessiveFieldsUsedInTheStatisticalProcessing=typeOfTimeIncrement;
+
+ # Indicator of unit of time for time range over which statistical processing is done
+ codetable[1] indicatorOfUnitForTimeRange ('4.4.table',masterDir,localDir) =1 ;
+
+ # Length of the time range over which statistical processing is done, in units defined by the previous octet
+ unsigned[4] lengthOfTimeRange=0 ;
+
+ # Indicator of unit of time for the increment between the successive fields used
+ codetable[1] indicatorOfUnitForTimeIncrement ('4.4.table',masterDir,localDir)=255 ;
+
+ # Time increment between successive fields, in units defined by the previous octet
+ unsigned[4] timeIncrement=0 ;
+ alias timeIncrementBetweenSuccessiveFields=timeIncrement;
+}
+
+# See GRIB-488. We only support maximum of 2 time ranges
+if (numberOfTimeRanges == 1 || numberOfTimeRanges == 2) {
+  concept stepTypeInternal {
+    "instant" = {typeOfStatisticalProcessing=255;}
+    "avg"     = {typeOfStatisticalProcessing=0;}
+    "avgd"    = {typeOfStatisticalProcessing=0;typeOfTimeIncrement=1;}
+    "accum"   = {typeOfStatisticalProcessing=1;}
+    "max"     = {typeOfStatisticalProcessing=2;}
+    "min"     = {typeOfStatisticalProcessing=3;}
+    "diff"    = {typeOfStatisticalProcessing=4;} # end-start
+    "rms"     = {typeOfStatisticalProcessing=5;}
+    "sd"      = {typeOfStatisticalProcessing=6;}
+    "cov"     = {typeOfStatisticalProcessing=7;}
+    "sdiff"   = {typeOfStatisticalProcessing=8;} # start-end
+    "ratio"   = {typeOfStatisticalProcessing=9;}
+    "stdanom" = {typeOfStatisticalProcessing=10;}
+    "sum"     = {typeOfStatisticalProcessing=11;}
+    "severity" = {typeOfStatisticalProcessing=100;}
+    "mode"     = {typeOfStatisticalProcessing=101;}
+    "index"    = {typeOfStatisticalProcessing=102;}
+  }
+  meta startStep step_in_units(forecastTime,indicatorOfUnitOfTimeRange,stepUnits,
+    indicatorOfUnitForTimeRange,lengthOfTimeRange) : no_copy;
+  meta endStep g2end_step(
+    startStep,
+    stepUnits,
+
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+
+    yearOfEndOfOverallTimeInterval,
+    monthOfEndOfOverallTimeInterval,
+    dayOfEndOfOverallTimeInterval,
+    hourOfEndOfOverallTimeInterval,
+    minuteOfEndOfOverallTimeInterval,
+    secondOfEndOfOverallTimeInterval,
+
+    indicatorOfUnitForTimeRange,
+    lengthOfTimeRange,
+    typeOfTimeIncrement,
+    numberOfTimeRanges
+  ) : dump,no_copy;
+
+  meta stepRange g2step_range(startStep,endStep): dump;
+} else {
+  constant stepType  = "multiple steps";
+  constant stepTypeInternal  = "multiple steps";
+  constant endStep   = "unavailable";
+  constant startStep   = "unavailable";
+  constant stepRange = "unavailable";
+}
+
+#meta  marsStep mars_step(stepRange,stepType) : edition_specific;
+
+alias ls.stepRange=stepRange;
+alias mars.step=endStep;
+
+alias time.stepType=stepType;
+alias time.stepRange=stepRange;
+alias time.stepUnits=stepUnits;
+alias time.dataDate=dataDate;
+alias time.dataTime=dataTime;
+alias time.startStep=startStep;
+alias time.endStep=endStep;
+
+meta time.validityDate validity_date(date,dataTime,step,stepUnits,yearOfEndOfOverallTimeInterval,
+    monthOfEndOfOverallTimeInterval,dayOfEndOfOverallTimeInterval) : no_copy;
+meta time.validityTime validity_time(date,dataTime,step,stepUnits,hourOfEndOfOverallTimeInterval,
+    minuteOfEndOfOverallTimeInterval) : no_copy;
+meta validityDateTime julian_date(validityDate, validityTime) : no_copy;

@@ -1,0 +1,43 @@
+{
+    "type": [
+        "h-recipe"
+    ], 
+    "properties": {
+        "nutrition": [
+            "p-nutrition"
+        ], 
+        "yield": [
+            "p-yield"
+        ], 
+        "author": [
+            "p-author", 
+            "h-card"
+        ], 
+        "duration": [
+            "dt-duration"
+        ], 
+        "photo": [
+            "u-photo"
+        ], 
+        "instructions": [
+            "e-instructions"
+        ], 
+        "summary": [
+            "p-summary"
+        ], 
+        "fn": [
+            "p-name"
+        ], 
+        "ingredient": [
+            "p-ingredient"
+        ],
+        "category": [
+            "p-category"
+        ]
+    },
+    "rels": {
+        "tag": [
+            "p-category"
+        ]
+    }
+}

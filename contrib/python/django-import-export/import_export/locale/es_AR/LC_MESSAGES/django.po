@@ -1,0 +1,209 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Gonzalo Bustos, 2015.
+# Santiago Muñoz <smunoz@mythologylabs.com.uy>, 2023.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-06-23 19:11+0100\n"
+"PO-Revision-Date: 2023-09-22 11:53-0300\n"
+"Last-Translator: Santiago Muñoz <smunoz@mythologylabs.com.uy>\n"
+"Language-Team: Spanish (Argentina)\n"
+"Language: es_AR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Poedit 1.6.10\n"
+
+#: admin.py templates/admin/import_export/change_list_import_item.html
+#: templates/admin/import_export/import.html
+msgid "Import"
+msgstr "Importar"
+
+#: admin.py
+#, python-format
+msgid "%s through import_export"
+msgstr ""
+
+#: admin.py
+#, fuzzy
+#| msgid "Import finished, with {} new and {} updated {}."
+msgid "Import finished: {} new, {} updated, {} deleted and {} skipped {}."
+msgstr "Proceso de importación finalizado, con {} nuevos y {} actualizados"
+
+#: admin.py
+#, python-format
+msgid ""
+"%(exc_name)s encountered while trying to read file. Ensure you have chosen "
+"the correct format for the file."
+msgstr ""
+"Se encontró %(exc_name)s mientras se intentaba leer el archivo. Asegúrese "
+"que seleccionó el formato correcto para el archivo."
+
+#: admin.py
+msgid ""
+"No valid data to import. Ensure your file has the correct headers or data "
+"for import."
+msgstr ""
+
+#: admin.py templates/admin/import_export/change_form.html
+#: templates/admin/import_export/change_list_export_item.html
+#: templates/admin/import_export/export.html
+msgid "Export"
+msgstr "Exportar"
+
+#: admin.py
+#, python-format
+msgid "Export selected %(verbose_name_plural)s"
+msgstr "Exportar %(verbose_name_plural)s seleccionados"
+
+#: formats/base_formats.py
+msgid "export failed due to IllegalCharacterError"
+msgstr ""
+
+#: forms.py
+msgid "Resource"
+msgstr "Recurso"
+
+#: forms.py
+msgid "Format"
+msgstr "Formato"
+
+#: forms.py
+msgid "File to import"
+msgstr "Archivo a importar"
+
+#: forms.py
+msgid "Form is not validated, call `is_valid` first"
+msgstr ""
+
+#: forms.py
+#, python-format
+msgid "Select at least 1 field for \"%(resource_name)s\" to export"
+msgstr ""
+
+#: resources.py
+#, python-format
+msgid ""
+"The following fields are declared in 'import_id_fields' but are not present "
+"in the resource fields: %s"
+msgstr ""
+
+#: resources.py
+#, python-format
+msgid ""
+"The following fields are declared in 'import_id_fields' but are not present "
+"in the file headers: %s"
+msgstr ""
+
+#: results.py
+#, python-format
+msgid "call to force_str() on instance failed: %s"
+msgstr ""
+
+#: templates/admin/import_export/base.html
+msgid "Home"
+msgstr "Inicio"
+
+#: templates/admin/import_export/export.html
+#, python-format
+msgid "Export %(len)s selected item."
+msgid_plural "Export %(len)s selected items."
+msgstr[0] ""
+msgstr[1] ""
+
+#: templates/admin/import_export/export.html
+#: templates/admin/import_export/resource_fields_list.html
+#, fuzzy
+#| msgid "This importer will import the following fields: "
+msgid "This exporter will export the following fields: "
+msgstr "Este importador importará los siguientes campos:"
+
+#: templates/admin/import_export/export.html
+msgid "Select all"
+msgstr ""
+
+#: templates/admin/import_export/export.html
+#: templates/admin/import_export/import.html
+msgid "Submit"
+msgstr "Enviar"
+
+#: templates/admin/import_export/import.html
+msgid ""
+"Below is a preview of data to be imported. If you are satisfied with the "
+"results, click 'Confirm import'"
+msgstr ""
+"A continuación se muestra una vista previa de los datos a importar. Si está "
+"satisfecho con los resultados, haga clic en 'Confirmar importación'"
+
+#: templates/admin/import_export/import.html
+msgid "Confirm import"
+msgstr "Confirmar importación"
+
+#: templates/admin/import_export/import.html
+msgid "Errors"
+msgstr "Errores"
+
+#: templates/admin/import_export/import.html
+msgid "Line number"
+msgstr "Número de línea"
+
+#: templates/admin/import_export/import.html
+msgid "Some rows failed to validate"
+msgstr "Falló la validación de algunas filas"
+
+#: templates/admin/import_export/import.html
+msgid ""
+"Please correct these errors in your data where possible, then reupload it "
+"using the form above."
+msgstr ""
+"Por favor corrija los siguientes errores en la información ingresada donde "
+"sea posible, luego vuelva a subir el archivo utilizando el formulario de la "
+"parte superior."
+
+#: templates/admin/import_export/import.html
+msgid "Row"
+msgstr "Fila"
+
+#: templates/admin/import_export/import.html
+msgid "Non field specific"
+msgstr "No específico del campo"
+
+#: templates/admin/import_export/import.html
+msgid "Preview"
+msgstr "Vista previa"
+
+#: templates/admin/import_export/import.html
+msgid "New"
+msgstr "Nuevo"
+
+#: templates/admin/import_export/import.html
+msgid "Skipped"
+msgstr "Omitido"
+
+#: templates/admin/import_export/import.html
+msgid "Delete"
+msgstr "Borrar"
+
+#: templates/admin/import_export/import.html
+msgid "Update"
+msgstr "Actualizar"
+
+#: templates/admin/import_export/resource_fields_list.html
+msgid "This importer will import the following fields: "
+msgstr "Este importador importará los siguientes campos:"
+
+#: widgets.py
+msgid "Value could not be parsed."
+msgstr ""
+
+#: widgets.py
+msgid "use_natural_foreign_keys and key_is_id cannot both be True"
+msgstr ""
+
+#~ msgid "You must select an export format."
+#~ msgstr "Debe seleccionar un formato de exportación."

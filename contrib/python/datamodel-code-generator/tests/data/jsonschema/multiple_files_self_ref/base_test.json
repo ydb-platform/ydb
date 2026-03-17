@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "base_test.json",
+  "description": "test",
+  "type": "object",
+  "definitions": {
+    "first": {
+      "$ref": "#/definitions/second"
+    },
+    "second": {
+      "type": "string"
+    }
+  }
+}

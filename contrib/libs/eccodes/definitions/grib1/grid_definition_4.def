@@ -1,0 +1,7 @@
+# (C) Copyright 2005- ECMWF.
+
+# GRID DEFINITION Gaussian latitude/longitude grid
+# grib 1 -> 2
+constant gridDefinitionTemplateNumber     = 40;
+
+template commonBlock "grib1/grid_definition_gaussian.def";

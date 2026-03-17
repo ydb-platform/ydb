@@ -1,0 +1,15 @@
+--- contrib/python/pyinstrument/pyinstrument/renderers/html.py
++++ contrib/python/pyinstrument/pyinstrument/renderers/html.py
+@@ -26,10 +27,6 @@ import codecs
+-        resources_dir = Path(__file__).parent / "html_resources"
++        import importlib.resources
++        resources_dir = importlib.resources.files(__package__) / "html_resources"
+
+         js_file = resources_dir / "app.js"
+         css_file = resources_dir / "app.css"
+
+-        if not js_file.exists() or not css_file.exists():
+-            raise RuntimeError(
+-                "Could not find app.js / app.css. Perhaps you need to run bin/build_js_bundle.py?"
+-            )
+-

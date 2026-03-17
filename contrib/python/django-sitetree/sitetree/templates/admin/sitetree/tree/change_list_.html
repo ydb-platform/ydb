@@ -1,0 +1,10 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {% if user.is_superuser %}
+    <li><a href="{% url 'admin:sitetree_dump' %}">{% trans "Dump data" %}</a></li>
+    <li><a href="{% url 'load-data' %}{% if is_popup %}?_popup=1{% endif %}">{% trans "Load data" %}</a></li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

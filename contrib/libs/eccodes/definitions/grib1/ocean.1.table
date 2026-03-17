@@ -1,0 +1,17 @@
+# CODE TABLE OCEAN 1 
+0 0 bit0_off
+0 1 bit0_on
+1 0 bit1_off
+1 1 bit1_on
+2 0 bit2_off
+2 1 bit2_on
+3 0 bit3_off
+3 1 bit3_on
+4 0 bit4_off
+4 1 bit4_on
+5 0 bit5_off
+5 1 bit5_on
+6 0 bit6_off
+6 1 bit6_on
+7 0 absent
+7 1 present

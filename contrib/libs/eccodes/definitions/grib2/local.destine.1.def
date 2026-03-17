@@ -1,0 +1,7 @@
+# DestinE MARS layout
+
+# Base keywords for all datasets
+include "grib2/local.destine.base.def"
+
+# Keywords based on dataset
+template_nofail datasetTemplate "grib2/local.destine.[dataset:s].def";

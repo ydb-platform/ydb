@@ -1,0 +1,1 @@
+import{a8 as e}from"./index-Cp3b7MWQ.js";const a=[["path",{d:"M12 3v14",key:"7cf3v8"}],["path",{d:"M5 10h14",key:"elsbfy"}],["path",{d:"M5 21h14",key:"11awu3"}]],f=e("diff",a);export{a as __iconNode,f as default};

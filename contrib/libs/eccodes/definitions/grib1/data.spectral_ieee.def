@@ -1,0 +1,135 @@
+# (C) Copyright 2005- ECMWF.
+
+# moved here to allow different bitsPerValue in second order packing
+unsigned[1] bitsPerValue : dump;
+alias numberOfBitsContainingEachPackedValue = bitsPerValue;
+alias accuracy = bitsPerValue;
+
+# For grib1 -> grib2
+#constant dataRepresentationTemplateNumber = 51;
+
+constant PUnset = -32767;
+
+# N is a pointer to the start of the packed data (i.e. gives octet number)
+unsigned[2] N : read_only,dump;
+signed[2] P  = PUnset;
+
+unsigned[1] JS=0  : dump;
+unsigned[1] KS=0  : dump;
+unsigned[1] MS=0  : dump;
+
+alias subSetJ=JS;
+alias subSetK=KS;
+alias subSetM=MS;
+
+constant GRIBEXShBugPresent = 1;
+transient computeLaplacianOperator=0;
+
+meta data.laplacianOperator    scale(P,oneConstant,grib1divider,truncateLaplacian) : dump;
+meta laplacianOperatorIsSet evaluate(P != PUnset &&  !computeLaplacianOperator );
+
+if (localUsePresent) {
+  if (changed(localDefinitionNumber)) {
+    transient TS = 0;
+    meta TScalc spectral_truncation(JS,KS,MS,TS) : read_only,hidden;
+    meta Nassigned octet_number(N,4*TScalc) : hidden;
+  }
+}
+
+position offsetBeforeData;
+meta values data_g1complex_packing(
+      section4Length,
+      offsetBeforeData,
+      offsetSection4,
+      unitsFactor,
+      unitsBias,
+      changingPrecision,
+      numberOfCodedValues,
+      bitsPerValue,
+      referenceValue,
+      binaryScaleFactor,
+      decimalScaleFactor,
+      optimizeScaleFactor,
+
+      GRIBEXShBugPresent,
+      ieeeFloats,
+
+      laplacianOperatorIsSet,
+      laplacianOperator,
+      subSetJ,
+      subSetK,
+      subSetM,
+      pentagonalResolutionParameterJ,
+      pentagonalResolutionParameterK,
+      pentagonalResolutionParameterM,
+
+      halfByte,
+      N,packingType,spectral_ieee,precision
+ ) : dump;
+
+meta data.packedValues data_sh_packed(
+      section4Length,
+      offsetBeforeData,
+      offsetSection4,
+
+      unitsFactor,
+      unitsBias,
+      changingPrecision,
+      numberOfCodedValues,
+      bitsPerValue,
+      referenceValue,
+      binaryScaleFactor,
+      decimalScaleFactor,
+      optimizeScaleFactor,
+
+      GRIBEXShBugPresent,
+      ieeeFloats,
+
+      laplacianOperatorIsSet,
+      laplacianOperator,
+      subSetJ,
+      subSetK,
+      subSetM,
+
+      pentagonalResolutionParameterJ,
+      pentagonalResolutionParameterK,
+      pentagonalResolutionParameterM
+ ) : read_only;
+
+meta data.unpackedValues data_sh_unpacked(
+      section4Length,
+      offsetBeforeData,
+      offsetSection4,
+
+      unitsFactor,
+      unitsBias,
+      changingPrecision,
+      numberOfCodedValues,
+      bitsPerValue,
+      referenceValue,
+      binaryScaleFactor,
+      decimalScaleFactor,
+      optimizeScaleFactor,
+
+      GRIBEXShBugPresent,
+      ieeeFloats,
+
+      laplacianOperatorIsSet,
+      laplacianOperator,
+      subSetJ,
+      subSetK,
+      subSetM,
+
+      pentagonalResolutionParameterJ,
+      pentagonalResolutionParameterK,
+      pentagonalResolutionParameterM
+ ) : read_only;
+
+meta packingError simple_packing_error(bitsPerValue,binaryScaleFactor,decimalScaleFactor,referenceValue,ibm) : no_copy;
+meta unpackedError simple_packing_error(zero,binaryScaleFactor,decimalScaleFactor,referenceValue,ibm) : no_copy;
+
+# nearest sh(values,radius,J,K,M);
+
+meta numberOfCodedValues g1number_of_coded_values_sh_complex(bitsPerValue,offsetBeforeData,offsetAfterData,halfByte,numberOfValues,subSetJ,subSetK,subSetM) : dump;
+
+template statistics "common/statistics_spectral.def";

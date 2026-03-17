@@ -1,0 +1,55 @@
+Metadata-Version: 2.4
+Name: pillow-avif-plugin
+Version: 1.5.5
+Summary: A pillow plugin that adds avif support via libavif
+Home-page: https://github.com/fdintino/pillow-avif-plugin/
+Download-URL: https://github.com/fdintino/pillow-avif-plugin/releases
+Author: Frankie Dintino
+Author-email: fdintino@theatlantic.com
+License: MIT License
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: C
+Classifier: Programming Language :: C++
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Multimedia :: Graphics
+Classifier: Topic :: Multimedia :: Graphics :: Graphics Conversion
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Provides-Extra: tests
+Requires-Dist: pytest; extra == "tests"
+Requires-Dist: packaging; extra == "tests"
+Requires-Dist: pytest-cov; extra == "tests"
+Requires-Dist: test-image-results; extra == "tests"
+Requires-Dist: pillow; extra == "tests"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: download-url
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: summary
+
+# pillow-avif-plugin
+
+This is a plugin that adds support for AVIF files until official support has been added (see [this pull request](https://github.com/python-pillow/Pillow/pull/5201)).
+
+To register this plugin with pillow you will need to add `import pillow_avif` somewhere in your application.

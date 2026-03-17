@@ -1,0 +1,93 @@
+Metadata-Version: 2.4
+Name: pygit2
+Version: 1.19.1
+Summary: Python bindings for libgit2.
+Home-page: https://github.com/libgit2/pygit2
+Maintainer: J. David Ibáñez
+Maintainer-email: jdavid.ibp@gmail.com
+License: GPLv2 with linking exception
+Project-URL: Documentation, https://www.pygit2.org/
+Project-URL: Changelog, https://github.com/libgit2/pygit2/blob/master/CHANGELOG.md
+Project-URL: Funding, https://github.com/sponsors/jdavid
+Keywords: git
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Topic :: Software Development :: Version Control
+Classifier: Typing :: Typed
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: COPYING
+License-File: AUTHORS.md
+Requires-Dist: cffi>=2.0
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: maintainer-email
+Dynamic: project-url
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# pygit2 - libgit2 bindings in Python
+
+Bindings to the libgit2 shared library, implements Git plumbing.
+Supports Python 3.11 to 3.14 and PyPy3 7.3+
+
+[![test-ci-badge][test-ci-badge]][test-ci-link]
+[![deploy-ci-badge][deploy-ci-badge]][deploy-ci-link]
+
+[deploy-ci-badge]: https://github.com/libgit2/pygit2/actions/workflows/wheels.yml/badge.svg
+[deploy-ci-link]: https://github.com/libgit2/pygit2/actions/workflows/wheels.yml
+[test-ci-badge]: https://github.com/libgit2/pygit2/actions/workflows/tests.yml/badge.svg
+[test-ci-link]: https://github.com/libgit2/pygit2/actions/workflows/tests.yml
+
+## Links
+
+- Documentation - <https://www.pygit2.org/>
+- Install - <https://www.pygit2.org/install.html>
+- Download - <https://pypi.org/project/pygit2/>
+- Source code and issue tracker - <https://github.com/libgit2/pygit2>
+- Changelog - <https://github.com/libgit2/pygit2/blob/master/CHANGELOG.md>
+- Authors - <https://github.com/libgit2/pygit2/blob/master/AUTHORS.md>
+
+## Sponsors
+
+Add your name and link here, [become a
+sponsor](https://github.com/sponsors/jdavid).
+
+## License: GPLv2 with linking exception
+
+This program is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License, version 2, as
+published by the Free Software Foundation.
+
+In addition to the permissions in the GNU General Public License, the
+authors give you unlimited permission to link the compiled version of
+this file into combinations with other programs, and to distribute those
+combinations without any restriction coming from the use of this file.
+(The General Public License restrictions do apply in other respects; for
+example, they cover modification of the file, and distribution when not
+linked into a combined executable.)
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program; see the file COPYING. If not, write to the Free
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.

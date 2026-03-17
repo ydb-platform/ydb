@@ -1,0 +1,31 @@
+GPX.py
+Copyright 2010-2012 Tomo Krajina
+
+This product includes software developed by
+Tomo Krajina (https://tkrajina.blogspot.com/).
+
+===============================================================================
+
+Dilution of precision stuff based on Son "Sean" Pham's fork (https://github.com/famanson)
+
+===============================================================================
+
+Time and geo bounds methods based on Yakov Istomin fork (https://github.com/Valerich)
+
+===============================================================================
+
+Lxml library based on Isaev Igor fork (https://github.com/itoldya)
+
+===============================================================================
+
+Python3 compatibility from Robert Smallshire  (https://github.com/rob-smallshire)
+
+===============================================================================
+
+__repr__, pep8, better docs, timedelta fix from Bryce Jasmer (https://github.com/bj1)
+
+===============================================================================
+
+Better docs by George Titsworth (https://github.com/titsworth)
+
+===============================================================================

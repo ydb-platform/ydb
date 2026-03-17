@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package yandex.cloud.video.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/video/v1;video";
+option java_package = "yandex.cloud.api.video.v1";
+
+// Entity representing the incoming video signal settings.
+message StreamLine {
+  reserved 4;
+
+  // Reserved for future use.
+  reserved 5 to 99, 102 to 199, 201 to 999, 1001, 1004 to 1999;
+
+  // ID of the line.
+  string id = 1;
+
+  // ID of the channel to which this stream line belongs.
+  string channel_id = 2;
+
+  // Title of the stream line.
+  string title = 3;
+
+  // Specifies the input type and settings for the video signal source.
+  oneof input_type {
+    // Real-Time Messaging Protocol (RTMP) push input type.
+    RTMPPushInput rtmp_push = 1000;
+
+    // Real-Time Messaging Protocol (RTMP) pull input type.
+    RTMPPullInput rtmp_pull = 1002;
+
+    // Secure Reliable Transport (SRT) pull input type.
+    SRTPullInput srt_pull = 1003;
+  }
+
+  // Specifies the control type of the stream line.
+  oneof line_type {
+    // Manual stream control.
+    ManualLine manual_line = 2000;
+
+    // Automatic stream control.
+    AutoLine auto_line = 2001;
+  }
+
+  // Timestamp when the stream line was initially created in the system.
+  google.protobuf.Timestamp created_at = 100;
+
+  // Timestamp of the last modification to the stream line or its metadata.
+  google.protobuf.Timestamp updated_at = 101;
+
+  // Custom user-defined labels as `key:value` pairs.
+  // Maximum 64 labels per stream line.
+  // Labels can be used for organization, filtering, and metadata purposes.
+  map<string, string> labels = 200;
+}
+
+// Represents the stream key used for pushing video streams.
+message PushStreamKey {
+  // The unique stream key.
+  string key = 1;
+}
+
+// Settings for an RTMP (Real-Time Messaging Protocol) push input.
+// Used when the video stream is pushed to an RTMP server.
+// @see https://en.wikipedia.org/wiki/Real-Time_Messaging_Protocol
+message RTMPPushInput {
+  // RTMP server url.
+  string url = 1;
+}
+
+// Settings for an RTMP pull input.
+// Used when the service pulls the video stream from an RTMP source.
+// @see https://en.wikipedia.org/wiki/Real-Time_Messaging_Protocol
+message RTMPPullInput {
+  // RTMP url for receiving video signal.
+  string url = 1;
+}
+
+// Settings for an SRT pull input.
+// Used when the service pulls the video stream from an SRT source.
+// @see https://en.wikipedia.org/wiki/Secure_Reliable_Transport
+message SRTPullInput {
+    // SRT url for receiving video signal.
+    string url = 1;
+}
+
+// Represents a manual line type where the stream control is handled manually.
+// This means that stream start/stop actions are performed by the user.
+message ManualLine {}
+
+// Represents an automatic line type where the stream control is handled automatically.
+message AutoLine {
+  // The status of the automatic line.
+  AutoLineStatus status = 1;
+
+  // Enum representing the status of an automatic stream line.
+  // Indicates whether the automatic line is active or deactivated.
+  enum AutoLineStatus {
+    // Auto line status unspecified.
+    AUTO_LINE_STATUS_UNSPECIFIED = 0;
+
+    // The automatic line is deactivated and not currently active.
+    DEACTIVATED = 1;
+
+    // The automatic line is active and operational.
+    ACTIVE = 2;
+  }
+}

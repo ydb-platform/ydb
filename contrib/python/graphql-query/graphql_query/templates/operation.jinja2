@@ -1,0 +1,14 @@
+{{ type }}{% if name is not none %} {{ name }}{% endif %}{% if variables|length > 0 %}(
+{%- for variable in variables %}
+  {{ variable }}
+{%- endfor %}
+){% endif %} {
+{%- for query in queries %}
+  {{ query }}
+{% endfor -%}
+}{% if fragments|length > 0 %}
+{%- for fragment in fragments %}
+
+{{ fragment }}
+{%- endfor -%}
+{% endif %}

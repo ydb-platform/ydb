@@ -1,0 +1,2 @@
+[console_scripts]
+papermill = papermill.__main__:papermill

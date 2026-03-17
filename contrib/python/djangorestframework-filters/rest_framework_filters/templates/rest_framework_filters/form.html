@@ -1,0 +1,17 @@
+{% load rest_framework_filters %}
+{% load i18n %}
+
+<h2>{% trans "Field filters" %}</h2>
+<form class="form" action="" method="get">
+    {{ filter.form.as_p }}
+
+    {% for related_name, filterset in filter.related_filtersets.items %}
+    <fieldset>
+        <legend>{{ filter|label:related_name }}</legend>
+
+        {{ filterset.form.as_p }}
+    </fieldset>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-primary">{% trans "Submit" %}</button>
+</form>

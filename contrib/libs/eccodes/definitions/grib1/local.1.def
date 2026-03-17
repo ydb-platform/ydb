@@ -1,0 +1,5 @@
+# (C) Copyright 2005- ECMWF.
+
+# Definition for BOM , same as ECWF
+unsigned[1] localDefinitionNumber = 1 : dump;
+template  localDefinition  "grib1/local.98.[localDefinitionNumber:l].def";

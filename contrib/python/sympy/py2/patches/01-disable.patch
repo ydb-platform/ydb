@@ -1,0 +1,27 @@
+--- contrib/python/sympy/py2/sympy/interactive/printing.py	(index)
++++ contrib/python/sympy/py2/sympy/interactive/printing.py	(working tree)
+@@ -6,7 +6,11 @@ import sys
+ from distutils.version import LooseVersion as V
+ from io import BytesIO
+ 
+-from sympy import latex as default_latex
++try:
++    # TODO: Пока экранирую
++    from sympy import latex as default_latex
++except:
++    default_latex = None
+ from sympy import preview
+ from sympy.core.compatibility import integer_types
+ from sympy.utilities.misc import debug
+--- contrib/python/sympy/py2/sympy/__init__.py	(index)
++++ contrib/python/sympy/py2/sympy/__init__.py	(working tree)
+@@ -80,7 +80,8 @@ from .algebras import *
+ # from combinatorics import *
+ # This module is slow to import:
+ #from physics import units
+-from .plotting import plot, textplot, plot_backends, plot_implicit, plot_parametric
++# INFO: plotting не был перенес, т.к. требует pyglet
++#from .plotting import plot, textplot, plot_backends, plot_implicit, plot_parametric
+ from .printing import *
+ from .interactive import init_session, init_printing
+ 

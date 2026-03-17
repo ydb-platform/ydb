@@ -1,0 +1,279 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.idp;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/organizationmanager/v1/idp/synchronization_settings.proto";
+import "yandex/cloud/validation.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/idp;idp";
+option java_package = "yandex.cloud.api.organizationmanager.v1.idp";
+
+// A set of methods for managing synchronization sessions.
+service SynchronizationSessionService {
+  // Opens a new synchronization session.
+  rpc OpenSession(OpenSessionRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/synchronization-sessions:open" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "OpenSessionMetadata"
+      response: "OpenSessionResponse"
+    };
+  }
+
+  // Closes a synchronization session.
+  rpc CloseSession(CloseSessionRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/synchronization-sessions/{session_id}:close" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CloseSessionMetadata"
+      response: "SynchronizationSession"
+    };
+  }
+
+  // Reports progress for a synchronization session.
+  rpc ReportSessionProgress(ReportSessionProgressRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/synchronization-sessions/{session_id}:reportProgress" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "ReportSessionProgressMetadata"
+      response: "SynchronizationSession"
+    };
+  }
+
+  // Sends a heartbeat for a synchronization session.
+  rpc Heartbeat(HeartbeatRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/idp/synchronization-sessions/{session_id}:heartbeat" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "HeartbeatMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Returns the specified synchronization session.
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/idp/synchronization-sessions/{session_id}" };
+  }
+
+  // Lists synchronization sessions for a subject container.
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/idp/synchronization-sessions" };
+  }
+}
+
+// Request to open a synchronization session.
+message OpenSessionRequest {
+  // ID of the subject container.
+  string subject_container_id = 1 [(required) = true, (length) = "<=50"];
+  // ID of the agent opening the session.
+  string agent_id = 2 [(required) = true, (length) = "<=50"];
+  // Type of synchronization session.
+  SessionType session_type = 3 [(required) = true];
+}
+
+// Synchronization session information.
+message SynchronizationSession {
+  // Unique identifier of the session.
+  string session_id = 1;
+  // ID of the agent managing the session.
+  string agent_id = 2;
+  // Timestamp when the session was created.
+  google.protobuf.Timestamp created_at = 3;
+  // Timestamp when the session expires.
+  google.protobuf.Timestamp expires_at = 4;
+  // Timestamp when the session was closed.
+  google.protobuf.Timestamp closed_at = 5;
+  // Synchronization mode.
+  SyncMode sync_mode = 6;
+  // Current status of the session.
+  SessionStatus status = 7;
+  // List of progress entries.
+  repeated ProgressEntry progress_entries = 8;
+  // Reason for session failure, if any.
+  string fail_reason = 9;
+  // Type of synchronization session.
+  SessionType session_type = 10;
+}
+
+// Response message for [SynchronizationSessionService.OpenSession].
+message OpenSessionResponse {
+  // Result of opening the session.
+  OpenSessionResult result = 1;
+  // Session information or next session time.
+  oneof session_info {
+    // Opened session information.
+    SynchronizationSession opened_session = 2;
+    // Timestamp for the next session if too early.
+    google.protobuf.Timestamp next_session_at = 3;
+  }
+  // Replication token for the session.
+  string replication_token = 4;
+  // Synchronization settings for the session.
+  SynchronizationSettings synchronization_settings = 5;
+}
+
+// Result of opening a synchronization session.
+enum OpenSessionResult {
+  // The result is not specified.
+  OPEN_SESSION_RESULT_UNSPECIFIED = 0;
+  // Session opened successfully.
+  SUCCESS = 1;
+  // A session already exists.
+  OPENED_SESSION_EXISTS = 2;
+  // Too early to open a new session.
+  TOO_EARLY = 3;
+}
+
+// Metadata for the [SynchronizationSessionService.OpenSession] operation.
+message OpenSessionMetadata {
+  // ID of the session.
+  string session_id = 1;
+}
+
+// Request to get a synchronization session.
+message GetSessionRequest {
+  // ID of the session to return.
+  string session_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Response message for [SynchronizationSessionService.GetSession].
+message GetSessionResponse { 
+  // Synchronization session information.
+  SynchronizationSession session = 1; 
+}
+
+// Request to report session progress.
+message ReportSessionProgressRequest {
+  // ID of the session.
+  string session_id = 1 [(required) = true, (length) = "<=50"];
+  // List of progress entries.
+  repeated ProgressEntry progress_entries = 2 [(size) = "1-3"];
+}
+
+// Metadata for the [SynchronizationSessionService.ReportSessionProgress] operation.
+message ReportSessionProgressMetadata {
+  // ID of the session.
+  string session_id = 1;
+}
+
+// Progress entry for synchronization.
+message ProgressEntry {
+  // Type of object being synchronized.
+  RelatedObjectType object_type = 1 [(required) = true];
+  // List of change information.
+  repeated ChangeInfo change_info = 2 [(size) = "1-6"];
+}
+
+// Information about changes during synchronization.
+message ChangeInfo {
+  // Type of change.
+  ChangeType change_type = 1;
+  // Number of successful changes.
+  int64 successful = 2;
+  // Number of failed changes.
+  int64 failed = 3;
+}
+
+// Type of change during synchronization.
+enum ChangeType {
+  // The change type is not specified.
+  CHANGE_TYPE_UNSPECIFIED = 0;
+  // Create operation.
+  CREATE = 1;
+  // Update operation.
+  UPDATE = 2;
+  // Delete operation.
+  DELETE = 3;
+  // Activate operation.
+  ACTIVATE = 4;
+  // Deactivate operation.
+  DEACTIVATE = 5;
+  // Password hash update operation.
+  PASSWORD_HASH_UPDATE = 6;
+}
+
+// Type of object related to synchronization.
+enum RelatedObjectType {
+  // The object type is not specified.
+  RELATED_OBJECT_TYPE_UNSPECIFIED = 0;
+  // User object.
+  USER = 1;
+  // Group object.
+  GROUP = 2;
+  // Membership object.
+  MEMBERSHIP = 3;
+}
+
+// Synchronization mode.
+enum SyncMode {
+  // The sync mode is not specified.
+  SYNC_MODE_UNSPECIFIED = 0;
+  // Full synchronization mode.
+  FULL_SYNC = 1;
+  // Delta synchronization mode.
+  DELTA = 2;
+}
+
+// Status of a synchronization session.
+enum SessionStatus {
+  // The status is not specified.
+  SESSION_STATUS_UNSPECIFIED = 0;
+  // Session is opened.
+  OPENED = 1;
+  // Session is pending.
+  PENDING = 2;
+  // Session is completed.
+  COMPLETED = 3;
+  // Session has failed.
+  FAILED = 4;
+  // Session has expired.
+  EXPIRED = 5;
+}
+
+// Request to list synchronization sessions.
+message ListSessionsRequest {
+  // ID of the subject container.
+  string subject_container_id = 1 [(required) = true, (length) = "<=50"];
+  // The maximum number of results per page to return.
+  int64 page_size = 2 [(value) = "0-1000"];
+  // Page token for pagination.
+  string page_token = 3 [(length) = "<=2000"];
+  // A filter expression that filters resources listed in the response.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+// Response message for [SynchronizationSessionService.ListSessions].
+message ListSessionsResponse {
+  // List of synchronization sessions.
+  repeated SynchronizationSession sessions = 1;
+  // Token for getting the next page of the list.
+  string next_page_token = 2;
+}
+
+// Request to close a synchronization session.
+message CloseSessionRequest {
+  // ID of the session to close.
+  string session_id = 1 [(required) = true, (length) = "<=50"];
+  // Whether the session failed.
+  bool failed = 2;
+  // Reason for session failure, if any.
+  string fail_reason = 3 [(length) = "<=256"];
+}
+
+// Metadata for the [SynchronizationSessionService.CloseSession] operation.
+message CloseSessionMetadata {
+  // ID of the session.
+  string session_id = 1;
+}
+
+// Request to send a heartbeat for a synchronization session.
+message HeartbeatRequest {
+  // ID of the session.
+  string session_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// Metadata for the [SynchronizationSessionService.Heartbeat] operation.
+message HeartbeatMetadata {
+  // ID of the session.
+  string session_id = 1;
+}

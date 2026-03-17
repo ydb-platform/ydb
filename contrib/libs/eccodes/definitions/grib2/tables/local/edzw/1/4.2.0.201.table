@@ -1,0 +1,13 @@
+#Discipline 0: Meteorological products
+#Category 201: Derived categorical properties - storm cells
+#
+# Notes:
+# (1) Only a subset of the product definition tamplates provides specifying the units for derived categorical products.
+#     Currently, these are: 4.40180 and 4.40181 (see Code table 4.0).
+#
+#0 0 Reserved
+1 1 Storm cell severity (defined by template, see Note 1)
+2 2 Hail category (defined by template, see Note 1)
+3 3 Wind category (defined by template, see Note 1)
+4 4 Heavy-rain category (defined by template, see Note 1)
+255 255 Missing

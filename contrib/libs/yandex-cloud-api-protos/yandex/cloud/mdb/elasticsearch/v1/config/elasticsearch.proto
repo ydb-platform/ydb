@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.elasticsearch.v1.config;
+
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/elasticsearch/v1/config;elasticsearch";
+option java_package = "yandex.cloud.api.mdb.elasticsearch.v1.config";
+
+// Elasticsearch 7.x supported configuration options are listed here.
+//
+// Detailed description for each set of options is available in [Elasticsearch documentation](https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html).
+//
+// Any options that are not listed here are not supported.
+message ElasticsearchConfig7 {
+  reserved 5;
+  // The maximum number of clauses a boolean query can contain.
+  //
+  // The limit is in place to prevent searches from becoming too large and taking up too much CPU and memory.
+  // It affects not only Elasticsearch's `bool` query, but many other queries that are implicitly converted to `bool` query by Elastcsearch.
+  //
+  // Default value: `1024`.
+  //
+  // See in-depth description in [Elasticsearch documentation](https://www.elastic.co/guide/en/elasticsearch/reference/current/search-settings.html).
+  google.protobuf.Int64Value max_clause_count = 3;
+
+  // The maximum percentage or absolute value (10%, 512mb) of heap space that is allocated to field data cache.
+  //
+  // All the field values that are placed in this cache, get loaded to memory in order to provide fast document based access to those values.
+  // Building the field data cache for a field can be an expensive operations, so its recommended to have enough memory for this cache, and to keep it loaded.
+  //
+  // Default value: unbounded.
+  //
+  // See in-depth description in [Elasticsearch documentation](https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-fielddata.html).
+  string fielddata_cache_size = 4;
+
+  // Remote hosts for reindex have to be explicitly allowed in elasticsearch.yml using the reindex.remote.whitelist property.
+  // It can be set to a comma delimited list of allowed remote host and port combinations.
+  // Scheme is ignored, only the host and port are used.
+  string reindex_remote_whitelist = 6;
+
+  // List of paths to PEM encoded certificate files that should be trusted.
+  //
+  // See in-depth description in [Elasticsearch documentation](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-reindex.html#reindex-ssl)
+  string reindex_ssl_ca_path = 7;
+}
+
+// Elasticsearch 7.x data node configuration.
+message ElasticsearchConfigSet7 {
+  // Effective settings for an Elasticsearch cluster (a combination of settings defined in [user_config] and [default_config]).
+  ElasticsearchConfig7 effective_config = 1 [(required) = true];
+
+  // User-defined settings for an Elasticsearch cluster.
+  ElasticsearchConfig7 user_config = 2;
+
+  // Default settings for an Elasticsearch cluster.
+  ElasticsearchConfig7 default_config = 3;
+}

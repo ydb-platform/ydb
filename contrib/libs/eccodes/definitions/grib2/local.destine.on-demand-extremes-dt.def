@@ -1,0 +1,6 @@
+# DestinE MARS On-Demand ExtremesDT keywords
+
+# Default is lat,long 0.0,0.0 to 8 chars precision from geolib
+
+ascii[8] georef = "s0000000" : dump ;
+alias mars.georef = georef;

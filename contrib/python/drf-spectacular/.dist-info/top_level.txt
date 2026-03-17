@@ -1,0 +1,1 @@
+drf_spectacular

@@ -1,0 +1,4 @@
+#!/bin/sh
+
+echo "MidnightBSD 1.2"
+

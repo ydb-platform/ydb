@@ -1,0 +1,13 @@
+# Product discipline 2 - Land surface products, parameter category 6: urban areas
+0 0 Urban cover (Proportion)
+1 1 Road cover (Proportion)
+2 2 Building cover (Proportion)
+3 3 Building height (m)
+4 4 Vertical-to-horizontal area fraction (m2 m-2)
+5 5 Standard deviation of building height (m)
+6 6 Distance downward from roof surface (m)
+7 7 Distance inward from outer wall surface (m)
+8 8 Distance downward from road surface (m)
+# 9-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

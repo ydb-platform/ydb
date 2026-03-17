@@ -1,0 +1,35 @@
+From 69621c67fb29dedd9ece4a7bdbf50380fbe4c5ee Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20G=C3=B3rny?= <mgorny@gentoo.org>
+Date: Thu, 3 Aug 2023 06:51:45 +0200
+Subject: [PATCH] Copy `debuglevel` and `_http_vsn` attrs into response classes
+
+Copy the `debuglevel` and `_http_vsn` attributes from base connection
+class into response classes, in order to fix compatibility with
+Python 3.12.  For reasons I don't comprehend, these end up being called
+on the class rather than instance, so regular proxying logic does not
+work.
+
+Fixes #707
+---
+ vcr/stubs/__init__.py | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/vcr/stubs/__init__.py b/vcr/stubs/__init__.py
+index dafaec71..4d4bb39d 100644
+--- a/vcr/stubs/__init__.py
++++ b/vcr/stubs/__init__.py
+@@ -389,6 +389,8 @@ class VCRHTTPConnection(VCRConnection):
+ 
+     _baseclass = HTTPConnection
+     _protocol = "http"
++    debuglevel = _baseclass.debuglevel
++    _http_vsn = _baseclass._http_vsn
+ 
+ 
+ class VCRHTTPSConnection(VCRConnection):
+@@ -397,3 +399,5 @@ class VCRHTTPSConnection(VCRConnection):
+     _baseclass = HTTPSConnection
+     _protocol = "https"
+     is_verified = True
++    debuglevel = _baseclass.debuglevel
++    _http_vsn = _baseclass._http_vsn

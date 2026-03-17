@@ -1,0 +1,11 @@
+--- contrib/python/django/django-3/django/core/cache/backends/memcached.py	(index)
++++ contrib/python/django/django-3/django/core/cache/backends/memcached.py	(working tree)
+@@ -199,7 +199,7 @@ class MemcachedCache(BaseMemcachedCache):
+         # Call _deletetouch() without the NOT_FOUND in expected results.
+         key = self.make_key(key, version=version)
+         self.validate_key(key)
+-        return bool(self._cache._deletetouch([b'DELETED'], 'delete', key))
++        return bool(self._cache.delete(key))
+ 
+ 
+ class PyLibMCCache(BaseMemcachedCache):

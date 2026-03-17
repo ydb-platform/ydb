@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-docutils{% endblock %}
+{% block content-class %}{% endblock %}
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../../../">{% trans "Home" %}</a></li>
+        <li><a href="../../">Documentation</a></li>
+        <li><a href="../">Views</a></li>
+        <li>{{ name }}</li>
+    </ul>
+{% endblock %}
+{% block title %}View: {{ name }}{% endblock %}
+
+{% block content %}
+    <h1>{{ name }}</h1>
+    <div class="g-d-c grp-rte">
+        <div class="grp-module">
+            <h2>{{ summary|striptags }}</h2>
+            <div class="grp-row" style="border: 0">
+                <p>{{ body }}</p>
+            </div>
+            {% if meta.Context %}
+                <div class="grp-module">
+                    <h3>Context:</h3>
+                    <div class="grp-row"><p>{{ meta.Context }}</p></div>
+                </div>
+            {% endif %}
+            {% if meta.Templates %}
+                <div class="grp-module">
+                    <h3>Templates:</h3>
+                    <div class="grp-row"><p>{{ meta.Templates }}</p></div>
+                </div>
+            {% endif %}
+        </div>
+        <a href="../" class="grp-back-link grp-icon-text">Back to Views Documentation</a>
+    </div>
+{% endblock %}

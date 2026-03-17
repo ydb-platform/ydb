@@ -1,0 +1,43 @@
+--- contrib/python/requests-toolbelt/py3/tests/__init__.py	(index)
++++ contrib/python/requests-toolbelt/py3/tests/__init__.py	(working tree)
+@@ -2,2 +2,3 @@
+ import betamax
++import yatest.common as yc
+ 
+@@ -8,1 +9,1 @@
+-        cassette_library_dir='tests/cassettes')
++        cassette_library_dir=yc.source_path("contrib/python/requests-toolbelt/py3/tests/cassettes/"))
+--- contrib/python/requests-toolbelt/py3/tests/test_downloadutils.py	(index)
++++ contrib/python/requests-toolbelt/py3/tests/test_downloadutils.py	(working tree)
+@@ -40,9 +40,10 @@ def test_get_download_file_path_directory():
+     filename = 'github3.py-0.7.1-py2.py3-none-any.whl'
+     with recorder.use_cassette('stream_response_to_file', **preserve_bytes):
+         r = s.get(url, headers={'Accept': 'application/octet-stream'})
+-        path = stream.get_download_file_path(r, tempfile.tempdir)
++        tempdir = os.path.abspath(tempfile.gettempdir())
++        path = stream.get_download_file_path(r, tempdir)
+         r.close()
+-        assert path == os.path.join(tempfile.tempdir, filename)
++        assert path == os.path.join(tempdir, filename)
+ 
+ 
+ def test_get_download_file_path_specific_file():
+--- contrib/python/requests-toolbelt/py3/tests/test_multipart_encoder.py	(index)
++++ contrib/python/requests-toolbelt/py3/tests/test_multipart_encoder.py	(working tree)
+@@ -14,2 +14,4 @@ import requests
+ preserve_bytes = {'preserve_exact_body_bytes': True}
++import yatest.common as yc
++SETUP_FILE = yc.source_path("contrib/python/requests-toolbelt/py3/tests/data/setup.py")
+ 
+@@ -193,1 +195,1 @@ class TestMultipartEncoder(unittest.TestCase):
+-        with open('setup.py', 'rb') as fd:
++        with open(SETUP_FILE, 'rb') as fd:
+@@ -209,1 +211,1 @@ class TestMultipartEncoder(unittest.TestCase):
+-        with open('setup.py', 'rb') as fd:
++        with open(SETUP_FILE, 'rb') as fd:
+@@ -216,1 +218,1 @@ class TestMultipartEncoder(unittest.TestCase):
+-        with open('setup.py', 'rb') as fd:
++        with open(SETUP_FILE, 'rb') as fd:
+@@ -242,1 +244,1 @@ class TestMultipartEncoder(unittest.TestCase):
+-                'test', open('tests/test_multipart_encoder.py', 'rb')
++                'test', open(SETUP_FILE, 'rb')

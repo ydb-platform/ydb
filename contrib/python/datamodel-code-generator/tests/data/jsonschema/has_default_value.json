@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Person",
+  "type": "object",
+  "definitions": {
+    "teamType": {
+      "description": "Person team",
+      "type": "string",
+      "enum": [
+        "Department",
+        "Division",
+        "BusinessUnit",
+        "Organization"
+      ],
+      "default": "Department"
+    },
+    "ID": {
+      "type": "string",
+      "default": "abc"
+    },
+    "Pet": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "default": {
+        "name": "ken"
+      }
+    },
+    "Family": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ID"
+      },
+      "default": [
+        "abc",
+        "efg"
+      ]
+    },
+    "FamilyPets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Pet"
+      },
+      "default": [
+        "taro",
+        "shiro"
+      ]
+    }
+  },
+  "properties": {
+    "id": {
+      "$ref": "#/definitions/ID"
+    },
+    "user": {
+      "$ref": "#/definitions/Pet"
+    },
+    "firstName": {
+      "type": "string",
+      "description": "The person's first name."
+    },
+    "team": {
+      "$ref": "#/definitions/teamType"
+    },
+    "anotherTeam": {
+      "$ref": "#/definitions/teamType",
+      "default": "Department"
+    },
+    "Family": {
+      "$ref": "#/definitions/Family"
+    },
+    "FamilyPets": {
+      "$ref": "#/definitions/FamilyPets"
+    }
+  }
+}

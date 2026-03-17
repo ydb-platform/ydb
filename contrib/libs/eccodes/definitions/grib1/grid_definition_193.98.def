@@ -1,0 +1,94 @@
+# (C) Copyright 2005- ECMWF.
+
+# GRID DEFINITION quasi-regular latitude/longitude grid
+# grib 1 -> 2
+constant gridDefinitionTemplateNumber = 0;
+
+unsigned[2] NRj : can_be_missing,dump;
+
+unsigned[2] numberOfPointsAlongAMeridian : can_be_missing,dump;
+alias Nj  = numberOfPointsAlongAMeridian;
+
+# Latitudes and Longitudes of the first and the last points
+# Resolution and component flags
+include "grib1/grid_first_last_resandcomp.def";
+
+unsigned[2] iDirectionIncrement : can_be_missing;
+unsigned[2] jDirectionIncrement : can_be_missing;
+alias Dj = jDirectionIncrement;
+alias Di = iDirectionIncrement;
+
+# for change_scanning_direction
+alias yFirst=latitudeOfFirstGridPointInDegrees;
+alias yLast=latitudeOfLastGridPointInDegrees;
+alias xFirst=longitudeOfFirstGridPointInDegrees;
+alias xLast=longitudeOfLastGridPointInDegrees;
+
+include "grib1/scanning_mode.def";
+
+#  Lar1 - latitude of first grid point of reference domain
+signed[3] Lar1 :  edition_specific;
+meta geography.Lar1InDegrees scale(latitudeOfFirstGridPointOfReferenceDomain,oneConstant,grib1divider,truncateDegrees) :dump;
+alias La1 = Lar1;
+
+#  Lor1 - longitude of first grid point of reference domain
+signed[3] Lor1  : edition_specific;
+meta geography.Lor1InDegrees scale(longitudeOfFirstGridPointOfReferenceDomain,oneConstant,grib1divider,truncateDegrees) : dump;
+alias Lo1 = Lor1;
+
+#  Lar2 - latitude of last grid point of reference domain
+signed[3] Lar2 :  edition_specific;
+meta geography.Lar2InDegrees scale(latitudeOfLastGridPointOfReferenceDomain,oneConstant,grib1divider,truncateDegrees) : dump;
+alias La2 = Lar2;
+
+#  Lor2 - longitude of last grid point of reference domain
+signed[3] Lor2 ;
+meta geography.Lor2InDegrees scale(longitudeOfLastGridPointOfReferenceDomain,oneConstant,grib1divider,truncateDegrees) : dump;
+alias Lo2 = Lor2;
+
+meta  geography.jDirectionIncrementInDegrees latlon_increment(ijDirectionIncrementGiven,jDirectionIncrement,
+  jScansPositively,
+  latitudeOfFirstGridPointInDegrees,latitudeOfLastGridPointInDegrees,
+  numberOfPointsAlongAMeridian,oneConstant,grib1divider,0) : can_be_missing,dump;
+#transient DjInMicrodegrees = times(jDirectionIncrement,thousand);
+
+meta  geography.iDirectionIncrementInDegrees latlon_increment(ijDirectionIncrementGiven,iDirectionIncrement,
+  iScansPositively,
+  longitudeOfFirstGridPointInDegrees,longitudeOfLastGridPointInDegrees,
+  Ni,oneConstant,grib1divider,1) : can_be_missing,dump;
+#meta DiInMicrodegrees times(iDirectionIncrement,thousand);
+
+alias latitudeFirstInDegrees = latitudeOfFirstGridPointInDegrees;
+alias longitudeFirstInDegrees = longitudeOfFirstGridPointInDegrees;
+
+alias latitudeLastInDegrees  = latitudeOfLastGridPointInDegrees;
+alias longitudeLastInDegrees = longitudeOfLastGridPointInDegrees;
+alias DiInDegrees = iDirectionIncrementInDegrees;
+alias DjInDegrees = jDirectionIncrementInDegrees;
+
+meta numberOfDataPoints number_of_points(Ni,Nj,PLPresent,pl) : dump;
+alias numberOfPoints=numberOfDataPoints;
+meta numberOfValues number_of_values(values,bitsPerValue,numberOfDataPoints,bitmapPresent,bitmap,numberOfCodedValues) : dump;
+#alias ls.valuesCount=numberOfValues;
+
+if(missing(Ni)){
+   iterator latlon_reduced(numberOfPoints,missingValue,values,
+      latitudeFirstInDegrees,longitudeFirstInDegrees,
+      latitudeLastInDegrees,loLast,
+      Nj,DjInDegrees,pl);
+   nearest latlon_reduced(values,radius,Nj,pl);
+} else {
+   transient iteratorDisableUnrotate = 0 : hidden; # ECC-808
+   iterator latlon(numberOfPoints,missingValue,values,longitudeFirstInDegrees,iInc,
+         Ni,Nj,iScansNegatively,
+         latitudeFirstInDegrees,DjInDegrees,jScansPositively,jPointsAreConsecutive,
+         isRotatedGrid, angleOfRotation,
+         latitudeOfSouthernPoleInDegrees,longitudeOfSouthernPoleInDegrees);
+   nearest regular(values,radius,Ni,Nj);
+}
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);

@@ -1,0 +1,214 @@
+Metadata-Version: 2.1
+Name: pyHanko
+Version: 0.25.1
+Summary: Tools for stamping and signing PDF files
+Author-email: Matthias Valvekens <dev@mvalvekens.be>
+Maintainer-email: Matthias Valvekens <dev@mvalvekens.be>
+License: MIT
+Project-URL: Homepage, https://github.com/MatthiasValvekens/pyHanko
+Project-URL: Documentation, https://pyhanko.readthedocs.io/
+Project-URL: Changes, https://pyhanko.readthedocs.io/en/latest/changelog.html
+Project-URL: Source Code, https://github.com/MatthiasValvekens/pyHanko
+Project-URL: Issue Tracker, https://github.com/MatthiasValvekens/pyHanko/issues
+Keywords: signature,pdf,pades,digital-signature,pkcs11
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Security :: Cryptography
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: pyhanko/pdf_utils/LICENSE.PyPDF2
+Requires-Dist: asn1crypto >=1.5.1
+Requires-Dist: qrcode >=7.3.1
+Requires-Dist: tzlocal >=4.3
+Requires-Dist: pyhanko-certvalidator <0.27,>=0.26.2
+Requires-Dist: click >=8.1.3
+Requires-Dist: requests >=2.31.0
+Requires-Dist: pyyaml >=6.0
+Requires-Dist: cryptography >=42.0.1
+Provides-Extra: async-http
+Requires-Dist: aiohttp ~=3.9.0 ; extra == 'async-http'
+Provides-Extra: docs
+Requires-Dist: sphinx ; extra == 'docs'
+Requires-Dist: sphinx-rtd-theme ; extra == 'docs'
+Provides-Extra: etsi
+Requires-Dist: xsdata <25.0,>=24.4 ; extra == 'etsi'
+Provides-Extra: extra-pubkey-algs
+Requires-Dist: oscrypto >=1.2.1 ; extra == 'extra-pubkey-algs'
+Provides-Extra: image-support
+Requires-Dist: Pillow >=7.2.0 ; extra == 'image-support'
+Requires-Dist: python-barcode ==0.15.1 ; extra == 'image-support'
+Provides-Extra: live-test
+Requires-Dist: pyHanko[async-http,extra-pubkey-algs,testing-basic,xmp] ; extra == 'live-test'
+Requires-Dist: pytest-aiohttp ~=1.0.4 ; extra == 'live-test'
+Requires-Dist: certomancer-csc-dummy ==0.3.0 ; extra == 'live-test'
+Requires-Dist: certomancer[web-api] ==0.12.* ; extra == 'live-test'
+Requires-Dist: pytest-cov <5.1,>=4.0 ; extra == 'live-test'
+Provides-Extra: mypy
+Requires-Dist: pyHanko[async-http,etsi,extra-pubkey-algs,image-support,opentype,pkcs11,xmp] ; extra == 'mypy'
+Requires-Dist: types-requests ; extra == 'mypy'
+Requires-Dist: types-python-dateutil ; extra == 'mypy'
+Requires-Dist: types-PyYAML ; extra == 'mypy'
+Requires-Dist: types-tzlocal ; extra == 'mypy'
+Provides-Extra: opentype
+Requires-Dist: fonttools >=4.33.3 ; extra == 'opentype'
+Requires-Dist: uharfbuzz <0.40.0,>=0.25.0 ; extra == 'opentype'
+Provides-Extra: pkcs11
+Requires-Dist: python-pkcs11 ~=0.7.0 ; extra == 'pkcs11'
+Provides-Extra: testing
+Requires-Dist: pyHanko[async-http,extra-pubkey-algs,image-support,opentype,pkcs11,testing-basic,xmp] ; extra == 'testing'
+Requires-Dist: pyHanko[etsi] ; extra == 'testing'
+Requires-Dist: pytest-aiohttp ~=1.0.4 ; extra == 'testing'
+Requires-Dist: certomancer-csc-dummy ==0.3.0 ; extra == 'testing'
+Provides-Extra: testing-basic
+Requires-Dist: pytest >=6.1.1 ; extra == 'testing-basic'
+Requires-Dist: requests-mock >=1.8.0 ; extra == 'testing-basic'
+Requires-Dist: freezegun >=1.1.0 ; extra == 'testing-basic'
+Requires-Dist: pytest-asyncio ==0.23.8 ; extra == 'testing-basic'
+Requires-Dist: certomancer ==0.12.* ; extra == 'testing-basic'
+Requires-Dist: pytest-cov <5.1,>=4.0 ; extra == 'testing-basic'
+Requires-Dist: backports.zoneinfo[tzdata] ; (python_version < "3.9") and extra == 'testing-basic'
+Provides-Extra: xmp
+Requires-Dist: defusedxml ~=0.7.1 ; extra == 'xmp'
+
+![pyHanko](docs/images/pyhanko-logo.svg)
+
+![status](https://github.com/MatthiasValvekens/pyHanko/workflows/pytest/badge.svg)
+![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pyHanko)
+![pypi](https://img.shields.io/pypi/v/pyHanko.svg)
+
+
+
+The lack of open-source CLI tooling to handle digitally signing and stamping PDF files was bothering me, so I went ahead and rolled my own.
+
+*Note:* The working title of this project (and former name of the repository on GitHub) was `pdf-stamp`, which might still linger in some references.
+
+*Note:* This project is currently in beta, and not yet production-ready.
+
+### Documentation
+
+The [documentation for pyHanko is hosted on ReadTheDocs](https://pyhanko.readthedocs.io/en/latest/)
+and includes information on CLI usage, library usage, and API reference documentation derived from
+inline docstrings.
+
+### Installing
+
+PyHanko is hosted on [PyPI](https://pypi.org/project/pyHanko/),
+and can be installed using `pip`:
+
+```bash
+pip install 'pyHanko[pkcs11,image-support,opentype,xmp]'
+```
+
+Depending on your shell, you might have to leave off the quotes:
+
+```bash
+pip install pyHanko[pkcs11,image-support,opentype,xmp]
+```
+
+This `pip` invocation includes the optional dependencies required for PKCS#11, image handling and
+OpenType/TrueType support.
+
+PyHanko requires Python 3.8 or later.
+
+### Contributing
+
+Do you have a question about pyHanko?
+[Post it on the discussion forum][discussion-forum]!
+
+This project welcomes community contributions. If there's a feature you'd like
+to have implemented, a bug you want to report, or if you're keen on
+contributing in some other way: that's great! However, please make sure to
+review the [contribution guidelines](CONTRIBUTING.md) before making your
+contribution. When in doubt, [ask for help on the discussion board][discussion-forum].
+
+**Please do not ask for support on the issue tracker.** The issue tracker is for bug
+reports and actionable feature requests. Questions related to pyHanko usage
+and development should be asked in the [discussion forum][discussion-forum] instead.
+
+
+[discussion-forum]: https://github.com/MatthiasValvekens/pyHanko/discussions
+
+
+### Features
+
+The code in this repository functions both as a library and as a command-line tool.
+Here is a short overview of the features.
+Note that not all of these are necessarily exposed through the CLI.
+
+ - Stamping
+    - Simple text-based stamps
+    - QR stamps
+    - Font can be monospaced, or embedded from a TTF/OTF font (requires `[opentype]` optional deps)
+ - Document preparation 
+    - Add empty signature fields to existing PDFs
+    - Add seed values to signature fields, with or without constraints
+    - Manage document metadata
+ - Signing
+    * Option to use async signing API
+    - Signatures can be invisible, or with an appearance based on the stamping tools
+    - LTV-enabled signatures are supported
+        - PAdES baseline profiles B-B, B-T, B-LT and B-LTA are all supported.
+        - Adobe-style revocation info embedding is also supported.
+    - RFC 3161 timestamp server support
+    - Support for multiple signatures (all modifications are executed using incremental updates to 
+      preserve cryptographic integrity)
+    - Supports RSA, DSA, ECDSA and EdDSA
+      - RSA padding modes: PKCS#1 v1.5 and RSASSA-PSS
+      - DSA
+      - ECDSA curves: anything supported by the `cryptography` library, 
+        see [here](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ec/#elliptic-curves).
+      - EdDSA: both Ed25519 and Ed448 are supported (in "pure" mode only, as per RFC 8419)
+    - Built-in support for PDF extensions defined in ISO/TS 32001 and ISO/TS 32002.
+    - PKCS#11 support
+        - Available both from the library and through the CLI
+        - Extra convenience wrapper for Belgian eID cards
+    - "Interrupted signing" mode for ease of integration with remote and/or interactive signing
+      processes.
+ - Signature validation
+    - Cryptographic integrity check
+    - Authentication through X.509 chain of trust validation
+    - LTV validation/sanity check (ad hoc)
+    - Difference analysis on files with multiple signatures and/or incremental 
+      updates made after signing (experimental)
+    - Signature seed value constraint validation
+    - AdES validation (incubating)
+ - Encryption
+    - All encryption methods in PDF 2.0 are supported.
+    - Authenticated encryption via ISO/TS 32003 and 32004.
+    - In addition, we support a number of extra file encryption
+      modes of operation for the public-key security handler that are not
+      explicitly called out in the standard.
+         - RSAES-OAEP (does not appear to be widely supported in PDF tooling)
+         - ephemeral-static ECDH with X9.63 key derivation (supported by Acrobat)
+ - CLI & configuration
+    - YAML-based configuration (optional for most features)
+    - CLI based on `click` 
+        - Available as `pyhanko` (when installed) or `python -m pyhanko` when running from
+          the source directory
+        - Built-in help: run `pyhanko --help` to get started
+
+
+### Some TODOs and known limitations
+
+See the [known issues](https://pyhanko.readthedocs.io/en/latest/known-issues.html)
+page in the documentation.
+
+
+### Acknowledgement
+
+This repository includes code from `PyPDF2` (with both minor and major modifications); the original license has been included [here](pyhanko/pdf_utils/LICENSE.PyPDF2).
+
+
+## License
+
+MIT License, see [LICENSE](LICENSE).

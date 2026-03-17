@@ -1,0 +1,22 @@
+# -*- text -*-
+#
+# Copyright (c) 2009-2010 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2010-2011 Los Alamos National Security, LLC.
+#                         All rights reserved.
+#
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI's common shmem support.
+#
+[sys call fail]
+A system call failed during shared memory initialization that should
+not have.  It is likely that your MPI job will now either abort or
+experience performance degradation.
+
+  Local host:  %s
+  System call: %s %s
+  Error:       %s (errno %d)

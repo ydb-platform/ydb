@@ -1,0 +1,8 @@
+# Code table 4.100 - Type of reference dataset
+0 0 Analysis
+1 1 Forecast
+2 2 Reforecast (Hindcast)
+3 3 Reanalysis
+4 4 Climate projection
+5 5 Gridded observations
+255 255 Missing

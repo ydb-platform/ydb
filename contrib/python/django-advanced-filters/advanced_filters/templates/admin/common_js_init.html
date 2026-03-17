@@ -1,0 +1,27 @@
+{% load i18n static %}
+
+<script type="text/javascript">
+	// globals
+	var _af_handlers = window._af_handlers || null;
+	var ADVANCED_FILTER_CHOICES_LOOKUP_URL = "{% url 'afilters_get_field_choices' %}";
+
+	// common advanced filter tabular form initialization
+	(function($) {
+		$("#{{ formset.prefix }}-group > tbody > tr")
+			.tabularFormset({
+				prefix: "{{ formset.prefix }}",
+				adminStaticPrefix: '{% static "admin/" %}',
+				addText: "{% trans "Add another filter" %}",
+				deleteText: "{% trans 'Remove' %}",
+				added: function(row) {
+					if (_af_handlers) _af_handlers.init();  // re-init
+
+					// call original "added" callback
+					$.fn.tabularFormset.default_added(row);
+				},
+				preAdded: function(row) {
+					if (_af_handlers) _af_handlers.destroy();  // cleanup
+				}
+		});
+	})(django.jQuery);
+</script>

@@ -1,0 +1,5 @@
+requirements:
+  - python-Levenshtein: null
+  - numpy: contrib/python/numpy
+  - pylev: contrib/python/pylev
+  - library-python-resource: library/python/resource

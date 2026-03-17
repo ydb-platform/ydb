@@ -1,0 +1,3 @@
+[console_scripts]
+scour = scour.scour:run
+

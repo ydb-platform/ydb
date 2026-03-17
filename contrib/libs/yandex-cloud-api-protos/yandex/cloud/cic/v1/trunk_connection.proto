@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package yandex.cloud.cic.v1;
+
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/cic/v1/common/transceiver_type.proto";
+import "yandex/cloud/cic/v1/common/lag_allocation_settings.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cic/v1;cic";
+option java_package = "yandex.cloud.api.cic.v1";
+
+// A TrunkConnection resource.
+message TrunkConnection {
+
+  // ID of the trunkConnection.
+  string id = 1;
+
+  // Name of the trunkConnection.
+  // The name must be unique within the folder.
+  // Value must match the regular expression ``\|[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?``.
+  string name = 2;
+
+  // Optional description of the trunkConnection. 0-256 characters long.
+  string description = 3;
+
+  reserved 4;
+
+  // ID of the folder that the trunkConnection belongs to.
+  string folder_id = 5;
+
+  // ID of the region that the trunkConnection belongs to.
+  string region_id = 6;
+
+  // Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp created_at = 7;
+  
+  reserved 8;
+
+  // Special trunkConnection config
+  oneof joint {
+    SinglePortDirectJoint single_port_direct_joint = 9;
+    LagDirectJoint lag_direct_joint = 10;
+    PartnerJointInfo partner_joint_info = 11;
+  }
+
+  // ID of pointOfPresence that the trunkConnection is deployed on.
+  google.protobuf.StringValue point_of_presence_id = 12;
+
+  reserved 13 to 21;
+
+  // Capacity of the trunkConnection
+  Capacity capacity = 22;
+
+  // Resource labels, `key:value` pairs.
+  // No more than 64 per resource.
+  // The maximum string length in characters for each value is 63.
+  // Each value must match the regular expression `[-_0-9a-z]*`.
+  // The string length in characters for each key must be 1-63.
+  // Each key must match the regular expression `[a-z][-_0-9a-z]*`.
+  map<string, string> labels = 23;
+
+  // Status of the trunkConnection.
+  Status status = 24;
+
+  // Deletion protection flag.
+  bool deletion_protection = 25;
+
+  // Config of trunkConnection that is deployed on partner joint.
+  message PartnerJointInfo {
+
+    reserved 1 to 2;
+
+    // Reserved for future using;
+    string service_key = 3;
+
+    // ID of partner that the trunkConnection is deployed on.
+    google.protobuf.StringValue partner_id = 4;
+  }
+
+  // Config of trunkConnection that is deployed on single port.
+  message SinglePortDirectJoint {
+
+    // Type of transceiver that the trunkConnection is deployed on.
+    common.TransceiverType transceiver_type = 1;
+
+    reserved 2;
+
+    // Name of port that the trunkConnection is deployed on.
+    google.protobuf.StringValue port_name = 3;
+
+    // Device name which is set in LLDP message.
+    string access_device_name = 4;
+  }
+
+  // Config of trunkConnection that is deployed on lag.
+  message LagDirectJoint {
+
+    // Type of transceiver that the trunkConnection is deployed on.
+    common.TransceiverType transceiver_type = 1;
+
+    reserved 2;
+
+    // LAG allocation settings that the trunkConnection is deployed on.
+    common.LagAllocationSettings lag_allocation_settings = 3;
+
+    // Device name which is set in LLDP message.
+    string access_device_name = 4;
+  }
+
+  enum Capacity {
+    CAPACITY_UNSPECIFIED = 0;
+    CAPACITY_50_MBPS = 1;
+    CAPACITY_100_MBPS = 2;
+    CAPACITY_200_MBPS = 3;
+    CAPACITY_300_MBPS = 4;
+    CAPACITY_400_MBPS = 5;
+    CAPACITY_500_MBPS = 6;
+    CAPACITY_1_GBPS = 7;
+    CAPACITY_2_GBPS = 8;
+    CAPACITY_3_GBPS = 9;
+    CAPACITY_4_GBPS = 10;
+    CAPACITY_5_GBPS = 11;
+    CAPACITY_10_GBPS = 12;
+    CAPACITY_20_GBPS = 13;
+    CAPACITY_30_GBPS = 14;
+    CAPACITY_40_GBPS = 15;
+    CAPACITY_50_GBPS = 16;
+    CAPACITY_100_GBPS = 17;
+    CAPACITY_200_GBPS = 18;
+  }
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATING = 1;
+    UPDATING = 2;
+    DELETING = 3;
+    ACTIVE = 4;
+  }
+}

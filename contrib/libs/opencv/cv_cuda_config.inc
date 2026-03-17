@@ -1,0 +1,24 @@
+IF (NOT HAVE_CUDA)
+    CFLAGS(
+        -DCUDA_ARCH_BIN=\"\"
+        -DCUDA_ARCH_FEATURES=\"\"
+        -DCUDA_ARCH_PTX=\"\"
+    )
+ELSE()
+    INCLUDE(${ARCADIA_ROOT}/library/cpp/cuda/wrappers/default_nvcc_flags.make.inc)
+    CFLAGS(
+        -DHAVE_CUDA
+        -DHAVE_CUBLAS
+        -DHAVE_CUFFT
+        -DHAVE_OPENCV_CUDAARITHM
+        -DHAVE_OPENCV_CUDAFILTERS
+        -DHAVE_OPENCV_CUDAIMGPROC
+        -DHAVE_OPENCV_CUDALEGACY
+        -DHAVE_OPENCV_CUDAOPTFLOW
+        -DHAVE_OPENCV_CUDAWARPING
+        -DHAVE_OPENCV_CUDEV
+        -DCUDA_ARCH_BIN=\"30\"
+        -DCUDA_ARCH_FEATURES=\"30\"
+        -DCUDA_ARCH_PTX=\"30\"
+    )
+ENDIF()

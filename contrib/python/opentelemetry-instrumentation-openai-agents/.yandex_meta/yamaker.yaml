@@ -1,0 +1,5 @@
+requirements:
+  # Это по факту обязательная зависимость сейчас
+  # https://github.com/traceloop/openllmetry/issues/2974
+  # https://github.com/traceloop/openllmetry/issues/2803
+  - traceloop-sdk

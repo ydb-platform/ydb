@@ -1,0 +1,6 @@
+# CODE TABLE 5.5, Missing Value Management for Complex Packing
+
+0 0  No explicit missing values included within data values
+1 1  Primary missing values included within data values
+2 2  Primary and secondary missing values included within data values
+255 255  Missing

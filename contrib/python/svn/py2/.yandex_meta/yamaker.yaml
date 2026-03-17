@@ -1,0 +1,2 @@
+exclude:
+  - svn/resources/*

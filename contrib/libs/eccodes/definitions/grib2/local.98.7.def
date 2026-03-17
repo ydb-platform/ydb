@@ -1,0 +1,16 @@
+# (C) Copyright 2005- ECMWF.
+
+unsigned[1] iterationNumber  : dump;
+alias number=iterationNumber;
+unsigned[1] numberOfForecastsInEnsemble  : dump;
+alias totalNumber=numberOfForecastsInEnsemble;
+unsigned[1] sensitiveAreaDomain  : dump;
+unsigned[1] diagnosticNumber  : dump;
+
+alias local.iterationNumber=iterationNumber;
+alias local.numberOfForecastsInEnsemble=numberOfForecastsInEnsemble;
+alias local.sensitiveAreaDomain=sensitiveAreaDomain;
+alias local.diagnosticNumber=diagnosticNumber;
+
+alias iteration = iterationNumber;
+alias diagnostic = diagnosticNumber;

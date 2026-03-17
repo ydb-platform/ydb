@@ -1,0 +1,6 @@
+requirements:
+  - PyYAML
+  - setuptools
+keep:
+  - apispec/ext/flask.py
+  - tests/test_ext_flask.py

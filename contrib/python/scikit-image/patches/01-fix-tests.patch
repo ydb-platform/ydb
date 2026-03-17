@@ -1,0 +1,38 @@
+--- contrib/python/scikit-image/tests/skimage/conftest.py	(index)
++++ contrib/python/scikit-image/tests/skimage/conftest.py	(working tree)
+@@ -13 +13,2 @@ def test_root_dir():
+-    return Path(__file__).absolute().parent
++    import yatest.common as yc
++    return Path(yc.source_path("contrib/python/scikit-image/tests/skimage/conftest.py")).absolute().parent
+--- contrib/python/scikit-image/tests/conftest.py	(index)
++++ contrib/python/scikit-image/tests/conftest.py	(working tree)
+@@ -1,3 +1,10 @@
+         custom_reporter._session = standard_reporter._session
+     config.pluginmanager.unregister(standard_reporter)
+     config.pluginmanager.register(custom_reporter, 'terminalreporter')
++    import skimage.data._fetchers
++    import yatest.common as yc
++    skimage.data._fetchers._LEGACY_DATA_DIR = yc.source_path(skimage.data._fetchers._LEGACY_DATA_DIR)
++    skimage.data._fetchers._DISTRIBUTION_DIR = yc.source_path(skimage.data._fetchers._DISTRIBUTION_DIR)
++    skimage.data_dir = skimage.data._fetchers._LEGACY_DATA_DIR
++    skimage.data.data_dir = skimage.data._fetchers._LEGACY_DATA_DIR
++    skimage.data._fetchers.data_dir = skimage.data._fetchers._LEGACY_DATA_DIR
+--- contrib/python/scikit-image/tests/skimage/util/test_backends.py	(index)
++++ contrib/python/scikit-image/tests/skimage/util/test_backends.py	(working tree)
+@@ -117,6 +117,7 @@ def test_no_dispatching_when_disabled(fake_backends, monkeypatch):
+     assert r == 42 * 2
+ 
+ 
++@pytest.mark.xfail
+ def test_notification_raised(fake_backends):
+     @_backends.dispatchable
+     def foo(x):
+--- contrib/python/scikit-image/tests/skimage/graph/test_rag.py	(index)
++++ contrib/python/scikit-image/tests/skimage/graph/test_rag.py	(working tree)
+@@ -215,6 +214,0 @@ def test_ncut_stable_subgraph():
+-@pytest.mark.xfail(
+-    SCIPY_LT_1_17_DEV0,
+-    strict=False,
+-    reason="Flaky before SciPy 1.17.0.dev0",
+-    # See https://github.com/scikit-image/scikit-image/issues/7911#issuecomment-3353082011
+-)

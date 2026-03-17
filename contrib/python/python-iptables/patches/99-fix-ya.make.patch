@@ -1,0 +1,5 @@
+--- contrib/python/python-iptables/ya.make	(index)
++++ contrib/python/python-iptables/ya.make	(working tree)
+@@ -22 +22 @@ SRCS(
+-    syms.cpp
++    GLOBAL syms.cpp

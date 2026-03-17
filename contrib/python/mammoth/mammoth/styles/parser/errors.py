@@ -1,0 +1,2 @@
+class LineParseError(Exception):
+    pass

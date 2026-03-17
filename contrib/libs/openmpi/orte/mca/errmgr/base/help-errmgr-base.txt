@@ -1,0 +1,112 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2014-2017 Intel, Inc.  All rights reserved.
+# Copyright (c) 2017      IBM Corporation.  All rights reserved.
+# Copyright (c) 2018      Research Organization for Information Science
+#                         and Technology (RIST).  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+#
+[undeliverable-msg]
+An attempt was made to send a message to a process whose
+address is unknown:
+
+  Sender:     %s
+  From node:  %s
+  Recipient:  %s
+  On node:    %s
+
+The message could not be delivered, and we are aborting.
+#
+[failed-daemon-launch]
+ORTE was unable to reliably start one or more daemons.
+This usually is caused by:
+
+* not finding the required libraries and/or binaries on
+  one or more nodes. Please check your PATH and LD_LIBRARY_PATH
+  settings, or configure OMPI with --enable-orterun-prefix-by-default
+
+* lack of authority to execute on one or more specified nodes.
+  Please verify your allocation and authorities.
+
+* the inability to write startup files into /tmp (--tmpdir/orte_tmpdir_base).
+  Please check with your sys admin to determine the correct location to use.
+
+*  compilation of the orted with dynamic libraries when static are required
+  (e.g., on Cray). Please check your configure cmd line and consider using
+  one of the contrib/platform definitions for your system type.
+
+* an inability to create a connection back to mpirun due to a
+  lack of common network interfaces and/or no route found between
+  them. Please check network connectivity (including firewalls
+  and network routing requirements).
+#
+[failed-daemon]
+An ORTE daemon has unexpectedly failed after launch and before
+communicating back to mpirun. This could be caused by a number
+of factors, including an inability to create a connection back
+to mpirun due to a lack of common network interfaces and/or no
+route found between them. Please check network connectivity
+(including firewalls and network routing requirements).
+#
+[node-died]
+ORTE has lost communication with a remote daemon.
+
+  HNP daemon   : %s on node %s
+  Remote daemon: %s on node %s
+
+This is usually due to either a failure of the TCP network
+connection to the node, or possibly an internal failure of
+the daemon itself. We cannot recover from this failure, and
+therefore will terminate the job.
+#
+[no-path]
+ORTE does not know how to route a message to the specified daemon
+located on the indicated node:
+
+  my node:   %s
+  target node:  %s
+
+This is usually an internal programming error that should be
+reported to the developers. In the meantime, a workaround may
+be to set the MCA param routed=direct on the command line or
+in your environment. We apologize for the problem.
+#
+[no-connect]
+ORTE is unable to establish a communication connection to the
+specified daemon located on the indicated node:
+
+  my node:   %s
+  target node:  %s
+
+This is usually due to a lack of common network interfaces and/or
+no route found between them. Please check network connectivity (including
+firewalls and network routing requirements). If these look okay,
+then it could be an internal programming error that should be
+reported to the developers. In the meantime, a workaround may
+be to set the MCA param routed=direct on the command line or
+in your environment.
+#
+[simple-message]
+An internal error has occurred in ORTE:
+
+%s
+
+This is something that should be reported to the developers.
+#
+[normal-termination-but]
+%s job %s terminated normally, but %d %s. Per user-direction, the job has been aborted.

@@ -1,0 +1,4 @@
+requirements:
+  - contrib/python/numpy
+  # Пока в Аркадии два Pydantic, даем возможность пользователям самим выбирать нужную версию
+  - pydantic: null

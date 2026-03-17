@@ -1,0 +1,12 @@
+--- contrib/python/uritemplate/py2/tests/test_from_fixtures.py	(index)
++++ contrib/python/uritemplate/py2/tests/test_from_fixtures.py	(working tree)
+@@ -6,7 +6,8 @@ import uritemplate
+ 
+ 
+ def fixture_file_path(filename):
+-    absolute_dir = os.path.abspath(os.path.dirname(__file__))
++    import yatest.common
++    absolute_dir = yatest.common.test_source_path()
+     filename = filename + '.json'
+     return os.path.join(absolute_dir, 'fixtures', filename)
+ 

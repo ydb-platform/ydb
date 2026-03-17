@@ -1,0 +1,88 @@
+# (C) Copyright 2005- ECMWF.
+
+# KWBC localDefinitionTemplate_001
+# --------------------------------
+#
+# Description            Octet    Code    Ksec1    Count
+# -----------            -----    ----    -----    -----
+#
+#sectionLength                   1       L3      n/a     ignore
+#applicationIdentifier           41      I1      37      -
+#type                            42      I1      38      -
+#identificationNumber            43      I1      39      -
+#productIdentifier               44      I1      40      -
+#spatialSmoothingOfProduct       45      I1      41      -
+#!
+#if_ge_46                        -       IF_GT   45      sectionLength
+#probProductDefinition           46      I1      42      -
+#probabilityType                 47      I1      43      -
+#lowerLimit                      48      I4      44      -
+#upperLimit                      52      I4      45      -
+#padding                         56      PAD     n/a     5
+#endif_ge_46                     -       ENDIF   if_ge_46
+#!
+#if_ge_61                        -       IF_GT   60      sectionLength
+#ensembleSize                    61      I1      46      -
+#clusterSize                     62      I1      47      -
+#numberOfClusters                63      I1      48      -
+#clusteringMethod                64      I1      49      -
+#northLatitudeOfCluster          65      S3      50      -
+#southLatitudeOfCluster          68      S3      51      -
+#westLongitudeOfCluster          71      S3      52      -
+#eastLongitudeOfCluster          74      S3      53      -
+#clusterMember1                  77      I1      54      -
+#clusterMember2                  78      I1      55      -
+#clusterMember3                  79      I1      56      -
+#clusterMember4                  80      I1      57      -
+#clusterMember5                  81      I1      58      -
+#clusterMember6                  82      I1      59      -
+#clusterMember7                  83      I1      60      -
+#clusterMember8                  84      I1      61      -
+#clusterMember9                  85      I1      62      -
+#clusterMember10                 86      I1      63      -
+#endif_ge_61                     -       ENDIF   if_ge_61
+
+#applicationIdentifier           1= ensemble
+
+#unsigned[1] applicationIdentifier : dump ; # 1= ensemble
+unsigned[1] type : dump ;                  # 1=unperturbed control forecast,2=individual negative perturbed fcst 3=individual positive perturbed fcst, 4=cluster, 5=whole cluster
+unsigned[1] identificationNumber : dump ;  # if(type=1) { 1=high resolution control fcst, 2=low resolution control fcst} else { ensemble number }
+unsigned[1] productIdentifier  : dump;     # 1= full field, 2=weighted mean, 3= etc
+unsigned[1] spatialSmoothingOfProduct : dump ;
+#
+constant sectionLengthLimitForProbability = 45 : dump;
+if(section1Length > sectionLengthLimitForProbability)
+{
+  unsigned[1] probProductDefinition  : dump;
+  unsigned[1] probabilityType  : dump;
+  unsigned[4] lowerLimit  : dump;
+  unsigned[4] upperLimit  : dump;
+
+    # padding
+    pad padding_local_7_1(5);
+}
+
+#
+constant sectionLengthLimitForEnsembles = 60;
+
+if(section1Length > sectionLengthLimitForEnsembles)
+{
+  unsigned[1] ensembleSize : dump ;
+  unsigned[1] clusterSize  : dump;
+  unsigned[1] numberOfClusters : dump ;
+  unsigned[1] clusteringMethod : dump ;
+  signed[3] northLatitudeOfCluster : dump ;
+  signed[3] southLatitudeOfCluster : dump ;
+  signed[3] westLongitudeOfCluster : dump ;
+  signed[3] eastLongitudeOfCluster : dump ;
+  unsigned[1] clusterMember1 : dump ;
+  unsigned[1] clusterMember2 : dump ;
+  unsigned[1] clusterMember3 : dump ;
+  unsigned[1] clusterMember4 : dump ;
+  unsigned[1] clusterMember5 : dump ;
+  unsigned[1] clusterMember6 : dump ;
+  unsigned[1] clusterMember7 : dump ;
+  unsigned[1] clusterMember8 : dump ;
+  unsigned[1] clusterMember9 : dump ;
+  unsigned[1] clusterMember10 : dump ;
+}

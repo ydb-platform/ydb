@@ -1,0 +1,12 @@
+# modelling subdomains definition
+unsigned[4] Nux  : dump;
+alias numberOfUsefulPointsAlongXAxis  = Nux;
+
+unsigned[4] Ncx  : dump;
+alias numberOfPointsAlongXAxisInCouplingArea  = Ncx;
+
+unsigned[4] Nuy  : dump;
+alias numberOfUsefulPointsAlongYAxis  = Nuy;
+
+unsigned[4] Ncy  : dump;
+alias numberOfPointsAlongYAxisInCouplingArea  = Ncy;

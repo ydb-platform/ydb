@@ -1,0 +1,29 @@
+fix from revision 2894732 REVIEW:269493 IMAGES-11892
+
+--- a/coders/psd.c
++++ b/coders/psd.c
+@@ -2309,6 +2309,7 @@ static Image *ReadPSDImage(const ImageInfo *image_info,ExceptionInfo *exception)
+         {
+           if (profile != (StringInfo *) NULL)
+             profile=DestroyStringInfo(profile);
++          InheritException(exception,&image->exception);
+           (void) CloseBlob(image);
+           image=DestroyImageList(image);
+           return((Image *) NULL);
+@@ -2317,7 +2318,7 @@ static Image *ReadPSDImage(const ImageInfo *image_info,ExceptionInfo *exception)
+          Skip the rest of the layer and mask information.
+       */
+       MagickSizeType blob_size = GetBlobSize(image);
+-      if (blob_size && offset+length >= blob_size)
++      if (blob_size > 0 && offset+length >= blob_size)
+           ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+       (void) SeekBlob(image,offset+length,SEEK_SET);
+     }
+@@ -2357,6 +2358,7 @@ static Image *ReadPSDImage(const ImageInfo *image_info,ExceptionInfo *exception)
+         {
+           if (profile != (StringInfo *) NULL)
+             profile=DestroyStringInfo(profile);
++          InheritException(exception,&image->exception);
+           (void) CloseBlob(image);
+           image=DestroyImageList(image);
+           return((Image *) NULL);

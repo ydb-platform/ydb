@@ -1,0 +1,12 @@
+--- contrib/python/mkdocs/ya.make	(index)
++++ contrib/python/mkdocs/ya.make	(working tree)
+@@ -73,6 +73,9 @@ RESOURCE_FILES(
+     .dist-info/METADATA
+     .dist-info/entry_points.txt
+     .dist-info/top_level.txt
++)
++
++RESOURCE_FILES(
+     mkdocs/contrib/search/lunr-language/lunr.ar.js
+     mkdocs/contrib/search/lunr-language/lunr.da.js
+     mkdocs/contrib/search/lunr-language/lunr.de.js

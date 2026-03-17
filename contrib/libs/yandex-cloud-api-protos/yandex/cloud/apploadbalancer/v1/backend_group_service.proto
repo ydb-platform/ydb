@@ -1,0 +1,366 @@
+syntax = "proto3";
+
+package yandex.cloud.apploadbalancer.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/apploadbalancer/v1/backend_group.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/apploadbalancer/v1;apploadbalancer";
+option java_package = "yandex.cloud.api.apploadbalancer.v1";
+
+// A set of methods for managing backend groups.
+service BackendGroupService {
+  // Returns the specified backend group.
+  //
+  // To get the list of all available backend groups, make a [List] request.
+  rpc Get(GetBackendGroupRequest) returns (BackendGroup) {
+    option (google.api.http) = {get: "/apploadbalancer/v1/backendGroups/{backend_group_id}"};
+  }
+
+  // Lists backend groups in the specified folder.
+  rpc List(ListBackendGroupsRequest) returns (ListBackendGroupsResponse) {
+    option (google.api.http) = {get: "/apploadbalancer/v1/backendGroups"};
+  }
+
+  // Creates a backend group in the specified folder.
+  rpc Create(CreateBackendGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/apploadbalancer/v1/backendGroups"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateBackendGroupMetadata"
+      response: "BackendGroup"
+    };
+  }
+
+  // Updates the specified backend group.
+  rpc Update(UpdateBackendGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/apploadbalancer/v1/backendGroups/{backend_group_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateBackendGroupMetadata"
+      response: "BackendGroup"
+    };
+  }
+
+  // Deletes the specified backend group.
+  rpc Delete(DeleteBackendGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/apploadbalancer/v1/backendGroups/{backend_group_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteBackendGroupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Adds backends to the specified backend group.
+  rpc AddBackend(AddBackendRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/apploadbalancer/v1/backendGroups/{backend_group_id}:addBackend"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddBackendMetadata"
+      response: "BackendGroup"
+    };
+  }
+
+  // Removes backends from the specified backend group.
+  rpc RemoveBackend(RemoveBackendRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/apploadbalancer/v1/backendGroups/{backend_group_id}:removeBackend"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RemoveBackendMetadata"
+      response: "BackendGroup"
+    };
+  }
+
+  // Updates the specified backend.
+  rpc UpdateBackend(UpdateBackendRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/apploadbalancer/v1/backendGroups/{backend_group_id}:updateBackend"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateBackendMetadata"
+      response: "BackendGroup"
+    };
+  }
+
+  // Lists operations for the specified backend group.
+  rpc ListOperations(ListBackendGroupOperationsRequest) returns (ListBackendGroupOperationsResponse) {
+    option (google.api.http) = {get: "/apploadbalancer/v1/backendGroups/{backend_group_id}/operations"};
+  }
+}
+
+message GetBackendGroupRequest {
+  // ID of the backend group to return.
+  //
+  // To get the backend group ID, make a [BackendGroupService.List] request.
+  string backend_group_id = 1 [(required) = true];
+}
+
+message ListBackendGroupsRequest {
+  // ID of the folder to list backend groups in.
+  //
+  // To get the folder ID, make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListBackendGroupsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListBackendGroupsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters backend groups listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on [BackendGroup.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name=my-backend-group`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListBackendGroupsResponse {
+  // List of backend groups in the specified folder.
+  repeated BackendGroup backend_groups = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListBackendGroupsRequest.page_size], use `next_page_token` as the value
+  // for the [ListBackendGroupsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message DeleteBackendGroupRequest {
+  // ID of the backend group to delete.
+  //
+  // To get the backend group ID, make a [BackendGroupService.List] request.
+  string backend_group_id = 1 [(required) = true];
+}
+
+message DeleteBackendGroupMetadata {
+  // ID of the backend group that is being deleted.
+  string backend_group_id = 1;
+}
+
+message UpdateBackendGroupRequest {
+  // ID of the backend group to update.
+  //
+  // To get the backend group ID, make a [BackendGroupService.List] request.
+  string backend_group_id = 1 [(required) = true];
+
+  // Field mask that specifies which attributes of the backend group should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New name for the backend group.
+  // The name must be unique within the folder.
+  string name = 3 [(pattern) = "([a-z]([-a-z0-9]{0,61}[a-z0-9])?)?"];
+
+  // New description of the backend group.
+  string description = 4 [(length) = "<=256"];
+
+  // Backend group labels as `key:value` pairs.
+  // For details about the concept, see [documentation](/docs/overview/concepts/services#labels).
+  //
+  // Existing set of labels is completely replaced by the provided set, so if you just want
+  // to add or remove a label:
+  // 1. Get the current set of labels with a [BackendGroupService.Get] request.
+  // 2. Add or remove a label in this set.
+  // 3. Send the new set in this field.
+  map<string, string> labels = 5 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // New list of backends in the backend group.
+  //
+  // Existing list of backends is completely replaced by the specified list, so if you just want to add or remove
+  // a target, make a [BackendGroupService.AddBackend] request or a [BackendGroupService.RemoveBackend] request.
+  oneof backend {
+    option (exactly_one) = true;
+
+    // New list of HTTP backends that the backend group will consist of.
+    HttpBackendGroup http = 6;
+
+    // New list of gRPC backends that the backend group will consist of.
+    GrpcBackendGroup grpc = 7;
+
+    // New list of stream (TCP) backends that the backend group will consist of.
+    StreamBackendGroup stream = 8;
+  }
+}
+
+message UpdateBackendGroupMetadata {
+  // ID of the backend group that is being updated.
+  string backend_group_id = 1;
+}
+
+message CreateBackendGroupRequest {
+  // ID of the folder to create a backend group in.
+  //
+  // To get the folder ID, make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // Name of the backend group.
+  // The name must be unique within the folder.
+  string name = 2 [(pattern) = "([a-z]([-a-z0-9]{0,61}[a-z0-9])?)?"];
+
+  // Description of the backend group.
+  string description = 3 [(length) = "<=256"];
+
+  // Backend group labels as `key:value` pairs.
+  // For details about the concept, see [documentation](/docs/overview/concepts/services#labels).
+  map<string, string> labels = 4 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // Backends that the backend group will consist of.
+  oneof backend {
+    // List of HTTP backends that the backend group will consist of.
+    HttpBackendGroup http = 5;
+
+    // List of gRPC backends that the backend group consists of.
+    GrpcBackendGroup grpc = 6;
+
+    // List of stream (TCP) backends that the backend group consists of.
+    StreamBackendGroup stream = 7;
+  }
+}
+
+message CreateBackendGroupMetadata {
+  // ID of the backend group that is being created.
+  string backend_group_id = 1;
+}
+
+message AddBackendRequest {
+  reserved 4;
+  // ID of the backend group to add a backend to.
+  //
+  // To get the backend group ID, make a [BackendGroupService.List] request.
+  string backend_group_id = 1 [(required) = true];
+
+  // Backend to add to the backend group.
+  oneof backend {
+    option (exactly_one) = true;
+
+    // HTTP backend to add to the backend group.
+    HttpBackend http = 2;
+
+    // gRPC backend to add to the backend group.
+    GrpcBackend grpc = 3;
+
+    // New settings for the Stream backend.
+    StreamBackend stream = 5;
+  }
+}
+
+message AddBackendMetadata {
+  // ID of the backend group that the backend is being added to.
+  string backend_group_id = 1;
+
+  // Name of the backend that is being added to the backend group.
+  string backend_name = 2;
+}
+
+message UpdateBackendRequest {
+  // ID of the backend group to update the backend in.
+  string backend_group_id = 1 [(required) = true];
+
+  // Field mask that specifies which attributes of the backend should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the backend to update (required) and new settings for the backend.
+  oneof backend {
+    option (exactly_one) = true;
+    // New settings for the HTTP backend.
+    HttpBackend http = 3;
+
+    // New settings for the gRPC backend.
+    GrpcBackend grpc = 4;
+
+    // New settings for the stream (TCP) backend.
+    StreamBackend stream = 5;
+  }
+}
+
+message UpdateBackendMetadata {
+  // ID of the backend group that the backend is being updated it.
+  string backend_group_id = 1;
+
+  // Name of the backend that is being updated.
+  string backend_name = 2;
+}
+
+message RemoveBackendRequest {
+  // ID of the backend group to remove a backend from.
+  //
+  // To get the backend group ID, make a [BackendGroupService.List] request.
+  string backend_group_id = 1 [(required) = true];
+
+  // Name of the backend to remove.
+  //
+  // To get the backend name, make a [BackendGroupService.Get] request.
+  string backend_name = 2 [(required) = true];
+}
+
+message RemoveBackendMetadata {
+  // ID of the backend group that the backend is being removed from.
+  string backend_group_id = 1;
+
+  // Name of the backend that is being removed.
+  string backend_name = 2;
+}
+
+message ListBackendGroupOperationsRequest {
+  // ID of the backend group to get operations for.
+  //
+  // To get the backend group ID, use a [BackendGroupService.List] request.
+  string backend_group_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than [page_size], the service returns a [ListBackendGroupOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListBackendGroupOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListBackendGroupOperationsResponse {
+  // List of operations for the specified backend group.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListBackendGroupOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListBackendGroupOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

@@ -1,0 +1,19 @@
+--- contrib/python/jaeger-client/tests/test_config.py	(index)
++++ contrib/python/jaeger-client/tests/test_config.py	(working tree)
+@@ -23,1 +23,1 @@ from jaeger_client import constants
+-from tests.test_utils import MockSampler
++from .test_utils import MockSampler
+--- contrib/python/jaeger-client/tests/test_reporter.py	(index)
++++ contrib/python/jaeger-client/tests/test_reporter.py	(working tree)
+@@ -35 +35,2 @@ from jaeger_client.ioloop_util import future_result
+-def test_null_reporter():
++@pytest.mark.asyncio
++async def test_null_reporter():
+@@ -42 +43,2 @@ def test_null_reporter():
+-def test_in_memory_reporter():
++@pytest.mark.asyncio
++async def test_in_memory_reporter():
+@@ -51 +53,2 @@ def test_in_memory_reporter():
+-def test_logging_reporter():
++@pytest.mark.asyncio
++async def test_logging_reporter():

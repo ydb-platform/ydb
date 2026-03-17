@@ -1,0 +1,30 @@
+openapi: 3.0.0
+info:
+  description: My API
+  version: "1.0.0"
+  title: My Swagger API
+
+paths:
+  /people:
+    get:
+      operationId: controllers.people.read_all
+      tags:
+        - people
+      summary: Retrieves people
+      description: Retrieves people
+      parameters:
+        - name: length
+          in: query
+          schema:
+            type: integer
+          description: Number of people to get from database
+          required: false
+        - name: offset
+          in: query
+          schema:
+            type: integer
+          description: Offset from beginning of list where to start gathering people
+          required: false
+      responses:
+        200:
+          description: Successful

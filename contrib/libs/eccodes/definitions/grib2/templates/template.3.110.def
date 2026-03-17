@@ -1,0 +1,40 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.110, Equatorial azimuthal equidistant projection
+include "grib2/templates/template.3.shape_of_the_earth.def"
+
+constant isGridded = true;
+
+# Number of points along X-axis
+unsigned[4] numberOfPointsAlongXAxis : dump;
+alias Nx = numberOfPointsAlongXAxis;
+alias numberOfPointsAlongAParallel = Nx;
+alias Ni = Nx;
+
+# Number of points along Y-axis
+unsigned[4] numberOfPointsAlongYAxis : dump;
+alias Ny = numberOfPointsAlongYAxis;
+alias numberOfPointsAlongAMeridian = Ny;
+alias Nj = Ny;
+
+# Latitude of tangency point (centre of grid)
+signed[4] latitudeOfTangencyPoint  : dump;
+alias La1 = latitudeOfTangencyPoint;
+
+# Longitude of tangency point
+unsigned[4] longitudeOfTangencyPoint : dump;
+alias Lo1 = longitudeOfTangencyPoint;
+
+# Resolution and component flag
+flags[1] resolutionAndComponentFlags 'grib2/tables/[tablesVersion]/3.3.table' : dump;
+
+# X-direction grid length in units of 10 -3 m as measured at the point of the axis
+unsigned[4] Dx : dump;
+
+# Y-direction grid length in units of 10 -3 m as measured at the point of the axis
+unsigned[4] Dy : dump;
+
+# Projection centre flag
+unsigned[1] projectionCentreFlag : dump;
+
+include "grib2/templates/template.3.scanning_mode.def"

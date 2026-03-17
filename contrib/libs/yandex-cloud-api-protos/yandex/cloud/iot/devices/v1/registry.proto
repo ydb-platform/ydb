@@ -1,0 +1,144 @@
+syntax = "proto3";
+
+package yandex.cloud.iot.devices.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/logging/v1/log_entry.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iot/devices/v1;devices";
+option java_package = "yandex.cloud.api.iot.devices.v1";
+
+// A registry. For more information, see [Registry](/docs/iot-core/concepts/index#registry).
+message Registry {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Registry is being created.
+    CREATING = 1;
+
+    // Registry is ready to use.
+    ACTIVE = 2;
+
+    // Registry is being deleted.
+    DELETING = 3;
+
+    // Registry is disabled.
+    DISABLED = 4;
+  }
+
+  // ID of the registry.
+  string id = 1;
+
+  // ID of the folder that the registry belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the registry. The name is unique within the folder.
+  string name = 4;
+
+  // Description of the registry. 0-256 characters long.
+  string description = 5;
+
+  // Resource labels as `key:value` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 6;
+
+  // Status of the registry.
+  Status status = 7;
+
+  // ID of the logs group for the specified registry.
+  string log_group_id = 8;
+
+  // Options for logging registry events
+  LogOptions log_options = 9;
+}
+
+// A registry certificate. For more information, see [Managing registry certificates](/docs/iot-core/operations/certificates/registry-certificates).
+message RegistryCertificate {
+  // ID of the registry that the certificate belongs to.
+  string registry_id = 1;
+
+  // SHA256 hash of the certificates.
+  string fingerprint = 2;
+
+  // Public part of the certificate.
+  string certificate_data = 3;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// A device topic alias.
+//
+// Alias is an alternate name of a device topic assigned by the user. Map alias to canonical topic name prefix, e.g. `my/custom/alias` match to `$device/abcdef/events`. For more information, see [Using topic aliases](/docs/iot-core/concepts/topic#aliases).
+message DeviceAlias {
+  // ID of the device that the alias belongs to.
+  string device_id = 1;
+
+  // Prefix of a canonical topic name to be aliased, e.g. `$devices/abcdef`.
+  string topic_prefix = 2;
+
+  // Alias of a device topic.
+  string alias = 3;
+}
+
+// A registry password.
+message RegistryPassword {
+  // ID of the registry that the password belongs to.
+  string registry_id = 1;
+
+  // ID of the password.
+  string id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+}
+
+// A Yandex Data Streams export.
+message DataStreamExport {
+  // ID of the YDS export.
+  string id = 1;
+
+  // Name of the YDS export.
+  string name = 2;
+
+  // ID of the registry that the YDS export belongs to.
+  string registry_id = 3;
+
+  // MQTT topic whose messages export to YDS.
+  string mqtt_topic_filter = 4;
+
+  // YDS database.
+  string database = 5;
+
+  // YDS stream name.
+  string stream = 6;
+
+  // ID of the service account which has permission to write to data stream.
+  string service_account_id = 7;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message LogOptions {
+
+  // Is logging from registry disabled.
+  bool disabled = 1;
+
+  // Log entries destination.
+  oneof destination {
+    // Entry should be written to log group resolved by ID.
+    string log_group_id = 2 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+
+    // Entry should be written to default log group for specified folder.
+    string folder_id = 3 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+  }
+
+  // Minimum log entry level.
+  //
+  // See [LogLevel.Level] for details.
+  yandex.cloud.logging.v1.LogLevel.Level min_level = 4;
+}

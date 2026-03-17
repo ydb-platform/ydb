@@ -1,0 +1,255 @@
+--- contrib/python/chdb/cpp/base/base/EnumReflection.h	(index)
++++ contrib/python/chdb/cpp/base/base/EnumReflection.h	(working tree)
+@@ -32,7 +32,7 @@ constexpr void static_for(F && f)
+ template <is_enum T>
+ struct fmt::formatter<T> : fmt::formatter<std::string_view>
+ {
+-    constexpr auto format(T value, auto& format_context) const
++    constexpr auto format(T value, auto& format_context)
+     {
+         return formatter<string_view>::format(magic_enum::enum_name(value), format_context);
+     }
+--- contrib/python/chdb/cpp/base/base/StringRef.h	(index)
++++ contrib/python/chdb/cpp/base/base/StringRef.h	(working tree)
+@@ -12,8 +12,6 @@
+ #include <base/types.h>
+ #include <base/unaligned.h>
+ #include <base/simd.h>
+-#include <fmt/core.h>
+-#include <fmt/ostream.h>
+ 
+ #include <city.h>
+ 
+@@ -378,5 +376,3 @@ namespace PackedZeroTraits
+ 
+ 
+ std::ostream & operator<<(std::ostream & os, const StringRef & str);
+-
+-template<> struct fmt::formatter<StringRef> : fmt::ostream_formatter {};
+--- contrib/python/chdb/cpp/base/base/wide_integer_to_string.h	(index)
++++ contrib/python/chdb/cpp/base/base/wide_integer_to_string.h	(working tree)
+@@ -62,7 +62,7 @@ struct fmt::formatter<wide::integer<Bits, Signed>>
+     }
+ 
+     template <typename FormatContext>
+-    auto format(const wide::integer<Bits, Signed> & value, FormatContext & ctx) const
++    auto format(const wide::integer<Bits, Signed> & value, FormatContext & ctx)
+     {
+         return fmt::format_to(ctx.out(), "{}", to_string(value));
+     }
+--- contrib/python/chdb/cpp/src/Analyzer/Identifier.h	(index)
++++ contrib/python/chdb/cpp/src/Analyzer/Identifier.h	(working tree)
+@@ -406,7 +406,7 @@ struct fmt::formatter<DB::Identifier>
+     }
+ 
+     template <typename FormatContext>
+-    auto format(const DB::Identifier & identifier, FormatContext & ctx) const
++    auto format(const DB::Identifier & identifier, FormatContext & ctx)
+     {
+         return fmt::format_to(ctx.out(), "{}", identifier.getFullName());
+     }
+@@ -428,7 +428,7 @@ struct fmt::formatter<DB::IdentifierView>
+     }
+ 
+     template <typename FormatContext>
+-    auto format(const DB::IdentifierView & identifier_view, FormatContext & ctx) const
++    auto format(const DB::IdentifierView & identifier_view, FormatContext & ctx)
+     {
+         return fmt::format_to(ctx.out(), "{}", identifier_view.getFullName());
+     }
+--- contrib/python/chdb/cpp/src/Client/TestHint.h	(index)
++++ contrib/python/chdb/cpp/src/Client/TestHint.h	(working tree)
+@@ -118,7 +118,7 @@ struct fmt::formatter<DB::TestHint::ErrorVector>
+     }
+ 
+     template <typename FormatContext>
+-    auto format(const DB::TestHint::ErrorVector & ErrorVector, FormatContext & ctx) const
++    auto format(const DB::TestHint::ErrorVector & ErrorVector, FormatContext & ctx)
+     {
+         if (ErrorVector.empty())
+             return fmt::format_to(ctx.out(), "{}", 0);
+--- contrib/python/chdb/cpp/src/Common/TransactionID.h	(index)
++++ contrib/python/chdb/cpp/src/Common/TransactionID.h	(working tree)
+@@ -108,7 +108,7 @@ struct fmt::formatter<DB::TransactionID>
+     }
+ 
+     template<typename FormatContext>
+-    auto format(const DB::TransactionID & tid, FormatContext & context) const
++    auto format(const DB::TransactionID & tid, FormatContext & context)
+     {
+         return fmt::format_to(context.out(), "({}, {}, {})", tid.start_csn, tid.local_tid, tid.host_id);
+     }
+--- contrib/python/chdb/cpp/src/Common/ZooKeeper/IKeeper.h	(index)
++++ contrib/python/chdb/cpp/src/Common/ZooKeeper/IKeeper.h	(working tree)
+@@ -645,7 +645,7 @@ public:
+ 
+ template <> struct fmt::formatter<Coordination::Error> : fmt::formatter<std::string_view>
+ {
+-    constexpr auto format(Coordination::Error code, auto & ctx) const
++    constexpr auto format(Coordination::Error code, auto & ctx)
+     {
+         return formatter<string_view>::format(Coordination::errorMessage(code), ctx);
+     }
+--- contrib/python/chdb/cpp/src/Common/formatReadable.h	(index)
++++ contrib/python/chdb/cpp/src/Common/formatReadable.h	(working tree)
+@@ -49,7 +49,7 @@ struct fmt::formatter<ReadableSize>
+     }
+ 
+     template <typename FormatContext>
+-    auto format(const ReadableSize & size, FormatContext & ctx) const
++    auto format(const ReadableSize & size, FormatContext & ctx)
+     {
+         return fmt::format_to(ctx.out(), "{}", formatReadableSizeWithBinarySuffix(size.value));
+     }
+--- contrib/python/chdb/cpp/src/Coordination/RaftServerConfig.h	(index)
++++ contrib/python/chdb/cpp/src/Coordination/RaftServerConfig.h	(working tree)
+@@ -57,7 +57,7 @@ using ClusterUpdateActions = std::vector<ClusterUpdateAction>;
+ template <>
+ struct fmt::formatter<DB::RaftServerConfig> : fmt::formatter<string_view>
+ {
+-    constexpr auto format(const DB::RaftServerConfig & server, format_context & ctx) const
++    constexpr auto format(const DB::RaftServerConfig & server, format_context & ctx)
+     {
+         return fmt::format_to(
+             ctx.out(), "server.{}={};{};{}", server.id, server.endpoint, server.learner ? "learner" : "participant", server.priority);
+@@ -67,7 +67,7 @@ struct fmt::formatter<DB::RaftServerConfig> : fmt::formatter<string_view>
+ template <>
+ struct fmt::formatter<DB::ClusterUpdateAction> : fmt::formatter<string_view>
+ {
+-    constexpr auto format(const DB::ClusterUpdateAction & action, format_context & ctx) const
++    constexpr auto format(const DB::ClusterUpdateAction & action, format_context & ctx)
+     {
+         if (const auto * add = std::get_if<DB::AddRaftServer>(&action))
+             return fmt::format_to(ctx.out(), "(Add server {})", add->id);
+--- contrib/python/chdb/cpp/src/Core/Field.h	(index)
++++ contrib/python/chdb/cpp/src/Core/Field.h	(working tree)
+@@ -1021,7 +1021,7 @@ struct fmt::formatter<DB::Field>
+     }
+ 
+     template <typename FormatContext>
+-    auto format(const DB::Field & x, FormatContext & ctx) const
++    auto format(const DB::Field & x, FormatContext & ctx)
+     {
+         return fmt::format_to(ctx.out(), "{}", toString(x));
+     }
+--- contrib/python/chdb/cpp/src/Core/QualifiedTableName.h	(index)
++++ contrib/python/chdb/cpp/src/Core/QualifiedTableName.h	(working tree)
+@@ -125,7 +125,7 @@ namespace fmt
+         }
+ 
+         template <typename FormatContext>
+-        auto format(const DB::QualifiedTableName & name, FormatContext & ctx) const
++        auto format(const DB::QualifiedTableName & name, FormatContext & ctx)
+         {
+             return fmt::format_to(ctx.out(), "{}.{}", DB::backQuoteIfNeed(name.database), DB::backQuoteIfNeed(name.table));
+         }
+--- contrib/python/chdb/cpp/src/DataTypes/IDataType.h	(index)
++++ contrib/python/chdb/cpp/src/DataTypes/IDataType.h	(working tree)
+@@ -631,7 +631,7 @@ struct fmt::formatter<DB::DataTypePtr>
+     }
+ 
+     template <typename FormatContext>
+-    auto format(const DB::DataTypePtr & type, FormatContext & ctx) const
++    auto format(const DB::DataTypePtr & type, FormatContext & ctx)
+     {
+         return fmt::format_to(ctx.out(), "{}", type->getName());
+     }
+--- contrib/python/chdb/cpp/src/Functions/printf.cpp	(index)
++++ contrib/python/chdb/cpp/src/Functions/printf.cpp	(working tree)
+@@ -235,7 +235,7 @@ public:
+                 concat_args[i] = instruction.execute();
+                 // std::cout << "concat_args[" << i << "]:" << concat_args[i].dumpStructure() << std::endl;
+             }
+-            catch (const fmt::v9::format_error & e)
++            catch (const fmt::v8::format_error & e)
+             {
+                 if (instruction.is_literal)
+                     throw Exception(
+--- contrib/python/chdb/cpp/src/IO/WriteHelpers.h	(index)
++++ contrib/python/chdb/cpp/src/IO/WriteHelpers.h	(working tree)
+@@ -1420,7 +1420,7 @@ struct fmt::formatter<DB::UUID>
+     }
+ 
+     template<typename FormatContext>
+-    auto format(const DB::UUID & uuid, FormatContext & context) const
++    auto format(const DB::UUID & uuid, FormatContext & context)
+     {
+         return fmt::format_to(context.out(), "{}", toString(uuid));
+     }
+--- contrib/python/chdb/cpp/src/Interpreters/StorageID.h	(index)
++++ contrib/python/chdb/cpp/src/Interpreters/StorageID.h	(working tree)
+@@ -135,7 +135,7 @@ namespace fmt
+         }
+ 
+         template <typename FormatContext>
+-        auto format(const DB::StorageID & storage_id, FormatContext & ctx) const
++        auto format(const DB::StorageID & storage_id, FormatContext & ctx)
+         {
+             return fmt::format_to(ctx.out(), "{}", storage_id.getNameForLogs());
+         }
+--- contrib/python/chdb/cpp/src/Parsers/formatAST.h	(index)
++++ contrib/python/chdb/cpp/src/Parsers/formatAST.h	(working tree)
+@@ -40,7 +40,7 @@ struct fmt::formatter<DB::ASTPtr>
+     }
+ 
+     template<typename FormatContext>
+-    auto format(const DB::ASTPtr & ast, FormatContext & context) const
++    auto format(const DB::ASTPtr & ast, FormatContext & context)
+     {
+         return fmt::format_to(context.out(), "{}", DB::serializeAST(*ast));
+     }
+--- contrib/python/chdb/cpp/src/Processors/Transforms/WindowTransform.cpp	(index)
++++ contrib/python/chdb/cpp/src/Processors/Transforms/WindowTransform.cpp	(working tree)
+@@ -43,7 +43,7 @@ struct fmt::formatter<DB::RowNumber>
+     }
+ 
+     template <typename FormatContext>
+-    auto format(const DB::RowNumber & x, FormatContext & ctx) const
++    auto format(const DB::RowNumber & x, FormatContext & ctx)
+     {
+         return fmt::format_to(ctx.out(), "{}:{}", x.block, x.row);
+     }
+--- contrib/python/chdb/cpp/src/Storages/MergeTree/MarkRange.h	(index)
++++ contrib/python/chdb/cpp/src/Storages/MergeTree/MarkRange.h	(working tree)
+@@ -69,7 +69,7 @@ struct fmt::formatter<DB::MarkRange>
+     }
+ 
+     template <typename FormatContext>
+-    auto format(const DB::MarkRange & range, FormatContext & ctx) const
++    auto format(const DB::MarkRange & range, FormatContext & ctx)
+     {
+         return fmt::format_to(ctx.out(), "{}", fmt::format("({}, {})", range.begin, range.end));
+     }
+--- contrib/python/chdb/cpp/src/Storages/MergeTree/ParallelReplicasReadingCoordinator.cpp	(index)
++++ contrib/python/chdb/cpp/src/Storages/MergeTree/ParallelReplicasReadingCoordinator.cpp	(working tree)
+@@ -112,7 +112,7 @@ struct fmt::formatter<DB::Part>
+     static constexpr auto parse(format_parse_context & ctx) { return ctx.begin(); }
+ 
+     template <typename FormatContext>
+-    auto format(const DB::Part & part, FormatContext & ctx) const
++    auto format(const DB::Part & part, FormatContext & ctx)
+     {
+         return fmt::format_to(ctx.out(), "{} in replicas [{}]", part.description.describe(), fmt::join(part.replicas, ", "));
+     }
+--- contrib/python/chdb/cpp/src/Storages/MergeTree/RangesInDataPart.cpp	(index)
++++ contrib/python/chdb/cpp/src/Storages/MergeTree/RangesInDataPart.cpp	(working tree)
+@@ -13,7 +13,7 @@ struct fmt::formatter<DB::RangesInDataPartDescription>
+     static constexpr auto parse(format_parse_context & ctx) { return ctx.begin(); }
+ 
+     template <typename FormatContext>
+-    auto format(const DB::RangesInDataPartDescription & range, FormatContext & ctx) const
++    auto format(const DB::RangesInDataPartDescription & range, FormatContext & ctx)
+     {
+         return fmt::format_to(ctx.out(), "{}", range.describe());
+     }
+--- contrib/python/chdb/cpp/src/Storages/NamedCollectionsHelpers.h	(index)
++++ contrib/python/chdb/cpp/src/Storages/NamedCollectionsHelpers.h	(working tree)
+@@ -158,7 +158,7 @@ struct fmt::formatter<DB::NamedCollectionValidateKey<T>>
+     }
+ 
+     template <typename FormatContext>
+-    auto format(const DB::NamedCollectionValidateKey<T> & elem, FormatContext & context) const
++    auto format(const DB::NamedCollectionValidateKey<T> & elem, FormatContext & context)
+     {
+         return fmt::format_to(context.out(), "{}", elem.value);
+     }

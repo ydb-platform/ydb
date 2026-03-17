@@ -1,0 +1,2 @@
+[pytest11]
+flask = pytest_flask.plugin

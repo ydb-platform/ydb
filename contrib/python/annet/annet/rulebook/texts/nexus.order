@@ -1,0 +1,85 @@
+# В этом файле определяется порядок команд, в котором их следует подавать на устройство.
+# - Если порядок команды не важен - ее можно не писать сюда совсем.
+# - Если команда начинается с undo и прописан параметр %order_reverse - команда считается
+#   обратной, но занимает место между прямыми там, где указано.
+
+# Фичи должны быть включены прежде всего
+feature
+# За ним сервисы
+service
+
+interface breakout
+
+no password strength-check
+username
+tacacs-server
+aaa
+
+ip access-list
+ipv6 access-list
+
+class-map
+policy-map
+system qos
+control-plane
+
+no policy-map %order_reverse
+no class-map %order_reverse
+
+snmp-server source-interface
+snmp-server user
+snmp-server host
+snmp-server enable
+snmp-server context
+snmp-server community
+snmp-server mib
+
+no ntp server
+no ntp distribute
+clear ntp session
+
+ntp distribute
+ntp server
+ntp commit
+
+
+vlan
+vlan group
+
+spanning-tree
+
+# перед тем, как менять mtu на интерфейсах, надо выставить максимальный
+no system jumbomtu %order_reverse
+system jumbomtu
+
+route-map
+
+service dhcp
+ip dhcp relay
+ipv6 dhcp relay
+
+vrf context
+
+interface */Vlan\d+/
+interface *
+    no switchport
+    switchport
+    switchport access vlan *
+    encapsulation
+    vrf member
+    ip
+    ipv6
+    no ipv6 nd %order_reverse
+    ipv6 nd
+    ~
+    channel-group
+
+interface */\S+\.\d+/
+
+# удалять eth-trunk можно только после того, как вычистим member interfaces
+undo interface */port-channel\d+/  %order_reverse
+
+router bgp
+    address-family
+    template
+    neighbor

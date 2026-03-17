@@ -1,0 +1,24 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: django-mptt-admin\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2016-11-21 14:32+0100\n"
+"PO-Revision-Date: 2016-11-21 14:32+0100\n"
+"Last-Translator: Istvan Farkas <istvan.farkas@gmail.com>\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "edit"
+msgstr "szerkeszt"
+
+msgid "add"
+msgstr "új"
+
+msgid "move failed"
+msgstr "mozgatás sikertelen"
+
+msgid "Error while loading the data from the server"
+msgstr "Hiba történt az adatok betöltése közben"

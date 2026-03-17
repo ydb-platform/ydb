@@ -1,0 +1,7 @@
+# Code table 4.244 - Quality indicator
+0 0 No quality information available
+1 1 Failed
+2 2 Passed
+# 3-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

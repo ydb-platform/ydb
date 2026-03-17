@@ -1,0 +1,38 @@
+requirements:
+  - library/python/symbols/registry
+mark_as_tests:
+  - Crypto/SelfTest/*.py
+exclude_from_macros:
+  - src/bignum.c
+  - src/blake2.c
+  - src/block_common.c
+  - src/blowfish_init.c
+  - src/cast5.c
+  - src/ec_ws_p256.c
+  - src/ec_ws_p384.c
+  - src/ec_ws_p521.c
+  - src/ed25519_perf.c
+  - src/ed448_perf.c
+  - src/hash_SHA2_template.c
+  - src/libtom/tomcrypt_des.c
+  - src/make_p256_table.c
+  - src/make_p384_table.c
+  - src/make_p521_table.c
+  - src/mod25519.c
+  - src/modexp_utils_math.c
+  - src/mont1.c
+  - src/mont2.c
+  - src/multiply_32.c
+  - src/multiply_64.c
+  - src/siphash_math.c
+  - src/x25519.c
+  # Python 3 only
+  - Crypto/Cipher/_mode_kw.py
+  - Crypto/Cipher/_mode_kwp.py
+  - Crypto/Protocol/HPKE.py
+exclude:
+  - tests/*
+copy:
+  - src/*
+keep:
+  - src/*_syms.cpp

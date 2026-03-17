@@ -1,0 +1,42 @@
+--- contrib/python/jupyter-client/py3/jupyter_client/kernelspecapp.py	(index)
++++ contrib/python/jupyter-client/py3/jupyter_client/kernelspecapp.py	(working tree)
+@@ -323,6 +323,7 @@ class KernelSpecApp(Application):
+     paths_: dict[str, str] = {k: v for k, v in paths.items() if k in missing}
+     return paths_, missing
+ 
++main = KernelSpecApp.launch_instance
+ 
+ if __name__ == "__main__":
+     KernelSpecApp.launch_instance()
+--- contrib/python/jupyter-client/py3/jupyter_client/launcher.py	(index)
++++ contrib/python/jupyter-client/py3/jupyter_client/launcher.py	(working tree)
+@@ -21,6 +21,8 @@ from traitlets.log import get_logger
+     env: dict[str, str] | None = None,
+     independent: bool = False,
+     cwd: str | None = None,
++    *,
++    _patch_entry_point: bool = True,
+     **kw: Any,
+ ) -> Popen:
+     """Launches a localhost kernel, binding to the specified ports.
+@@ -45,6 +47,10 @@ def launch_kernel(cmd, stdin=None, stdout=None, stderr=None, env=None,
+     cwd : path, optional
+         The working dir of the kernel process (default: cwd of this process).
+ 
++    _patch_entry_point: bool, optional
++        XXX: by default patches environment to run Python via any python Arcadia binary
++        to allow run `sys.executable -m ipykernel.something...` in jupyter_client tests.
++
+     **kw: optional
+         Additional arguments for Popen
+ 
+@@ -152,6 +157,9 @@ def launch_kernel(cmd, stdin=None, stdout=None, stderr=None, env=None,
+         if not independent:
+             env["JPY_PARENT_PID"] = str(os.getpid())
+ 
++    if _patch_entry_point:
++        env["Y_PYTHON_ENTRY_POINT"] = ":main"
++
+     try:
+         # Allow to use ~/ in the command or its arguments
+         cmd = [os.path.expanduser(s) for s in cmd]

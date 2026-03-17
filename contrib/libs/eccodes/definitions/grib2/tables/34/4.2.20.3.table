@@ -1,0 +1,14 @@
+# Product discipline 20 - Health and socioeconomic impacts, parameter category 3: renewable energy sector
+0 0 Renewable power capacity (W)
+1 1 Renewable power production rate (W)
+2 2 Wind power capacity (W)
+3 3 Wind power production rate (W)
+4 4 Solar photovoltaic (PV) power capacity (W)
+5 5 Solar photovoltaic (PV) power production rate (W)
+6 6 Solar non-photovoltaic (PV) power capacity (W)
+7 7 Solar non-photovoltaic (PV) power production rate (W)
+8 8 Concentrated solar power (CSP) power capacity (W)
+9 9 Concentrated solar power (CSP) power production rate (W)
+# 10-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

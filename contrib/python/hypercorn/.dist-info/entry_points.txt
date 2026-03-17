@@ -1,0 +1,5 @@
+[console_scripts]
+hypercorn = hypercorn.__main__:main
+
+[gui_scripts]
+

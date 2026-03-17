@@ -1,0 +1,27 @@
+Metadata-Version: 2.1
+Name: Flask-SSLify
+Version: 0.1.5
+Summary: Force SSL on your Flask app.
+Home-page: https://github.com/kennethreitz/flask-sslify
+Author: Kenneth Reitz
+Author-email: me@kennethreitz.com
+License: BSD
+Platform: any
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Dist: Flask
+
+Flask-SSLify
+------------
+
+This is a simple Flask extension that configures your Flask application to redirect
+all incoming requests to ``https``.
+
+Redirects only occur when ``app.debug`` is ``False``.
+
+

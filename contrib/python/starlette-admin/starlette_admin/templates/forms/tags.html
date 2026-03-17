@@ -1,0 +1,19 @@
+<div class="{% if error %}{{ field.error_class }}{% endif %}">
+    <select id="{{ field.id }}"
+            name="{{ field.id }}"
+            class="{{ field.class_ }} {% if error %}{{ field.error_class }}{% endif %}"
+            data-tags="true"
+            multiple>
+        {% if data %}
+            {% for value in data %}
+                <option selected="selected">
+                    {{ value }}
+                </option>
+            {% endfor %}
+        {% endif %}
+    </select>
+    {% if field.help_text %}
+        <small class="form-hint mt-2">{{ field.help_text }}</small>
+    {% endif %}
+</div>
+{% include "forms/_error.html" %}

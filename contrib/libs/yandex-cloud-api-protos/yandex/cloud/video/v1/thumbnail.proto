@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package yandex.cloud.video.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/video/v1;video";
+option java_package = "yandex.cloud.api.video.v1";
+
+// Entity representing an image used as a visual representation for various content entities.
+// Thumbnails provide preview images for channels, streams, episodes, videos, and stream lines.
+message Thumbnail {
+  // Reserved for future use.
+  reserved 3 to 99, 101 to 1002;
+
+  // Unique identifier of the thumbnail.
+  string id = 1;
+
+  // Identifier of the channel where the thumbnail is created and managed.
+  string channel_id = 2;
+
+  oneof parent_id {
+      // ID of the episode which the thumbnail is associated with.
+      string episode_id = 1003;
+
+      // ID of the video which the thumbnail is associated with.
+      string video_id = 1004;
+  }
+
+  // Timestamp when the thumbnail was initially created in the system.
+  google.protobuf.Timestamp created_at = 100;
+}

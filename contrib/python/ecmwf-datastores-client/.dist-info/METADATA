@@ -1,0 +1,519 @@
+Metadata-Version: 2.4
+Name: ecmwf-datastores-client
+Version: 0.4.2
+Summary: ECMWF Data Stores Service (DSS) API Python client
+License:                                  Apache License
+                                   Version 2.0, January 2004
+                                http://www.apache.org/licenses/
+        
+           TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+        
+           1. Definitions.
+        
+              "License" shall mean the terms and conditions for use, reproduction,
+              and distribution as defined by Sections 1 through 9 of this document.
+        
+              "Licensor" shall mean the copyright owner or entity authorized by
+              the copyright owner that is granting the License.
+        
+              "Legal Entity" shall mean the union of the acting entity and all
+              other entities that control, are controlled by, or are under common
+              control with that entity. For the purposes of this definition,
+              "control" means (i) the power, direct or indirect, to cause the
+              direction or management of such entity, whether by contract or
+              otherwise, or (ii) ownership of fifty percent (50%) or more of the
+              outstanding shares, or (iii) beneficial ownership of such entity.
+        
+              "You" (or "Your") shall mean an individual or Legal Entity
+              exercising permissions granted by this License.
+        
+              "Source" form shall mean the preferred form for making modifications,
+              including but not limited to software source code, documentation
+              source, and configuration files.
+        
+              "Object" form shall mean any form resulting from mechanical
+              transformation or translation of a Source form, including but
+              not limited to compiled object code, generated documentation,
+              and conversions to other media types.
+        
+              "Work" shall mean the work of authorship, whether in Source or
+              Object form, made available under the License, as indicated by a
+              copyright notice that is included in or attached to the work
+              (an example is provided in the Appendix below).
+        
+              "Derivative Works" shall mean any work, whether in Source or Object
+              form, that is based on (or derived from) the Work and for which the
+              editorial revisions, annotations, elaborations, or other modifications
+              represent, as a whole, an original work of authorship. For the purposes
+              of this License, Derivative Works shall not include works that remain
+              separable from, or merely link (or bind by name) to the interfaces of,
+              the Work and Derivative Works thereof.
+        
+              "Contribution" shall mean any work of authorship, including
+              the original version of the Work and any modifications or additions
+              to that Work or Derivative Works thereof, that is intentionally
+              submitted to Licensor for inclusion in the Work by the copyright owner
+              or by an individual or Legal Entity authorized to submit on behalf of
+              the copyright owner. For the purposes of this definition, "submitted"
+              means any form of electronic, verbal, or written communication sent
+              to the Licensor or its representatives, including but not limited to
+              communication on electronic mailing lists, source code control systems,
+              and issue tracking systems that are managed by, or on behalf of, the
+              Licensor for the purpose of discussing and improving the Work, but
+              excluding communication that is conspicuously marked or otherwise
+              designated in writing by the copyright owner as "Not a Contribution."
+        
+              "Contributor" shall mean Licensor and any individual or Legal Entity
+              on behalf of whom a Contribution has been received by Licensor and
+              subsequently incorporated within the Work.
+        
+           2. Grant of Copyright License. Subject to the terms and conditions of
+              this License, each Contributor hereby grants to You a perpetual,
+              worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+              copyright license to reproduce, prepare Derivative Works of,
+              publicly display, publicly perform, sublicense, and distribute the
+              Work and such Derivative Works in Source or Object form.
+        
+           3. Grant of Patent License. Subject to the terms and conditions of
+              this License, each Contributor hereby grants to You a perpetual,
+              worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+              (except as stated in this section) patent license to make, have made,
+              use, offer to sell, sell, import, and otherwise transfer the Work,
+              where such license applies only to those patent claims licensable
+              by such Contributor that are necessarily infringed by their
+              Contribution(s) alone or by combination of their Contribution(s)
+              with the Work to which such Contribution(s) was submitted. If You
+              institute patent litigation against any entity (including a
+              cross-claim or counterclaim in a lawsuit) alleging that the Work
+              or a Contribution incorporated within the Work constitutes direct
+              or contributory patent infringement, then any patent licenses
+              granted to You under this License for that Work shall terminate
+              as of the date such litigation is filed.
+        
+           4. Redistribution. You may reproduce and distribute copies of the
+              Work or Derivative Works thereof in any medium, with or without
+              modifications, and in Source or Object form, provided that You
+              meet the following conditions:
+        
+              (a) You must give any other recipients of the Work or
+                  Derivative Works a copy of this License; and
+        
+              (b) You must cause any modified files to carry prominent notices
+                  stating that You changed the files; and
+        
+              (c) You must retain, in the Source form of any Derivative Works
+                  that You distribute, all copyright, patent, trademark, and
+                  attribution notices from the Source form of the Work,
+                  excluding those notices that do not pertain to any part of
+                  the Derivative Works; and
+        
+              (d) If the Work includes a "NOTICE" text file as part of its
+                  distribution, then any Derivative Works that You distribute must
+                  include a readable copy of the attribution notices contained
+                  within such NOTICE file, excluding those notices that do not
+                  pertain to any part of the Derivative Works, in at least one
+                  of the following places: within a NOTICE text file distributed
+                  as part of the Derivative Works; within the Source form or
+                  documentation, if provided along with the Derivative Works; or,
+                  within a display generated by the Derivative Works, if and
+                  wherever such third-party notices normally appear. The contents
+                  of the NOTICE file are for informational purposes only and
+                  do not modify the License. You may add Your own attribution
+                  notices within Derivative Works that You distribute, alongside
+                  or as an addendum to the NOTICE text from the Work, provided
+                  that such additional attribution notices cannot be construed
+                  as modifying the License.
+        
+              You may add Your own copyright statement to Your modifications and
+              may provide additional or different license terms and conditions
+              for use, reproduction, or distribution of Your modifications, or
+              for any such Derivative Works as a whole, provided Your use,
+              reproduction, and distribution of the Work otherwise complies with
+              the conditions stated in this License.
+        
+           5. Submission of Contributions. Unless You explicitly state otherwise,
+              any Contribution intentionally submitted for inclusion in the Work
+              by You to the Licensor shall be under the terms and conditions of
+              this License, without any additional terms or conditions.
+              Notwithstanding the above, nothing herein shall supersede or modify
+              the terms of any separate license agreement you may have executed
+              with Licensor regarding such Contributions.
+        
+           6. Trademarks. This License does not grant permission to use the trade
+              names, trademarks, service marks, or product names of the Licensor,
+              except as required for reasonable and customary use in describing the
+              origin of the Work and reproducing the content of the NOTICE file.
+        
+           7. Disclaimer of Warranty. Unless required by applicable law or
+              agreed to in writing, Licensor provides the Work (and each
+              Contributor provides its Contributions) on an "AS IS" BASIS,
+              WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+              implied, including, without limitation, any warranties or conditions
+              of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+              PARTICULAR PURPOSE. You are solely responsible for determining the
+              appropriateness of using or redistributing the Work and assume any
+              risks associated with Your exercise of permissions under this License.
+        
+           8. Limitation of Liability. In no event and under no legal theory,
+              whether in tort (including negligence), contract, or otherwise,
+              unless required by applicable law (such as deliberate and grossly
+              negligent acts) or agreed to in writing, shall any Contributor be
+              liable to You for damages, including any direct, indirect, special,
+              incidental, or consequential damages of any character arising as a
+              result of this License or out of the use or inability to use the
+              Work (including but not limited to damages for loss of goodwill,
+              work stoppage, computer failure or malfunction, or any and all
+              other commercial damages or losses), even if such Contributor
+              has been advised of the possibility of such damages.
+        
+           9. Accepting Warranty or Additional Liability. While redistributing
+              the Work or Derivative Works thereof, You may choose to offer,
+              and charge a fee for, acceptance of support, warranty, indemnity,
+              or other liability obligations and/or rights consistent with this
+              License. However, in accepting such obligations, You may act only
+              on Your own behalf and on Your sole responsibility, not on behalf
+              of any other Contributor, and only if You agree to indemnify,
+              defend, and hold each Contributor harmless for any liability
+              incurred by, or claims asserted against, such Contributor by reason
+              of your accepting any such warranty or additional liability.
+        
+           END OF TERMS AND CONDITIONS
+        
+           APPENDIX: How to apply the Apache License to your work.
+        
+              To apply the Apache License to your work, attach the following
+              boilerplate notice, with the fields enclosed by brackets "[]"
+              replaced with your own identifying information. (Don't include
+              the brackets!)  The text should be enclosed in the appropriate
+              comment syntax for the file format. We also recommend that a
+              file or class name and description of purpose be included on the
+              same "printed page" as the copyright notice for easier
+              identification within third-party archives.
+        
+           Copyright 2022, European Union.
+        
+           Licensed under the Apache License, Version 2.0 (the "License");
+           you may not use this file except in compliance with the License.
+           You may obtain a copy of the License at
+        
+               http://www.apache.org/licenses/LICENSE-2.0
+        
+           Unless required by applicable law or agreed to in writing, software
+           distributed under the License is distributed on an "AS IS" BASIS,
+           WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+           See the License for the specific language governing permissions and
+           limitations under the License.
+        
+Project-URL: documentation, https://ecmwf.github.io/ecmwf-datastores-client/
+Project-URL: source, https://github.com/ecmwf/ecmwf-datastores-client
+Project-URL: tracker, https://github.com/ecmwf/ecmwf-datastores-client/issues
+Classifier: Development Status :: 2 - Pre-Alpha
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Scientific/Engineering
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: attrs
+Requires-Dist: multiurl>=0.3.7
+Requires-Dist: requests
+Requires-Dist: typing-extensions
+Provides-Extra: legacy
+Requires-Dist: cdsapi>=0.7.6; extra == "legacy"
+Dynamic: license-file
+
+<p align="center">
+  <a href="https://github.com/ecmwf/codex/raw/refs/heads/main/ESEE">
+    <img src="https://github.com/ecmwf/codex/raw/refs/heads/main/ESEE/data_provision_badge.svg" alt="ECMWF Software EnginE"></a>
+  <a href="https://github.com/ecmwf/codex/raw/refs/heads/main/Project Maturity">
+    <img src="https://github.com/ecmwf/codex/raw/refs/heads/main/Project Maturity/incubating_badge.svg" alt="Maturity Level"></a>
+  <!-- <a href="https://codecov.io/gh/ecmwf/ecmwf-datastores-client">
+    <img src="https://codecov.io/gh/ecmwf/ecmwf-datastores-client/branch/main/graph/badge.svg" alt="Code Coverage"></a> -->
+  <a href="https://opensource.org/licenses/apache-2-0">
+    <img src="https://img.shields.io/badge/Licence-Apache 2.0-blue.svg" alt="Licence"></a>
+  <a href="https://github.com/ecmwf/ecmwf-datastores-client/releases">
+    <img src="https://img.shields.io/github/v/release/ecmwf/ecmwf-datastores-client?color=purple&label=Release" alt="Latest Release"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a>
+  •
+  <a href="#installation">Installation</a>
+  •
+  <a href="https://ecmwf.github.io/ecmwf-datastores-client/">Documentation</a>
+</p>
+
+> [!IMPORTANT]
+> This software is **Incubating** and subject to ECMWF's guidelines on [Software Maturity](https://github.com/ecmwf/codex/raw/refs/heads/main/Project%20Maturity).
+
+# ecmwf-datastores-client
+
+ECMWF Data Stores Service (DSS) API Python client.
+
+Technical documentation: https://ecmwf.github.io/ecmwf-datastores-client/
+
+## Installation
+
+Install with conda:
+
+```
+$ conda install -c conda-forge ecmwf-datastores-client
+```
+
+Install with pip:
+
+```
+$ pip install ecmwf-datastores-client
+```
+
+## Configuration
+
+The `Client` requires the `url` to the API root and a valid API `key`. These can be provided in three ways, in order of precedence:
+
+1. As keyword arguments when instantiating the `Client`.
+1. Via the `ECMWF_DATASTORES_URL` and `ECMWF_DATASTORES_KEY` environment variables.
+1. From a configuration file, which must be located at `~/.ecmwfdatastoresrc` or at the path specified by the `ECMWF_DATASTORES_RC_FILE` environment variable.
+
+```
+$ cat $HOME/.ecmwfdatastoresrc
+url: https://cds.climate.copernicus.eu/api
+key: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+## Quick Start
+
+Configure the logging level to display INFO messages:
+
+```python
+>>> import logging
+>>> logging.basicConfig(level="INFO")
+
+```
+
+Instantiate the API client and optionally verify authentication:
+
+```python
+>>> from ecmwf.datastores import Client
+>>> client = Client()
+>>> client.check_authentication()  # optional check
+{...}
+
+```
+
+Retrieve data:
+
+```python
+>>> collection_id = "reanalysis-era5-pressure-levels"
+>>> request = {
+...     "product_type": ["reanalysis"],
+...     "variable": ["temperature"],
+...     "year": ["2022"],
+...     "month": ["01"],
+...     "day": ["01"],
+...     "time": ["00:00"],
+...     "pressure_level": ["1000"],
+...     "data_format": "grib",
+...     "download_format": "unarchived",
+... }
+
+>>> client.retrieve(collection_id, request, target="target_1.grib")  # blocks
+'target_1.grib'
+
+```
+
+Alternative methods to retrieve data:
+
+```python
+>>> remote = client.submit(collection_id, request)  # doesn't block
+>>> remote
+Remote(...)
+>>> remote.download("target_2.grib")  # blocks
+'target_2.grib'
+
+>>> results = client.submit_and_wait_on_results(collection_id, request)  # blocks
+>>> results
+Results(...)
+>>> results.download("target_3.grib")
+'target_3.grib'
+
+>>> client.download_results(remote.request_id, "target_4.grib")  # blocks
+'target_4.grib'
+
+```
+
+List all collection IDs sorted by last update:
+
+```python
+>>> collections = client.get_collections(sortby="update")
+
+>>> collection_ids = []
+>>> while collections is not None:  # Loop over pages
+...     collection_ids.extend(collections.collection_ids)
+...     collections = collections.next  # Move to the next page
+...
+
+>>> collection_ids
+[...]
+>>> collection_id in collection_ids
+True
+
+```
+
+Explore a collection:
+
+```python
+>>> collection = client.get_collection(collection_id)
+
+>>> collection.id == collection_id
+True
+>>> collection.title
+'...'
+>>> collection.description
+'...'
+
+>>> collection.published_at
+datetime.datetime(...)
+>>> collection.updated_at
+datetime.datetime(...)
+
+>>> collection.begin_datetime
+datetime.datetime(...)
+>>> collection.end_datetime
+datetime.datetime(...)
+>>> collection.bbox
+(...)
+
+>>> collection.submit(request)
+Remote(...)
+
+>>> collection.apply_constraints(request)
+{...}
+
+```
+
+Interact with results:
+
+```python
+>>> results = client.get_results(remote.request_id)
+
+>>> results.content_length > 0
+True
+>>> results.content_type
+'application/x-grib'
+>>> results.location
+'...'
+
+>>> results.download("target_5.grib")
+'target_5.grib'
+
+```
+
+List all successful jobs, sorted by newest first:
+
+```python
+>>> jobs = client.get_jobs(sortby="-created", status="successful")
+
+>>> request_ids = []
+>>> while jobs is not None:  # Loop over pages
+...     request_ids.extend(jobs.request_ids)
+...     jobs = jobs.next  # Move to the next page
+...
+
+>>> request_ids
+[...]
+>>> remote.request_id in request_ids
+True
+
+```
+
+Interact with a previously submitted job:
+
+```python
+>>> remote = client.get_remote(remote.request_id)
+
+>>> remote.collection_id == collection_id
+True
+>>> remote.request
+{...}
+
+>>> remote.status
+'successful'
+>>> remote.results_ready
+True
+
+>>> remote.created_at
+datetime.datetime(...)
+>>> remote.started_at
+datetime.datetime(...)
+>>> remote.finished_at
+datetime.datetime(...)
+>>> remote.updated_at == remote.finished_at
+True
+
+>>> remote.download("target_6.grib")
+'target_6.grib'
+
+>>> remote.get_results()
+Results(...)
+
+>>> remote.delete()
+{...}
+
+```
+
+Apply constraints and find the number of available days in a given month:
+
+```python
+>>> month = {"year": "2000", "month": "02"}
+>>> constrained_request = client.apply_constraints(collection_id, month)
+
+>>> len(constrained_request["day"])
+29
+
+```
+
+## Workflow for developers/contributors
+
+For best experience create a new conda environment (e.g. DEVELOP) with Python 3.12:
+
+```
+conda create -n DEVELOP -c conda-forge python=3.12
+conda activate DEVELOP
+```
+
+Before pushing to GitHub, run the following commands:
+
+1. Update conda environment: `make conda-env-update`
+1. Install this package: `pip install -e .`
+1. Sync with the latest [template](https://github.com/ecmwf-projects/cookiecutter-conda-package) (optional): `make template-update`
+1. Run quality assurance checks: `make qa`
+1. Run tests: `make unit-tests`
+1. Run the static type checker: `make type-check`
+1. Build the documentation (see [Sphinx tutorial](https://www.sphinx-doc.org/en/master/tutorial/)): `make docs-build`
+
+## License
+
+```
+Copyright 2022, European Union.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```

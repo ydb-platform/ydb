@@ -1,0 +1,2306 @@
+[
+  {
+    "country_code": "LT",
+    "bic": "LIABLT2XCON",
+    "bank_code": "10110",
+    "name": "Lietuvos banko padalinys",
+    "short_name": "Lietuvos banko padalinys",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "LIABLT2XSNO",
+    "bank_code": "00758",
+    "name": "Lietuvos banko s\u0105skaita BAB SNORAS \u012fmokoms surinkti",
+    "short_name": "Lietuvos banko s\u0105skaita BAB SNORAS \u012fmokoms surinkti",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "LIABLT2XXXX",
+    "bank_code": "10100",
+    "name": "Lietuvos bankas",
+    "short_name": "Lietuvos bankas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "LIABLT2XXXX",
+    "bank_code": "10101",
+    "name": "Lietuvos banko Kauno skyrius",
+    "short_name": "Lietuvos bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LIABLT2XXXX",
+    "bank_code": "10110",
+    "name": "Mok\u0117jimo sistem\u0173 departamentas",
+    "short_name": "Lietuvos bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LIABLT2XXXX",
+    "bank_code": "10900",
+    "name": "Mok\u0117jimo sistem\u0173 departamentas",
+    "short_name": "Lietuvos bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CSDLLT22RTG",
+    "bank_code": "90002",
+    "name": "Lietuvos centrinis vertybini\u0173 popieri\u0173 depozitoriumas",
+    "short_name": "Lietuvos centrinis vertybini\u0173 popieri\u0173 depozitoriumas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CSDLLT22XXX",
+    "bank_code": "90001",
+    "name": "Lietuvos centrinis vertybini\u0173 popieri\u0173 depozitoriumas",
+    "short_name": "Lietuvos centrinis vertybini\u0173 popieri\u0173 depozitoriumas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "AGBLLT2XTGT",
+    "bank_code": "40199",
+    "name": "Luminor Bank AS Lietuvos sk. minimum rezerves",
+    "short_name": "Luminor Bank AS Lietuvos sk. minimum rezerves",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "AGBLLT2XXXX",
+    "bank_code": "40100",
+    "name": "Luminor Bank AS Lietuvos skyrius",
+    "short_name": "Luminor Bank AS Lietuvos skyrius",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "AGBLLT2XXXX",
+    "bank_code": "21400",
+    "name": "Luminor Bank AS Lietuvos skyrius",
+    "short_name": "Luminor Bank AS Lietuvos skyrius",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "70500",
+    "name": "AB bankas \"Finasta\"",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71800",
+    "name": "AB \u0160iauli\u0173 bankas",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71812",
+    "name": "AB \u0160iauli\u0173 banko Alytaus KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71821",
+    "name": "AB \u0160iauli\u0173 banko Anyk\u0161\u010di\u0173 KAS",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71816",
+    "name": "AB \u0160iauli\u0173 banko Bir\u0161tono KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71825",
+    "name": "AB \u0160iauli\u0173 banko Bir\u017e\u0173 KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71899",
+    "name": "AB \u0160iauli\u0173 banko centrin\u0117 b\u016bstin\u0117",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71819",
+    "name": "AB \u0160iauli\u0173 banko Druskinink\u0173 KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71826",
+    "name": "AB \u0160iauli\u0173 banko Jonavos KAS",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71809",
+    "name": "AB \u0160iauli\u0173 banko Kauno filialas",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71823",
+    "name": "AB \u0160iauli\u0173 banko Kedaini\u0173 KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71802",
+    "name": "AB \u0160iauli\u0173 banko Kelm\u0117s KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71805",
+    "name": "AB \u0160iauli\u0173 banko Klaip\u0117dos filialas",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71829",
+    "name": "AB \u0160iauli\u0173 banko Kupi\u0161kio KAS",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71804",
+    "name": "AB \u0160iauli\u0173 banko Kur\u0161\u0117n\u0173 KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71818",
+    "name": "AB \u0160iauli\u0173 banko Marijampol\u0117s KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71808",
+    "name": "AB \u0160iauli\u0173 banko Ma\u017eeiki\u0173 KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71806",
+    "name": "AB \u0160iauli\u0173 banko Palangos KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71815",
+    "name": "AB \u0160iauli\u0173 banko Panev\u0117\u017eio KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71820",
+    "name": "AB \u0160iauli\u0173 banko Plung\u0117s KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71814",
+    "name": "AB \u0160iauli\u0173 banko Radvili\u0161kio KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71830",
+    "name": "AB \u0160iauli\u0173 banko Raseini\u0173 KAS",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71828",
+    "name": "AB \u0160iauli\u0173 banko Roki\u0161kio KAS",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71807",
+    "name": "AB \u0160iauli\u0173 banko \u0160ilut\u0117s KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71813",
+    "name": "AB \u0160iauli\u0173 banko Taurag\u0117s KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71817",
+    "name": "AB \u0160iauli\u0173 banko Tel\u0161i\u0173 KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71824",
+    "name": "AB \u0160iauli\u0173 banko Ukmerg\u0117s KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71811",
+    "name": "AB \u0160iauli\u0173 banko Utenos KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71810",
+    "name": "AB \u0160iauli\u0173 banko Vilkavi\u0161kio KAS",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71803",
+    "name": "AB \u0160iauli\u0173 banko Vilniaus filialas",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71822",
+    "name": "AB \u0160iauli\u0173 banko Visagino KAC",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBSBLT26XXX",
+    "bank_code": "71827",
+    "name": "AB \u0160iauli\u0173 banko Zaras\u0173 KAS",
+    "short_name": "AB \u0160iauli\u0173 bankas",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBVILT2XXXX",
+    "bank_code": "70440",
+    "name": "AB SEB bankas",
+    "short_name": "AB SEB bankas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CRUBLT22XXX",
+    "bank_code": "39807",
+    "name": "Crius LT, UAB",
+    "short_name": "Crius LT, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "EUEBLT22XXX",
+    "bank_code": "71100",
+    "name": "European Merchant Bank UAB",
+    "short_name": "European Merchant Bank UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "FEMAMTMAXXX",
+    "bank_code": "30066",
+    "name": "Ferratum Bank PLC",
+    "short_name": "Ferratum Bank PLC",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "FJORLT21XXX",
+    "bank_code": "22500",
+    "name": "AB Fjord Bank",
+    "short_name": "AB Fjord Bank",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "GRFNLT21XXX",
+    "bank_code": "60024",
+    "name": "UAB GF bankas",
+    "short_name": "UAB GF bankas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "HABALT22XXX",
+    "bank_code": "73000",
+    "name": "\"Swedbank\", AB",
+    "short_name": "\"Swedbank\", AB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "IBFLLT22XXX",
+    "bank_code": "22400",
+    "name": "AS Inbank filialas",
+    "short_name": "AS Inbank filialas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "INDULT2XXXX",
+    "bank_code": "72900",
+    "name": "Akciju sabiedriba \"Citadele banka\" Lietuvos filialas",
+    "short_name": "Akciju sabiedriba \"Citadele banka\" Lietuvos filialas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "KUSRLT21XXX",
+    "bank_code": "50300",
+    "name": "AB \"Mano bankas\"",
+    "short_name": "AB \"Mano bankas\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "KUSRLT24XXX",
+    "bank_code": "50301",
+    "name": "AB \"Mano bankas\" - 2",
+    "short_name": "AB \"Mano bankas\" - 2",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MDBALT22XXX",
+    "bank_code": "72300",
+    "name": "UAB Medicinos bankas",
+    "short_name": "UAB Medicinos bankas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MULTLT2XXXX",
+    "bank_code": "21700",
+    "name": "AS \"Industra Bank\" Lietuvos filialas",
+    "short_name": "AS \"Industra Bank\" Lietuvos filialas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "NDEALT2XXXX",
+    "bank_code": "21499",
+    "name": "Luminor Bank AS Lietuvos skyrius",
+    "short_name": "Luminor Bank AS Lietuvos skyrius",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "NORWNOK1XXX",
+    "bank_code": "30021",
+    "name": "Bank Norwegian ASA",
+    "short_name": "Bank Norwegian ASA",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "OKOYLT2XXXX",
+    "bank_code": "21500",
+    "name": "OP Corporate Bank plc Lietuvos filialas",
+    "short_name": "OP Corporate Bank plc Lietuvos filialas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PYYRLT22XXX",
+    "bank_code": "22600",
+    "name": "PayRay Bank, UAB",
+    "short_name": "PayRay Bank, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "RETBLT21XXX",
+    "bank_code": "70700",
+    "name": "Revolut Bank UAB",
+    "short_name": "Revolut Bank UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "RVUALT2VXXX",
+    "bank_code": "70701",
+    "name": "Revolut Bank UAB",
+    "short_name": "Revolut Bank UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "SMPOLT22XXX",
+    "bank_code": "74000",
+    "name": "Danske Bank A/S Lietuvos filialas",
+    "short_name": "Danske Bank A/S Lietuvos filialas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TBIBBGSFXXX",
+    "bank_code": "30069",
+    "name": "TBI Bank EAD",
+    "short_name": "TBI Bank EAD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "USDFLT22XXX",
+    "bank_code": "74100",
+    "name": "UAB SME Bank",
+    "short_name": "UAB SME Bank",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50109",
+    "name": "Akademin\u0117 kredito unija",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50121",
+    "name": "Auk\u0161taitijos kredito unija",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50126",
+    "name": "Bir\u017e\u0173 kredito unija",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50164",
+    "name": "Gyventoj\u0173 ir smulkaus verslo kredito unija",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50144",
+    "name": "Ignalinos kredito unija",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50147",
+    "name": "Joni\u0161kio kredito unija",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50200",
+    "name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50114",
+    "name": "Kredito unija \"Kupi\u0161k\u0117n\u0173 taupa\"",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50117",
+    "name": "Kredito unija Zanavyk\u0173 bankelis",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50162",
+    "name": "Pareig\u016bn\u0173 kredito unija",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50139",
+    "name": "Raseini\u0173 kredito unija ",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "JCKULT21XXX",
+    "bank_code": "50129",
+    "name": "\u0160ilal\u0117s kredito unija",
+    "short_name": "Jungtin\u0117 centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50131",
+    "name": "\"Achemos\" kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50152",
+    "name": "Alytaus kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50130",
+    "name": "Anyk\u0161\u010di\u0173 kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50111",
+    "name": "Centro kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50149",
+    "name": "Druskinink\u0173 kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50142",
+    "name": "Grinki\u0161kio kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50132",
+    "name": "Jonavos kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50133",
+    "name": "Jurbarko kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50127",
+    "name": "Kauno kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50135",
+    "name": "Kauno regiono kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50159",
+    "name": "K\u0117daini\u0173 kra\u0161to kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50122",
+    "name": "Kelm\u0117s kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50163",
+    "name": "Klaip\u0117dos kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50108",
+    "name": "Kooperatin\u0117 bendrov\u0117 ARKU kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50125",
+    "name": "Kredito unija \"DELTA\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50106",
+    "name": "Kredito unija \"Ebitum\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50156",
+    "name": "Kredito unija \"Fort\u016bna\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50153",
+    "name": "Kredito unija \"Garg\u017ed\u0173 taupa\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50113",
+    "name": "Kredito unija \"Germanto lobis\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50168",
+    "name": "Kredito unija \"Magnus\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50154",
+    "name": "Kredito unija \"M\u0117melio taupomoji kasa\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50166",
+    "name": "Kredito unija \"Neris\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50123",
+    "name": "Kredito unija \"Prien\u0173 taupa\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50101",
+    "name": "Kredito unija \"S\u016bduvos parama\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50112",
+    "name": "Kredito unija \"Tikroji viltis\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50120",
+    "name": "Kredito unija \"Vievio taupa\"",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50138",
+    "name": "Kretingos kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50100",
+    "name": "Lietuvos centrin\u0117 kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50146",
+    "name": "Ma\u017eeiki\u0173 kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50140",
+    "name": "Pag\u0117gi\u0173 kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50119",
+    "name": "Pakruojo \u016bkinink\u0173 kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50136",
+    "name": "Palangos kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50110",
+    "name": "Panev\u0117\u017eio kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50124",
+    "name": "Pasvalio kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50105",
+    "name": "Plung\u0117s kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50165",
+    "name": "\u0160eimos kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50102",
+    "name": "\u0160ilut\u0117s kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50115",
+    "name": "\u0160irvint\u0173 kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50128",
+    "name": "Taurag\u0117s kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50151",
+    "name": "Trak\u0173 kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50134",
+    "name": "Ukmerg\u0117s \u016bkinink\u0173 kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50145",
+    "name": "Utenos kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50104",
+    "name": "Vilkavi\u0161kio kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50167",
+    "name": "Vilniaus kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "LCKULT22XXX",
+    "bank_code": "50118",
+    "name": "Vytauto Did\u017eiojo kredito unija",
+    "short_name": "Lietuvos centrin\u0117 kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "CSDLLT22577",
+    "bank_code": "90577",
+    "name": "Nasdaq CSD SE Lietuvos filialas",
+    "short_name": "Nasdaq CSD SE Lietuvos filialas",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAMTLT22XXX",
+    "bank_code": "91004",
+    "name": "UAB \u201eMonsoon Capital\u201c",
+    "short_name": "UAB \u201eMonsoon Capital\u201c",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CRUGLT21XXX",
+    "bank_code": "51700",
+    "name": "Kredito unija \"Saul\u0117gr\u0105\u017ea\"",
+    "short_name": "Kredito unija \"Saul\u0117gr\u0105\u017ea\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "KRUALT21XXX",
+    "bank_code": "50500",
+    "name": "Kredito unija \"Taupa\"",
+    "short_name": "Kredito unija \"Taupa\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "KUVKLT21XXX",
+    "bank_code": "50600",
+    "name": "Kredito unija \"Vilniaus kreditas\"",
+    "short_name": "Kredito unija \"Vilniaus kreditas\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "LTKULT21XXX",
+    "bank_code": "51500",
+    "name": "LTL kredito unija",
+    "short_name": "LTL kredito unija",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "SIKNLT21XXX",
+    "bank_code": "50150",
+    "name": "Kredito unija \"Baltija\"",
+    "short_name": "Kredito unija \"Baltija\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UCTKLT21XXX",
+    "bank_code": "50400",
+    "name": "\"Kredito unija Centro taupomoji kasa\"",
+    "short_name": "\"Kredito unija Centro taupomoji kasa\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "VEKULT21XXX",
+    "bank_code": "51600",
+    "name": "Taupkas\u0117, kredito unija",
+    "short_name": "Taupkas\u0117, kredito unija",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "VIKULT21XXX",
+    "bank_code": "50800",
+    "name": "Vilniaus kredito unija",
+    "short_name": "Vilniaus kredito unija",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "VRKULT21XXX",
+    "bank_code": "50160",
+    "name": "Rato kredito unija",
+    "short_name": "Rato kredito unija",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "VRKULT21XXX",
+    "bank_code": "51900",
+    "name": "Rato kredito unija",
+    "short_name": "Rato kredito unija",
+    "primary": false
+  },
+  {
+    "country_code": "LT",
+    "bic": "ADWSGB22XXX",
+    "bank_code": "30086",
+    "name": "Advanced Wallet Solutions Limited",
+    "short_name": "Advanced Wallet Solutions Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "AFOPDEB2XXX",
+    "bank_code": "30024",
+    "name": "NOELSE PAY  (DE)",
+    "short_name": "NOELSE PAY  (DE)",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "AFOPITM2XXX",
+    "bank_code": "39902",
+    "name": "NOELSE PAY (IT)",
+    "short_name": "NOELSE PAY (IT)",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "AFPMFR22XXX",
+    "bank_code": "39903",
+    "name": "NOELSE PAY (FR)",
+    "short_name": "NOELSE PAY (FR)",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "AKELEE21XXX",
+    "bank_code": "38100",
+    "name": "AS Pocopay",
+    "short_name": "AS Pocopay",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "ARPYGB21XXX",
+    "bank_code": "30039",
+    "name": "ArcaPay ltd",
+    "short_name": "ArcaPay ltd",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "BEFKCZP1XXX",
+    "bank_code": "30040",
+    "name": "B-Efekt a.s.",
+    "short_name": "B-Efekt a.s.",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "BITSNL2AXXX",
+    "bank_code": "30042",
+    "name": "Bitsafe Payments B.V.",
+    "short_name": "Bitsafe Payments B.V.",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "BRTESESSXXX",
+    "bank_code": "39904",
+    "name": "Brite AB",
+    "short_name": "Brite AB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "BUEEGB22XXX",
+    "bank_code": "30081",
+    "name": "Bureau Buttercrane Ltd",
+    "short_name": "Bureau Buttercrane Ltd",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CIURGB21XXX",
+    "bank_code": "39800",
+    "name": "Cauri Ltd",
+    "short_name": "Cauri Ltd",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CNENPLP1XXX",
+    "bank_code": "30079",
+    "name": "CURRENCY ONE S.A.",
+    "short_name": "CURRENCY ONE S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CNNNGB21XXX",
+    "bank_code": "30030",
+    "name": "Connectum Limited",
+    "short_name": "Connectum Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CPAYIE2DXXX",
+    "bank_code": "30096",
+    "name": "Fire Financial Services Limited EU",
+    "short_name": "Fire Financial Services Limited EU",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CPAYIE31XXX",
+    "bank_code": "30097",
+    "name": "Fire Financial Services Limited UK",
+    "short_name": "Fire Financial Services Limited UK",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "DSFELT21XXX",
+    "bank_code": "32700",
+    "name": "DSBC Financial Europe, UAB",
+    "short_name": "DSBC Financial Europe, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "EAPFESM2XXX",
+    "bank_code": "30093",
+    "name": "EASY PAYMENT AND FINANCE, E.P., S.A",
+    "short_name": "EASY PAYMENT AND FINANCE, E.P., S.A",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "FFCSCZP1XXX",
+    "bank_code": "30076",
+    "name": "FAS finance company s.r.o.",
+    "short_name": "FAS finance company s.r.o.",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "FINDMTMTXXX",
+    "bank_code": "30080",
+    "name": "Finductive Ltd",
+    "short_name": "Finductive Ltd",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "GFCBEE22XXX",
+    "bank_code": "39400",
+    "name": "GFC Good Finance Company AS",
+    "short_name": "GFC Good Finance Company AS",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MAEHEE21XXX",
+    "bank_code": "30071",
+    "name": "Maaelu Edendamise Hoiu-laenuuhistu",
+    "short_name": "Maaelu Edendamise Hoiu-laenuuhistu",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MAFVGB21XXX",
+    "bank_code": "39900",
+    "name": "Mayzus Financial Services Limited",
+    "short_name": "Mayzus Financial Services Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MCPIMTM1XXX",
+    "bank_code": "30052",
+    "name": "Money+Card Payment Institution Ltd",
+    "short_name": "Money+Card Payment Institution Ltd",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MOIULT21XXX",
+    "bank_code": "35800",
+    "name": "Bruc Bond, UAB",
+    "short_name": "Bruc Bond, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "OPEXGB2LXXX",
+    "bank_code": "30085",
+    "name": "OPENAX LIMITED",
+    "short_name": "OPENAX LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PAERCZP1XXX",
+    "bank_code": "30041",
+    "name": "Payment Execution s.r.o.",
+    "short_name": "Payment Execution s.r.o.",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PAUALT22XXX",
+    "bank_code": "34300",
+    "name": "AB \"Paystrax\"",
+    "short_name": "AB \"Paystrax\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PHPYMTM1XXX",
+    "bank_code": "30070",
+    "name": "Phoenix Payments Ltd",
+    "short_name": "Phoenix Payments Ltd",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PYYPGB21XXX",
+    "bank_code": "30083",
+    "name": "MY EU PAY LTD",
+    "short_name": "MY EU PAY LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "POWHCY22XXX",
+    "bank_code": "30098",
+    "name": "Payabl. CY Limited",
+    "short_name": "Payabl. CY Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "RILALT22XXX",
+    "bank_code": "39814",
+    "name": "RIA Lithuania UAB",
+    "short_name": "RIA Lithuania UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TBFULT21XXX",
+    "bank_code": "31800",
+    "name": "TBF Finance, UAB",
+    "short_name": "TBF Finance, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TFIMCY2NXXX",
+    "bank_code": "30018",
+    "name": "TFI Markets Ltd",
+    "short_name": "TFI Markets Ltd",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TONIGB22XXX",
+    "bank_code": "30094",
+    "name": "Tonio Limited",
+    "short_name": "Tonio Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TPAYSKBXXXX",
+    "bank_code": "30056",
+    "name": "Trust Pay, a.s.",
+    "short_name": "Trust Pay, a.s.",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TRPEMTM1XXX",
+    "bank_code": "30054",
+    "name": "TRUEVO PAYMENTS LTD",
+    "short_name": "TRUEVO PAYMENTS LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TRWIBEB1XXX",
+    "bank_code": "30073",
+    "name": "Wise Europe SA",
+    "short_name": "Wise Europe SA",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UACOLT21XXX",
+    "bank_code": "31000",
+    "name": "UAB Contabilita",
+    "short_name": "UAB Contabilita",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UADRLT21XXX",
+    "bank_code": "31500",
+    "name": "UAB Drauskaita",
+    "short_name": "UAB Drauskaita",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UALTLT22XXX",
+    "bank_code": "39801",
+    "name": "UAB Lock Trust",
+    "short_name": "UAB Lock Trust",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UANOLT22XXX",
+    "bank_code": "39808",
+    "name": "NovaPay, UAB",
+    "short_name": "NovaPay, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAPYLT21XXX",
+    "bank_code": "35300",
+    "name": "UAB \"Alternative Payments\"",
+    "short_name": "UAB \"Alternative Payments\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UHISEE21XXX",
+    "bank_code": "30074",
+    "name": "Uhisarveldused AS",
+    "short_name": "Uhisarveldused AS",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UNNIGB21XXX",
+    "bank_code": "30061",
+    "name": "UNIFIED FINANCE LTD",
+    "short_name": "UNIFIED FINANCE LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "VAAALT21XXX",
+    "bank_code": "33100",
+    "name": "ValorPay UAB",
+    "short_name": "ValorPay UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "APSLLT21XXX",
+    "bank_code": "30100",
+    "name": "UAB \"ANTIGRAVITY PAYMENT SYSTEMS\"",
+    "short_name": "UAB \"ANTIGRAVITY PAYMENT SYSTEMS\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "BAXXLT22XXX",
+    "bank_code": "34200",
+    "name": "Finci, UAB",
+    "short_name": "Finci, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "BIYSGB2AXXX",
+    "bank_code": "30035",
+    "name": "Bilderlings Pay Limited",
+    "short_name": "Bilderlings Pay Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "BZENLT22XXX",
+    "bank_code": "31300",
+    "name": "UAB ZEN.COM",
+    "short_name": "UAB ZEN.COM",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CARDCY2LXXX",
+    "bank_code": "30034",
+    "name": "UNLIMINT EU LTD",
+    "short_name": "UNLIMINT EU LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CBNULT2VXXX",
+    "bank_code": "34100",
+    "name": "CBI Money UAB",
+    "short_name": "CBI Money UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CFTEMTM1XXX",
+    "bank_code": "30027",
+    "name": "OpenPayd Financial Services Malta Limited",
+    "short_name": "OpenPayd Financial Services Malta Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CFZZGB21XXX",
+    "bank_code": "30043",
+    "name": "CFS-Zipp Limited",
+    "short_name": "CFS-Zipp Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CLJUGB21XXX",
+    "bank_code": "39500",
+    "name": "Clear Junction Limited",
+    "short_name": "Clear Junction Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CLUALT22XXX",
+    "bank_code": "34700",
+    "name": "Clearshift UAB",
+    "short_name": "Clearshift UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CNUALT21XXX",
+    "bank_code": "37400",
+    "name": "UAB ConnectPay",
+    "short_name": "UAB ConnectPay",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "CRVULT21XXX",
+    "bank_code": "39804",
+    "name": "Corporate Services UAB",
+    "short_name": "Corporate Services UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "DMVOLT22XXX",
+    "bank_code": "39806",
+    "name": "Demivolt, UAB",
+    "short_name": "Demivolt, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "ECBXCY2NXXX",
+    "bank_code": "37900",
+    "name": "ECOMMBX LIMITED",
+    "short_name": "ECOMMBX LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "EMONMTM2XXX",
+    "bank_code": "30031",
+    "name": "Emoney P.L.C.",
+    "short_name": "Emoney P.L.C.",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "EPMTGB2LLTH",
+    "bank_code": "30045",
+    "name": "Epayments Systems Limited",
+    "short_name": "Epayments Systems Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "EPUALT22XXX",
+    "bank_code": "33500",
+    "name": "UAB \"epayblock\"",
+    "short_name": "UAB \"epayblock\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "EVIULT2VXXX",
+    "bank_code": "35000",
+    "name": "\"Paysera LT\", UAB",
+    "short_name": "\"Paysera LT\", UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "FAPOCZP1XXX",
+    "bank_code": "30046",
+    "name": "Fairplay Pay s.r.o.",
+    "short_name": "Fairplay Pay s.r.o.",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "FNHOGB21XXX",
+    "bank_code": "30090",
+    "name": "FINANCIAL HOUSE LIMITED",
+    "short_name": "FINANCIAL HOUSE LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "FOUNGB21XXX",
+    "bank_code": "30091",
+    "name": "Monetley LTD",
+    "short_name": "Monetley LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "FTCSSESSXXX",
+    "bank_code": "30028",
+    "name": "Intergiro Intl AB (publ)",
+    "short_name": "Intergiro Intl AB (publ)",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "GLUALT22XXX",
+    "bank_code": "38800",
+    "name": "GlobalNetint UAB",
+    "short_name": "GlobalNetint UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "GUAVGB22XXX",
+    "bank_code": "30092",
+    "name": "Guavapay Limited",
+    "short_name": "Guavapay Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "GUPULT22XXX",
+    "bank_code": "34000",
+    "name": "UAB Guru Pay",
+    "short_name": "UAB Guru Pay",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "IBIULT21XXX",
+    "bank_code": "39100",
+    "name": "UAB \"IBS Lithuania\"",
+    "short_name": "UAB \"IBS Lithuania\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "IHPYEE22XXX",
+    "bank_code": "30026",
+    "name": "inHouse Pay AS",
+    "short_name": "inHouse Pay AS",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "INHULT21XXX",
+    "bank_code": "36400",
+    "name": "International Fintech, UAB",
+    "short_name": "International Fintech, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "INTFBGSFXXX",
+    "bank_code": "30053",
+    "name": "iCARD AD",
+    "short_name": "iCARD AD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "ISEMCY22XXX",
+    "bank_code": "30038",
+    "name": "ISX FINANCIAL EU PLC",
+    "short_name": "ISX FINANCIAL EU PLC",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MAABLT21XXX",
+    "bank_code": "37300",
+    "name": "UAB Majestic Financial",
+    "short_name": "UAB Majestic Financial",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MIEGLT21XXX",
+    "bank_code": "35100",
+    "name": "\"Secure Nordic Payments\", UAB",
+    "short_name": "\"Secure Nordic Payments\", UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MNNELT21XXX",
+    "bank_code": "31100",
+    "name": "UAB Maneuver LT",
+    "short_name": "UAB Maneuver LT",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MODRGB23XXX",
+    "bank_code": "30029",
+    "name": "MODULR FS LIMITED",
+    "short_name": "MODULR FS LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MODRIE22XXX",
+    "bank_code": "30129",
+    "name": "MODULR FS EUROPE LIMITED",
+    "short_name": "MODULR FS EUROPE LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MOKZLT21XXX",
+    "bank_code": "60016",
+    "name": "UAB \"MOKILIZINGAS\"",
+    "short_name": "UAB \"MOKILIZINGAS\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MOOWGB22XXX",
+    "bank_code": "30084",
+    "name": "Moorwand LTD",
+    "short_name": "Moorwand LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MOTOLT21XXX",
+    "bank_code": "30500",
+    "name": "Foxpay, UAB",
+    "short_name": "Foxpay, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MSBBGB2LXXX",
+    "bank_code": "30067",
+    "name": "MSBB MONEY LTD",
+    "short_name": "MSBB MONEY LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MSFVMTM1XXX",
+    "bank_code": "30082",
+    "name": "CEEVO Financial Services (Malta) Limited",
+    "short_name": "CEEVO Financial Services (Malta) Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "MTCCMTMTXXX",
+    "bank_code": "30095",
+    "name": "MTACC LTD",
+    "short_name": "MTACC LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "NEUALT21XXX",
+    "bank_code": "30800",
+    "name": "UAB \"NexPay\"",
+    "short_name": "UAB \"NexPay\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "NIKULT22XXX",
+    "bank_code": "34600",
+    "name": "Nikulipe UAB",
+    "short_name": "Nikulipe UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "OKEOLT22XXX",
+    "bank_code": "39805",
+    "name": "Okeo Payments, UAB",
+    "short_name": "Okeo Payments, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "OPTULT22XXX",
+    "bank_code": "33800",
+    "name": "Opal Transfer EU, UAB",
+    "short_name": "Opal Transfer EU, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "ORRRCZP1XXX",
+    "bank_code": "30051",
+    "name": "OrangeTrust s.r.o.",
+    "short_name": "OrangeTrust s.r.o.",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PAEDGB21XXX",
+    "bank_code": "30047",
+    "name": "PAYSEND PLC",
+    "short_name": "PAYSEND PLC",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PAEOLT21XXX",
+    "bank_code": "38700",
+    "name": "UAB PanPay Europe",
+    "short_name": "UAB PanPay Europe",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PAYVBEB2XXX",
+    "bank_code": "30025",
+    "name": "Paynovate S.A.",
+    "short_name": "Paynovate S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PAOMGB21XXX",
+    "bank_code": "38600",
+    "name": "Payoma Limited",
+    "short_name": "Payoma Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PAPYMTMTXXX",
+    "bank_code": "38200",
+    "name": "Papaya Ltd",
+    "short_name": "Papaya Ltd",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PATCBGSFXXX",
+    "bank_code": "30064",
+    "name": "Paynetics AD",
+    "short_name": "Paynetics AD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PAUUMTM1XXX",
+    "bank_code": "30055",
+    "name": "FinXP Limited",
+    "short_name": "FinXP Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PCTULT21XXX",
+    "bank_code": "31400",
+    "name": "PCS Transfer, UAB",
+    "short_name": "PCS Transfer, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PEPGLT21XXX",
+    "bank_code": "30200",
+    "name": "UAB \"Perlas Finance\"",
+    "short_name": "UAB \"Perlas Finance\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PFSRIE21XXX",
+    "bank_code": "30032",
+    "name": "PFS Card Services Ireland Limited",
+    "short_name": "PFS Card Services Ireland Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PFSSESM1XXX",
+    "bank_code": "30232",
+    "name": "PFS Card Services Ireland Limited Succursal Espana",
+    "short_name": "PFS Card Services Ireland Limited Succursal Espana",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PYYTGB21XXX",
+    "bank_code": "30077",
+    "name": "PAYSTREE LTD",
+    "short_name": "PAYSTREE LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PYMXMTMTXXX",
+    "bank_code": "30065",
+    "name": "Finance Incorporated Limited",
+    "short_name": "Finance Incorporated Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "PRNSFRP1XXX",
+    "bank_code": "30132",
+    "name": "PFS Card Services Ireland Limited (FR branch)",
+    "short_name": "PFS Card Services Ireland Limited (FR branch)",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "REVOFRP2XXX",
+    "bank_code": "32501",
+    "name": "REVOLUT FRANCE SUCCURSALE DE REVOLUT PAYMENTS UAB",
+    "short_name": "REVOLUT FRANCE SUCCURSALE DE REVOLUT PAYMENTS UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "REVOGB21XXX",
+    "bank_code": "39200",
+    "name": "Revolut LTD",
+    "short_name": "Revolut LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "REVOLT21XXX",
+    "bank_code": "32500",
+    "name": "Revolut Payments UAB",
+    "short_name": "Revolut Payments UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "SEOUGB21XXX",
+    "bank_code": "30068",
+    "name": "Settlego Solutions Limited",
+    "short_name": "Settlego Solutions Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "SEPMCY2NXXX",
+    "bank_code": "30063",
+    "name": "SEPAGA E.M.I. LIMITED",
+    "short_name": "SEPAGA E.M.I. LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "SESOLT21XXX",
+    "bank_code": "37100",
+    "name": "UAB \"Seven Seas Europe\"",
+    "short_name": "UAB \"Seven Seas Europe\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "SHFRLT21XXX",
+    "bank_code": "31700",
+    "name": "SHIFT Financial Services LT, UAB",
+    "short_name": "SHIFT Financial Services LT, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "SONCLT21XXX",
+    "bank_code": "33200",
+    "name": "Sonect Europe UAB",
+    "short_name": "Sonect Europe UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "STUALT21XXX",
+    "bank_code": "30600",
+    "name": "SatchelPay, UAB",
+    "short_name": "SatchelPay, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "SUMUIE22XXX",
+    "bank_code": "30022",
+    "name": "SumUp Limited",
+    "short_name": "SumUp Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "SUPAGB21XXX",
+    "bank_code": "30089",
+    "name": "SumUp Payments Limited",
+    "short_name": "SumUp Payments Limited",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "SUPULT22XXX",
+    "bank_code": "33700",
+    "name": "SumUp EU Payments, UAB",
+    "short_name": "SumUp EU Payments, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TEUALT22XXX",
+    "bank_code": "31900",
+    "name": "UAB TeslaPay",
+    "short_name": "UAB TeslaPay",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TPROLV22XXX",
+    "bank_code": "39700",
+    "name": "SIA Transact Pro",
+    "short_name": "SIA Transact Pro",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TRFBLT21XXX",
+    "bank_code": "36900",
+    "name": "Trustcom Financial, UAB",
+    "short_name": "Trustcom Financial, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TRYULT21XXX",
+    "bank_code": "37800",
+    "name": "Transactive Systems UAB",
+    "short_name": "Transactive Systems UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TRLULT21XXX",
+    "bank_code": "32400",
+    "name": "TransferGo Lithuania UAB",
+    "short_name": "TransferGo Lithuania UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TRUDBG21XXX",
+    "bank_code": "30036",
+    "name": "Transact Europe EAD",
+    "short_name": "Transact Europe EAD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "TRWIGB22XXX",
+    "bank_code": "39000",
+    "name": "Wise Payments LTD",
+    "short_name": "Wise Payments LTD",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAAALT22XXX",
+    "bank_code": "39810",
+    "name": "UAB H PAY AND GO",
+    "short_name": "UAB H PAY AND GO",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAAMLT21XXX",
+    "bank_code": "35400",
+    "name": "Contomobile UAB",
+    "short_name": "Contomobile UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UABELT22XXX",
+    "bank_code": "39802",
+    "name": "Bebawa, UAB",
+    "short_name": "Bebawa, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UADELT21XXX",
+    "bank_code": "36600",
+    "name": "UAB \"deVere E-Money\"",
+    "short_name": "UAB \"deVere E-Money\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAINLT21XXX",
+    "bank_code": "35900",
+    "name": "UAB \"NIUM EU\"",
+    "short_name": "UAB \"NIUM EU\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAMMLT21XXX",
+    "bank_code": "36000",
+    "name": "UAB \"Mobilieji mok\u0117jimai\"",
+    "short_name": "UAB \"Mobilieji mok\u0117jimai\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UANFLT21XXX",
+    "bank_code": "35200",
+    "name": "AB \"NEO Finance\"",
+    "short_name": "AB \"NEO Finance\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UANILT22XXX",
+    "bank_code": "34500",
+    "name": "Nandi Finance UAB",
+    "short_name": "Nandi Finance UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAPALT22XXX",
+    "bank_code": "39809",
+    "name": "PAYRNET UAB",
+    "short_name": "PAYRNET UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAPELT22XXX",
+    "bank_code": "35500",
+    "name": "UAB \"Pervesk\"",
+    "short_name": "UAB \"Pervesk\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAPLLT21XXX",
+    "bank_code": "36700",
+    "name": "UAB \"Pyrros Lithuania\"",
+    "short_name": "UAB \"Pyrros Lithuania\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAPPLT21XXX",
+    "bank_code": "32200",
+    "name": "UAB \"PHOENIX PAYMENTS\"",
+    "short_name": "UAB \"PHOENIX PAYMENTS\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAPULT22XXX",
+    "bank_code": "31200",
+    "name": "UAB PAYTEND EUROPE",
+    "short_name": "UAB PAYTEND EUROPE",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UATULT22XXX",
+    "bank_code": "34800",
+    "name": "UAB Travel Union",
+    "short_name": "UAB Travel Union",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAUPLT2VXXX",
+    "bank_code": "33400",
+    "name": "UAB \"UPLATA EU\"",
+    "short_name": "UAB \"UPLATA EU\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAWALT21XXX",
+    "bank_code": "30900",
+    "name": "Walletto UAB",
+    "short_name": "Walletto UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UAWALT22XXX",
+    "bank_code": "30901",
+    "name": "\"Walletto\" UAB",
+    "short_name": "\"Walletto\" UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UFPOLT21XXX",
+    "bank_code": "39600",
+    "name": "UAB \u201eFinansin\u0117s paslaugos \u201eContis\u201c",
+    "short_name": "UAB \u201eFinansin\u0117s paslaugos \u201eContis\u201c",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UFUNLT22XXX",
+    "bank_code": "35600",
+    "name": "UAB Finolita Unio",
+    "short_name": "UAB Finolita Unio",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UIPULT21XXX",
+    "bank_code": "32300",
+    "name": "UAB International Payment Union",
+    "short_name": "UAB International Payment Union",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "UNECLT2VXXX",
+    "bank_code": "38900",
+    "name": "UAB SAFU.COM",
+    "short_name": "UAB SAFU.COM",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "URFSLT21XXX",
+    "bank_code": "32600",
+    "name": "UAB \u201eRebellion Fintech Services\u201c",
+    "short_name": "UAB \u201eRebellion Fintech Services\u201c",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "USPELT2VXXX",
+    "bank_code": "33900",
+    "name": "UAB \"Simplex Payment Services\"",
+    "short_name": "UAB \"Simplex Payment Services\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "USTILT2VXXX",
+    "bank_code": "39811",
+    "name": "UAB Stanhope Financial",
+    "short_name": "UAB Stanhope Financial",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "VAUALT21XXX",
+    "bank_code": "30700",
+    "name": "Valyuz, UAB",
+    "short_name": "Valyuz, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "VEPALT2XXXX",
+    "bank_code": "37500",
+    "name": "Verified Payments, UAB",
+    "short_name": "Verified Payments, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "VIPULT22XXX",
+    "bank_code": "35700",
+    "name": "UAB \"Via Payments\"",
+    "short_name": "UAB \"Via Payments\"",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "VPLALT21XXX",
+    "bank_code": "31600",
+    "name": "Verse Payments Lithuania, UAB",
+    "short_name": "Verse Payments Lithuania, UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "WAUALT21XXX",
+    "bank_code": "32000",
+    "name": "Wallter UAB",
+    "short_name": "Wallter UAB",
+    "primary": true
+  },
+  {
+    "country_code": "LT",
+    "bic": "WIUALT22XXX",
+    "bank_code": "33000",
+    "name": "Wittix, UAB",
+    "short_name": "Wittix, UAB",
+    "primary": true
+  }
+]

@@ -1,0 +1,14 @@
+type A {
+    field: String!
+    optionalField: String
+    optionalListOptionalField: [String]
+    listOptionalField: [String]!
+    listField: [String!]!
+    optionalListListOptionalField:[[String]!]
+    listListOptionalField:[[String]!]!
+    listOptionalListOptionalField:[[String]]!
+    optionalListOptionalListField:[[String!]]
+    optionalListListField:[[String!]!]
+    listListField:[[String!]!]!
+    listOptionalListField:[[String!]]!
+}

@@ -1,0 +1,186 @@
+#Surface net solar radiation, clear sky
+'surface_net_downward_shortwave_flux_assuming_clear_sky' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 210 ;
+}
+#Surface net thermal radiation, clear sky
+'surface_net_downward_longwave_flux_assuming_clear_sky' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 211 ;
+}
+#Eastward sea water velocity
+'eastward_sea_water_velocity' = {
+ discipline = 192 ;
+ parameterCategory = 151 ;
+ parameterNumber = 131 ;
+}
+#Northward sea water velocity
+'northward_sea_water_velocity' = {
+ discipline = 192 ;
+ parameterCategory = 151 ;
+ parameterNumber = 132 ;
+}
+#Sea-ice thickness
+'sea_ice_thickness' = {
+ discipline = 192 ;
+ parameterCategory = 174 ;
+ parameterNumber = 98 ;
+}
+#Sea surface height
+'sea_surface_height_above_geoid' = {
+ discipline = 192 ;
+ parameterCategory = 151 ;
+ parameterNumber = 145 ;
+}
+#Depth of 20C isotherm
+'depth_of_isosurface_of_sea_water_potential_temperature' = {
+ discipline = 192 ;
+ parameterCategory = 151 ;
+ parameterNumber = 163 ;
+}
+#Top net solar radiation
+'toa_net_upward_shortwave_flux' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 178 ;
+}
+#Temperature of snow layer
+'temperature_in_surface_snow' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 238 ;
+}
+#GEMS Ozone
+'mass_fraction_of_ozone_in_air' = {
+ discipline = 192 ;
+ parameterCategory = 210 ;
+ parameterNumber = 203 ;
+}
+#Carbon monoxide
+'mass_fraction_of_carbon_monoxide_in_air' = {
+ discipline = 192 ;
+ parameterCategory = 210 ;
+ parameterNumber = 123 ;
+}
+#Nitrogen dioxide
+'mass_fraction_of_nitrogen_dioxide_in_air' = {
+ discipline = 192 ;
+ parameterCategory = 210 ;
+ parameterNumber = 121 ;
+}
+#Sulphur dioxide
+'mass_fraction_of_sulfur_dioxide_in_air' = {
+ discipline = 192 ;
+ parameterCategory = 210 ;
+ parameterNumber = 122 ;
+}
+#Ammonia
+'mass_fraction_of_ammonia_in_air' = {
+ discipline = 192 ;
+ parameterCategory = 217 ;
+ parameterNumber = 19 ;
+}
+#Nitrogen monoxide
+'mass_fraction_of_nitrogen_monoxide_in_air' = {
+ discipline = 192 ;
+ parameterCategory = 217 ;
+ parameterNumber = 27 ;
+}
+#Particulate matter d <= 1 um
+'mass_concentration_of_pm1_ambient_aerosol_particles_in_air' = {
+ discipline = 192 ;
+ parameterCategory = 210 ;
+ parameterNumber = 72 ;
+}
+#Particulate matter d <= 2.5 um
+'mass_concentration_of_pm2p5_ambient_aerosol_particles_in_air' = {
+ discipline = 192 ;
+ parameterCategory = 210 ;
+ parameterNumber = 73 ;
+}
+#Particulate matter d <= 10 um
+'mass_concentration_of_pm10_ambient_aerosol_particles_in_air' = {
+ discipline = 192 ;
+ parameterCategory = 210 ;
+ parameterNumber = 74 ;
+}
+#Total column vertically-integrated water vapour
+'lwe_thickness_of_atmosphere_mass_content_of_water_vapor' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 137 ;
+}
+#Large-scale precipitation
+'lwe_thickness_of_stratiform_precipitation_amount' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 142 ;
+}
+#Snowfall
+'lwe_thickness_of_snowfall_amount' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 144 ;
+}
+#Total cloud cover
+'cloud_area_fraction' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 164 ;
+}
+#Evaporation
+'lwe_thickness_of_water_evaporation_amount' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 182 ;
+}
+#Albedo (climatological)
+'surface_albedo' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 174 ;
+}
+#Total column ozone
+'atmosphere_mass_content_of_ozone' = {
+ discipline = 192 ;
+ parameterCategory = 128 ;
+ parameterNumber = 206 ;
+}
+#Sea water potential temperature
+'sea_water_potential_temperature' = {
+ discipline = 192 ;
+ parameterCategory = 151 ;
+ parameterNumber = 129 ;
+}
+#Sea water practical salinity
+'sea_water_practical_salinity' = {
+ discipline = 192 ;
+ parameterCategory = 151 ;
+ parameterNumber = 130 ;
+}
+#Upward sea water velocity
+'upward_sea_water_velocity' = {
+ discipline = 192 ;
+ parameterCategory = 151 ;
+ parameterNumber = 133 ;
+}
+#Sea water sigma theta
+'sea_water_sigma_theta' = {
+ discipline = 192 ;
+ parameterCategory = 151 ;
+ parameterNumber = 138 ;
+}
+#Surface downward eastward stress
+'surface_downward_eastward_stress' = {
+ discipline = 192 ;
+ parameterCategory = 151 ;
+ parameterNumber = 153 ;
+}
+#Surface downward northward stress
+'surface_downward_northward_stress' = {
+ discipline = 192 ;
+ parameterCategory = 151 ;
+ parameterNumber = 154 ;
+}

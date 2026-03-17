@@ -1,0 +1,102 @@
+Metadata-Version: 2.4
+Name: langchain
+Version: 1.2.10
+Summary: Building applications with LLMs through composability
+Project-URL: Homepage, https://docs.langchain.com/
+Project-URL: Documentation, https://reference.langchain.com/python/langchain/langchain/
+Project-URL: Repository, https://github.com/langchain-ai/langchain
+Project-URL: Issues, https://github.com/langchain-ai/langchain/issues
+Project-URL: Changelog, https://github.com/langchain-ai/langchain/releases?q=tag%3A%22langchain%3D%3D1%22
+Project-URL: Twitter, https://x.com/LangChain
+Project-URL: Slack, https://www.langchain.com/join-community
+Project-URL: Reddit, https://www.reddit.com/r/LangChain/
+License: MIT
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: <4.0.0,>=3.10.0
+Requires-Dist: langchain-core<2.0.0,>=1.2.10
+Requires-Dist: langgraph<1.1.0,>=1.0.8
+Requires-Dist: pydantic<3.0.0,>=2.7.4
+Provides-Extra: anthropic
+Requires-Dist: langchain-anthropic; extra == 'anthropic'
+Provides-Extra: aws
+Requires-Dist: langchain-aws; extra == 'aws'
+Provides-Extra: azure-ai
+Requires-Dist: langchain-azure-ai; extra == 'azure-ai'
+Provides-Extra: community
+Requires-Dist: langchain-community; extra == 'community'
+Provides-Extra: deepseek
+Requires-Dist: langchain-deepseek; extra == 'deepseek'
+Provides-Extra: fireworks
+Requires-Dist: langchain-fireworks; extra == 'fireworks'
+Provides-Extra: google-genai
+Requires-Dist: langchain-google-genai; extra == 'google-genai'
+Provides-Extra: google-vertexai
+Requires-Dist: langchain-google-vertexai; extra == 'google-vertexai'
+Provides-Extra: groq
+Requires-Dist: langchain-groq; extra == 'groq'
+Provides-Extra: huggingface
+Requires-Dist: langchain-huggingface; extra == 'huggingface'
+Provides-Extra: mistralai
+Requires-Dist: langchain-mistralai; extra == 'mistralai'
+Provides-Extra: ollama
+Requires-Dist: langchain-ollama; extra == 'ollama'
+Provides-Extra: openai
+Requires-Dist: langchain-openai; extra == 'openai'
+Provides-Extra: perplexity
+Requires-Dist: langchain-perplexity; extra == 'perplexity'
+Provides-Extra: together
+Requires-Dist: langchain-together; extra == 'together'
+Provides-Extra: xai
+Requires-Dist: langchain-xai; extra == 'xai'
+Description-Content-Type: text/markdown
+
+# 🦜️🔗 LangChain
+
+[![PyPI - Version](https://img.shields.io/pypi/v/langchain?label=%20)](https://pypi.org/project/langchain/#history)
+[![PyPI - License](https://img.shields.io/pypi/l/langchain)](https://opensource.org/licenses/MIT)
+[![PyPI - Downloads](https://img.shields.io/pepy/dt/langchain)](https://pypistats.org/packages/langchain)
+[![Twitter](https://img.shields.io/twitter/url/https/twitter.com/langchain.svg?style=social&label=Follow%20%40LangChain)](https://x.com/langchain)
+
+Looking for the JS/TS version? Check out [LangChain.js](https://github.com/langchain-ai/langchainjs).
+
+To help you ship LangChain apps to production faster, check out [LangSmith](https://smith.langchain.com).
+[LangSmith](https://smith.langchain.com) is a unified developer platform for building, testing, and monitoring LLM applications.
+
+## Quick Install
+
+```bash
+pip install langchain
+```
+
+## 🤔 What is this?
+
+LangChain is the easiest way to start building agents and applications powered by LLMs. With under 10 lines of code, you can connect to OpenAI, Anthropic, Google, and [more](https://docs.langchain.com/oss/python/integrations/providers/overview). LangChain provides a pre-built agent architecture and model integrations to help you get started quickly and seamlessly incorporate LLMs into your agents and applications.
+
+We recommend you use LangChain if you want to quickly build agents and autonomous applications. Use [LangGraph](https://docs.langchain.com/oss/python/langgraph/overview), our low-level agent orchestration framework and runtime, when you have more advanced needs that require a combination of deterministic and agentic workflows, heavy customization, and carefully controlled latency.
+
+LangChain [agents](https://docs.langchain.com/oss/python/langchain/agents) are built on top of LangGraph in order to provide durable execution, streaming, human-in-the-loop, persistence, and more. (You do not need to know LangGraph for basic LangChain agent usage.)
+
+## 📖 Documentation
+
+For full documentation, see the [API reference](https://reference.langchain.com/python/langchain/langchain/). For conceptual guides, tutorials, and examples on using LangChain, see the [LangChain Docs](https://docs.langchain.com/oss/python/langchain/overview). You can also chat with the docs using [Chat LangChain](https://chat.langchain.com).
+
+## 📕 Releases & Versioning
+
+See our [Releases](https://docs.langchain.com/oss/python/release-policy) and [Versioning](https://docs.langchain.com/oss/python/versioning) policies.
+
+## 💁 Contributing
+
+As an open-source project in a rapidly developing field, we are extremely open to contributions, whether it be in the form of a new feature, improved infrastructure, or better documentation.
+
+For detailed information on how to contribute, see the [Contributing Guide](https://docs.langchain.com/oss/python/contributing/overview).

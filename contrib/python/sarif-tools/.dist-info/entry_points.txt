@@ -1,0 +1,3 @@
+[console_scripts]
+sarif=sarif.cmdline.main:main
+

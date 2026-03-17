@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package yandex.cloud.loadbalancer.v1;
+
+import "google/protobuf/duration.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadbalancer/v1;loadbalancer";
+option java_package = "yandex.cloud.api.loadbalancer.v1";
+
+// A HealthCheck resource. For more information, see [Health check](/docs/network-load-balancer/concepts/health-check).
+message HealthCheck {
+  // Configuration option for a TCP health check.
+  message TcpOptions {
+    // Port to use for TCP health checks.
+    int64 port = 1 [(value) = "1-65535"];
+  }
+
+  // Configuration option for an HTTP health check.
+  message HttpOptions {
+    // Port to use for HTTP health checks.
+    int64 port = 1 [(value) = "1-65535"];
+
+    // URL path to set for health checking requests for every target in the target group. 
+    // For example `` /ping ``. The default path is `` / ``.
+    string path = 2;
+  }
+
+  // Name of the health check. The name must be unique for each target group that attached to a single load balancer. 3-63 characters long.
+  string name = 1 [(required) = true, (pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // The interval between health checks. The default is 2 seconds.
+  google.protobuf.Duration interval = 2;
+
+  // Timeout for a target to return a response for the health check. The default is 1 second.
+  google.protobuf.Duration timeout = 3;
+
+  // Number of failed health checks before changing the status to `` UNHEALTHY ``. The default is 2.
+  int64 unhealthy_threshold = 4 [(value) = "2-10"];
+
+  // Number of successful health checks required in order to set the `` HEALTHY `` status for the target. The default is 2.
+  int64 healthy_threshold = 5 [(value) = "2-10"];
+
+  // Protocol to use for the health check. Either TCP or HTTP.
+  oneof options {
+    option (exactly_one) = true;
+
+    // Options for TCP health check.
+    TcpOptions tcp_options = 6;
+
+    // Options for HTTP health check.
+    HttpOptions http_options = 7;
+  }
+}

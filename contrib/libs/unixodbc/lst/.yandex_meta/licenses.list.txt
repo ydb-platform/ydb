@@ -1,0 +1,6 @@
+====================LGPL-2.0-or-later====================
+* LGPL software.                                              *
+
+
+====================LGPL-2.0-or-later====================
+* This code is LGPL. You CAN make commercial solutions using  *

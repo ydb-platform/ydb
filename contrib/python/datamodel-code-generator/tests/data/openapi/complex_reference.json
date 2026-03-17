@@ -1,0 +1,58 @@
+{
+    "openapi": "3.0.0",
+    "components": {
+        "schemas": {
+            "A": {
+                "properties": {
+                    "a_property": {
+                        "$ref": "#/components/schemas/B1"
+                    },
+                },
+                "type": "object"
+            },
+            "B1": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/A"
+                    }
+                ],
+                "type": "object"
+            },
+            "C1": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/B1"
+                    }
+                ],
+                "type": "object"
+            },
+            "B2": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/A"
+                    }
+                ],
+                "type": "object"
+            },
+            "D1": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/C1"
+                    }
+                ],
+                "type": "object"
+            },
+            "D1andB2": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/D1"
+                    },
+                    {
+                        "$ref": "#/components/schemas/B2"
+                    }
+                ],
+                "type": "object"
+            }
+        }
+    }
+}

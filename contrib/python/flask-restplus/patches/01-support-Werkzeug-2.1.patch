@@ -1,0 +1,27 @@
+--- contrib/python/flask-restplus/flask_restplus/api.py	(index)
++++ contrib/python/flask-restplus/flask_restplus/api.py	(working tree)
+@@ -30 +30,4 @@ from werkzeug.exceptions import HTTPException, MethodNotAllowed, NotFound, NotAc
+-from werkzeug.wrappers import BaseResponse
++try:
++    from werkzeug.wrappers import BaseResponse
++except ImportError:
++    from werkzeug.wrappers import Response as BaseResponse
+--- contrib/python/flask-restplus/flask_restplus/resource.py	(index)
++++ contrib/python/flask-restplus/flask_restplus/resource.py	(working tree)
+@@ -6 +6,4 @@ from flask.views import MethodView
+-from werkzeug.wrappers import BaseResponse
++try:
++    from werkzeug.wrappers import BaseResponse
++except ImportError:
++    from werkzeug.wrappers import Response as BaseResponse
+--- contrib/python/flask-restplus/flask_restplus/api.py	(index)
++++ contrib/python/flask-restplus/flask_restplus/api.py	(working tree)
+@@ -705,7 +705,7 @@ class Api(object):
+     @property
+     def payload(self):
+         '''Store the input payload in the current request context'''
+-        return request.get_json()
++        return request.get_json(silent=True)
+ 
+     @property
+     def refresolver(self):

@@ -1,0 +1,40 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2008-2011 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2010-2011 Oak Ridge National Labs.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# *** THESE MESSAGES ARE COORDINATED WITH FIXED STRINGS IN
+# *** errhandler_predefined.c!  Do not change these messages without also
+# *** changing errhandler_predefined.c!
+#
+[mpi_errors_are_fatal]
+%s *** An error occurred %s %s
+%s *** reported by process [%lu,%lu]
+%s *** on %s %s
+%s *** %s
+%s *** MPI_ERRORS_ARE_FATAL (processes in this %s will now abort,
+%s ***    and potentially your MPI job)
+#
+[mpi_errors_are_fatal unknown handle]
+%s *** An error occurred %s %s
+%s *** reported by process [%lu,%lu]
+%s *** on a NULL %s
+%s *** %s
+%s *** MPI_ERRORS_ARE_FATAL (processes in this %s will now abort,
+%s ***    and potentially your MPI job)
+#

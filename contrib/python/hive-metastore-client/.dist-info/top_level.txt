@@ -1,0 +1,2 @@
+hive_metastore_client
+thrift_files

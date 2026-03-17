@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package yandex.cloud.connectionmanager.v1;
+
+import "yandex/cloud/connectionmanager/v1/common.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/connectionmanager/v1;connectionmanager";
+option java_package = "yandex.cloud.api.connectionmanager.v1";
+
+message OpenSearchAuth {
+    oneof security {
+        UserPasswordAuth user_password = 1;
+    }
+}
+message OpenSearchCluster {
+    message Host {
+        reserved 1, 2, 5;
+        enum GroupRole {
+            GROUP_ROLE_UNSPECIFIED = 0;
+            DATA = 1;
+            MANAGER = 2;
+        }
+        enum Health {
+            HEALTH_UNSPECIFIED = 0;
+            ALIVE = 1;
+            DEAD = 2;
+            DEGRADED = 3;
+            READONLY = 4;
+        }
+
+        string host = 3;
+        int64 port = 4;
+        Health health = 6;
+        repeated GroupRole roles = 7;
+    }
+
+    repeated Host hosts = 1;
+    TLSParams tls_params = 2;
+}
+message OpenSearchConnection {
+    reserved 3;
+    // When creating/updating Connection, the field "cluster" is mutually
+    // exclusive with "managed_cluster_id".
+    OpenSearchCluster cluster = 1;
+    // When creating/updating Connection, the field "managed_cluster_id" is
+    // mutually exclusive with "cluster".
+    string managed_cluster_id = 2;
+    OpenSearchAuth auth = 4;
+}

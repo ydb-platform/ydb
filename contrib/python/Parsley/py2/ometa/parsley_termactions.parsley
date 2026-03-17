@@ -1,0 +1,10 @@
+ruleValue = ws '->' term:tt -> t.Action(tt)
+
+semanticPredicate = ws '?(' term:tt ws ')' -> t.Predicate(tt)
+
+semanticAction = ws '!(' term:tt ws ')' -> t.Action(tt)
+
+application = indentation? name:name
+                  ('(' term_arglist:args ')'
+                    -> t.Apply(name, self.rulename, args)
+                  | -> t.Apply(name, self.rulename, []))

@@ -1,0 +1,167 @@
+syntax = "proto3";
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/video/v1/subtitle.proto";
+
+package yandex.cloud.video.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/video/v1;video";
+option java_package = "yandex.cloud.api.video.v1";
+
+// Subtitle management service.
+// Provides methods for creating, retrieving, updating, and deleting subtitles,
+// which provide text translations or transcriptions of video content in various languages.
+service SubtitleService {
+  // Retrieves detailed information about a specific subtitle by its ID.
+  // Returns all subtitle metadata and related information.
+  rpc Get(GetSubtitleRequest) returns (Subtitle) {
+    option (google.api.http) = {
+      get: "/video/v1/subtitles/{subtitle_id}"
+    };
+  }
+
+  // Lists all subtitles associated with a specific video with pagination support.
+  // Results can be filtered and sorted using the provided parameters.
+  rpc List(ListSubtitlesRequest) returns (ListSubtitlesResponse) {
+    option (google.api.http) = {
+      get: "/video/v1/subtitles"
+    };
+  }
+
+  // Creates a new subtitle record for a specific video.
+  // This method only creates the metadata record; the actual subtitle file must be uploaded
+  // using the URL obtained from the GenerateUploadURL method.
+  rpc Create(CreateSubtitleRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/video/v1/subtitles"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateSubtitleMetadata"
+      response: "Subtitle"
+    };
+  }
+
+  // Generates a URL for uploading a subtitle file to an existing subtitle record.
+  // This URL can be used to upload the actual subtitle file using an HTTP PUT request.
+  // The URL is pre-signed and has a limited validity period.
+  rpc GenerateUploadURL(GenerateSubtitleUploadURLRequest) returns (GenerateSubtitleUploadURLResponse) {
+    option (google.api.http) = {
+      get: "/video/v1/subtitles/{subtitle_id}:generateUploadURL"
+    };
+  }
+
+  // Deletes a specific subtitle by its ID.
+  // This removes both the metadata record and the associated subtitle file.
+  rpc Delete(DeleteSubtitleRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      delete: "/video/v1/subtitles/{subtitle_id}"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteSubtitleMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetSubtitleRequest {
+  // ID of the subtitle to retrieve.
+  string subtitle_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListSubtitlesRequest {
+  // Reserved for future use.
+  reserved 1 to 99, 102 to 999;
+
+  // The maximum number of subtitles to return per page.
+  int64 page_size = 100 [(value) = "<=100"];
+
+  // Page token for retrieving the next page of results.
+  // This token is obtained from the next_page_token field in the previous ListSubtitlesResponse.
+  string page_token = 101 [(length) = "<=15000"];
+
+  // Specifies the parent resource to list subtitles from (exactly one must be chosen).
+  oneof parent_id {
+    option (exactly_one) = true;
+
+    // ID of the video containing the subtitles to list.
+    string video_id = 1000 [(length) = "<=50"];
+  }
+}
+
+message ListSubtitlesResponse {
+  // Reserved for future use.
+  reserved 2 to 99;
+
+  // List of subtitles matching the request criteria.
+  // May be empty if no subtitles match the criteria or if the video has no subtitles.
+  repeated Subtitle subtitles = 1;
+
+  // Token for retrieving the next page of results.
+  // Empty if there are no more results available.
+  string next_page_token = 100;
+}
+
+message CreateSubtitleRequest {
+  // Reserved for future use.
+  reserved 3 to 999, 1001 to 1099;
+
+  // Subtitle language represented as a three-letter code according to ISO 639-2/T.
+  string language = 1 [(length) = "3", (pattern) = "ara|deu|eng|fra|ita|jpn|kaz|kor|rus|spa|tur|ukr|zho"];
+
+  // Contains the subtitle label (or title) that will be displayed on screen during video playback.
+  // Should provide a concise and accurate representation of the spoken content.
+  // If not provided, it will be auto-generated based on the specified language.
+  string label = 2 [(length) = "<=50"];
+
+  oneof parent_id {
+    option (exactly_one) = true;
+
+    // ID of the video.
+    string video_id = 1000 [(length) = "<=50"];
+  }
+
+  // Source type.
+  oneof source {
+    option (exactly_one) = true;
+
+    // Upload subtitle.
+    SubtitleUploadParams upload = 1100;
+  }
+}
+
+message SubtitleUploadParams {
+  // Original filename of the subtitle file being uploaded.
+  string filename = 1 [(required) = true];
+}
+
+message CreateSubtitleMetadata {
+  // ID of the subtitle being created.
+  string subtitle_id = 1;
+}
+
+message GenerateSubtitleUploadURLRequest {
+  // ID of the subtitle for which to generate an upload URL.
+  string subtitle_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GenerateSubtitleUploadURLResponse {
+  // Pre-signed URL for uploading the subtitle file.
+  // This URL can be used with an HTTP PUT request to upload the subtitle file.
+  // The URL has a limited validity period and will expire after a certain time.
+  string upload_url = 1;
+}
+
+message DeleteSubtitleRequest {
+  // ID of the subtitle to delete.
+  string subtitle_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteSubtitleMetadata {
+  // ID of the subtitle being deleted.
+  // This identifier can be used to track the subtitle deletion operation.
+  string subtitle_id = 1;
+}

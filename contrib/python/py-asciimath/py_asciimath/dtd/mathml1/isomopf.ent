@@ -1,0 +1,52 @@
+<!-- 
+
+     File isomopf.ent produced by the dsssl script ent.dsl
+     from input data in unicode.xml.
+
+     Please report any errors to 
+     David Carlisle <davidc@nag.co.uk>.
+
+     The numeric character values assigned to each entity
+     (should) match either official Unicode assignments
+     or assignments in the STIX proposal for characters
+     for Mathematics.
+
+     The STIX assignments are temporary and will change if
+     the proposal or some variant of it is adopted by the
+     Unicode Consortium.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1991
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+-->
+
+<!ENTITY Aopf       "&#58624;" ><!--UE500 /Bbb A, open face A -->
+<!ENTITY Bopf       "&#58625;" ><!--UE501 /Bbb B, open face B -->
+<!ENTITY Copf       "&#8450;"  ><!--U2102 /Bbb C, open face C -->
+<!ENTITY Dopf       "&#58627;" ><!--UE503 /Bbb D, open face D -->
+<!ENTITY Eopf       "&#58628;" ><!--UE504 /Bbb E, open face E -->
+<!ENTITY Fopf       "&#58629;" ><!--UE505 /Bbb F, open face F -->
+<!ENTITY Gopf       "&#58630;" ><!--UE506 /Bbb G, open face G -->
+<!ENTITY Hopf       "&#58631;" ><!--UE507 /Bbb H, open face H -->
+<!ENTITY Iopf       "&#58632;" ><!--UE508 /Bbb I, open face I -->
+<!ENTITY Jopf       "&#58633;" ><!--UE509 /Bbb J, open face J -->
+<!ENTITY Kopf       "&#58634;" ><!--UE50A /Bbb K, open face K  -->
+<!ENTITY Lopf       "&#58635;" ><!--UE50B /Bbb L, open face L  -->
+<!ENTITY Mopf       "&#58636;" ><!--UE50C /Bbb M, open face M  -->
+<!ENTITY Nopf       "&#8469;"  ><!--U2115 /Bbb N, open face N -->
+<!ENTITY Oopf       "&#58638;" ><!--UE50E /Bbb O, open face O -->
+<!ENTITY Popf       "&#8473;"  ><!--U2119 /Bbb P, open face P -->
+<!ENTITY Qopf       "&#8474;"  ><!--U211A /Bbb Q, open face Q -->
+<!ENTITY Ropf       "&#8477;"  ><!--U211D /Bbb R, open face R -->
+<!ENTITY Sopf       "&#58642;" ><!--UE512 /Bbb S, open face S -->
+<!ENTITY Topf       "&#58643;" ><!--UE513 /Bbb T, open face T -->
+<!ENTITY Uopf       "&#58644;" ><!--UE514 /Bbb U, open face U -->
+<!ENTITY Vopf       "&#58645;" ><!--UE515 /Bbb V, open face V -->
+<!ENTITY Wopf       "&#58646;" ><!--UE516 /Bbb W, open face W -->
+<!ENTITY Xopf       "&#58647;" ><!--UE517 /Bbb X, open face X -->
+<!ENTITY Yopf       "&#58648;" ><!--UE518 /Bbb Y, open face Y -->
+<!ENTITY Zopf       "&#8484;"  ><!--U2124 /Bbb Z, open face Z -->

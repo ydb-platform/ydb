@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package yandex.cloud.connectionmanager.v1;
+
+import "yandex/cloud/connectionmanager/v1/common.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/connectionmanager/v1;connectionmanager";
+option java_package = "yandex.cloud.api.connectionmanager.v1";
+
+message StoreDocAuth {
+    oneof security {
+        UserPasswordAuth user_password = 1;
+    }
+    string auth_source = 2;
+}
+
+message StoreDocCluster {
+    message Host {
+        enum Type {
+            TYPE_UNSPECIFIED = 0;
+            MONGOD = 1;
+            MONGOS = 2;
+            MONGOINFRA = 3;
+        }
+        enum Role {
+            ROLE_UNSPECIFIED = 0;
+            PRIMARY = 1;
+            SECONDARY = 2;
+        }
+        enum Health {
+            HEALTH_UNSPECIFIED = 0;
+            ALIVE = 1;
+            DEAD = 2;
+            DEGRADED = 3;
+        }
+        string host = 1;
+        int64 port = 2;
+        Role role = 3;
+        Health health = 4;
+        Type type = 5;
+    }
+    repeated Host hosts = 1;
+    TLSParams tls_params = 2;
+}
+
+message StoreDocConnection {
+    // When creating/updating Connection, the field "cluster" is mutually
+    // exclusive with "managed_cluster_id".
+    StoreDocCluster cluster = 1;
+    // When creating/updating Connection, the field "managed_cluster_id" is mutually
+    // exclusive with "cluster".
+    string managed_cluster_id = 2;
+    StoreDocAuth auth = 3;
+    repeated string databases = 4;
+}

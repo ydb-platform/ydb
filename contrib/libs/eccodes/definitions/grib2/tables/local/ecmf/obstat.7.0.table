@@ -1,0 +1,6 @@
+#Code Table obstat.7.0: Vertical coordinate types
+1 1 Channel
+2 2 Pressure level
+3 3 Pressure layer
+4 4 Surface
+#5-255 Reserved

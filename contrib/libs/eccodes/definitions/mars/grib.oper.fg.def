@@ -1,0 +1,7 @@
+if (centre == 98 ) {
+ meta fgDate validity_date(dataDate,dataTime,endStep) : no_copy;
+ meta fgTime validity_time(dataDate,dataTime,endStep) : no_copy;
+
+ alias mars.date = fgDate;
+ alias mars.time = fgTime;
+}

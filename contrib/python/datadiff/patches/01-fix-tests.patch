@@ -1,0 +1,5 @@
+--- contrib/python/datadiff/datadiff/tests/test_datadiff.py	(index)
++++ contrib/python/datadiff/datadiff/tests/test_datadiff.py	(working tree)
+@@ -25 +26 @@ def test_diff_objects():
+-    assert str(raised.value) == "diff() not implemented for <class 'datadiff.tests.test_datadiff.Foo'>"
++    assert str(raised.value) == "diff() not implemented for <class '__tests__.datadiff.tests.test_datadiff.Foo'>"

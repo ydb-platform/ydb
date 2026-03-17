@@ -1,0 +1,88 @@
+<!-- 
+
+     File isolat1.ent produced by the dsssl script ent.dsl
+     from input data in unicode.xml.
+
+     Please report any errors to 
+     David Carlisle <davidc@nag.co.uk>.
+
+     The numeric character values assigned to each entity
+     (should) match either official Unicode assignments
+     or assignments in the STIX proposal for characters
+     for Mathematics.
+
+     The STIX assignments are temporary and will change if
+     the proposal or some variant of it is adopted by the
+     Unicode Consortium.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1986
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+-->
+
+<!ENTITY aacute     "&#225;"   ><!--U00E1 =small a, acute accent -->
+<!ENTITY acirc      "&#226;"   ><!--U00E2 =small a, circumflex accent -->
+<!ENTITY aelig      "&#230;"   ><!--U00E6 =small ae diphthong (ligature) -->
+<!ENTITY agrave     "&#224;"   ><!--U00E0 =small a, grave accent -->
+<!ENTITY aring      "&#229;"   ><!--U00E5 =small a, ring -->
+<!ENTITY atilde     "&#227;"   ><!--U00E3 =small a, tilde -->
+<!ENTITY auml       "&#228;"   ><!--U00E4 =small a, dieresis or umlaut mark -->
+<!ENTITY Aacute     "&#193;"   ><!--U00C1 =capital A, acute accent -->
+<!ENTITY Acirc      "&#194;"   ><!--U00C2 =capital A, circumflex accent -->
+<!ENTITY AElig      "&#198;"   ><!--U00C6 =capital AE diphthong (ligature) -->
+<!ENTITY Agrave     "&#192;"   ><!--U00C0 =capital A, grave accent -->
+<!ENTITY Aring      "&#197;"   ><!--U00C5 =capital A, ring -->
+<!ENTITY Atilde     "&#195;"   ><!--U00C3 =capital A, tilde -->
+<!ENTITY Auml       "&#196;"   ><!--U00C4 =capital A, dieresis or umlaut mark -->
+<!ENTITY ccedil     "&#231;"   ><!--U00E7 =small c, cedilla -->
+<!ENTITY Ccedil     "&#199;"   ><!--U00C7 =capital C, cedilla -->
+<!ENTITY eacute     "&#233;"   ><!--U00E9 =small e, acute accent -->
+<!ENTITY ecirc      "&#234;"   ><!--U00EA =small e, circumflex accent -->
+<!ENTITY egrave     "&#232;"   ><!--U00E8 =small e, grave accent -->
+<!ENTITY eth        "&#240;"   ><!--U00F0 =small eth, Icelandic -->
+<!ENTITY euml       "&#235;"   ><!--U00EB =small e, dieresis or umlaut mark -->
+<!ENTITY Eacute     "&#201;"   ><!--U00C9 =capital E, acute accent -->
+<!ENTITY Ecirc      "&#202;"   ><!--U00CA =capital E, circumflex accent -->
+<!ENTITY Egrave     "&#200;"   ><!--U00C8 =capital E, grave accent -->
+<!ENTITY ETH        "&#208;"   ><!--U00D0 =capital Eth, Icelandic -->
+<!ENTITY Euml       "&#203;"   ><!--U00CB =capital E, dieresis or umlaut mark -->
+<!ENTITY iacute     "&#237;"   ><!--U00ED =small i, acute accent -->
+<!ENTITY icirc      "&#238;"   ><!--U00EE =small i, circumflex accent -->
+<!ENTITY igrave     "&#236;"   ><!--U00EC =small i, grave accent -->
+<!ENTITY iuml       "&#239;"   ><!--U00EF =small i, dieresis or umlaut mark -->
+<!ENTITY Iacute     "&#205;"   ><!--U00CD =capital I, acute accent -->
+<!ENTITY Icirc      "&#206;"   ><!--U00CE =capital I, circumflex accent -->
+<!ENTITY Igrave     "&#204;"   ><!--U00CC =capital I, grave accent -->
+<!ENTITY Iuml       "&#207;"   ><!--U00CF =capital I, dieresis or umlaut mark -->
+<!ENTITY ntilde     "&#241;"   ><!--U00F1 =small n, tilde -->
+<!ENTITY Ntilde     "&#209;"   ><!--U00D1 =capital N, tilde -->
+<!ENTITY oacute     "&#243;"   ><!--U00F3 =small o, acute accent -->
+<!ENTITY ocirc      "&#244;"   ><!--U00F4 =small o, circumflex accent -->
+<!ENTITY ograve     "&#242;"   ><!--U00F2 =small o, grave accent -->
+<!ENTITY oslash     "&#248;"   ><!--U00F8 latin small letter o with stroke -->
+<!ENTITY otilde     "&#245;"   ><!--U00F5 =small o, tilde -->
+<!ENTITY ouml       "&#246;"   ><!--U00F6 =small o, dieresis or umlaut mark -->
+<!ENTITY Oacute     "&#211;"   ><!--U00D3 =capital O, acute accent -->
+<!ENTITY Ocirc      "&#212;"   ><!--U00D4 =capital O, circumflex accent -->
+<!ENTITY Ograve     "&#210;"   ><!--U00D2 =capital O, grave accent -->
+<!ENTITY Oslash     "&#216;"   ><!--U00D8 =capital O, slash -->
+<!ENTITY Otilde     "&#213;"   ><!--U00D5 =capital O, tilde -->
+<!ENTITY Ouml       "&#214;"   ><!--U00D6 =capital O, dieresis or umlaut mark -->
+<!ENTITY szlig      "&#223;"   ><!--U00DF =small sharp s, German (sz ligature) -->
+<!ENTITY thorn      "&#254;"   ><!--U00FE =small thorn, Icelandic -->
+<!ENTITY THORN      "&#222;"   ><!--U00DE =capital THORN, Icelandic -->
+<!ENTITY uacute     "&#250;"   ><!--U00FA =small u, acute accent -->
+<!ENTITY ucirc      "&#251;"   ><!--U00FB =small u, circumflex accent -->
+<!ENTITY ugrave     "&#249;"   ><!--U00F9 =small u, grave accent -->
+<!ENTITY uuml       "&#252;"   ><!--U00FC =small u, dieresis or umlaut mark -->
+<!ENTITY Uacute     "&#218;"   ><!--U00DA =capital U, acute accent -->
+<!ENTITY Ucirc      "&#219;"   ><!--U00DB =capital U, circumflex accent -->
+<!ENTITY Ugrave     "&#217;"   ><!--U00D9 =capital U, grave accent -->
+<!ENTITY Uuml       "&#220;"   ><!--U00DC =capital U, dieresis or umlaut mark -->
+<!ENTITY yacute     "&#253;"   ><!--U00FD =small y, acute accent -->
+<!ENTITY yuml       "&#255;"   ><!--U00FF =small y, dieresis or umlaut mark -->
+<!ENTITY Yacute     "&#221;"   ><!--U00DD =capital Y, acute accent -->

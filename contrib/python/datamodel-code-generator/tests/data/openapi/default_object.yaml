@@ -1,0 +1,81 @@
+openapi: 3.0.3
+info:
+  title: Example
+  version: 0.1.0
+servers:
+- url: http://example.com
+paths:
+  /foo:
+    delete:
+      responses:
+        '200':
+          description: OK
+components:
+  schemas:
+    Foo:
+      type: object
+      properties:
+        text:
+          type: string
+          default: "987"
+        number:
+          type: number
+    Bar:
+      type: object
+      properties:
+        foo:
+          allOf:
+          - $ref: '#/components/schemas/Foo'
+          default:
+            text: abc
+            number: 123
+        baz:
+          type: array
+          items:
+            $ref: '#/components/schemas/Foo'
+          default:
+            - text: abc
+              number: 123
+            - text: efg
+              number: 456
+    Nested.Foo:
+      type: string
+    Nested.Bar:
+      type: object
+      properties:
+        foo:
+          allOf:
+            - $ref: '#/components/schemas/Foo'
+          default:
+            text: abc
+            number: 123
+        baz:
+          type: array
+          items:
+            $ref: '#/components/schemas/Foo'
+          default:
+            - text: abc
+              number: 123
+            - text: efg
+              number: 456
+        nested_foo:
+          $ref: '#/components/schemas/Nested.Foo'
+          default: 'default foo'
+    Another.Foo:
+      type: string
+    Another.Bar:
+      type: object
+      properties:
+        original_foo:
+          allOf:
+            - $ref: '#/components/schemas/Foo'
+          default:
+            text: abc
+            number: 123
+        nested_foo:
+          type: array
+          items:
+            $ref: '#/components/schemas/Nested.Foo'
+          default:
+            - abc
+            - efg

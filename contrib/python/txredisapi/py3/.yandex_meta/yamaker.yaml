@@ -1,0 +1,2 @@
+requirements:
+  - pyopenssl  # из Twisted импортируется ssl, а для него нужен pyopenssl

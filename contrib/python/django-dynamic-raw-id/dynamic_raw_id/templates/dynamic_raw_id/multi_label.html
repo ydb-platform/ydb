@@ -1,0 +1,4 @@
+{% for object in objects %}
+    <a href="{{ object.1 }}" >{{ object.0 }}</a>{% if not forloop.last %},&nbsp;{% endif %}
+{% endfor %}
+

@@ -1,0 +1,32 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.200, Grid point data - Run length packing with level values
+
+meta codedValues data_run_length_packing(
+      section7Length,
+      offsetBeforeData,
+      offsetSection7,
+      numberOfValues,
+      bitsPerValue,
+      maxLevelValue,
+      numberOfLevelValues,
+      decimalScaleFactor,
+      levelValues
+): read_only;
+
+meta values data_apply_bitmap(
+      codedValues,
+      bitmap,
+      missingValue,
+      binaryScaleFactor,
+      numberOfDataPoints,
+      numberOfValues
+) : dump;
+
+alias data.packedValues = codedValues;
+
+template statistics "common/statistics_grid.def";
+
+# This template can have undefined values within its Data Section
+meta numberOfMissing count_missing(bitmap,unusedBitsInBitmap,numberOfDataPoints,one) : dump;
+alias numberOfMissingValues=numberOfMissing;

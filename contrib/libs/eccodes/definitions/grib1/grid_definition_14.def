@@ -1,0 +1,10 @@
+# (C) Copyright 2005- ECMWF.
+
+# GRID DEFINITION Rotated Gaussian latitude/longitude grid
+# grib 1 -> 2
+constant gridDefinitionTemplateNumber     = 41;
+
+template commonBlock "grib1/grid_definition_gaussian.def";
+
+# Rotation parameters
+include "grib1/grid_rotation.def"

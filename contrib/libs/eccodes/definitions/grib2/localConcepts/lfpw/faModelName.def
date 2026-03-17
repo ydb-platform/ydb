@@ -1,0 +1,9 @@
+'arpege-france-oper-forecast-production' = { generatingProcessIdentifier = 211; }
+'arpege-france-oper-forecast-assim'      = { generatingProcessIdentifier =  12; }
+'arpege-france-dble-forecast-production' = { generatingProcessIdentifier = 212; }
+'arpege-france-dble-forecast-assim'      = { generatingProcessIdentifier =  22; }
+'arome-france-oper-6'                    = { generatingProcessIdentifier = 204; }
+'arome-france-oper-1'                    = { generatingProcessIdentifier = 213; }
+'arome-france-dble-6'                    = { generatingProcessIdentifier = 209; }
+'arome-france-dble-1'                    = { generatingProcessIdentifier = 210; }
+'default'                                = { generatingProcessIdentifier = 255; }

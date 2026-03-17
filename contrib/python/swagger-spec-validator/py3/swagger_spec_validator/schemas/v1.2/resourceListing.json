@@ -1,0 +1,30 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "properties": {
+        "apiVersion": {
+            "type": "string"
+        },
+        "apis": {
+            "items": {
+                "$ref": "resourceObject.json#"
+            },
+            "type": "array"
+        },
+        "authorizations": {
+            "$ref": "authorizationObject.json#"
+        },
+        "info": {
+            "$ref": "infoObject.json#"
+        },
+        "swaggerVersion": {
+            "enum": [
+                "1.2"
+            ]
+        }
+    },
+    "required": [
+        "swaggerVersion",
+        "apis"
+    ],
+    "type": "object"
+}

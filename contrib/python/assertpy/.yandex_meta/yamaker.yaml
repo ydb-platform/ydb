@@ -1,0 +1,8 @@
+# requirements:
+#   - x
+mark_as_py3_sources:
+  - assertpy/
+  - assertpy/**
+copy:
+  - assertpy/*.py
+repo_url: https://github.com/assertpy/assertpy

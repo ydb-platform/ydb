@@ -1,0 +1,316 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/organizationmanager/v1/mfa_enforcement.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1;organizationmanager";
+option java_package = "yandex.cloud.api.organizationmanager.v1";
+
+// a set of methods for managing MFA enforcements
+service MfaEnforcementService {
+  // creates an MFA enforcement in the specified organization
+  rpc Create (CreateMfaEnforcementRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/organization-manager/v1/mfaEnforcements" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateMfaEnforcementMetadata"
+      response: "MfaEnforcement"
+    };
+  }
+  // updates the specified MFA enforcement
+  rpc Update (UpdateMfaEnforcementRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/mfaEnforcements/{mfa_enforcement_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateMfaEnforcementMetadata"
+      response: "MfaEnforcement"
+    };
+  }
+  // activates the specified MFA enforcement
+  rpc Activate (ActivateMfaEnforcementRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/mfaEnforcements/{mfa_enforcement_id}:activate" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "ActivateMfaEnforcementMetadata"
+      response: "MfaEnforcement"
+    };
+  }
+  // deactivates the specified MFA enforcement
+  rpc Deactivate (DeactivateMfaEnforcementRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/mfaEnforcements/{mfa_enforcement_id}:deactivate" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeactivateMfaEnforcementMetadata"
+      response: "MfaEnforcement"
+    };
+  }
+  // deletes the specified MFA enforcement
+  rpc Delete (DeleteMfaEnforcementRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/organization-manager/v1/mfaEnforcements/{mfa_enforcement_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteMfaEnforcementMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+  // returns the specified MFA enforcement
+  rpc Get (GetMfaEnforcementRequest) returns (MfaEnforcement) {
+    option (google.api.http) = { get: "/organization-manager/v1/mfaEnforcements/{mfa_enforcement_id}" };
+  }
+  // returns MFA enforcements for the specified organization
+  rpc List (ListMfaEnforcementsRequest) returns (ListMfaEnforcementsResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/mfaEnforcements" };
+  }
+  // updates specified MFA enforcement's audience
+  rpc UpdateAudience (UpdateAudienceRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/mfaEnforcements/{mfa_enforcement_id}:updateAudience" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateAudienceMetadata"
+      response: "UpdateAudienceResponse"
+    };
+  }
+  // returns specified MFA enforcement's audience
+  rpc ListAudience (ListAudienceRequest) returns (ListAudienceResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/mfaEnforcements/{mfa_enforcement_id}:listAudience" };
+  }
+  // updates specified MFA enforcement's excluded audience
+  rpc UpdateExcludedAudience (UpdateExcludedAudienceRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/organization-manager/v1/mfaEnforcements/{mfa_enforcement_id}:updateExcludedAudience" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateExcludedAudienceMetadata"
+      response: "UpdateExcludedAudienceResponse"
+    };
+  }
+  // returns specified MFA enforcement's excluded audience
+  rpc ListExcludedAudience (ListExcludedAudienceRequest) returns (ListExcludedAudienceResponse) {
+    option (google.api.http) = { get: "/organization-manager/v1/mfaEnforcements/{mfa_enforcement_id}:listExcludedAudience" };
+  }
+}
+
+message CreateMfaEnforcementRequest {
+  // organization id of the MFA enforcement
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+  // acr id for the MFA enforcement. one of 'any-mfa' or 'phr',
+  // specification https://yandex.cloud/en/docs/organization/concepts/mfa?utm_referrer=https%3A%2F%2Fa.yandex-team.ru%2F#mfa-factors
+  string acr_id = 2 [(required) = true, (length) = "<=50"];
+  // the period during which the entered MFA factor will be considered valid and the
+  // corresponding acr will be regarded as satisfied
+  google.protobuf.Duration ttl = 3 [(required) = true, (value) = "<=8760h"]; // max 1 year
+  // the MFA enforcement status
+  Status status = 4 [(required) = true];
+  // the MFA enforcement application start time
+  google.protobuf.Timestamp apply_at = 5;
+  // the MFA enforcement enroll window
+  google.protobuf.Duration enroll_window = 6 [(required) = true];
+  // the MFA enforcement name
+  string name = 7 [(required) = true, (pattern) = "[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  // the MFA enforcement description
+  string description = 8 [(length) = "<=256"];
+
+  enum Status {
+    // status upspecified
+    STATUS_UNSPECIFIED = 0;
+    // active
+    STATUS_ACTIVE = 1;
+    // inactive
+    STATUS_INACTIVE = 2;
+  }
+}
+
+message CreateMfaEnforcementMetadata {
+  // organization id of the MFA enforcement
+  string organization_id = 2;
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 3;
+}
+
+message UpdateMfaEnforcementRequest {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+  // acr id for the MFA enforcement. one of 'any-mfa' or 'phr',
+  // specification https://yandex.cloud/en/docs/organization/concepts/mfa?utm_referrer=https%3A%2F%2Fa.yandex-team.ru%2F#mfa-factors
+  string acr_id = 2 [(length) = "<=50"];
+  // the period during which the entered MFA factor will be considered valid and the
+  // corresponding acr will be regarded as satisfied
+  google.protobuf.Duration ttl = 3 [(value) = "<=8760h"]; // max 1 year
+  // the MFA enforcement status
+  Status status = 4;
+  // the MFA enforcement application start time
+  google.protobuf.Timestamp apply_at = 5;
+  // the MFA enforcement enroll window
+  google.protobuf.Duration enroll_window = 6;
+  // field mask to specify which fields of the MFA enforcement resource should be updated
+  google.protobuf.FieldMask update_mask = 7;
+  // the MFA enforcement name
+  string name = 8 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  // the MFA enforcement description
+  string description = 9 [(length) = "<=256"];
+
+  enum Status {
+    // status upspecified
+    STATUS_UNSPECIFIED = 0;
+    // active
+    STATUS_ACTIVE = 1;
+    // inactive
+    STATUS_INACTIVE = 2;
+  }
+}
+
+message UpdateMfaEnforcementMetadata {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 2;
+}
+
+message ActivateMfaEnforcementRequest {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ActivateMfaEnforcementMetadata {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 2;
+}
+
+message DeactivateMfaEnforcementRequest {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeactivateMfaEnforcementMetadata {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 2;
+}
+
+message DeleteMfaEnforcementRequest {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteMfaEnforcementMetadata {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 2;
+}
+
+message GetMfaEnforcementRequest {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListMfaEnforcementsRequest {
+  // organization id
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+  // the maximum number of results per page to return
+  int64 page_size = 2 [(value) = "0-1000"];
+  // page token
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+message ListMfaEnforcementsResponse {
+  // list of MFA enforcements for the specified organization
+  repeated MfaEnforcement mfa_enforcements = 1;
+  // token to get the next page of results
+  string next_page_token = 2;
+}
+
+message UpdateAudienceRequest {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+  // MFA enforcement's audience to update
+  repeated AudienceDelta audience_deltas = 2 [(size) = "1-1000"];
+}
+
+message UpdateAudienceResponse {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+  // updated MFA enforcement's audience
+  repeated AudienceDelta effective_deltas = 2;
+}
+
+message AudienceDelta {
+  // action to perform
+  Action action = 1 [(required) = true];
+  // subject id
+  string subject_id = 2 [(required) = true, (length) = "<=100"];
+
+  enum Action {
+    // action unspecified
+    ACTION_UNSPECIFIED = 0;
+    // add subject to audience
+    ACTION_ADD = 1;
+    // remove subject from audience
+    ACTION_REMOVE = 2;
+  }
+}
+
+message UpdateAudienceMetadata {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 2;
+}
+
+message ListAudienceRequest {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+  // the maximum number of results per page to return
+  int64 page_size = 2 [(value) = "0-1000"];
+  // page token
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+message ListAudienceResponse {
+  // MFA enforcement's audience
+  repeated Subject subjects = 1;
+  // token to get the next page of results
+  string next_page_token = 2;
+
+  message Subject {
+    // subject id
+    string id = 1;
+    // subject type
+    string type = 2;
+  }
+}
+
+message UpdateExcludedAudienceRequest {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+  // updated MFA enforcement's excluded audience
+  repeated AudienceDelta audience_deltas = 2 [(size) = "1-1000"];
+}
+
+message UpdateExcludedAudienceResponse {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+  // updated MFA enforcement's excluded audience
+  repeated AudienceDelta effective_deltas = 2;
+}
+
+message UpdateExcludedAudienceMetadata {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 2;
+}
+
+message ListExcludedAudienceRequest {
+  // id of the MFA enforcement
+  string mfa_enforcement_id = 1 [(required) = true, (length) = "<=50"];
+  // the maximum number of results per page to return
+  int64 page_size = 2 [(value) = "0-1000"];
+  // page token
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+message ListExcludedAudienceResponse {
+  // MFA enforcement's audience
+  repeated Subject subjects = 1;
+  // token to get the next page of results
+  string next_page_token = 2;
+
+  message Subject {
+    // subject id
+    string id = 1;
+    // subject type
+    string type = 2;
+  }
+}

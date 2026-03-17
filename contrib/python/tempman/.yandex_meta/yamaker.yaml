@@ -1,0 +1,5 @@
+mark_as_py3_sources:
+  - tempman/__init__.py
+copy:
+  - tempman/__init__.py
+repo_url: https://github.com/mwilliamson/python-tempman

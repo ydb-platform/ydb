@@ -1,0 +1,24 @@
+# (C) Copyright 2005- ECMWF.
+# 4DVar model errors
+
+template mars_labeling "grib1/mars_labeling.def";
+
+#1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=25;
+if (stepType is "instant") {
+  alias productDefinitionTemplateNumber=zero;
+} else {
+  alias productDefinitionTemplateNumber=eight;
+}
+
+constant GRIBEXSection1Problem = 52 - section1Length ;
+
+unsigned[1] componentIndex  : dump;
+alias mars.number=componentIndex;
+unsigned[1] numberOfComponents  : dump;
+unsigned[1] modelErrorType  : dump;
+
+alias local.componentIndex=componentIndex;
+alias local.numberOfComponents=numberOfComponents;
+alias local.modelErrorType=modelErrorType;

@@ -1,0 +1,87 @@
+# Операторы:
+#   *  Один аргумент в undo
+#   ~  Несколько аргументов (минимум один) в undo
+#
+# Параметры:
+#   %global         Команда действует на любом уровне ниже
+#   %logic=...      Кастомная функция обработки правила
+#   %diff_logic=... Кастомная функция построения диффа.
+#                   данная функция работает для подблоков (в отличие от %logic)
+#   %comment=...    Добавить коммент после строки который будет видно с опцией patch --add-comments
+#                   Сделано в основном для того чтобы генерировать специальные команды для наливки
+# -----
+
+%context=block:ap-env
+
+name:~               %logic=aruba.ap_env.hostname
+
+*/ipaddr|netmask|gatewayip|dnsip|domainname/:...  %logic=aruba.ap_env.mgmt
+
+usb-port-disable:... %logic=aruba.ap_env.patch_flag
+iap_master:...       %logic=aruba.ap_env.patch_flag
+iap_conductor:...    %logic=aruba.ap_env.patch_flag
+
+iap_zone:~  %logic=aruba.ap_env.iap_zone
+
+dot11a_radio:disable %logic=aruba.ap_env.dot11_radio
+dot11g_radio:disable %logic=aruba.ap_env.dot11_radio
+
+installation_type:...  %logic=aruba.ap_env.installation_type
+
+standalone_mode:... %logic=aruba.ap_env.swarm_mode
+
+*/wifi0_arm_(channel|power_10x)/:...    %logic=aruba.ap_env.wifi_arm
+*/wifi1_arm_(channel|power_10x)/:...    %logic=aruba.ap_env.wifi_arm
+
+a_ant_gain_10x:...  %logic=aruba.ap_env.ant_gain
+g_ant_gain_10x:...  %logic=aruba.ap_env.ant_gain
+
+a_ant_pol:...  %logic=aruba.ap_env.ant_pol
+g_ant_pol:...  %logic=aruba.ap_env.ant_pol
+
+%context=block:conf-t
+syslog-server
+
+*/syslog-level/ ~/(emergency|alert|critical|error|warn|notice|info|debug)/ * %logic=aruba.misc.syslog_level
+*/syslog-level/ ~/(emergency|alert|critical|error|warn|notice|info|debug)/ %logic=aruba.misc.syslog_level
+
+arm
+    wide-bands
+    a-channels
+    g-channels
+    min-tx-power
+    max-tx-power
+
+rf dot11g-radio-profile
+    max-distance
+    max-tx-power
+    min-tx-power
+
+rf dot11a-radio-profile
+    max-distance
+    max-tx-power
+    min-tx-power
+
+wlan access-rule ~
+    rule ~          %ordered
+
+wlan ssid-profile ~
+    g-basic-rates
+    a-basic-rates
+    wpa-passphrase
+    radius-reauth-interval
+    dtim-period
+
+ntp-server
+rf-band
+name
+virtual-controller-ip
+
+wlan tacacs-server tacacs
+    key
+    timeout
+
+no ~ %global
+~ %global
+
+# vim: set syntax=annrulebook:

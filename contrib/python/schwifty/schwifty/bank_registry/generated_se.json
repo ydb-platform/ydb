@@ -1,0 +1,290 @@
+[
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "DABASESX",
+    "bank_code": "120",
+    "name": "Danske Bank",
+    "short_name": "Danske Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "AABASESS",
+    "bank_code": "230",
+    "name": "\u00c5landsbanken",
+    "short_name": "\u00c5landsbanken"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "NDEASESS",
+    "bank_code": "300",
+    "name": "Nordea",
+    "short_name": "Nordea"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "ESSESESS",
+    "bank_code": "500",
+    "name": "SEB",
+    "short_name": "SEB"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "HANDSESS",
+    "bank_code": "600",
+    "name": "Handelsbanken",
+    "short_name": "Handelsbanken"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "SWEDSESS",
+    "bank_code": "800",
+    "name": "Swedbank",
+    "short_name": "Swedbank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "ELLFSESS",
+    "bank_code": "902",
+    "name": "L\u00e4nsf\u00f6rs\u00e4kringar Bank",
+    "short_name": "L\u00e4nsf\u00f6rs\u00e4kringar Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "CITISESX",
+    "bank_code": "904",
+    "name": "Citibank (filial)",
+    "short_name": "Citibank (filial)"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "FEMAMTMT",
+    "bank_code": "907",
+    "name": "Ferratum Bank",
+    "short_name": "Ferratum Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "NNSESES1",
+    "bank_code": "910",
+    "name": "Nordnet Bank",
+    "short_name": "Nordnet Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "SKIASESS",
+    "bank_code": "915",
+    "name": "Skandiabanken",
+    "short_name": "Skandiabanken"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "IKANSE21",
+    "bank_code": "917",
+    "name": "Ikanobanken",
+    "short_name": "Ikanobanken"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "DNBASESX",
+    "bank_code": "919",
+    "name": "DnB NOR filial",
+    "short_name": "DnB NOR filial"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "MARGSESS",
+    "bank_code": "923",
+    "name": "Marginalen Bank",
+    "short_name": "Marginalen Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "SBAVSESS",
+    "bank_code": "925",
+    "name": "SBAB Bank",
+    "short_name": "SBAB Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "IBCASES1",
+    "bank_code": "927",
+    "name": "ICA Banken",
+    "short_name": "ICA Banken"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "RESUSE21",
+    "bank_code": "928",
+    "name": "Resurs Bank AB",
+    "short_name": "Resurs Bank AB"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "SWEDSESS",
+    "bank_code": "930",
+    "name": "Swedbank",
+    "short_name": "Swedbank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "LAHYSESS",
+    "bank_code": "939",
+    "name": "Landshypotek",
+    "short_name": "Landshypotek"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "FORXSES1",
+    "bank_code": "940",
+    "name": "Forex Bank",
+    "short_name": "Forex Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "BSNOSESS",
+    "bank_code": "946",
+    "name": "Santander Consumer Bank",
+    "short_name": "Santander Consumer Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "FTSBSESS",
+    "bank_code": "947",
+    "name": "BNP Paribas",
+    "short_name": "BNP Paribas"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "NDEASESS",
+    "bank_code": "950",
+    "name": "Nordea (Plusgirot)",
+    "short_name": "Nordea (Plusgirot)"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "AVANSES1",
+    "bank_code": "955",
+    "name": "Avanza Bank",
+    "short_name": "Avanza Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "SPSDSE23",
+    "bank_code": "957",
+    "name": "Sparbanken Syd",
+    "short_name": "Sparbanken Syd"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "BMPBSESS",
+    "bank_code": "958",
+    "name": "AION Bank",
+    "short_name": "AION Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "ERPFSES2",
+    "bank_code": "959",
+    "name": "Erik Penser Bank AB",
+    "short_name": "Erik Penser Bank AB"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "LOSADKKK",
+    "bank_code": "963",
+    "name": "L\u00e5n & Spar Bank A/S, filial",
+    "short_name": "L\u00e5n & Spar Bank A/S, filial"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "NOFBSESS",
+    "bank_code": "964",
+    "name": "Nordax Bank",
+    "short_name": "Nordax Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "MEMMSE21",
+    "bank_code": "965",
+    "name": "MedMera Bank AB",
+    "short_name": "MedMera Bank AB"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "SVEASES1",
+    "bank_code": "966",
+    "name": "Svea Bank",
+    "short_name": "Svea Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "JAKMSE22",
+    "bank_code": "967",
+    "name": "JAK Medlemsbank",
+    "short_name": "JAK Medlemsbank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "BSTPSESS",
+    "bank_code": "968",
+    "name": "Bluestep Finans AB",
+    "short_name": "Bluestep Finans AB"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "EKMLSE21",
+    "bank_code": "970",
+    "name": "Ekobanken",
+    "short_name": "Ekobanken"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "NOHLSESS",
+    "bank_code": "975",
+    "name": "Northmill Bank",
+    "short_name": "Northmill Bank"
+  },
+  {
+    "country_code": "SE",
+    "primary": true,
+    "bic": "KLRNSESS",
+    "bank_code": "978",
+    "name": "Klarna Bank",
+    "short_name": "Klarna Bank"
+  }
+]

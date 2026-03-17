@@ -1,0 +1,19 @@
+# {{- '#' * (heading_level - 1) }} {{title}}
+
+## {{- '#' * (heading_level - 1) }} 📂 Overall coverage
+
+| Metric        | Coverage |
+|---------------|----------|
+| **Lines**     | {{summary.line_badge}} {{summary.line_covered}}/{{summary.line_total}} ({{summary.line_percent}}%) |
+| **Functions** | {{summary.function_badge}} {{summary.function_covered}}/{{summary.function_total}} ({{summary.function_percent}}%) |
+| **Branches**  | {{summary.branch_badge}} {{summary.branch_covered}}/{{summary.branch_total}} ({{summary.branch_percent}}%) |
+{% if entries %}
+
+## {{- '#' * (heading_level - 1) }} 📄 File coverage
+
+| File                   | Lines | Functions | Branches |
+|------------------------|-------|-----------|----------|
+{% for row in entries %}
+| **{% if (file_link) %}[{% endif %}`{{row.filename}}`{% if (file_link) %}]({{ file_link | replace('{file}', row.filename) }}){% endif %}** | {{row.line_badge}} {{row.line_covered}}/{{row.line_total}} ({{row.line_percent}}%) | {{row.function_badge}} {{row.function_covered}}/{{row.function_total}} ({{row.function_percent}}%) | {{row.branch_badge}} {{row.branch_covered}}/{{row.branch_total}} ({{row.branch_percent}}%) |
+{% endfor %}
+{% endif %}

@@ -1,0 +1,5 @@
+# class e4
+alias mars.step = startStep;
+
+alias monthlyVerificationTime = validityTime;
+alias monthlyVerificationDate = dataDate;

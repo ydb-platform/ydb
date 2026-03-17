@@ -1,0 +1,16 @@
+# Code table JMA-252 - type of vegetation
+#
+0 0   Sea or inland water
+1 1   Broadleaf-evergreen trees
+2 2   Broadleaf-deciduous trees
+3 3   Broadleaf and needleleaf trees
+4 4   Needleleaf-evergreen trees
+5 5   Needleleaf-deciduous trees
+6 6   Broadleaf trees with groundcover
+7 7   Groundcover
+8 8   Broadleaf shrubs with groundcover
+9 9   Broadleaf shrubs with bare soil
+10 10 Dwarf trees and shrubs with groundcover (tundra)
+11 11 No vegetation: bare soil
+12 12 Broadleaf-deciduous trees with winter wheat
+13 13 Perennial land ice

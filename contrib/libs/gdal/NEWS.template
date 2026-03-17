@@ -1,0 +1,43 @@
+# GDAL/OGR X.Y.Z Release Notes
+
+## In a nutshell...
+
+## New optional dependencies
+
+## New installed files
+
+## Removed files
+
+## Backward compatibility issues
+
+See [MIGRATION_GUIDE.TXT](https://github.com/OSGeo/gdal/blob/release/X.Y/MIGRATION_GUIDE.TXT)
+
+## Build changes
+
+## Internal libraries
+
+## GDAL X.Y.Z - Overview of Changes
+
+### Port
+
+### Core
+
+### Algorithms
+
+### Utilities
+
+### gdal_utils package
+
+### Raster drivers
+
+## OGR X.Y.Z - Overview of Changes
+
+### Core
+
+### OGRSpatialReference
+
+### Utilities
+
+### Vector drivers
+
+## SWIG Language Bindings

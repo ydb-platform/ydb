@@ -1,0 +1,11 @@
+# author: Sebastien Villaume
+# created: 6 Oct 2011
+# modified: 20 Feb 2014
+#
+constant GRIBEXSection1Problem = 53 - section1Length;
+
+# base local definition
+include "grib1/local.82.0.def";
+
+unsigned[1] marsExperimentOffset = 0 : dump, long_type;
+

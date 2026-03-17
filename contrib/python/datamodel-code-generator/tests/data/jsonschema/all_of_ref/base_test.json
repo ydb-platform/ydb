@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "base_test.json",
+  "description": "base test",
+  "type": "object",
+  "definitions": {
+    "first": {
+      "type": "object",
+      "required": [
+        "second"
+      ],
+      "properties": {
+        "second": {
+          "type": "string",
+          "description": "Second",
+          "examples": [
+            "second"
+          ]
+        }
+      }
+    }
+  }
+}

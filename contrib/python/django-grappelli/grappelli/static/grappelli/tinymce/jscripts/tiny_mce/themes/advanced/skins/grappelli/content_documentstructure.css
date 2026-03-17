@@ -1,0 +1,72 @@
+/* -- Basic Elements ---------- */
+
+body#tinymce {
+    width: 630px; /* 10px more than body#tinymce in content_base.css to provide equal line-breaks */
+}
+body#tinymce.fullscreen {
+    padding-left: 10px !important;
+    width: 630px !important; /* 10px more than body#tinymce.fullscreen in content_base.css to provide equal line-breaks */
+    background: #eee;
+}
+
+/* -- Typographic Elements ---------- */
+
+body#tinymce h1, 
+body#tinymce h2, 
+body#tinymce h3, 
+body#tinymce h4, 
+body#tinymce p, 
+body#tinymce ol, 
+body#tinymce ul, 
+body#tinymce code, 
+body#tinymce pre, 
+body#tinymce blockquote {
+    padding: 2px 5px 5px;
+    line-height: 16px !important;
+    background-color: #fff;
+}
+body#tinymce p.mce-grid-container {
+    padding: 2px 0 0;
+    line-height: 16px !important;
+    background-color: transparent;
+    border-top: 0px dashed #999 !important;
+    border-bottom: 0px solid #999 !important;
+}
+body#tinymce table.mceItemTable td {
+    border: 1px dashed #bbb !important;
+}
+body#tinymce div h1, 
+body#tinymce div h2, 
+body#tinymce div h3, 
+body#tinymce div h4, 
+body#tinymce div p, 
+body#tinymce div code, 
+body#tinymce div pre {
+    padding-left: 0;
+}
+
+body#tinymce h1:before, 
+body#tinymce h2:before, 
+body#tinymce h3:before, 
+body#tinymce h4:before, 
+body#tinymce p:before, 
+body#tinymce ol:before, 
+body#tinymce ul:before, 
+body#tinymce code:before, 
+body#tinymce pre:before, 
+body#tinymce blockquote:before, 
+body#tinymce div:before {
+    position: relative; display: block;
+    font-family: "Andale Mono"; font-size: 9px; font-weight: normal; color: #999;
+}
+body#tinymce ol:before, 
+body#tinymce ul:before {
+    margin-left: -30px;
+}
+body#tinymce blockquote:before {
+    margin-left: -25px;
+}
+body#tinymce p.mce-grid-container:before {
+    margin-bottom: 3px;
+    color: #7c7c7c;
+}

@@ -1,0 +1,34 @@
+#TreeTransformer
+Exactly(:x) -> [t.Match(x)]
+Token(:x) -> [t.Match(x)]
+Many(@x) -> [t.Choice(len(x) + 2)] + x + [t.Commit(-len(x) - 1)]
+Many1(@x) -> x + [t.Choice(len(x) + 2)] + x + [t.Commit(-len(x) - 1)]
+Repeat(:min :max @x)
+    -> [t.Python(repr(int(min))), t.Push(), t.Python(repr(int(max))),
+        t.Push(), t.RepeatChoice(len(x) + 2)] + x + [t.Commit(-len(x) - 1)]
+Optional(@x) -> [t.Choice(len(x) + 2)] + x + [t.Commit(2), t.Python("None")]
+# Right-associate Or() as needed. Note that Or() can have a list of a single
+# element.
+Or(@xs) = ?(len(xs) == 1) transform(xs[0])
+        | ?(len(xs) == 2) transform(t.Or(xs[0], xs[1]))
+        |                 transform(t.Or(xs[0], t.Or(xs[1:])))
+Or(@left @right)
+    -> [t.Choice(len(left) + 2)] + left + [t.Commit(len(right) + 1)] + right
+Not(@x) -> [t.Choice(len(x) + 3)] + x + [t.Commit(1), t.Fail()]
+Lookahead(:x) = transform(t.Not(t.Not(x)))
+And(@xs) -> sum(xs, [])
+Bind(:name @x) -> x + [t.Bind(name)]
+Predicate(@x) -> x + [t.Predicate()]
+Action(:x) -> [t.Python(x.data)]
+Python(:x) -> [t.Python(x.data)]
+List(@x) -> [t.Descend()] + x + [t.Ascend()]
+ConsumedBy(@x) -> [t.StartSlice()] + x + [t.EndSlice()]
+
+pushes :xs -> [inner for x in xs for inner in [x[0], t.Push()]]
+Apply("super" :code @args) pushes(args):xs -> xs + [t.SuperCall(code)]
+Apply(:rule :code @args) pushes(args):xs -> xs + [t.Call(rule)]
+ForeignApply(:grammar :rule :code @args) pushes(args):xs -> (xs +
+    [t.ForeignCall(grammar, rule)])
+
+Rule(:name @xs) -> t.Rule(name, xs)
+Grammar(:name :tree @rules) -> t.Grammar(name, tree, rules)

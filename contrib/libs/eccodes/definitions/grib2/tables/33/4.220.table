@@ -1,0 +1,6 @@
+# Code table 4.220 - Horizontal dimension processed
+0 0 Latitude
+1 1 Longitude
+# 2-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

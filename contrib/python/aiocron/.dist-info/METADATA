@@ -1,0 +1,119 @@
+Metadata-Version: 2.1
+Name: aiocron
+Version: 2.1
+Summary: Crontabs for asyncio
+Author-email: Gael Pasgrimaud <gael@gawel.org>
+License: MIT License
+        
+        Copyright (c) 2016 Gael Pasgrimaud
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/gawel/aiocron/
+Keywords: crontab,cron,asyncio
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.9
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: cronsim >=2.6
+Requires-Dist: python-dateutil >=2.9.0
+Requires-Dist: tzlocal >=5.2
+Provides-Extra: test
+Requires-Dist: tox >=4.21.1 ; extra == 'test'
+Requires-Dist: tox-uv >=1.13.0 ; extra == 'test'
+Requires-Dist: coverage >=7.6.1 ; extra == 'test'
+Requires-Dist: pytest >=8.3.3 ; extra == 'test'
+Requires-Dist: pytest-cov >=5.0.0 ; extra == 'test'
+
+================================================
+aiocron - Crontabs for asyncio
+================================================
+
+
+.. image:: https://img.shields.io/pypi/v/aiocron.svg
+  :target: https://pypi.python.org/pypi/aiocron
+.. image:: https://img.shields.io/pypi/dm/aiocron.svg
+  :target: https://pypi.python.org/pypi/aiocron
+
+Usage
+=====
+
+``aiocron`` provide a decorator to run function at time::
+
+    >>> import aiocron
+    >>> import asyncio
+    >>>
+    >>> @aiocron.crontab('*/30 * * * *')
+    ... async def attime():
+    ...     print('run')
+    ...
+    >>> asyncio.get_event_loop().run_forever()
+
+You can also use it as an object::
+
+    >>> @aiocron.crontab('1 9 * * 1-5', start=False)
+    ... async def attime():
+    ...     print('run')
+    ...
+    >>> attime.start()
+    >>> asyncio.get_event_loop().run_forever()
+
+Your function still be available at ``attime.func``
+
+You can also await a crontab. In this case, your coroutine can accept
+arguments::
+
+    >>> @aiocron.crontab('0 9,10 * * * mon,fri', start=False)
+    ... async def attime(i):
+    ...     print('run %i' % i)
+    ...
+    >>> async def once():
+    ...     try:
+    ...         res = await attime.next(1)
+    ...     except Exception as e:
+    ...         print('It failed (%r)' % e)
+    ...     else:
+    ...         print(res)
+    ...
+    >>> asyncio.get_event_loop().run_forever()
+
+Finally you can use it as a sleep coroutine. The following will wait until
+next hour::
+
+    >>> await crontab('0 * * * *').next()
+
+If you don't like the decorator magic you can set the function by yourself::
+
+    >>> cron = crontab('0 * * * *', func=yourcoroutine, start=False)
+
+Notice that unlike standard unix crontab you can specify seconds at the 6th
+position.
+
+``aiocron`` use `croniter <https://pypi.python.org/pypi/croniter>`_. Refer to
+it's documentation to know more about crontab format.

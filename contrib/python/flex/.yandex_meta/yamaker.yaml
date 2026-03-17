@@ -1,0 +1,5 @@
+requirements:
+  - iso8601
+  - setuptools
+keep:
+  - tests/*

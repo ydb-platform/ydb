@@ -1,0 +1,10 @@
+--- contrib/python/pytest-freezegun/py3/pytest_freezegun.py	(index)
++++ contrib/python/pytest-freezegun/py3/pytest_freezegun.py	(working tree)
+@@ -2,6 +2,7 @@
+ 
+ import pytest
+ 
++import setuptools
+ from distutils.version import LooseVersion
+ from freezegun import freeze_time
+ 

@@ -1,0 +1,29 @@
+transient defaultFaFieldName = "";
+transient defaultFaLevelName = "";
+transient defaultFaModelName = "";
+
+concept faFieldName (defaultFaFieldName,"faFieldName.def",conceptsMasterDir,conceptsLocalDirAll) : no_copy;
+concept faLevelName (defaultFaLevelName,"faLevelName.def",conceptsMasterDir,conceptsLocalDirAll) : no_copy;
+concept faModelName (defaultFaModelName,"faModelName.def",conceptsMasterDir,conceptsLocalDirAll) : no_copy;
+
+# 0 = Accumulation or time range from last event
+# 1 = Accumulation or time range from the start
+transient LSTCUM = 0;
+
+# Scaling factor for levels
+transient ZLMULT = 1.;
+# Base value for levels
+transient ZLBASE = 0.;
+
+# Name in FA
+ascii[16]     CLNOMA : dump;
+# Encoding method
+unsigned[8]   INGRIB : dump;
+# Spectral/grid-point
+unsigned[8]   LLCOSP : dump;
+# Number of bits used to encode each value
+unsigned[8]   INBITS : dump;
+
+# FA scaling factor
+signed[8]     FMULTM = 1 : dump;
+signed[8]     FMULTE = 0 : dump;

@@ -1,0 +1,7 @@
+# Product discipline 0 - Meteorological products, parameter category 17: electrodynamics
+0 0 Lightning strike density (m-2 s-1)
+1 1 Lightning potential index (LPI) (J kg-1)
+2 2 Cloud-to-ground lightning flash density (km-2 day-1)
+3 3 Cloud-to-cloud lightning flash density (km-2 day-1)
+4 4 Total lightning flash density (km-2 day-1)
+5 5 Subgrid-scale lightning potential index (J kg-1)

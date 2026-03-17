@@ -1,0 +1,90 @@
+Index: contrib/python/python3-saml/onelogin/saml2/settings.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git contrib/python/python3-saml/onelogin/saml2/settings.py contrib/python/python3-saml/onelogin/saml2/settings.py
+--- contrib/python/python3-saml/onelogin/saml2/settings.py	(revision 7b75c992da85d71b87949a458f57452f6e9d9415)
++++ contrib/python/python3-saml/onelogin/saml2/settings.py	(date 1650633550432)
+@@ -10,6 +10,7 @@
+ """
+ from time import time
+ import re
++import __res as arcadia_resfs
+ from os.path import dirname, exists, join, sep
+
+ from onelogin.saml2 import compat
+@@ -248,7 +249,7 @@
+         """
+         filename = self.get_base_path() + 'settings.json'
+
+-        if not exists(filename):
++        if not (exists(filename) or filename.encode() in arcadia_resfs.resfs_files()):
+             raise OneLogin_Saml2_Error(
+                 'Settings file not found: %s',
+                 OneLogin_Saml2_Error.SETTINGS_FILE_NOT_FOUND,
+@@ -257,13 +258,18 @@
+
+         # In the php toolkit instead of being a json file it is a php file and
+         # it is directly included
+-        with open(filename, 'r') as json_data:
+-            settings = json.loads(json_data.read())
++        if exists(filename):
++            with open(filename, 'r') as json_data:
++                settings = json.loads(json_data.read())
++        elif filename.encode() in arcadia_resfs.resfs_files():
++            settings = json.loads(arcadia_resfs.resfs_read(filename))
+
+         advanced_filename = self.get_base_path() + 'advanced_settings.json'
+         if exists(advanced_filename):
+             with open(advanced_filename, 'r') as json_data:
+                 settings.update(json.loads(json_data.read()))  # Merge settings
++        elif advanced_filename.encode() in arcadia_resfs.resfs_files():
++            settings.update(json.loads(arcadia_resfs.resfs_read(advanced_filename)))  # Merge settings
+
+         return self._load_settings_from_dict(settings)
+
+Index: contrib/python/python3-saml/onelogin/saml2/xml_utils.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git contrib/python/python3-saml/onelogin/saml2/xml_utils.py contrib/python/python3-saml/onelogin/saml2/xml_utils.py
+--- contrib/python/python3-saml/onelogin/saml2/xml_utils.py	(revision 7b75c992da85d71b87949a458f57452f6e9d9415)
++++ contrib/python/python3-saml/onelogin/saml2/xml_utils.py	(date 1651766306294)
+@@ -11,6 +11,7 @@
+
+ from os.path import join, dirname
+ from lxml import etree
++import __res as arcadia_resfs
+ from onelogin.saml2 import compat
+ from onelogin.saml2.constants import OneLogin_Saml2_Constants
+ from onelogin.saml2.xmlparser import tostring, fromstring
+@@ -20,6 +21,13 @@
+     etree.register_namespace(prefix, url)
+
+
++class Resolver(etree.Resolver):
++    def resolve(self, url, id, context):
++        if url.endswith(".xsd"):
++            schema_file = join(dirname(__file__), 'schemas', url)
++            return self.resolve_string(arcadia_resfs.resfs_read(schema_file), context)
++
++
+ class OneLogin_Saml2_XML(object):
+     _element_class = type(etree.Element('root'))
+     _parse_etree = staticmethod(fromstring)
+@@ -92,8 +100,11 @@
+             return 'unloaded_xml'
+
+         schema_file = join(dirname(__file__), 'schemas', schema)
+-        with open(schema_file, 'r') as f_schema:
+-            xmlschema = OneLogin_Saml2_XML._schema_class(etree.parse(f_schema))
++        resolver_instance = Resolver()
++        parser = etree.XMLParser(load_dtd=True)
++        parser.resolvers.add(resolver_instance)
++        schema_doc = etree.fromstring(arcadia_resfs.resfs_read(schema_file), parser=parser)
++        xmlschema = OneLogin_Saml2_XML._schema_class(schema_doc)
+
+         if not xmlschema.validate(xml):
+             if debug:

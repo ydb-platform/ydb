@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package yandex.cloud.video.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/video/v1;video";
+option java_package = "yandex.cloud.api.video.v1";
+
+// Entity representing a stream fragment that can be accessed independently.
+// Episodes can be linked to either a stream or a line
+// and provide a way to reference specific portions of the corresponding content.
+message Episode {
+  reserved 1001, 1002;
+
+  // Reserved for future use.
+  reserved 11, 13 to 99, 102 to 999;
+
+  // Unique identifier of the episode.
+  string id = 1;
+
+  // Identifier of the stream this episode is linked to.
+  // Optional, empty if the episode is linked to a line.
+  string stream_id = 2;
+
+  // Identifier of the line this episode is linked to.
+  // Optional, empty if the episode is linked to a stream.
+  string line_id = 3;
+
+  // Title of the episode displayed in interfaces and players.
+  string title = 4;
+
+  // Detailed description of the episode content and context.
+  string description = 5;
+
+  // Identifier of the thumbnail image used to represent the episode visually.
+  string thumbnail_id = 6;
+
+  // Timestamp marking the beginning of the episode content.
+  google.protobuf.Timestamp start_time = 7;
+
+  // Timestamp marking the end of the episode content.
+  google.protobuf.Timestamp finish_time = 8;
+
+  // Controls the Digital Video Recording (DVR) functionality for the episode.
+  // Determines how many seconds of the stream are available for time-shifted viewing.
+  //
+  // Possible values:
+  //  * `0`: Infinite DVR size, the full length of the stream is available for viewing.
+  //  * `>0`: Size of DVR window in seconds, the minimum value is 30s.
+  int64 dvr_seconds = 9;
+
+  // Current visibility status controlling whether the episode is publicly available.
+  VisibilityStatus visibility_status = 10;
+
+  // Identifier of the style preset used in the player during episode playback.
+  string style_preset_id = 12;
+
+  // Specifies the episode access permission settings.
+  oneof access_rights {
+    // Allows unrestricted public access to the episode via direct link.
+    // No additional authorization or access control is applied.
+    EpisodePublicAccessRights public_access = 1000;
+
+    // Restricts episode access using URL signatures for secure time-limited access.
+    EpisodeSignURLAccessRights sign_url_access = 1003;
+  }
+
+  // Timestamp when the episode was initially created in the system.
+  google.protobuf.Timestamp created_at = 100;
+
+  // Timestamp of the last modification to the episode or its metadata.
+  google.protobuf.Timestamp updated_at = 101;
+
+  // Visibility status of the episode.
+  enum VisibilityStatus {
+    // The visibility status is not specified.
+    VISIBILITY_STATUS_UNSPECIFIED = 0;
+
+    // The episode is publicly available, subject to its access permission settings.
+    PUBLISHED = 1;
+
+    // The episode is available only to administrators.
+    UNPUBLISHED = 2;
+  }
+}
+
+// Represents public access rights for an episode.
+// When this access type is set, the episode is publicly accessible via direct link.
+message EpisodePublicAccessRights {}
+
+// Represents access rights controlled by URL signatures.
+// When this access type is set, the episode is accessible only via properly signed temporary link.
+message EpisodeSignURLAccessRights {}

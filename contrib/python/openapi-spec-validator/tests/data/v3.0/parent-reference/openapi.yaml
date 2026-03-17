@@ -1,0 +1,36 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: OpenAPI Petstore
+  license:
+    name: MIT
+servers:
+  - url: http://petstore.swagger.io/v1
+paths:
+  /pets:
+    get:
+      summary: List all pets
+      operationId: listPets
+      tags:
+        - pets
+      parameters:
+        - name: limit
+          in: query
+          description: How many items to return at one time (max 100)
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: Expected response to a valid request
+          content:
+            application/json:
+              schema:
+                $ref: "spec/components.yaml#/schemas/Pet"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/schemas/Error"

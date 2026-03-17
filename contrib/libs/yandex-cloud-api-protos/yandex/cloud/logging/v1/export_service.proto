@@ -1,0 +1,343 @@
+syntax = "proto3";
+
+package yandex.cloud.logging.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/logging/v1/export.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/logging/v1;logging";
+option java_package = "yandex.cloud.api.logging.v1";
+
+// A set of methods for managing log exports.
+service ExportService {
+  // Run new logs export from log group to sink
+  rpc Run(RunExportRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/logging/v1/run-export"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RunExportMetadata"
+      response: "RunExportDetails"
+    };
+  }
+
+  // Returns the specified export.
+  //
+  // To get the list of all available exports, make a [List] request.
+  rpc Get(GetExportRequest) returns (Export) {
+    option (google.api.http) = {get: "/logging/v1/exports/{export_id}"};
+  }
+
+  // Retrieves the list of exports in the specified folder.
+  rpc List(ListExportsRequest) returns (ListExportsResponse) {
+    option (google.api.http) = {get: "/logging/v1/exports"};
+  }
+
+  // Creates a export in the specified folder.
+  rpc Create(CreateExportRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/logging/v1/exports"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateExportMetadata"
+      response: "Export"
+    };
+  }
+
+  // Updates the specified export.
+  rpc Update(UpdateExportRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/logging/v1/exports/{export_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateExportMetadata"
+      response: "Export"
+    };
+  }
+
+  // Deletes the specified export.
+  rpc Delete(DeleteExportRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/logging/v1/exports/{export_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteExportMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified export.
+  rpc ListOperations(ListExportOperationsRequest) returns (ListExportOperationsResponse) {
+    option (google.api.http) = {get: "/logging/v1/exports/{export_id}/operations"};
+  }
+
+  // Lists existing access bindings for the specified export.
+  rpc ListAccessBindings(access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = {get: "/logging/v1/exports/{resource_id}:listAccessBindings"};
+  }
+
+  // Sets access bindings for the specified export.
+  rpc SetAccessBindings(access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/logging/v1/exports/{resource_id}:setAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Updates access bindings for the specified export.
+  rpc UpdateAccessBindings(access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/logging/v1/exports/{resource_id}:updateAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message RunExportRequest {
+  string group_id = 1 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+  string sink_id = 2 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+  ExportParams params = 3 [(required) = true];
+  string result_filename = 4 [(required) = true];
+  google.protobuf.Timestamp since = 5 [(required) = true];
+  google.protobuf.Timestamp until = 6 [(required) = true];
+}
+
+message RunExportDetails {
+  string group_id = 1;
+  string sink_id = 2;
+  ExportParams params = 3;
+  string result_filename = 4;
+  google.protobuf.Timestamp since = 5;
+  google.protobuf.Timestamp until = 6;
+}
+
+message RunExportMetadata {
+  string group_id = 1;
+  string sink_id = 2;
+  string result_filename = 3;
+}
+
+message GetExportRequest {
+  // ID of the export to return.
+  //
+  // To get a export ID make a [ExportService.List] request.
+  string export_id = 1 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+}
+
+message ListExportsRequest {
+  reserved 2;
+  // Folder ID of the exports to return.
+  //
+  // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListExportssResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 3;
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListExportsResponse.next_page_token] returned by a previous list request.
+  string page_token = 4 [(length) = "<=100"];
+
+  // A filter expression that filters exports listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can only be applied to the [Export.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name="my-export"`.
+  string filter = 5 [(length) = "<=1000"];
+}
+
+message ListExportsResponse {
+  // List of exports in the specified folder.
+  repeated Export exports = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListExportsRequest.page_size], use `next_page_token` as the value
+  // for the [ListExportsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateExportRequest {
+  // ID of the folder to create a export in.
+  //
+  // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+
+  // Name of the export.
+  // The name must be unique within the folder.
+  string name = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Description of the export.
+  string description = 3 [(length) = "<=256"];
+
+  // Export labels as `key:value` pairs.
+  map<string, string> labels = 4 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // Logging Group ID logs exported from
+  string group_id = 5 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+
+  // Logging Sink ID logs exported to
+  string sink_id = 6 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+
+  // Parameters for logs filtration
+  ExportParams params = 7 [(required) = true];
+}
+
+message CreateExportMetadata {
+  // ID of the export being created.
+  string export_id = 1;
+}
+
+message UpdateExportRequest {
+  // ID of the export to update.
+  //
+  // To get a export ID make a [ExportService.List] request.
+  string export_id = 1 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+
+  // Field mask that specifies which attributes of the function should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New name of the export.
+  // The name must be unique within the folder.
+  string name = 3 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // New Description of the export.
+  string description = 4 [(length) = "<=256"];
+
+  // New export labels as `key:value` pairs.
+  map<string, string> labels = 5 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // New logging Group ID logs exported from
+  string group_id = 6 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+
+  // New logging Sink ID logs exported to
+  string sink_id = 7 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+
+  // New parameters for logs filtration
+  ExportParams params = 8 [(required) = true];
+}
+
+message UpdateExportMetadata {
+  // ID of the export being updated.
+  string export_id = 1;
+}
+
+message DeleteExportRequest {
+  // ID of the export to delete.
+  //
+  // To get a export ID make a [ExportService.List] request.
+  string export_id = 1 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+}
+
+message DeleteExportMetadata {
+  // ID of the export being deleted.
+  string export_id = 1;
+}
+
+message ListExportOperationsRequest {
+  // ID of the export to list operations for.
+  //
+  // To get a export ID make a [ExportService.List] request.
+  string export_id = 1 [
+    (required) = true,
+    (length) = "<=64"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListExportOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListExportOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+  // A filter expression that filters resources listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can be applied to the [operation.Operation.description], [operation.Operation.created_at], [operation.Operation.modified_at], [operation.Operation.created_by], [operation.Operation.done] fields.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Examples of a filter: `done=false`, `created_by='John.Doe'`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListExportOperationsResponse {
+  // List of operations for the specified export.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListOExportperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListExportOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

@@ -1,0 +1,137 @@
+Metadata-Version: 2.0
+Name: Parsley
+Version: 1.3
+Summary: Parsing and pattern matching made easy.
+Home-page: http://launchpad.net/parsley
+Author: Allen Short
+Author-email: washort42@gmail.com
+License: MIT License
+Platform: UNKNOWN
+
+.. -*- mode: rst -*-
+
+===============================================================
+Parsley: A Pattern-Matching Language Based on OMeta and Python
+===============================================================
+
+You can read further docs at: http://parsley.readthedocs.org/en/latest/
+
+Summary
+-------
+
+Parsley is a parsing library for people who find parsers scary or
+annoying. I wrote it because I wanted to parse a programming language,
+and tools like PLY or ANTLR or Bison were very hard to understand and
+integrate into my Python code. Most parser generators are based on LL
+or LR parsing algorithms that compile to big state machine
+tables. It was like I had to wake up a different section of my brain
+to understand or work on grammar rules.
+
+Parsley, like pyparsing and ZestyParser, uses the PEG algorithm, so
+each expression in the grammar rules works like a Python
+expression. In particular, alternatives are evaluated in order, unlike
+table-driven parsers such as yacc, bison or PLY.
+
+Parsley is an implementation of OMeta, an object-oriented
+pattern-matching language developed by Alessandro Warth at
+http://tinlizzie.org/ometa/ . For further reading, see Warth's PhD
+thesis, which provides a detailed description of OMeta:
+http://www.vpri.org/pdf/tr2008003_experimenting.pdf
+
+How It Works
+------------
+
+Parsley compiles a grammar to a Python class, with the rules as methods. The
+rules specify parsing expressions, which consume input and return values if
+they succeed in matching.
+
+Basic syntax
+~~~~~~~~~~~~
+``foo = ....``:
+   Define a rule named foo.
+
+``expr1 expr2``:
+   Match expr1, and then match expr2 if it succeeds, returning the value of
+   expr2. Like Python's ``and``.
+
+``expr1 | expr2``:
+  Try to match ``expr1`` --- if it fails, match ``expr2`` instead. Like Python's
+  ``or``.
+
+``expr*``:
+  Match ``expr`` zero or more times, returning a list of matches.
+
+``expr+``:
+  Match ``expr`` one or more times, returning a list of matches.
+
+``expr?``:
+  Try to match ``expr``. Returns ``None`` if it fails to match.
+
+``expr{n, m}``:
+  Match ``expr`` at least ``n`` times, and no more than ``m`` times.
+
+``expr{n}``:
+  Match ``expr`` ``n`` times exactly.
+
+``~expr``:
+  Negative lookahead. Fails if the next item in the input matches
+  ``expr``. Consumes no input.
+
+``~~expr``:
+  Positive lookahead. Fails if the next item in the input does *not*
+  match ``expr``. Consumes no input.
+
+``ruleName`` or ``ruleName(arg1 arg2 etc)``:
+  Call the rule ``ruleName``, possibly with args.
+
+``'x'``:
+  Match the literal character 'x'.
+
+``<expr>``:
+  Returns the string consumed by matching ``expr``. Good for tokenizing rules.
+
+``expr:name``:
+  Bind the result of expr to the local variable ``name``.
+
+``-> pythonExpression``:
+  Evaluate the given Python expression and return its result. Can be
+  used inside parentheses too!
+
+``!(pythonExpression)``:
+  Invoke a Python expression as an action.
+
+``?(pythonExpression)``:
+  Fail if the Python expression is false, Returns True otherwise.
+
+Comments like Python comments are supported as well, starting with #
+and extending to the end of the line.
+
+Interface
+---------
+
+The starting point for defining a new grammar is
+``parsley.makeGrammar(grammarSource, bindings)``, which takes a grammar
+definition and a dict of variable bindings for its embedded
+expressions and produces a Python class. Grammars can be subclassed as
+usual, and makeGrammar can be called on these classes to override
+rules and provide new ones. Grammar rules are exposed as methods.
+
+Example Usage
+-------------
+
+::
+
+    from parsley import makeGrammar
+    exampleGrammar = """
+    ones = '1' '1' -> 1
+    twos = '2' '2' -> 2
+    stuff = (ones | twos)+
+    """
+    Example = makeGrammar(exampleGrammar, {})
+    g = Example("11221111")
+    result = g.stuff()
+    print result
+
+→  ``[1, 2, 1, 1]``
+
+

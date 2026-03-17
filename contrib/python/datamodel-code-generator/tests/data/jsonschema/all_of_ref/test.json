@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "test",
+  "description": "test",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "base_test.json#/definitions/first"
+    }
+  ]
+}

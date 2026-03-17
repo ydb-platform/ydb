@@ -1,0 +1,12 @@
+# aliasing MARS date and Time to the date and time defined in local section,
+# corresponding to the end of the Ocean NRT data assimilation
+alias mars.date = dateOfAnalysis;
+alias mars.time = timeOfAnalysis;
+
+# aliasing the new offset date and time to the date and time
+# coming fron the section 1, i.e. reference date and time
+alias mars.offsetdate = dataDate;
+alias mars.offsettime = dataTime;
+
+unalias mars.step;
+alias mars.step = stepRange;

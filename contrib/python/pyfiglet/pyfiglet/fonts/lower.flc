@@ -1,0 +1,29 @@
+flc2a
+# Lower by Sis <suaac@csv.warwick.ac.uk> 2/95
+# Converts upper-case to lower-case.
+# figlet release 2.1 -- 12 Aug 1994
+#
+# This is a figlet controlfile.
+#
+# Explanation of first line:
+#   flc2 - "magic number" for file identification
+#   a    - should always be `a', for now
+#
+# File body:
+#   The first character of any line is the "command" for that line.
+#   Possible figlet 2.1 commands are as follows:
+#   `#' - comment, continues until end-of-line
+#   `t' - translate, a not-so-fancy version of the Unix "tr" command
+#   `f' - freeze, treat further lines as if they were in a new file
+#
+# The following lines convert upper-case to lower-case.
+#
+# Standard letters:
+t A-Z a-z
+#
+# figlet Deutsch characters:
+t \-255-\-253 \-252-\-250
+#
+# ISO Latin-1 accented letters:
+t \192-\214 \224-\246
+t \216-\222 \248-\254

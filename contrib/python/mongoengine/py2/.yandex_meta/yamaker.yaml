@@ -1,0 +1,4 @@
+exclude_from_macros:
+- setup.py
+keep:
+- setup.py # Файл нужен Sandbox для сборки их окружения

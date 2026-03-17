@@ -1,0 +1,83 @@
+# (C) Copyright 2005- ECMWF.
+
+# Tigge
+constant marsClass = 'ti';
+constant marsModel = 'glob';
+
+alias tigge_short_name=shortName;
+alias short_name=shortName;
+alias parameter=paramId;
+alias tigge_name=name;
+
+alias parameter.paramId=paramId;
+alias parameter.shortName=shortName;
+alias parameter.units=units;
+alias parameter.name=name;
+
+if(levtype is "sfc")
+{
+    unalias mars.levelist;
+}
+
+alias mars.expver = marsExpver;
+alias mars.class  = marsClass;
+alias mars.param = paramId;
+alias mars.model = marsModel;
+alias mars.origin = centre;
+
+# Tigge-LAM rules
+# productionStatusOfProcessedData == 4
+if (section2Used == 1) {
+    constant marsLamModel = 'lam';
+    alias mars.model = marsLamModel;    # model redefined. It is not 'glob'
+    alias mars.origin = tiggeSuiteID;   # origin is the suiteName for Tigge-LAM
+    unalias mars.domain;                # No mars domain needed
+}
+
+concept marsType(unknown) {
+
+   fc = {
+     typeOfProcessedData = 2;
+   }
+   "9" = {
+     typeOfProcessedData = 2;
+   }
+
+   cf = {
+     typeOfProcessedData = 3;
+   }
+   "10" = {
+     typeOfProcessedData = 3;
+   }
+
+   pf = {
+     typeOfProcessedData = 4;
+   }
+   "11" = {
+     typeOfProcessedData = 4;
+   }
+}
+
+# See GRIB-205 re no_copy
+concept marsStream(unknown) {
+
+    oper = {
+      typeOfProcessedData = 0;
+    }
+    oper = {
+      typeOfProcessedData = 2;
+    }
+
+    enfo = {
+      typeOfProcessedData = 3;
+    }
+    enfo = {
+      typeOfProcessedData = 4;
+    }
+    enfo = {
+      typeOfProcessedData = 8;
+    }
+} : no_copy;
+
+alias mars.stream = marsStream;
+alias mars.type   = marsType;

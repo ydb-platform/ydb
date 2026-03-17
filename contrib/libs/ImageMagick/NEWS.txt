@@ -1,0 +1,33 @@
+ImageMagick version 7 has been released. We encourage you to migrate your
+workstreams to version 7. However, we recognize a significant version 6 user
+community. As such, the ImageMagick development team is committed to maintain,
+but not enhance, version 6 at least until 2028 and possibly beyond.
+
+We discovered a bug in the pseudo-random generator prior to ImageMagick
+6.9.10-81, the first 3 values repeated because the random state was not
+initialized properly. As a consequence of the fix, expect a different
+numerical sequence when seeding (-seed).
+
+ImageMagick best practices strongly encourages you to configure a security
+policy that best suits your local environment.
+
+The ImageMagick development process ensures a stable API and ABI. Before each
+ImageMagick release, we perform a comprehensive security assessment that
+includes memory error, thread data race detection, and continuous fuzzing
+to detect and prevent security vulnerabilities.
+
+As an analog to linear (RGB) and non-linear (sRGB) color colorspaces, as
+of ImageMagick 6.9.9-29, we introduce the LinearGray colorspace. Gray is
+non-linear grayscale and LinearGray is linear (e.g. -colorspace linear-gray).
+
+Want more performance from ImageMagick? Try these options:
+
+  add more memory to your system;
+  add more cores to your system;
+  reduce lock contention with the tcmalloc memory allocation library;
+  push large images to a solid-state drive, see large image support.
+
+If these options are prohibitive, you can reduce the quality of the image
+results. The default build is Q16. If you instead use a Q8 build, you use half
+the memory The tradeoff is reduced precision. For a Q8 build of ImageMagick,
+use this configure script option: --with-quantum-depth=8.

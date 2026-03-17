@@ -1,0 +1,15 @@
+# (C) Copyright 2005- ECMWF.
+
+# GRID DEFINITION stretched and rotated latitude/longitude grids
+# grib 1 -> 2
+constant gridDefinitionTemplateNumber     = 3;
+
+template commonBlock "grib1/grid_definition_latlon.def";
+
+ascii[4] zeros : read_only;
+
+# Rotation parameters
+include "grib1/grid_rotation.def"
+
+# Stretching parameters
+include "grib1/grid_stretching.def"

@@ -1,0 +1,35 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.0, Grid point data - simple packing
+
+meta codedValues data_g2simple_packing(
+    section7Length,
+    offsetBeforeData,
+    offsetSection7,
+    unitsFactor,
+    unitsBias,
+    changingPrecision,
+    numberOfValues,
+    bitsPerValue,
+    referenceValue,
+    binaryScaleFactor,
+    decimalScaleFactor,
+    optimizeScaleFactor
+): read_only;
+
+meta values data_apply_bitmap(
+      codedValues,
+      bitmap,
+      missingValue,
+      binaryScaleFactor,
+      numberOfDataPoints,
+      numberOfValues
+) : dump;
+
+meta packingError  simple_packing_error(bitsPerValue,binaryScaleFactor,decimalScaleFactor,referenceValue,ieee) : no_copy;
+meta unpackedError simple_packing_error(zero,binaryScaleFactor,decimalScaleFactor,referenceValue,ieee) : no_copy;
+
+alias data.packedValues=codedValues;
+
+template statistics "common/statistics_grid.def";
+template missing_values "common/missing_values_grid.def";

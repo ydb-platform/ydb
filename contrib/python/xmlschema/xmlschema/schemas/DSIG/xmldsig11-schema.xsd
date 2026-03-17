@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+#
+# Copyright ©[2011] World Wide Web Consortium 
+# (Massachusetts Institute of Technology,  
+#  European Research Consortium for Informatics and Mathematics, 
+#  Keio University). All Rights Reserved.  
+# This work is distributed under the W3C® Software License [1] in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+# the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+# PURPOSE. 
+# [1] http://www.w3.org/Consortium/Legal/2002/copyright-software-20021231
+#
+-->
+
+<schema xmlns="http://www.w3.org/2001/XMLSchema"
+        xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+        xmlns:dsig11="http://www.w3.org/2009/xmldsig11#"
+        targetNamespace="http://www.w3.org/2009/xmldsig11#"
+        version="0.1" elementFormDefault="qualified">
+
+  <import namespace="http://www.w3.org/2000/09/xmldsig#"/>
+
+  <element name="ECKeyValue" type="dsig11:ECKeyValueType"/>
+  <complexType name="ECKeyValueType">
+    <sequence>
+      <choice>
+        <element name="ECParameters" type="dsig11:ECParametersType"/>
+        <element name="NamedCurve" type="dsig11:NamedCurveType"/>
+      </choice>
+      <element name="PublicKey" type="dsig11:ECPointType"/>
+    </sequence>
+    <attribute name="Id" type="ID" use="optional"/>
+  </complexType>
+
+  <complexType name="NamedCurveType">
+    <attribute name="URI" type="anyURI" use="required"/>
+  </complexType>
+  
+  <simpleType name="ECPointType">
+    <restriction base="ds:CryptoBinary"/>
+  </simpleType>
+
+  <complexType name="ECParametersType">
+    <sequence>
+      <element name="FieldID" type="dsig11:FieldIDType"/>
+      <element name="Curve" type="dsig11:CurveType"/>
+      <element name="Base" type="dsig11:ECPointType"/>
+      <element name="Order" type="ds:CryptoBinary"/>
+      <element name="CoFactor" type="integer" minOccurs="0"/>
+      <element name="ValidationData"
+               type="dsig11:ECValidationDataType" minOccurs="0"/>
+    </sequence>
+  </complexType>
+  
+  <complexType name="FieldIDType">
+    <choice>
+      <element ref="dsig11:Prime"/>
+      <element ref="dsig11:TnB"/>
+      <element ref="dsig11:PnB"/>
+      <element ref="dsig11:GnB"/>
+      <any namespace="##other" processContents="lax"/>
+    </choice>
+  </complexType>
+
+  <complexType name="CurveType">
+    <sequence>
+      <element name="A" type="ds:CryptoBinary"/>
+      <element name="B" type="ds:CryptoBinary"/>
+    </sequence>
+  </complexType>
+
+  <complexType name="ECValidationDataType">
+    <sequence>
+      <element name="seed" type="ds:CryptoBinary"/>
+    </sequence>
+    <attribute name="hashAlgorithm" type="anyURI" use="required"/>
+  </complexType>
+
+  <element name="Prime" type="dsig11:PrimeFieldParamsType"/>
+  <complexType name="PrimeFieldParamsType">
+    <sequence>
+      <element name="P" type="ds:CryptoBinary"/>
+    </sequence>
+  </complexType>
+
+  <element name="GnB" type="dsig11:CharTwoFieldParamsType"/>
+  <complexType name="CharTwoFieldParamsType">
+    <sequence>
+      <element name="M" type="positiveInteger"/>
+    </sequence>
+  </complexType>
+  
+  <element name="TnB" type="dsig11:TnBFieldParamsType"/>
+  <complexType name="TnBFieldParamsType">
+    <complexContent>
+      <extension base="dsig11:CharTwoFieldParamsType">
+        <sequence>
+          <element name="K" type="positiveInteger"/>
+        </sequence>
+      </extension>
+    </complexContent>
+  </complexType>
+
+  <element name="PnB" type="dsig11:PnBFieldParamsType"/>
+  <complexType name="PnBFieldParamsType">
+    <complexContent>
+      <extension base="dsig11:CharTwoFieldParamsType">
+        <sequence>
+          <element name="K1" type="positiveInteger"/>
+          <element name="K2" type="positiveInteger"/>
+          <element name="K3" type="positiveInteger"/>
+        </sequence>
+      </extension>
+    </complexContent>
+  </complexType>
+
+  <element name="DEREncodedKeyValue" type="dsig11:DEREncodedKeyValueType"/>
+  <complexType name="DEREncodedKeyValueType">
+    <simpleContent>
+      <extension base="base64Binary">
+        <attribute name="Id" type="ID" use="optional"/>
+      </extension>
+    </simpleContent>
+  </complexType>
+
+  <element name="KeyInfoReference" type="dsig11:KeyInfoReferenceType"/> 
+  <complexType name="KeyInfoReferenceType">
+    <attribute name="URI" type="anyURI" use="required"/>
+    <attribute name="Id" type="ID" use="optional"/>
+  </complexType>
+
+  <element name="X509Digest" type="dsig11:X509DigestType"/>
+  <complexType name="X509DigestType">
+    <simpleContent>
+      <extension base="base64Binary">
+        <attribute name="Algorithm" type="anyURI" use="required"/>
+      </extension>
+    </simpleContent>
+  </complexType>
+
+</schema>
+

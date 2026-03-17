@@ -1,0 +1,35 @@
+python-prctl -- Control process attributes through prctl
+========================================================
+
+The linux prctl function allows you to control specific characteristics of a
+process' behaviour. Usage of the function is fairly messy though, due to
+limitations in C and linux. This module provides a nice non-messy python(ic)
+interface.
+
+Besides prctl, this library also wraps libcap for complete capability handling
+and allows you to set the process name as seen in ps and top.
+
+See docs/index.rst for the documentation. An HTML version can be found on
+http://packages.python.org/python-prctl/
+
+Quick install instructions
+==========================
+Before installing python-prctl, you need GCC, libc headers and libcap headers.
+On Debian/Ubuntu:
+
+$ sudo apt-get install build-essential libcap-dev
+
+On fedora:
+
+$ sudo yum install gcc glibc-devel libcap-devel
+
+Stable version:
+
+$ sudo easy_install python-prctl
+
+Latest code:
+
+$ git clone http://github.com/seveas/python-prctl
+$ cd python-prctl
+$ python setup.py build
+$ sudo python setup.py install

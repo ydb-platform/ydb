@@ -1,0 +1,10 @@
+--- contrib/python/chdb/cpp/programs/local/StoragePython.cpp        (index)
++++ contrib/python/chdb/cpp/programs/local/StoragePython.cpp        (working tree)
+@@ -27,7 +27,7 @@
+ #include <Common/Exception.h>
+ #include "PythonUtils.h"
+ #include <Common/logger_useful.h>
+-#include <Formats/FormatFactory.cpp>
++#include <Formats/FormatFactory.h>
+ 
+ #include <any>

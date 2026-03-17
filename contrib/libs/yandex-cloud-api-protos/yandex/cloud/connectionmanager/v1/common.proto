@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package yandex.cloud.connectionmanager.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/connectionmanager/v1;connectionmanager";
+option java_package = "yandex.cloud.api.connectionmanager.v1";
+
+message TLSParams {
+    oneof tls_mode {
+        google.protobuf.Empty disabled = 1;
+        TLSConfig tls = 2;
+    }
+}
+
+message TLSConfig {
+    string ca_certificate = 1;
+}
+
+message Password {
+    // When creating/updating Password, the field "raw" is mutually exclusive
+    // with "password_generation_options". In order to switch to the "raw"
+    // password you have to explicitly clear the "password_generation_options"
+    // field.
+    string raw = 1;
+
+    // When creating/updating Password, the field "password_generation_options"
+    // is mutually exclusive with "raw". In order to switch to the
+    // "password_generation_options" you have to explicitly clear the "raw"
+    // field.
+    PasswordGenerationOptions password_generation_options = 3;
+
+    oneof secret_key {
+        // Read-only. Do not fill this field in create/update requests.
+        string lockbox_secret_key = 2;
+    }
+}
+
+message PasswordGenerationOptions {
+    // Cookie is an arbitrary non-sensitive string that is saved with the
+    // password. When updating PasswordGenerationOptions, if the cookie passed
+    // in the update request differs from the cookie in the current
+    // PasswordGenerationOptions, the password will be re-generated. If the
+    // same cookie is passed, the password will not change.
+    string cookie = 1;
+
+    oneof password_generation_options {
+        LockboxPasswordGenerationOptions lockbox_password_generation_options = 2;
+    }
+}
+
+message LockboxPasswordGenerationOptions {
+    reserved 1;
+    // password length; by default, a reasonable length will be decided
+    int64 length = 2;
+
+    // whether at least one A..Z character is included in the password, true by default
+    google.protobuf.BoolValue include_uppercase = 3;
+    // whether at least one a..z character is included in the password, true by default
+    google.protobuf.BoolValue include_lowercase = 4;
+    // whether at least one 0..9 character is included in the password, true by default
+    google.protobuf.BoolValue include_digits = 5;
+    // whether at least one punctuation character is included in the password, true by default
+    // punctuation characters by default: !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
+    // to customize the punctuation characters, see included_punctuation and excluded_punctuation below
+    google.protobuf.BoolValue include_punctuation = 6;
+
+    // If include_punctuation is true, one of these two fields (not both) may be used optionally to customize the punctuation:
+    // a string of specific punctuation characters to use
+    string included_punctuation = 7;
+    // a string of punctuation characters to exclude from the default
+    string excluded_punctuation = 8;
+}
+
+message UserPasswordAuth {
+    string user = 1;
+    Password password = 2;
+}

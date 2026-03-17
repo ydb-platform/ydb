@@ -1,0 +1,104 @@
+--- contrib/python/snowflake-connector-python/snowflake/connector/ocsp_snowflake.py	(ab1580e0420a6e402930d1b3da730be90e49b747)
++++ contrib/python/snowflake-connector-python/snowflake/connector/ocsp_snowflake.py	(e3b5bc0bc5b7c29e3cb6b9198d2dd81bf14adb23)
+@@ -68,6 +68,8 @@ from snowflake.connector.ssd_internal_keys import (
+ from snowflake.connector.telemetry_oob import TelemetryService
+ from snowflake.connector.time_util import DecorrelateJitterBackoff
+ 
++from snowflake.connector.vendored.requests import certs
++
+ from . import constants
+ from .cache import SFDictCache, SFDictFileCache
+ from .telemetry import TelemetryField, generate_telemetry_data_dict
+@@ -1452,7 +1454,9 @@ class SnowflakeOCSP:
+ 
+                     # This import that depends on these libraries is to import certificates from them,
+                     # we would like to have these as up to date as possible.
+-                    from requests import certs
++
++                    # forcing YA specific wark around
++                    # from requests import certs
+ 
+                     if (
+                         hasattr(certs, "__file__")
+@@ -1484,7 +1488,8 @@ class SnowflakeOCSP:
+                     try:
+                         import certifi
+ 
+-                        self.read_cert_bundle(certifi.where())
++                        # self.read_cert_bundle(certifi.where())
++                        self.read_cert_bundle(certs.where())
+                     except Exception:
+                         logger.debug("no certifi is installed. ignored.")
+ 
+--- contrib/python/snowflake-connector-python/snowflake/connector/ssl_wrap_socket.py	(ab1580e0420a6e402930d1b3da730be90e49b747)
++++ contrib/python/snowflake-connector-python/snowflake/connector/ssl_wrap_socket.py	(e3b5bc0bc5b7c29e3cb6b9198d2dd81bf14adb23)
+@@ -17,7 +17,8 @@ from functools import wraps
+ from inspect import getfullargspec as get_args
+ from socket import socket
+ 
+-import certifi
++# import certifi
++from snowflake.connector.vendored.requests import certs
+ import OpenSSL.SSL
+ 
+ from .constants import OCSPMode
+@@ -27,6 +28,8 @@ from .vendored.urllib3 import connection as connection_
+ from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext
+ from .vendored.urllib3.util import ssl_ as ssl_
+ 
++
++
+ DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
+ FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
+ 
+@@ -71,7 +74,7 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
+     ca_certs_index = get_args(ssl_.ssl_wrap_socket).args.index("ca_certs")
+     ca_certs_in_args = len(args) > ca_certs_index
+     if not ca_certs_in_args and not kwargs.get("ca_certs"):
+-        kwargs["ca_certs"] = certifi.where()
++        kwargs["ca_certs"] = certs.where()
+ 
+     ret = ssl_.ssl_wrap_socket(*args, **kwargs)
+ 
+--- contrib/python/snowflake-connector-python/snowflake/connector/vendored/requests/certs.py	(ab1580e0420a6e402930d1b3da730be90e49b747)
++++ contrib/python/snowflake-connector-python/snowflake/connector/vendored/requests/certs.py	(e3b5bc0bc5b7c29e3cb6b9198d2dd81bf14adb23)
+@@ -11,7 +11,38 @@ If you are packaging Requests, e.g., for a Linux distribution or a managed
+ environment, you can change the definition of where() to return a separately
+ packaged CA bundle.
+ """
+-from certifi import where
++import pathlib
++import sys
++import os
++from certifi import where as certifi_where
++
++def where():
++    # since ya make tests are executed in the specific environment without usual file path's
++    #   and sf vendored libs expects a file path in certifi.where() response this workaroud is created
++    #   during test process cacert would be placed in the tmp location
++    #   and projects using snowflake should set env var SNOWFLAKE_CABUNDLE_PATH where to place certs from arcadia
++    # and packaged solution might provide some reasonable path to cacert.pm
++    is_arcadia_python = hasattr(sys, "extra_modules")
++
++    if is_arcadia_python:
++        cacert_pem_path = os.environ.get("SNOWFLAKE_CABUNDLE_PATH")
++        if cacert_pem_path:
++            cacert_pem_path = pathlib.Path(cacert_pem_path)
++            certs_path = cacert_pem_path.parent
++        else:
++            certs_path = pathlib.Path(os.environ.get("TMP")) / "certs"
++            cacert_pem_path = certs_path / "cacert.pem"
++
++        if not cacert_pem_path.exists():
++            import library.python.resource
++            certs_path.mkdir(parents=True, exist_ok=True)
++            with open(cacert_pem_path, "wb") as fh:
++                fh.write(library.python.resource.find("/builtin/cacert"))
++
++        return str(cacert_pem_path.resolve())
++    else:
++        return certifi_where()
++
+ 
+ if __name__ == "__main__":
+     print(where())

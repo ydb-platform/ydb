@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.report.table;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/report/table;table";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.report.table";
+
+import "yandex/cloud/loadtesting/api/v1/common/quantiles.proto";
+
+// Aggregated test results.
+message Report {
+  // Total count of HTTP responses, grouped by HTTP response code.
+  map<int64, int64> http_codes = 1;
+  
+  // Total count of network responses, grouped by response code.
+  map<int64, int64> net_codes = 2;
+  
+  // Response time statistics, aggregated by quantiles.
+  common.Quantiles quantiles = 3;
+}

@@ -1,0 +1,6 @@
+#code|abbreviation|type|name|unit|scale|reference|width|crex_unit|crex_scale|crex_width
+025200|bandSpecificOceanQualityFlag|flag|BAND SPECIFIC OCEAN QUALITY FLAG|Flag table|0|0|9|Flag table|0|3
+025201|altimeterEchoProcessingMode|table|Altimeter Echo Processing Mode|Code Table|0|0|8|Code Table|0|3
+025202|altimeterTrackingMode|table|Altimeter Tracking Mode|Code Table|0|0|8|Code Table|0|3
+025203|seaIceFreeboard|double|Sea Ice Freeboard|m|3|-131072|18|m|3|6
+010200|meanDynamicTopographyAccuracy|double|MEAN DYNAMIC TOPOGRAPHY ACCURACY|m|3|-131072|18|m|3|6

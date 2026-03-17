@@ -1,0 +1,69 @@
+Metadata-Version: 2.1
+Name: django-constance
+Version: 3.1.0
+Summary: Django live settings with pluggable backends, including Redis.
+Home-page: https://github.com/jazzband/django-constance
+Author: Jannis Leidel
+Author-email: jannis@leidel.info
+License: BSD
+Keywords: django,libraries,settings,redis
+Platform: any
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 3.2
+Classifier: Framework :: Django :: 4.0
+Classifier: Framework :: Django :: 4.1
+Classifier: Framework :: Django :: 4.2
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Utilities
+Requires-Python: >=3.7
+License-File: LICENSE
+License-File: AUTHORS
+Requires-Dist: django-picklefield
+Provides-Extra: redis
+Requires-Dist: redis ; extra == 'redis'
+
+Constance - Dynamic Django settings
+===================================
+
+.. image:: https://jazzband.co/static/img/badge.svg
+   :alt: Jazzband
+   :target: https://jazzband.co/
+
+.. image:: https://img.shields.io/readthedocs/django-constance.svg
+   :target: https://django-constance.readthedocs.io/
+   :alt: Documentation
+
+.. image:: https://github.com/jazzband/django-constance/workflows/Test/badge.svg
+   :target: https://github.com/jazzband/django-constance/actions
+   :alt: GitHub Actions
+
+.. image:: https://codecov.io/gh/jazzband/django-constance/branch/master/graph/badge.svg
+   :target: https://codecov.io/gh/jazzband/django-constance
+   :alt: Coverage
+
+A Django app for storing dynamic settings in pluggable backends (Redis and
+Django model backend built in) with an integration with the Django admin app.
+
+For more information see the documentation at:
+
+https://django-constance.readthedocs.io/
+
+If you have questions or have trouble using the app please file a bug report
+at:
+
+https://github.com/jazzband/django-constance/issues

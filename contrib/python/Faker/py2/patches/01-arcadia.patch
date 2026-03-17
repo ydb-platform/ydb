@@ -1,0 +1,13 @@
+--- contrib/python/Faker/py2/faker/utils/loading.py	(index)
++++ contrib/python/Faker/py2/faker/utils/loading.py	(working tree)
+@@ -9,6 +9,10 @@ def get_path(module):
+     if getattr(sys, 'frozen', False):
+         # frozen
+ 
++        paths = list(getattr(module, '__path__', []))
++        if len(paths) == 1:
++            return os.path.normpath(paths[0])
++
+         if getattr(sys, '_MEIPASS', False):
+             # PyInstaller
+             lib_dir = getattr(sys, '_MEIPASS')

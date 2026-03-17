@@ -1,0 +1,7 @@
+--- contrib/python/fiona/fiona/_env.pyx	(index)
++++ contrib/python/fiona/fiona/_env.pyx	(working tree)
+@@ -55,2 +55,2 @@ try:
+-    import certifi
+-    ca_bundle = certifi.where()
++    import certifi.source
++    ca_bundle = certifi.source.where()

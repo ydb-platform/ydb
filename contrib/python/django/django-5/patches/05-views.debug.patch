@@ -1,0 +1,45 @@
+--- django-5/django/views/debug.py	(index)
++++ django-5/django/views/debug.py	(working tree)
+@@ -6,6 +6,7 @@ import sys
+ import types
+ import warnings
+ from pathlib import Path
++import io, pkgutil
+ 
+ from django.conf import settings
+ from django.http import Http404, HttpResponse, HttpResponseNotFound
+@@ -423,14 +424,14 @@ class ExceptionReporter:
+ 
+     def get_traceback_html(self):
+         """Return HTML version of debug 500 HTTP error page."""
+-        with self.html_template_path.open(encoding="utf-8") as fh:
++        with io.StringIO(pkgutil.get_data(__package__, "templates/technical_500.html").decode("utf-8")) as fh:
+             t = DEBUG_ENGINE.from_string(fh.read())
+         c = Context(self.get_traceback_data(), use_l10n=False)
+         return t.render(c)
+ 
+     def get_traceback_text(self):
+         """Return plain text version of debug 500 HTTP error page."""
+-        with self.text_template_path.open(encoding="utf-8") as fh:
++        with io.StringIO(pkgutil.get_data(__package__, "templates/technical_500.txt").decode("utf-8")) as fh:
+             t = DEBUG_ENGINE.from_string(fh.read())
+         c = Context(self.get_traceback_data(), autoescape=False, use_l10n=False)
+         return t.render(c)
+@@ -633,7 +634,7 @@ def technical_404_response(request, exception):
+     if isinstance(urlconf, types.ModuleType):
+         urlconf = urlconf.__name__
+ 
+-    with builtin_template_path("technical_404.html").open(encoding="utf-8") as fh:
++    with io.StringIO(pkgutil.get_data(__package__, "templates/technical_404.html").decode("utf-8")) as fh:
+         t = DEBUG_ENGINE.from_string(fh.read())
+     reporter_filter = get_default_exception_reporter_filter()
+     c = Context(
+@@ -654,7 +655,7 @@ def technical_404_response(request, exception):
+ 
+ def default_urlconf(request):
+     """Create an empty URLconf 404 error response."""
+-    with builtin_template_path("default_urlconf.html").open(encoding="utf-8") as fh:
++    with io.StringIO(pkgutil.get_data(__package__, "templates/default_urlconf.html").decode("utf-8")) as fh:
+         t = DEBUG_ENGINE.from_string(fh.read())
+     c = Context(
+         {

@@ -1,0 +1,61 @@
+--- contrib/python/geopandas/geopandas/io/tests/test_file.py	(index)
++++ contrib/python/geopandas/geopandas/io/tests/test_file.py	(working tree)
+@@ -587,6 +587,7 @@ def test_read_file(engine, nybb_filename):
+     assert (df.columns[:-1] == expected_columns).all()
+ 
+ 
++@pytest.mark.skip('skip internet connection')
+ @pytest.mark.web
+ @pytest.mark.parametrize(
+     "url",
+--- contrib/python/geopandas/geopandas/tests/test_geoseries.py	(index)
++++ contrib/python/geopandas/geopandas/tests/test_geoseries.py	(working tree)
+@@ -184,6 +184,7 @@ class TestSeries:
+         exp = pd.Series([False, True, False])
+         assert_series_equal(res, exp)
+ 
++    @pytest.mark.skip
+     def test_to_file(self):
+         """Test to_file and from_file"""
+         tempfilename = os.path.join(self.tempdir, "test.shp")
+--- contrib/python/geopandas/geopandas/tests/util.py	(index)
++++ contrib/python/geopandas/geopandas/tests/util.py	(working tree)
+@@ -10,7 +10,8 @@ from geopandas.testing import (  # noqa: F401
+     geom_equals,
+ )
+ 
+-HERE = os.path.abspath(os.path.dirname(__file__))
++import yatest.common as yc
++HERE = os.path.abspath(os.path.dirname(yc.source_path(__file__)))
+ PACKAGE_DIR = os.path.dirname(os.path.dirname(HERE))
+ 
+ _TEST_DATA_DIR = os.path.join(PACKAGE_DIR, "geopandas", "tests", "data")
+--- contrib/python/geopandas/geopandas/tools/tests/test_clip.py	(index)
++++ contrib/python/geopandas/geopandas/tools/tests/test_clip.py	(working tree)
+@@ -380,6 +380,7 @@ class TestClipWithSingleRectangleGdf:
+         with pytest.warns(UserWarning):
+             clip(mixed_gdf, mask, keep_geom_type=True)
+ 
++    @pytest.mark.skip
+     def test_warning_geomcoll(self, geomcol_gdf, mask):
+         """Test the correct warnings are raised if keep_geom_type is
+         called on a GDF with GeometryCollection"""
+--- contrib/python/geopandas/geopandas/io/tests/test_file.py	(index)
++++ contrib/python/geopandas/geopandas/io/tests/test_file.py	(working tree)
+@@ -25,6 +25,7 @@ import pytest
+ from geopandas.testing import assert_geodataframe_equal, assert_geoseries_equal
+ from geopandas.tests.util import PACKAGE_DIR, validate_boro_df
+ from pandas.testing import assert_frame_equal, assert_series_equal
++import yatest.common as yc
+ 
+ try:
+     import pyogrio
+@@ -1414,7 +1415,7 @@ def test_to_file__undetermined_driver(tmp_path, df_nybb):
+ 
+ 
+ @pytest.mark.parametrize(
+-    "test_file", [(pathlib.Path("~/test_file.geojson")), "~/test_file.geojson"]
++    "test_file", [(pathlib.Path(yc.output_path("test_file.geojson"))), yc.output_path("test_file.geojson")]
+ )
+ def test_write_read_file(test_file, engine):
+     gdf = geopandas.GeoDataFrame(geometry=[box(0, 0, 10, 10)], crs=_CRS)

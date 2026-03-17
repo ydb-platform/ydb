@@ -1,0 +1,717 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.functions.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/serverless/functions/v1/function.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/functions/v1;functions";
+option java_package = "yandex.cloud.api.serverless.functions.v1";
+
+// A set of methods for managing serverless functions.
+service FunctionService {
+  // Returns the specified function.
+  //
+  // To get the list of all available functions, make a [List] request.
+  rpc Get(GetFunctionRequest) returns (Function) {
+    option (google.api.http) = {get: "/functions/v1/functions/{function_id}"};
+  }
+
+  // Retrieves the list of functions in the specified folder.
+  rpc List(ListFunctionsRequest) returns (ListFunctionsResponse) {
+    option (google.api.http) = {get: "/functions/v1/functions"};
+  }
+
+  // Creates a function in the specified folder.
+  rpc Create(CreateFunctionRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/functions/v1/functions"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateFunctionMetadata"
+      response: "Function"
+    };
+  }
+
+  // Updates the specified function.
+  rpc Update(UpdateFunctionRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/functions/v1/functions/{function_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateFunctionMetadata"
+      response: "Function"
+    };
+  }
+
+  // Deletes the specified function.
+  rpc Delete(DeleteFunctionRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/functions/v1/functions/{function_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteFunctionMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Returns the specified version of a function.
+  //
+  // To get the list of available version, make a [ListVersions] request.
+  rpc GetVersion(GetFunctionVersionRequest) returns (Version) {
+    option (google.api.http) = {get: "/functions/v1/versions/{function_version_id}"};
+  }
+
+
+  // Returns all versions with the specified tag.
+  //
+  // To get the list of all available versions, make a [ListVersions] request.
+  rpc GetVersionByTag(GetFunctionVersionByTagRequest) returns (Version) {
+    option (google.api.http) = {get: "/functions/v1/versions:byTag"};
+  }
+
+
+  // Retrieves the list of versions for the specified function, or of all function versions
+  // in the specified folder.
+  rpc ListVersions(ListFunctionsVersionsRequest) returns (ListFunctionsVersionsResponse) {
+    option (google.api.http) = {get: "/functions/v1/versions"};
+  }
+
+
+  // Deletes the specified version of a function.
+  //
+  // NOTE: old untagged function versions are deleted automatically.
+  rpc DeleteVersion(DeleteFunctionVersionRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/functions/v1/versions/{function_version_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteFunctionVersionMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Set a tag for the specified version of a function.
+  rpc SetTag(SetFunctionTagRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/functions/v1/versions/{function_version_id}:setTag"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "SetFunctionTagMetadata"
+      response: "Version"
+    };
+  }
+
+  // Remove a tag from the specified version of a function.
+  rpc RemoveTag(RemoveFunctionTagRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/functions/v1/versions/{function_version_id}:removeTag"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RemoveFunctionTagMetadata"
+      response: "Version"
+    };
+  }
+
+  // Returns the log of tags assigned to versions of the specified function.
+  rpc ListTagHistory(ListFunctionTagHistoryRequest) returns (ListFunctionTagHistoryResponse) {
+    option (google.api.http) = {get: "/functions/v1/functions/{function_id}:tagHistory"};
+  }
+
+
+  // Creates a version for the specified function.
+  rpc CreateVersion(CreateFunctionVersionRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/functions/v1/versions"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateFunctionVersionMetadata"
+      response: "Version"
+    };
+  }
+
+
+  // Lists available runtime environments for the specified function.
+  rpc ListRuntimes(ListRuntimesRequest) returns (ListRuntimesResponse) {
+    option (google.api.http) = {get: "/functions/v1/runtimes"};
+  }
+
+  // Lists operations for the specified function.
+  rpc ListOperations(ListFunctionOperationsRequest) returns (ListFunctionOperationsResponse) {
+    option (google.api.http) = {get: "/functions/v1/functions/{function_id}/operations"};
+  }
+
+  // Lists existing access bindings for the specified function.
+  rpc ListAccessBindings(access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = {get: "/functions/v1/functions/{resource_id}:listAccessBindings"};
+  }
+
+  // Sets access bindings for the function.
+  rpc SetAccessBindings(access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/functions/v1/functions/{resource_id}:setAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Updates access bindings for the specified function.
+  rpc UpdateAccessBindings(access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/functions/v1/functions/{resource_id}:updateAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists existing scaling policies for specified function
+  rpc ListScalingPolicies(ListScalingPoliciesRequest) returns (ListScalingPoliciesResponse) {
+    option (google.api.http) = {get: "/functions/v1/functions/{function_id}/scalingPolicies"};
+  }
+
+  // Set scaling policy for specified function and tag
+  rpc SetScalingPolicy(SetScalingPolicyRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/functions/v1/functions/{function_id}:setScalingPolicy"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "SetScalingPolicyMetadata"
+      response: "ScalingPolicy"
+    };
+  }
+
+  // Remove scaling policy for specified function and tag
+  rpc RemoveScalingPolicy(RemoveScalingPolicyRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/functions/v1/functions/{function_id}:removeScalingPolicy"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RemoveScalingPolicyMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetFunctionRequest {
+  // ID of the function to return.
+  //
+  // To get a function ID make a [FunctionService.List] request.
+  string function_id = 1 [(required) = true];
+}
+
+message GetFunctionVersionRequest {
+  // ID of the version to return.
+  //
+  // To get a version ID make a [FunctionService.ListVersions] request.
+  string function_version_id = 1 [(required) = true];
+}
+
+message GetFunctionVersionByTagRequest {
+  // ID of the function whose versions should be listed.
+  //
+  // To get a function ID use a [FunctionService.List] request.
+  string function_id = 1 [(required) = true];
+
+  // Version tag.
+  //
+  // To get the history of version tags make a [FunctionService.ListTagHistory] request.
+  string tag = 2 [(pattern) = "[a-z][-_0-9a-z]*|[$]latest"];
+}
+
+message ListFunctionsRequest {
+  // ID of the folder to list functions in.
+  //
+  // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `pageSize`, the service returns a [ListFunctionsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2;
+
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListFunctionsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3;
+
+  // A filter expression that filters functions listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can only be applied to the [Function.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name="my-function"`.
+  string filter = 4;
+}
+
+message ListFunctionsResponse {
+  // List of functions in the specified folder.
+  repeated Function functions = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListFunctionsRequest.page_size], use `nextPageToken` as the value
+  // for the [ListFunctionsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `nextPageToken` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateFunctionRequest {
+  // ID of the folder to create a function in.
+  //
+  // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // Name of the function.
+  // The name must be unique within the folder.
+  string name = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Description of the function.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 4 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+}
+
+message CreateFunctionMetadata {
+  // ID of the function that is being created.
+  string function_id = 1;
+}
+
+message UpdateFunctionRequest {
+  // ID of the function to update.
+  //
+  // To get a function ID make a [FunctionService.List] request.
+  string function_id = 1 [(required) = true];
+
+  // Field mask that specifies which attributes of the function should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New name for the function.
+  // The name must be unique within the folder.
+  string name = 3 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // New description for the function.
+  string description = 4 [(length) = "<=256"];
+
+  // Function labels as `key:value` pairs.
+  //
+  // Existing set of labels is completely replaced by the provided set, so if you just want
+  // to add or remove a label, request the current set of labels with a [FunctionService.Get] request.
+  map<string, string> labels = 5 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+}
+
+message UpdateFunctionMetadata {
+  // ID of the function that is being updated.
+  string function_id = 1;
+}
+
+message DeleteFunctionRequest {
+  // ID of the function to delete.
+  // To get a function ID make a [FunctionService.List] request.
+  string function_id = 1 [(required) = true];
+}
+
+message DeleteFunctionMetadata {
+  // ID of the function that is being deleted.
+  string function_id = 1;
+}
+
+message DeleteFunctionVersionRequest {
+  reserved 1;
+  // ID of the function's version to delete.
+  string function_version_id = 2 [(required) = true];
+  // Forces deletion of the version tags.
+  //
+  // If the value equals false and the function has tags with the selected version then request returns an error.
+  bool force = 3;
+}
+
+message DeleteFunctionVersionMetadata {
+  reserved 1;
+  // ID of the function's version is being deleted.
+  string function_version_id = 2;
+}
+
+message ListRuntimesRequest {}
+
+message ListRuntimesResponse {
+  // Runtime environments available for the specified function.
+  repeated string runtimes = 1;
+}
+
+message ListFunctionsVersionsRequest {
+  oneof id {
+    option (exactly_one) = true;
+    // ID of the folder to list function versions for.
+    // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+    string folder_id = 1;
+
+    // ID of the function to list versions for.
+    // To get a function ID use a [FunctionService.List] request.
+    string function_id = 2;
+  }
+
+  // The maximum number of results per page to return. If the number of available results
+  // is larger than `pageSize`, the service returns a [ListFunctionsVersionsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 3 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListFunctionsVersionsResponse.next_page_token] returned by a previous list request.
+  string page_token = 4 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can only be applied to the [Version.status] and [Version.runtime] fields.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `status="ACTIVE"`.
+  string filter = 5 [(length) = "<=1000"];
+}
+
+message ListFunctionsVersionsResponse {
+  // List of versions for the specified folder or function.
+  repeated Version versions = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListFunctionsVersionsRequest.page_size], use `nextPageToken` as the value
+  // for the [ListFunctionsVersionsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `nextPageToken` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListFunctionOperationsRequest {
+  // ID of the function to list operations for.
+  string function_id = 1 [(required) = true];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `pageSize`, the service returns a [ListFunctionOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListFunctionOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can be applied to the [operation.Operation.done], [operation.Operation.created_by] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Examples of a filter: `done=false`, `created_by='John.Doe'`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListFunctionOperationsResponse {
+  // List of operations for the specified function.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListFunctionOperationsRequest.page_size], use `nextPageToken` as the value
+  // for the [ListFunctionOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `nextPageToken` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateFunctionVersionRequest {
+  reserved 14;
+  reserved 16;
+  reserved 21;
+  reserved 8;
+  // ID of the function to create a version for.
+  //
+  // To get a function ID, make a [FunctionService.List] request.
+  string function_id = 1 [(required) = true];
+
+  // Runtime environment for the version.
+  string runtime = 2 [(required) = true];
+
+  // Description of the version
+  string description = 3 [(length) = "0-256"];
+
+  // Entrypoint of the version.
+  string entrypoint = 4 [(required) = true];
+
+  // Resources allocated to the version.
+  Resources resources = 5 [(required) = true];
+
+  // Timeout for the execution of the version.
+  //
+  // If the timeout is exceeded, Cloud Functions responds with a 504 HTTP code.
+  google.protobuf.Duration execution_timeout = 6 [(required) = true, (value) = "0s-3600s"];
+
+  // ID of the service account to associate with the version.
+  string service_account_id = 7;
+
+  // Source of the deployment package for the version.
+  oneof package_source {
+    option (exactly_one) = true;
+
+    // Functions deployment package.
+    Package package = 9;
+
+    // Content of the deployment package.
+    bytes content = 10 [(length) = "<=52428800"];
+
+    // ID of the version to be copied from. Source version must belong to the same folder as the created version
+    // and the user must have read permissions to the source version.
+    string version_id = 11;
+  }
+
+  // Environment settings for the version.
+  map<string, string> environment = 12 [
+    (length) = "<=4096",
+    (map_key).pattern = "[a-zA-Z][a-zA-Z0-9_]*"
+  ];
+
+  // Function version tags. For details, see [Version tag](/docs/functions/concepts/function#tag).
+  repeated string tag = 13 [(pattern) = "[a-z][-_0-9a-z]*"];
+
+  // Function version connectivity. If specified the version will be attached to specified network/subnet(s).
+  Connectivity connectivity = 17;
+
+  // Additional service accounts to be used by the version.
+  map<string, string> named_service_accounts = 15;
+
+  // Yandex Lockbox secrets to be used by the version.
+  repeated Secret secrets = 18;
+
+  // Options for logging from the function
+  LogOptions log_options = 19;
+
+  // S3 mounts to be used by the version.
+  repeated StorageMount storage_mounts = 20;
+
+  // Config for asynchronous invocations of the version
+  AsyncInvocationConfig async_invocation_config = 22;
+
+  // Optional size of in-memory mounted /tmp directory in bytes.
+  // Available for versions with resources.memory greater or equal to 1024 MiB.
+  //
+  // 0 or in range from 512 MiB to 3/4 of resources.memory.
+  int64 tmpfs_size = 23;
+
+  // The maximum number of requests processed by a function instance at the same time
+  int64 concurrency = 24 [(value) = "0-16"];
+
+  // Mounts to be used by the version.
+  repeated Mount mounts = 25;
+
+  // Metadata options for the version.
+  MetadataOptions metadata_options = 26;
+}
+
+message CreateFunctionVersionMetadata {
+  // ID of the version that is being created.
+  string function_version_id = 1;
+}
+
+message SetFunctionTagRequest {
+  // ID of the version to set the tag for.
+  //
+  // To get a version ID make a [FunctionService.ListVersions] request.
+  string function_version_id = 1 [(required) = true];
+
+  // Tag to set for the version.
+  string tag = 2 [(pattern) = "[a-z][-_0-9a-z]*"];
+}
+
+message RemoveFunctionTagRequest {
+  // ID of the version to remove a tag from.
+  //
+  // To get the a version ID make a [FunctionService.ListVersions] request.
+  string function_version_id = 1 [(required) = true];
+
+  // Tag to remove from the specified version.
+  string tag = 2 [(pattern) = "[a-z][-_0-9a-z]*"];
+}
+
+message SetFunctionTagMetadata {
+  // ID of the function versions that is being tagged.
+  string function_version_id = 1;
+}
+
+message RemoveFunctionTagMetadata {
+  // ID of the function versions that is being untagged.
+  string function_version_id = 1;
+}
+
+message ListFunctionTagHistoryRequest {
+  // ID of the function to retrieve tag history for.
+  //
+  // To get a function ID, make a [FunctionService.List] request.
+  string function_id = 1 [(required) = true];
+
+  // Specific tag that history should be limited to.
+  string tag = 2 [(pattern) = "[a-z][-_0-9a-z]*|[$]latest"];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `pageSize`, the service returns a [ListFunctionOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 3 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListFunctionOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 4 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can only be applied to the [FunctionTagHistoryRecord.effective_from] and [FunctionTagHistoryRecord.effective_to] fields.
+  // 2. An `=` or `>` or `<` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // For example, `effective_to>2021-01-01T12:00:00Z`.
+  string filter = 5 [(length) = "<=1000"];
+}
+
+message ListFunctionTagHistoryResponse {
+  // A record in the tag history.
+  message FunctionTagHistoryRecord {
+    // ID of the function that the record is about.
+    string function_id = 1;
+
+    // ID of the function version that the record is about.
+    string function_version_id = 3;
+
+    // Tag that was set for the version at some point.
+    string tag = 2;
+
+    // Timestamp when the tag started being active for the function.
+    google.protobuf.Timestamp effective_from = 4;
+
+    // Timestamp when the tag stopped being active for the function.
+    google.protobuf.Timestamp effective_to = 5;
+  }
+
+  // Set of relevant tag history records.
+  repeated FunctionTagHistoryRecord function_tag_history_record = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListFunctionTagHistoryRequest.page_size], use `nextPageToken` as the value
+  // for the [ListFunctionTagHistoryRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `nextPageToken` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListScalingPoliciesRequest {
+  // ID of the function to retrieve scaling policies for.
+  //
+  // To get a function ID, make a [FunctionService.List] request.
+  string function_id = 1 [(required) = true];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `pageSize`, the service returns a [ListScalingPoliciesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListScalingPoliciesResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListScalingPoliciesResponse {
+  // Set of relevant scaling policies.
+  repeated ScalingPolicy scaling_policies = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListScalingPoliciesRequest.page_size], use `nextPageToken` as the value
+  // for the [ListScalingPoliciesRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `nextPageToken` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message SetScalingPolicyRequest {
+  reserved 3;
+  // ID of the function to retrieve scaling policies for.
+  //
+  // To get a function ID, make a [FunctionService.List] request.
+  string function_id = 1 [(required) = true];
+
+  // Version tag.
+  //
+  // To get the history of version tags make a [FunctionService.ListTagHistory] request.
+  string tag = 2 [
+    (required) = true,
+    (pattern) = "[a-z][-_0-9a-z]*|[$]latest"
+  ];
+
+  // Minimum guaranteed provisioned instances count for all zones in total.
+  // Billed separately.
+  int64 provisioned_instances_count = 4 [(value) = ">=0"];
+
+  // Upper limit for instance count in each zone.
+  // 0 means no limit.
+  int64 zone_instances_limit = 5 [(value) = ">=0"];
+
+  // Upper limit of requests count in each zone.
+  // 0 means no limit.
+  int64 zone_requests_limit = 6 [(value) = ">=0"];
+}
+
+message SetScalingPolicyMetadata {
+  // ID of the function for which scaling policy was set.
+  string function_id = 1;
+}
+
+message RemoveScalingPolicyRequest {
+  // ID of the function to remove scaling policies for.
+  //
+  // To get a function ID, make a [FunctionService.List] request.
+  string function_id = 1 [(required) = true];
+
+  // Version tag.
+  //
+  // To get the history of version tags make a [FunctionService.ListTagHistory] request.
+  string tag = 2 [
+    (required) = true,
+    (pattern) = "[a-z][-_0-9a-z]*|[$]latest"
+  ];
+}
+
+message RemoveScalingPolicyMetadata {
+  // ID of the function for which scaling policy was removed.
+  string function_id = 1;
+}

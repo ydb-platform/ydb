@@ -1,0 +1,11 @@
+# Product discipline 4 - Space weather products, parameter category 4: energetic particles
+0 0 Proton flux (differential) ((m2 s sr eV)-1)
+1 1 Proton flux (integral) ((m2 s sr )-1)
+2 2 Electron flux (differential) ((m2 s sr eV)-1)
+3 3 Electron flux (integral) ((m2 s sr)-1)
+4 4 Heavy ion flux (differential) ((m2 s sr eV/nuc)-1)
+5 5 Heavy ion flux (integral) ((m2 s sr)-1)
+6 6 Cosmic ray neutron flux (h-1)
+# 7-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

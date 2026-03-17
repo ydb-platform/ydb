@@ -1,0 +1,6 @@
+exclude:
+  - examples/*
+mark_as_sources:
+  - graphene/test/__init__.py
+mark_as_py3_sources:
+  - graphene/utils/thenables_asyncio.py

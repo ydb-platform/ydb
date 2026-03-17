@@ -1,0 +1,7 @@
+requirements:
+  - contrib/deprecated/http-parser
+exclude:
+  - http_parser/parser*.so
+  - http_parser/http_parser.*
+mark_as_cython_c:
+  - http_parser/parser.pyx

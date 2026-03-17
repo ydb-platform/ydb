@@ -1,0 +1,6 @@
+import{S as o}from"./index-BZt0m9TU.js";import"./index-xGeN4i2A.js";import"./svelte/svelte_svelte.js";import"./svelte/svelte_animate.js";import"./svelte/svelte_attachments.js";import"./svelte/svelte_easing.js";import"./svelte/svelte_internal_client.js";import"./svelte/svelte_internal_flags_async.js";import"./svelte/svelte_internal_flags_legacy.js";import"./svelte/svelte_internal_flags_tracing.js";import"./svelte/svelte_internal_server.js";import"./svelte/svelte_legacy.js";import"./svelte/svelte_motion.js";import"./svelte/svelte_reactivity.js";import"./svelte/svelte_reactivity_window.js";import"./svelte/svelte_server.js";import"./svelte/svelte_store.js";import"./svelte/svelte_transition.js";import"./svelte/svelte_events.js";const r="depthBoxBlurPixelShader",e=`varying vec2 vUV;uniform sampler2D textureSampler;uniform vec2 screenSize;
+#define CUSTOM_FRAGMENT_DEFINITIONS
+void main(void)
+{vec4 colorDepth=vec4(0.0);for (int x=-OFFSET; x<=OFFSET; x++)
+for (int y=-OFFSET; y<=OFFSET; y++)
+colorDepth+=texture2D(textureSampler,vUV+vec2(x,y)/screenSize);gl_FragColor=(colorDepth/float((OFFSET*2+1)*(OFFSET*2+1)));}`;o.ShadersStore[r]||(o.ShadersStore[r]=e);const u={name:r,shader:e};export{u as depthBoxBlurPixelShader};

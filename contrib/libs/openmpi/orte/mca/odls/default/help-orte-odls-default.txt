@@ -1,0 +1,140 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2007 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2009      Sun Microsystems, Inc.  All rights reserved.
+# Copyright (c) 2010-2011 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2017      Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is a US/English help file.
+#
+[execve error]
+Open MPI tried to fork a new process via the "execve" system call but
+failed.  Open MPI checks many things before attempting to launch a
+child process, but nothing is perfect. This error may be indicative
+of another problem on the target host, or even something as silly as
+having specified a directory for your application. Your job will now
+abort.
+
+  Local host:        %s
+  Working dir:       %s
+  Application name:  %s
+  Error:             %s
+#
+[binding not supported]
+Open MPI tried to bind a new process, but process binding is not
+supported on the host where it was launched.  The process was killed
+without launching the target application.  Your job will now abort.
+
+  Local host:        %s
+  Application name:  %s
+#
+[binding generic error]
+Open MPI tried to bind a new process, but something went wrong.  The
+process was killed without launching the target application.  Your job
+will now abort.
+
+  Local host:        %s
+  Application name:  %s
+  Error message:     %s
+  Location:          %s:%d
+#
+[bound to everything]
+Open MPI tried to bind a new process to a specific set of processors,
+but ended up binding it to *all* processors.  This means that the new
+process is effectively unbound.
+
+This is only a warning -- your job will continue.  You can suppress
+this warning in the future by setting the odls_warn_if_not_bound MCA
+parameter to 0.
+
+  Local host:        %s
+  Application name:  %s
+  Location:          %s:%d
+#
+[slot list and paffinity_alone]
+Open MPI detected that both a slot list was specified and the MCA
+parameter "paffinity_alone" was set to true.  Only one of these can be
+used at a time.  Your job will now abort.
+
+  Local host:        %s
+  Application name:  %s
+#
+[iof setup failed]
+Open MPI tried to launch a child process but the "IOF child setup"
+failed.  This should not happen.  Your job will now abort.
+
+  Local host:        %s
+  Application name:  %s
+#
+[not bound]
+WARNING: Open MPI tried to bind a process but failed.  This is a
+warning only; your job will continue.
+
+  Local host:        %s
+  Application name:  %s
+  Error message:     %s
+  Location:          %s:%d
+#
+[syscall fail]
+A system call failed that should not have.  In this particular case,
+a warning or error message was not displayed that should have been.
+Your job may behave unpredictably after this, or abort.
+
+  Local host:        %s
+  Application name:  %s
+  Function:          %s
+  Location:          %s:%d
+#
+[memory not bound]
+WARNING: Open MPI tried to bind a process but failed.  This is a
+warning only; your job will continue, though performance may
+be degraded.
+
+  Local host:        %s
+  Application name:  %s
+  Error message:     %s
+  Location:          %s:%d
+
+#
+[memory binding error]
+Open MPI tried to bind memory for a new process but something went
+wrong. The process was killed without launching the target
+application. Your job will now abort.
+
+  Local host:        %s
+  Application name:  %s
+  Error message: %s
+  Location:  %s:%d
+#
+[set limit]
+Error message received from:
+
+  Local host:        %s
+  Application name:  %s
+  Location:  %s:%d
+
+Message:
+
+%s
+#
+[incorrectly-bound]
+WARNING: Open MPI incorrectly bound a process to the daemon's cores.
+This is a warning only; your job will continue.
+
+  Local host:        %s
+  Application name:  %s
+  Location:          %s:%d

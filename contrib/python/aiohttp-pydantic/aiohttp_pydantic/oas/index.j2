@@ -1,0 +1,58 @@
+{# This updated file is part of swagger_ui_bundle (https://github.com/dtkav/swagger_ui_bundle) #}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>{{ title | default('Swagger UI') }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.20.8/swagger-ui.min.css">
+    <link rel="icon" href="data:,">
+    <style>
+      html
+      {
+        box-sizing: border-box;
+        overflow: -moz-scrollbars-vertical;
+        overflow-y: scroll;
+      }
+
+      *,
+      *:before,
+      *:after
+      {
+        box-sizing: inherit;
+      }
+
+      body
+      {
+        margin:0;
+        background: #fafafa;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@{{ swagger_ui_version }}/swagger-ui-bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@{{ swagger_ui_version }}/swagger-ui-standalone-preset.js"></script>
+    <script>
+    window.onload = function() {
+      // Begin Swagger UI call region
+      const ui = SwaggerUIBundle({
+        url: "{{ openapi_spec_url }}",
+        dom_id: "#swagger-ui",
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: "StandaloneLayout",
+        ...{{ display_configurations }},
+      });
+
+      window.ui = ui
+    }
+  </script>
+  </body>
+</html>

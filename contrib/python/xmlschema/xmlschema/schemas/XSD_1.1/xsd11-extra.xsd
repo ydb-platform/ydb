@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Chameleon schema for defining XSD 1.1 list type builtins and to override
+openContent/defaultOpenContent declarations for the xmlschema library.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+
+  <xs:override schemaLocation="XMLSchema.xsd">
+    <xs:element name="openContent" id="openContent">
+    <xs:annotation>
+      <xs:documentation
+           source="../structures/structures.html#element-openContent"/>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="xs:annotated">
+          <xs:sequence>
+            <xs:element name="any" minOccurs="0">
+              <!-- Add notQName attribute in xs:any particles -->
+              <xs:complexType>
+                <xs:complexContent>
+                  <xs:extension base="xs:wildcard">
+                    <xs:attribute name="notQName" type="xs:qnameList" use="optional"/>
+                  </xs:extension>
+                </xs:complexContent>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+          <xs:attribute name="mode" default="interleave" use="optional">
+            <xs:simpleType>
+              <xs:restriction base="xs:NMTOKEN">
+                <xs:enumeration value="none"/>
+                <xs:enumeration value="interleave"/>
+                <xs:enumeration value="suffix"/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+    </xs:element>
+    <xs:element name="defaultOpenContent" id="defaultOpenContent">
+    <xs:annotation>
+      <xs:documentation
+           source="../structures/structures.html#element-defaultOpenContent"/>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="xs:annotated">
+          <xs:sequence>
+            <xs:element name="any">
+              <!-- Add notQName attribute in xs:any particles -->
+              <xs:complexType>
+                <xs:complexContent>
+                  <xs:extension base="xs:wildcard">
+                    <xs:attribute name="notQName" type="xs:qnameList" use="optional"/>
+                  </xs:extension>
+                </xs:complexContent>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+          <xs:attribute name="appliesToEmpty" type="xs:boolean"
+                        default="false" use="optional"/>
+          <xs:attribute name="mode" default="interleave" use="optional">
+            <xs:simpleType>
+              <xs:restriction base="xs:NMTOKEN">
+                <xs:enumeration value="interleave"/>
+                <xs:enumeration value="suffix"/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+    </xs:element>
+  </xs:override>
+
+  <xs:simpleType name="IDREFS" id="IDREFS">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:list itemType="xs:IDREF"/>
+      </xs:simpleType>
+      <xs:minLength value="1" id="IDREFS.minLength"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="ENTITIES" id="ENTITIES">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:list itemType="xs:ENTITY"/>
+      </xs:simpleType>
+      <xs:minLength value="1" id="ENTITIES.minLength"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="NMTOKENS" id="NMTOKENS">
+    <xs:restriction>
+      <xs:simpleType>
+        <xs:list itemType="xs:NMTOKEN"/>
+      </xs:simpleType>
+      <xs:minLength value="1" id="NMTOKENS.minLength"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>

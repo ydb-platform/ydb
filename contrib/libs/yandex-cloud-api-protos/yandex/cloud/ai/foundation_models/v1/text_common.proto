@@ -1,0 +1,228 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.foundation_models.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/foundation_models/v1;foundation_models";
+option java_package = "yandex.cloud.api.ai.foundation_models.v1";
+
+
+// Defines the options for completion generation.
+message CompletionOptions {
+  // Enables streaming of partially generated text.
+  bool stream = 1;
+
+  // Affects creativity and randomness of responses. Should be a double number between 0 (inclusive) and 1 (inclusive).
+  // Lower values produce more straightforward responses while higher values lead to increased creativity and randomness.
+  // Default temperature: 0.3
+  google.protobuf.DoubleValue temperature = 2;
+
+  // The limit on the number of tokens used for single completion generation.
+  // Must be greater than zero. This maximum allowed parameter value may depend on the model being used.
+  google.protobuf.Int64Value max_tokens = 3;
+
+  // Configures reasoning capabilities for the model, allowing it to perform internal reasoning before responding.
+  ReasoningOptions reasoning_options = 4;
+}
+
+// Represents reasoning options that enable the model's ability to perform internal reasoning before generating a response.
+message ReasoningOptions {
+  // Enum representing the reasoning mode.
+  enum ReasoningMode {
+    // Unspecified reasoning mode.
+    REASONING_MODE_UNSPECIFIED = 0;
+
+    // Disables reasoning. The model will generate a response without performing any internal reasoning.
+    DISABLED = 1;
+
+    // Enables reasoning in a hidden manner without exposing the reasoning steps to the user.
+    ENABLED_HIDDEN = 2;
+  }
+
+  // Specifies the reasoning mode to be used.
+  ReasoningMode mode = 1;
+}
+
+// A message object representing a wrapper over the inputs and outputs of the completion model.
+message Message {
+  // The ID of the message sender. Supported roles:
+  // * `system`: Special role used to define the behavior of the completion model.
+  // * `assistant`: A role used by the model to generate responses.
+  // * `user`: A role used by the user to describe requests to the model.
+  string role = 1;
+
+  // Message content.
+  oneof Content {
+    // Textual content of the message.
+    string text = 2;
+    // List of tool calls made by the model as part of the response generation.
+    ToolCallList tool_call_list = 3;
+    // List of tool results returned from external tools that were invoked by the model.
+    ToolResultList tool_result_list = 4;
+  }
+}
+
+// An object representing the number of content [tokens](/docs/foundation-models/concepts/yandexgpt/tokens) used by the completion model.
+message ContentUsage {
+  // Provides additional information about how the completion tokens were utilized.
+  message CompletionTokensDetails {
+    // The number of tokens used specifically for internal reasoning performed by the model.
+    int64 reasoning_tokens = 1;
+  }
+
+  // The number of tokens in the textual part of the model input.
+  int64 input_text_tokens = 1;
+
+  // The number of tokens in the generated completion.
+  int64 completion_tokens = 2;
+
+  // The total number of tokens, including all input tokens and all generated tokens.
+  int64 total_tokens = 3;
+
+  // Provides additional information about how the completion tokens were utilized.
+  CompletionTokensDetails completion_tokens_details = 4;
+}
+
+// Represents a generated completion alternative, including its content and generation status.
+message Alternative {
+  // Enum representing the generation status of the alternative.
+  enum AlternativeStatus {
+    // Unspecified generation status.
+    ALTERNATIVE_STATUS_UNSPECIFIED = 0;
+
+    // Partially generated alternative.
+    ALTERNATIVE_STATUS_PARTIAL = 1;
+
+    // Incomplete final alternative resulting from reaching the maximum allowed number of tokens.
+    ALTERNATIVE_STATUS_TRUNCATED_FINAL = 2;
+
+    // Final alternative generated without running into any limits.
+    ALTERNATIVE_STATUS_FINAL = 3;
+
+    // Generation was stopped due to the discovery of potentially sensitive content in the prompt or generated response.
+    // To fix, modify the prompt and restart generation.
+    ALTERNATIVE_STATUS_CONTENT_FILTER = 4;
+
+    // Tools were invoked during the completion generation.
+    ALTERNATIVE_STATUS_TOOL_CALLS = 5;
+  }
+
+  // A message with the content of the alternative.
+  Message message = 1;
+
+  // The generation status of the alternative.
+  AlternativeStatus status = 2;
+}
+
+// Represents a token, the basic unit of content, used by the foundation model.
+message Token {
+  // An internal token identifier.
+  int64 id = 1;
+
+  // The textual representation of the token.
+  string text = 2;
+
+  // Indicates whether the token is special or not. Special tokens may define the model's behavior and are not visible to users.
+  bool special = 3;
+}
+
+// Represents a tool that can be invoked during completion generation.
+message Tool {
+  oneof ToolType {
+    // Represents a function that can be called.
+    FunctionTool function = 1;
+  }
+}
+
+// Represents a function tool that can be invoked during completion generation.
+message FunctionTool {
+  // The name of the function.
+  string name = 1;
+  // A description of the function's purpose or behavior.
+  string description = 2;
+  // A JSON Schema that defines the expected parameters for the function.
+  // The schema should describe the required fields, their types, and any constraints or default values.
+  google.protobuf.Struct parameters = 3;
+  // Enforces strict adherence to the function schema, ensuring only defined parameters are used.
+  bool strict = 4;
+}
+
+// Represents a call to a tool.
+message ToolCall {
+  oneof ToolCallType {
+    // Represents a call to a function.
+    FunctionCall function_call = 1;
+  }
+}
+
+// Represents the invocation of a function with specific arguments.
+message FunctionCall {
+  // The name of the function being called.
+  string name = 1;
+  // The structured arguments passed to the function.
+  // These arguments must adhere to the JSON Schema defined in the corresponding function's parameters.
+  google.protobuf.Struct arguments = 2;
+}
+
+// Represents a list of tool calls.
+message ToolCallList {
+  // A list of tool calls to be executed.
+  repeated ToolCall tool_calls = 1;
+}
+
+// Represents the result of a tool call.
+message ToolResult {
+  oneof ToolResultType {
+    // Represents the result of a function call.
+    FunctionResult function_result = 1;
+  }
+}
+
+// Represents the result of a function call.
+message FunctionResult {
+  // The name of the function that was executed.
+  string name = 1;
+  oneof ContentType {
+    // The result of the function call, represented as a string.
+    // This field can be used to store the output of the function.
+    string content = 2;
+  }
+}
+
+// Represents a list of tool results.
+message ToolResultList {
+  // A list of tool results.
+  repeated ToolResult tool_results = 1;
+}
+
+// Represents the expected structure of the model's response using a JSON Schema.
+message JsonSchema {
+  // The JSON Schema that the model's output must conform to.
+  google.protobuf.Struct schema = 1;
+}
+
+// Specifies how the model should select which tool (or tools) to use when generating a response.
+message ToolChoice {
+  // Defines the different modes for tool calling.
+  enum ToolChoiceMode {
+    // The server will choose the default behavior, which is AUTO.
+    TOOL_CHOICE_MODE_UNSPECIFIED = 0;
+    // The model will not call any tool and will generate a standard text response.
+    NONE = 1;
+    // The model can choose between generating a text response or calling one or more tools.
+    // This is the default behavior.
+    AUTO = 2;
+    // The model is required to call one or more tools.
+    REQUIRED = 3;
+  }
+
+  oneof ToolChoice {
+    // Specifies the overall tool-calling mode.
+    ToolChoiceMode mode = 1;
+    // Forces the model to call a specific function.
+    // The provided string must match the name of a function in the API request.
+    string function_name = 2;
+  }
+}

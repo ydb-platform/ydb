@@ -1,0 +1,4 @@
+0 0  Empty local section 
+82 82 standard operational SMHI
+83 83 MATCH data (standard operational SMHI + extra MATCH keywords)
+255 255 MISSING

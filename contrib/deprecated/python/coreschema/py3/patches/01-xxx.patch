@@ -1,0 +1,17 @@
+--- contrib/deprecated/python/coreschema/py3/coreschema/encodings/corejson.py	(index)
++++ contrib/deprecated/python/coreschema/py3/coreschema/encodings/corejson.py	(working tree)
+@@ -1,3 +1,5 @@
++import coreschema
++
+ jsonschema = coreschema.RefSpace({
+     'Document': coreschema.Object(
+         properties={
+@@ -14,6 +16,6 @@ jsonschema = coreschema.RefSpace({
+     'Link': coreschema.Object(
+         properties={
+             '_type': coreschema.Enum(['link'])
+-        }
++        },
+     )
+-})
++}, root='Document')

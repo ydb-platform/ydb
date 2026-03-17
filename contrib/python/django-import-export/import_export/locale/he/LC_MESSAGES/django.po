@@ -1,0 +1,205 @@
+# Hebrew translation for django-import-export
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-import-export\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-06-23 19:11+0100\n"
+"PO-Revision-Date: 2025-06-23 17:44+0300\n"
+"Last-Translator: \n"
+"Language-Team: Hebrew <he@li.org>\n"
+"Language: he\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Poedit 3.6\n"
+
+#: admin.py templates/admin/import_export/change_list_import_item.html
+#: templates/admin/import_export/import.html
+msgid "Import"
+msgstr "ייבוא"
+
+#: admin.py
+#, python-format
+msgid "%s through import_export"
+msgstr "%s באמצעות ייבוא/ייצוא"
+
+#: admin.py
+msgid "Import finished: {} new, {} updated, {} deleted and {} skipped {}."
+msgstr "הייבוא הסתיים: נוספו {}, עודכנו {}, נמחקו {}, דולגו {}."
+
+#: admin.py
+#, python-format
+msgid ""
+"%(exc_name)s encountered while trying to read file. Ensure you have chosen "
+"the correct format for the file."
+msgstr ""
+"שגיאת %(exc_name)s אירעה בקריאת הקובץ. ודאו שבחרתם את פורמט הקובץ הנכון."
+
+#: admin.py
+msgid ""
+"No valid data to import. Ensure your file has the correct headers or data "
+"for import."
+msgstr ""
+"לא נמצא מידע תקין לייבוא. יש לוודא שהכותרות והנתונים בקובץ תקינים ומתאימים "
+"לייבוא."
+
+#: admin.py templates/admin/import_export/change_form.html
+#: templates/admin/import_export/change_list_export_item.html
+#: templates/admin/import_export/export.html
+msgid "Export"
+msgstr "ייצוא"
+
+#: admin.py
+#, python-format
+msgid "Export selected %(verbose_name_plural)s"
+msgstr "ייצוא %(verbose_name_plural)s שנבחרו"
+
+#: formats/base_formats.py
+msgid "export failed due to IllegalCharacterError"
+msgstr "הייצוא נכשל עקב שגיאת תו לא חוקי (IllegalCharacterError)"
+
+#: forms.py
+msgid "Resource"
+msgstr "משאב"
+
+#: forms.py
+msgid "Format"
+msgstr "פורמט"
+
+#: forms.py
+msgid "File to import"
+msgstr "קובץ לייבוא"
+
+#: forms.py
+msgid "Form is not validated, call `is_valid` first"
+msgstr "הטופס לא אומת, יש לקרוא לפונקציה `is_valid` תחילה"
+
+#: forms.py
+#, python-format
+msgid "Select at least 1 field for \"%(resource_name)s\" to export"
+msgstr "יש לבחור לפחות שדה אחד לייצוא עבור \"%(resource_name)s\""
+
+#: resources.py
+#, python-format
+msgid ""
+"The following fields are declared in 'import_id_fields' but are not present "
+"in the resource fields: %s"
+msgstr "השדות הבאים הוגדרו ב-'import_id_fields' אך אינם קיימים בשדות המשאב: %s"
+
+#: resources.py
+#, python-format
+msgid ""
+"The following fields are declared in 'import_id_fields' but are not present "
+"in the file headers: %s"
+msgstr ""
+"השדות הבאים הוגדרו ב-'import_id_fields' אך אינם קיימים בכותרות הקובץ: %s"
+
+#: results.py
+#, python-format
+msgid "call to force_str() on instance failed: %s"
+msgstr "הקריאה ל-force_str() על המופע נכשלה: %s"
+
+#: templates/admin/import_export/base.html
+msgid "Home"
+msgstr "דף הבית"
+
+#: templates/admin/import_export/export.html
+#, python-format
+msgid "Export %(len)s selected item."
+msgid_plural "Export %(len)s selected items."
+msgstr[0] "ייצוא הפריט שנבחר"
+msgstr[1] "ייצוא %(len)s פריטים שנבחרו"
+
+#: templates/admin/import_export/export.html
+#: templates/admin/import_export/resource_fields_list.html
+msgid "This exporter will export the following fields: "
+msgstr "הייצוא יכלול את השדות הבאים:"
+
+#: templates/admin/import_export/export.html
+msgid "Select all"
+msgstr ""
+
+#: templates/admin/import_export/export.html
+#: templates/admin/import_export/import.html
+msgid "Submit"
+msgstr "שליחה"
+
+#: templates/admin/import_export/import.html
+msgid ""
+"Below is a preview of data to be imported. If you are satisfied with the "
+"results, click 'Confirm import'"
+msgstr ""
+"להלן תצוגה מקדימה של הנתונים לייבוא. אם התוצאות נראות תקינות, לחצו על 'אשר "
+"ייבוא'."
+
+#: templates/admin/import_export/import.html
+msgid "Confirm import"
+msgstr "אשר ייבוא"
+
+#: templates/admin/import_export/import.html
+msgid "Errors"
+msgstr "שגיאות"
+
+#: templates/admin/import_export/import.html
+msgid "Line number"
+msgstr "מספר שורה"
+
+#: templates/admin/import_export/import.html
+msgid "Some rows failed to validate"
+msgstr "אימות מספר שורות נכשל"
+
+#: templates/admin/import_export/import.html
+msgid ""
+"Please correct these errors in your data where possible, then reupload it "
+"using the form above."
+msgstr ""
+"יש לתקן את השגיאות בקובץ המקורי במידת האפשר, ולטעון אותו מחדש באמצעות הטופס "
+"למעלה."
+
+#: templates/admin/import_export/import.html
+msgid "Row"
+msgstr "שורה"
+
+#: templates/admin/import_export/import.html
+msgid "Non field specific"
+msgstr "לא קשור לשדה מסוים"
+
+#: templates/admin/import_export/import.html
+msgid "Preview"
+msgstr "תצוגה מקדימה"
+
+#: templates/admin/import_export/import.html
+msgid "New"
+msgstr "חדש"
+
+#: templates/admin/import_export/import.html
+msgid "Skipped"
+msgstr "דולג"
+
+#: templates/admin/import_export/import.html
+msgid "Delete"
+msgstr "מחיקה"
+
+#: templates/admin/import_export/import.html
+msgid "Update"
+msgstr "עדכון"
+
+#: templates/admin/import_export/resource_fields_list.html
+msgid "This importer will import the following fields: "
+msgstr "הייבוא יכלול את השדות הבאים:"
+
+#: widgets.py
+msgid "Value could not be parsed."
+msgstr "לא ניתן היה לפענח את הערך."
+
+#: widgets.py
+msgid "use_natural_foreign_keys and key_is_id cannot both be True"
+msgstr ""
+"לא ניתן להפעיל את ההגדרות 'use_natural_foreign_keys' ו-'key_is_id' בו-זמנית."
+
+#~ msgid "You must select an export format."
+#~ msgstr "עליך לבחור פורמט לייצוא."

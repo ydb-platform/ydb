@@ -1,0 +1,5 @@
+- `Igor Davydenko <https://github.com/playpauseandstop>`_
+- `Alex Kuzmenko <https://github.com/alxpy>`_
+- `Kaarle Ritvanen <https://github.com/kunkku>`_
+- `Yoan Blanc <https://github.com/greut>`_
+- `Miro Prasil <https://github.com/mprasil>`_

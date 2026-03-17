@@ -1,0 +1,33 @@
+{% extends "layout.html" %}
+{% block header %}{% endblock %}
+{% block sidebar %}{% endblock %}
+{% block content %}
+    <div class="empty">
+        <div class="empty-header">{{ exc.status_code }}</div>
+        <p class="empty-title">{{ _("Oops… You just found an error page") }}</p>
+        <p class="empty-subtitle text-muted">{{ exc.detail }}</p>
+        <div class="empty-action">
+            <a class="btn btn-primary" href="{{ url_for(__name__ ~ ':index') }}">
+                <svg class="icon"
+                     fill="none"
+                     height="24"
+                     stroke-linecap="round"
+                     stroke-linejoin="round"
+                     stroke-width="2"
+                     stroke="currentColor"
+                     viewBox="0 0 24 24"
+                     width="24"
+                     xmlns="http://www.w3.org/2000/svg">
+                    <path d="M0 0h24v24H0z" fill="none" stroke="none"></path>
+                    <line x1="5" x2="19" y1="12" y2="12">
+                    </line>
+                    <line x1="5" x2="11" y1="12" y2="18">
+                    </line>
+                    <line x1="5" x2="11" y1="12" y2="6">
+                    </line>
+                </svg>
+                {{ _("Take me home") }}
+            </a>
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,19 @@
+{# -*- engine: jinja -*- #}
+{% extends "base.html" %}
+
+{% block html_title %}{{filename}} - {{info.head}}{% endblock %}
+
+{% block summary %}
+{% include "source_page.summary.html" %}
+
+{% endblock %}
+
+{% block navigation %}
+{% include "source_page.navigation.html" %}
+
+{% endblock %}
+
+{% block content %}
+{% include "source_page.content.html" %}
+
+{% endblock %}

@@ -1,0 +1,12 @@
+
+0 avg  Average
+1 accum  Accumulation
+2 max  Maximum
+3 min  Minimum
+4 diff  Difference (Value at the end of time range minus value at the beginning)
+5 rms  Root mean square
+6 sd  Standard deviation
+7 cov  Covariance (Temporal variance)
+8 8  Difference (Value at the start of time range minus value at the end)
+9 ratio  Ratio
+255 missing  Missing

@@ -1,0 +1,56 @@
+Metadata-Version: 2.0
+Name: pyjks
+Version: 20.0.0
+Summary: Pure-Python Java Keystore (JKS) library
+Home-page: http://github.com/kurtbrose/pyjks
+Author: Kurt Rose, Jeroen De Ridder
+Author-email: kurt@kurtrose.com
+License: MIT
+Keywords: JKS JCEKS java keystore security ssl
+Platform: UNKNOWN
+Classifier: Development Status :: 6 - Mature
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Topic :: Utilities
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Requires-Dist: javaobj-py3
+Requires-Dist: pyasn1 (>=0.3.5)
+Requires-Dist: pyasn1-modules
+Requires-Dist: pycryptodomex
+Requires-Dist: twofish
+
+PyJKS enables Python projects to load and manipulate Java KeyStore
+(JKS) data without a JVM dependency. PyJKS supports JKS, JCEKS, BKS
+and UBER (BouncyCastle) keystores. Simply::
+
+  pip install pyjks
+
+Or::
+
+  easy_install pyjks
+
+Then::
+
+  import jks
+
+  keystore = jks.KeyStore.load('keystore.jks', 'passphrase')
+
+  print(keystore.private_keys)
+  print(keystore.certs)
+  print(keystore.secret_keys)
+
+And that's barely scratching the surface. Check out `the usage examples on
+GitHub <https://github.com/kurtbrose/pyjks#usage-examples>`_ for
+more!
+
+
+

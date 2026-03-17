@@ -1,0 +1,2 @@
+[console_scripts]
+f90nml = f90nml.cli:parse

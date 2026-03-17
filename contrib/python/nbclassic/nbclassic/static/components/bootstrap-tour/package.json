@@ -1,0 +1,79 @@
+{
+  "name": "bootstrap-tour",
+  "description": "Quick and easy way to build your product tours with Bootstrap Popovers.",
+  "version": "0.12.0",
+  "keywords": [
+    "tour",
+    "bootstrap",
+    "js",
+    "tour",
+    "intro"
+  ],
+  "homepage": "http://bootstraptour.com",
+  "author": {
+    "name": "Ulrich Sossou",
+    "email": "sorich87@gmail.com",
+    "url": "http://ulrichsossou.com"
+  },
+  "contributors": [
+    {
+      "name": "Emanuele Marchi",
+      "email": "emanuele@lostcrew.it",
+      "url": "http://lostcrew.it"
+    },
+    {
+      "name": "Nicola Molinari",
+      "email": "emmenko@gmail.com"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sorich87/bootstrap-tour.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sorich87/bootstrap-tour/issues"
+  },
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  ],
+  "dependencies": {
+    "bootstrap": "~3",
+    "jquery": ">=1.8"
+  },
+  "devDependencies": {
+    "coffee-script": "~1.12.7",
+    "gulp": "~3.9.0",
+    "gulp-bump": "~2.7",
+    "gulp-changed": "~3.1.0",
+    "gulp-clean": "~0.3.1",
+    "gulp-coffee": "~2.3.4",
+    "gulp-coffeelint": "~0.6.0",
+    "gulp-concat": "~2.6.1",
+    "gulp-connect": "~5.0.0",
+    "gulp-header": "~1.8.9",
+    "gulp-jasmine": "~2.4.2",
+    "gulp-less": "~3.3.2",
+    "gulp-load-plugins": "~1.5.0",
+    "gulp-open": "~2.0.0",
+    "gulp-rename": "~1.2.0",
+    "gulp-uglify": "~3.0.0",
+    "gulp-util": "~3.0.0",
+    "karma": "~1.7.1",
+    "karma-chrome-launcher": "^2.2.0",
+    "karma-firefox-launcher": "^1.0.1",
+    "karma-jasmine": "~1.1.0",
+    "phantomjs": "^2.1.7",
+    "streamqueue": "1.1.1"
+  },
+  "engines": {
+    "node": ">= 0.8.0"
+  },
+  "main": "./build/js/bootstrap-tour.js",
+  "scripts": {
+    "build": "gulp dist",
+    "test": "gulp test"
+  }
+}

@@ -1,0 +1,100 @@
+{% extends "admin/import_export/base.html" %}
+{% load i18n %}
+{% load admin_urls %}
+{% load import_export_tags %}
+
+{% block extrahead %}{{ block.super }}
+<script type="text/javascript" src="{% url 'admin:jsi18n' %}"></script>
+{{ form.media }}
+{% endblock %}
+
+{% block breadcrumbs_last %}
+{% translate "Export" %}
+{% endblock %}
+
+{% block content %}
+<form action="{{ export_url }}" method="POST">
+  {% csrf_token %}
+    {# export request has originated from an Admin UI action #}
+    {% if form.initial.export_items %}
+      <p>
+      {% blocktranslate count len=form.initial.export_items|length trimmed %}
+        Export {{ len }} selected item.
+        {% plural %}
+        Export {{ len }} selected items.
+      {% endblocktranslate %}
+      </p>
+    {% endif %}
+    {% if form.export_items.errors %}
+        <div class="error">
+            {{ form.export_items.errors }}
+        </div>
+    {% endif %}
+
+  {# fields list is not required with selectable fields form #}
+  {% if not form.is_selectable_fields_form %}
+    {% include "admin/import_export/resource_fields_list.html" with import_or_export="export" %}
+  {% endif %}
+
+  <fieldset class="module">
+    {% for field in form.visible_fields %}
+      <div
+        {% if field.field.is_selectable_field %}
+          {# all fields are visible by default, JS will hide unselected resource fields on load #}
+
+          class="selectable-field-export-row"
+          {# resource index will be used for showing-hiding fields #}
+          resource-index="{{ field.field.resource_index }}"
+        {% else %}
+          class="form-row aligned"
+        {% endif %}
+      >
+        {% if field.field.initial_field %}
+          <p style="padding: 0;">{% translate "This exporter will export the following fields: " %}</p>
+          {% if form.visible_fields|length >= 2 %}
+            <div>
+              <input type="checkbox" class="select-toggle" name="select-all-toggle" 
+                    onchange="onSelectToggleChange(event)" checked>
+              <label style="font-weight: bold;" for="select-all-toggle">{% translate "Select all" %}
+              </label>
+            </div>
+          {% endif %}
+        {% endif %}
+        {{ field.errors }}
+        
+        {% if not field.field.is_selectable_field %}
+          {{ field.label_tag }}
+        {% endif %}
+
+        {% if field.field.widget.attrs.readonly %}
+          {{ field.field.value }}
+          {{ field.as_hidden }}
+          {% else %}
+          {{ field }}
+        {% endif %}
+
+        {% if field.field.is_selectable_field %}
+          {{ field.label_tag }}
+        {% endif %}
+
+        {% if field.field.help_text %}
+        <p class="help">{{ field.field.help_text|safe }}</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+    {% for field in form.hidden_fields %}
+        {{ field }}
+    {% endfor %}
+  </fieldset>
+
+  <div>
+    {% if form.non_field_errors %}
+      {{ form.non_field_errors }}
+    {% endif %}
+  </div>
+
+  <div class="submit-row">
+    <input type="submit" class="default" value="{% translate "Submit" %}">
+  </div>
+</form>
+{% endblock %}

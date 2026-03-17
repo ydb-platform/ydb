@@ -1,0 +1,21 @@
+# (C) Copyright 2005- ECMWF.
+
+alias mars.expver = experimentVersionNumber;
+alias parameter.paramId=paramId;
+alias parameter.shortName=shortName;
+alias parameter.units=units;
+alias parameter.name=name;
+
+alias mars.class  = marsClass;
+alias mars.param = paramId;
+
+# Special rule for level type 103 'Specified height level above ground (m)'
+if(typeOfFirstFixedSurface == 103) {
+    # only the parameters above 10m
+    if (level > 10) {
+        constant heightLevelName = 'hl';
+        alias mars.levtype = heightLevelName;
+        # levelist was unaliased in template.4.horizontal.def so we must have it back
+        alias mars.levelist = level;
+    }
+}

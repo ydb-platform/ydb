@@ -1,0 +1,132 @@
+--- contrib/python/jupyter-core/py2/jupyter_core/tests/test_application.py	(index)
++++ contrib/python/jupyter-core/py2/jupyter_core/tests/test_application.py	(working tree)
+@@ -17,6 +17,12 @@ from jupyter_core.application import JupyterApp, NoStart
+ pjoin = os.path.join
+ 
+ 
++@pytest.fixture(autouse=True)
++def patch_data_dir(monkeypatch):
++    import yatest.common
++    monkeypatch.setenv('JUPYTER_DATA_DIR', yatest.common.work_path())
++
++
+ def test_basic():
+     app = JupyterApp()
+ 
+--- contrib/python/jupyter-core/py2/jupyter_core/tests/test_command.py	(index)
++++ contrib/python/jupyter-core/py2/jupyter_core/tests/test_command.py	(working tree)
+@@ -20,12 +20,17 @@ from jupyter_core.paths import (
+     jupyter_path, jupyter_config_path,
+ )
+ 
++import yatest.common
++
+ 
+ def get_jupyter_output(cmd):
+     """Get output of a jupyter command"""
+     if not isinstance(cmd, list):
+         cmd = [cmd]
+-    return check_output([sys.executable, '-m', 'jupyter_core'] + cmd).decode('utf8').strip()
++    executable = yatest.common.binary_path(
++        'contrib/python/jupyter-core/py2/bin/jupyter-core'
++    )
++    return check_output([executable] + cmd).decode('utf8').strip()
+ 
+ 
+ def write_executable(path, source):
+@@ -131,6 +138,7 @@ def test_subcommand_list(tmpdir):
+                 'yo-eyropa-ganymyde-callysto',
+             ]
+ 
++@pytest.mark.skip('not working with arcadia monobinary, needs big python to fix test')
+ def test_not_on_path(tmpdir):
+     a = tmpdir.mkdir("a")
+     jupyter = a.join('jupyter')
+@@ -152,6 +160,7 @@ def test_not_on_path(tmpdir):
+     assert b'WITNESS' in out
+ 
+ 
++@pytest.mark.skip('not working with arcadia monobinary, needs big python to fix test')
+ def test_path_priority(tmpdir):
+     a = tmpdir.mkdir("a")
+     jupyter = a.join('jupyter')
+--- contrib/python/jupyter-core/py2/jupyter_core/tests/test_migrate.py	(index)
++++ contrib/python/jupyter-core/py2/jupyter_core/tests/test_migrate.py	(working tree)
+@@ -24,8 +24,10 @@ from jupyter_core.migrate import (
+ )
+ from jupyter_core import migrate as migrate_mod
+ 
++import yatest.common
++
+ pjoin = os.path.join
+-here = os.path.dirname(__file__)
++here = yatest.common.source_path('contrib/python/jupyter-core/py2/jupyter_core/tests')
+ dotipython = pjoin(here, 'dotipython')
+ dotipython_empty = pjoin(here, 'dotipython_empty')
+ 
+@@ -33,14 +35,14 @@ dotipython_empty = pjoin(here, 'dotipython_empty')
+ @pytest.fixture
+ def td(request):
+     """Fixture for a temporary directory"""
+-    td = mkdtemp(u'μnïcø∂e')
++    td = mkdtemp(dir=yatest.common.work_path())
+     request.addfinalizer(lambda : shutil.rmtree(td))
+     return td
+ 
+ @pytest.fixture
+ def env(request):
+     """Fixture for a full testing environment"""
+-    td = mkdtemp()
++    td = mkdtemp(dir=yatest.common.work_path())
+     env = {
+         'TESTDIR': td,
+         'IPYTHONDIR': pjoin(td, 'ipython'),
+@@ -207,6 +209,7 @@ def test_migrate_default(env):
+     assert not os.path.exists(env['JUPYTER_DATA_DIR'])
+ 
+ 
++@pytest.mark.skip('fails on distbuild due to unknown PermissionError')
+ def test_migrate(env):
+     shutil.copytree(dotipython, env['IPYTHONDIR'])
+     migrate()
+--- contrib/python/jupyter-core/py2/jupyter_core/tests/test_paths.py	(index)
++++ contrib/python/jupyter-core/py2/jupyter_core/tests/test_paths.py	(working tree)
+@@ -22,9 +22,10 @@ from jupyter_core.paths import (
+ )
+ from ipython_genutils.tempdir import TemporaryDirectory
+ from ipython_genutils.py3compat import cast_unicode
+-from ipython_genutils.testing.decorators import skip_if_not_win32, skip_win32
+ from .mocking import darwin, windows, linux
+ 
++import pytest
++
+ pjoin = os.path.join
+ 
+ 
+@@ -225,7 +226,7 @@ def test_is_hidden():
+         assert not is_file_hidden(subdir56, os.stat(subdir56))
+ 
+ 
+-@skip_if_not_win32
++@pytest.mark.skipif("sys.platform != 'win32'")
+ def test_is_hidden_win32():
+     import ctypes
+     with TemporaryDirectory() as root:
+@@ -239,7 +240,7 @@ def test_is_hidden_win32():
+         assert is_file_hidden(subdir1)
+ 
+ 
+-@skip_if_not_win32
++@pytest.mark.skipif("sys.platform != 'win32'")
+ def test_secure_write_win32():
+     def fetch_win32_permissions(filename):
+         '''Extracts file permissions on windows using icacls'''
+@@ -282,7 +283,7 @@ def test_secure_write_win32():
+         shutil.rmtree(directory)
+ 
+ 
+-@skip_win32
++@pytest.mark.skipif("sys.platform == 'win32'")
+ def test_secure_write_unix():
+     directory = tempfile.mkdtemp()
+     fname = os.path.join(directory, 'check_perms')

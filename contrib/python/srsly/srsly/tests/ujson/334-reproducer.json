@@ -1,0 +1,857 @@
+{
+	"ak.somestring.internal.Shadow": {
+		"id": 33300002,
+		"init_state": "(bk.action.array.Make, (bk.action.i32.Const, 0))",
+		"child": {
+			"ak.somestring.Flexbox": {
+				"flex_direction": "column",
+				"align_items": "stretch",
+				"children": [
+					{
+						"ak.somestring.Collection": {
+							"id": 33300001,
+							"snap": "center",
+							"direction": "row",
+							"children": [
+								{
+									"ak.somestring.Flexbox": {
+										"decoration": {
+											"ak.somestring.BoxDecoration": {
+												"background": {
+													"ak.somestring.ColorDrawable": {
+														"color": "#2c8932"
+													}
+												}
+											}
+										},
+										"children": [
+											{
+												"ak.somestring.Flexbox": {
+													"flex_direction": "column",
+													"align_items": "stretch",
+													"children": [
+														{
+															"ak.somestring.Flexbox": {
+																"flex_direction": "column",
+																"align_items": "stretch",
+																"children": [
+																	{
+																		"ak.somestring.Flexbox": {
+																			"children": [
+																				{
+																					"ls.components.Image": {
+																						"media_id": "10156403921218138",
+																						"preview_url": "https://scontent.xx.whoaa.net/v/t1.0-9/51099660_10156403921233138_3677795704043995136_n.jpg?_nc_cat=102&_nc_log=1&_nc_oc=AQk3Td-w9KpopLL2N1jgZ4WDMuxUyuGY3ZvY4mDSCk8W9-GjsFPi2S4gVQk0Y3A5ZaaQf7ASvQ2s_eR85kTmFvr0&_nc_ad=z-m&_nc_cid=0&_nc_zor=9&_nc_ht=scontent.xx&oh=fb16b0d60b13817a505f583cc9dad1eb&oe=5CBCDB46",
+																						"height": 278,
+																						"width": 156
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"grow": 1
+																				}
+																			}
+																		}
+																	},
+																	{
+																		"ak.somestring.Flexbox": {
+																			"flex_direction": "column",
+																			"align_items": "stretch",
+																			"children": [
+																				{
+																					"ak.somestring.Flexbox": {
+																						"flex_direction": "row",
+																						"align_items": "stretch",
+																						"children": [
+																							{
+																								"ak.somestring.Flexbox": {
+																									"decoration": {
+																										"ak.somestring.BoxDecoration": {
+																											"background": {
+																												"ak.somestring.ColorDrawable": {
+																													"color": "#ffffff"
+																												}
+																											}
+																										}
+																									},
+																									"_style": {
+																										"flex": {
+																											"margin_right": "4dp",
+																											"grow": 1
+																										}
+																									}
+																								}
+																							},
+																							{
+																								"ak.somestring.Flexbox": {
+																									"decoration": {
+																										"ak.somestring.BoxDecoration": {
+																											"background": {
+																												"ak.somestring.ColorDrawable": {
+																													"color": "#ffffff"
+																												}
+																											}
+																										}
+																									},
+																									"_style": {
+																										"flex": {
+																											"margin_right": "4dp",
+																											"grow": 1
+																										}
+																									}
+																								}
+																							},
+																							{
+																								"ak.somestring.Flexbox": {
+																									"flex_direction": "row",
+																									"align_items": "stretch",
+																									"decoration": {
+																										"ak.somestring.BoxDecoration": {
+																											"background": {
+																												"ak.somestring.ColorDrawable": {
+																													"color": "#ffffff"
+																												}
+																											}
+																										}
+																									},
+																									"children": [
+																										{
+																											"ak.somestring.Flexbox": {
+																												"id": 33300004,
+																												"_style": {
+																													"flex": {
+																														"grow": 1
+																													}
+																												}
+																											}
+																										}
+																									],
+																									"_style": {
+																										"flex": {
+																											"margin_right": "4dp",
+																											"grow": 1
+																										}
+																									}
+																								}
+																							}
+																						],
+																						"_style": {
+																							"flex": {
+																								"height": "2dp",
+																								"margin_left": "4dp"
+																							}
+																						}
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"position_type": "absolute",
+																					"left": "0dp",
+																					"top": "10dp",
+																					"margin_top": "10dp",
+																					"right": "0dp",
+																					"height": "2dp",
+																					"width": "100%"
+																				}
+																			}
+																		}
+																	}
+																],
+																"_style": {
+																	"flex": {
+																		"grow": 1
+																	}
+																}
+															}
+														},
+														{
+															"ak.somestring.Flexbox": {
+																"align_items": "flex_start",
+																"children": [
+																	{
+																		"ak.somestring.Flexbox": {
+																			"decoration": {
+																				"ak.somestring.BoxDecoration": {
+																					"corner_radius": "17dp"
+																				}
+																			},
+																			"children": [
+																				{
+																					"ls.components.Image": {
+																						"media_id": "10156403921218138",
+																						"preview_url": "https://scontent.xx.whoaa.net/v/t1.0-9/51099660_10156403921233138_3677795704043995136_n.jpg?_nc_cat=102&_nc_log=1&_nc_oc=AQk3Td-w9KpopLL2N1jgZ4WDMuxUyuGY3ZvY4mDSCk8W9-GjsFPi2S4gVQk0Y3A5ZaaQf7ASvQ2s_eR85kTmFvr0&_nc_ad=z-m&_nc_cid=0&_nc_zor=9&_nc_ht=scontent.xx&oh=fb16b0d60b13817a505f583cc9dad1eb&oe=5CBCDB46",
+																						"height": 34,
+																						"width": 34,
+																						"_style": {
+																							"flex": {
+																								"width": "34dp",
+																								"height": "34dp"
+																							}
+																						}
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"margin_right": "12dp",
+																					"width": "34dp",
+																					"height": "34dp"
+																				}
+																			}
+																		}
+																	},
+																	{
+																		"ak.somestring.Flexbox": {
+																			"flex_direction": "column",
+																			"align_items": "flex_start",
+																			"children": [
+																				{
+																					"ak.somestring.RichText": {
+																						"children": [
+																							{
+																								"ak.somestring.TextSpan": {
+																									"text": "eric",
+																									"text_size": "15sp",
+																									"text_style": "bold",
+																									"text_color": "#ffffff"
+																								}
+																							}
+																						],
+																						"_style": {
+																							"flex": {
+																								"margin_bottom": "2dp",
+																								"width": "100%"
+																							}
+																						}
+																					}
+																				},
+																				{
+																					"ak.somestring.RichText": {
+																						"children": [
+																							{
+																								"ak.somestring.TextSpan": {
+																									"text": "8h",
+																									"text_size": "13sp",
+																									"text_style": "normal",
+																									"text_color": "#ffffff"
+																								}
+																							}
+																						],
+																						"_style": {
+																							"flex": {
+																								"width": "100%"
+																							}
+																						}
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"width": "100%",
+																					"height": "100%"
+																				}
+																			}
+																		}
+																	}
+																],
+																"_style": {
+																	"flex": {
+																		"position_type": "absolute",
+																		"top": "30dp",
+																		"left": "10dp",
+																		"height": "48dp"
+																	}
+																}
+															}
+														},
+														{
+															"ak.somestring.Flexbox": {
+																"children": [
+																	{
+																		"ls.components.StoriesReplyBar": {}
+																	}
+																],
+																"_style": {
+																	"flex": {
+																		"width": "100%",
+																		"height": "45dp",
+																		"margin_top": "auto",
+																		"margin_bottom": "auto"
+																	}
+																}
+															}
+														}
+													],
+													"_style": {
+														"flex": {
+															"position_type": "absolute",
+															"width": "100%",
+															"height": "100%",
+															"grow": 1
+														}
+													}
+												}
+											},
+											{
+												"ak.somestring.Flexbox": {
+													"flex_direction": "column",
+													"align_items": "stretch",
+													"children": [
+														{
+															"ak.somestring.Flexbox": {
+																"flex_direction": "column",
+																"align_items": "stretch",
+																"children": [
+																	{
+																		"ak.somestring.Flexbox": {
+																			"children": [
+																				{
+																					"ls.components.Image": {
+																						"media_id": "10101230968216658",
+																						"preview_url": "https://scontent.xx.whoaa.net/v/t1.0-9/50800535_10101230968226638_6755212111762161664_n.jpg?_nc_cat=101&_nc_log=1&_nc_oc=AQmKcqYvt6DI7aeGk3k_oF6RHSVZkUg7f9hnBCWilyaOGdCWO0-u9_zssC5qGvca6wqsrz3AP0y1RPLPiZj8ycCv&_nc_ad=z-m&_nc_cid=0&_nc_zor=9&_nc_ht=scontent.xx&oh=2fffbab8f0a102d196454ee0138c1850&oe=5CC15206",
+																						"height": 278,
+																						"width": 156
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"grow": 1
+																				}
+																			}
+																		}
+																	},
+																	{
+																		"ak.somestring.Flexbox": {
+																			"flex_direction": "column",
+																			"align_items": "stretch",
+																			"children": [
+																				{
+																					"ak.somestring.Flexbox": {
+																						"flex_direction": "row",
+																						"align_items": "stretch",
+																						"children": [
+																							{
+																								"ak.somestring.Flexbox": {
+																									"decoration": {
+																										"ak.somestring.BoxDecoration": {
+																											"background": {
+																												"ak.somestring.ColorDrawable": {
+																													"color": "#ffffff"
+																												}
+																											}
+																										}
+																									},
+																									"_style": {
+																										"flex": {
+																											"margin_right": "4dp",
+																											"grow": 1
+																										}
+																									}
+																								}
+																							},
+																							{
+																								"ak.somestring.Flexbox": {
+																									"flex_direction": "row",
+																									"align_items": "stretch",
+																									"decoration": {
+																										"ak.somestring.BoxDecoration": {
+																											"background": {
+																												"ak.somestring.ColorDrawable": {
+																													"color": "#ffffff"
+																												}
+																											}
+																										}
+																									},
+																									"children": [
+																										{
+																											"ak.somestring.Flexbox": {
+																												"id": 33300005,
+																												"_style": {
+																													"flex": {
+																														"grow": 1
+																													}
+																												}
+																											}
+																										}
+																									],
+																									"_style": {
+																										"flex": {
+																											"margin_right": "4dp",
+																											"grow": 1
+																										}
+																									}
+																								}
+																							},
+																							{
+																								"ak.somestring.Flexbox": {
+																									"decoration": {
+																										"ak.somestring.BoxDecoration": {
+																											"background": {
+																												"ak.somestring.ColorDrawable": {
+																													"color": "#cccccc"
+																												}
+																											}
+																										}
+																									},
+																									"_style": {
+																										"flex": {
+																											"margin_right": "4dp",
+																											"grow": 1
+																										}
+																									}
+																								}
+																							}
+																						],
+																						"_style": {
+																							"flex": {
+																								"height": "2dp",
+																								"margin_left": "4dp"
+																							}
+																						}
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"position_type": "absolute",
+																					"left": "0dp",
+																					"top": "10dp",
+																					"margin_top": "10dp",
+																					"right": "0dp",
+																					"height": "2dp",
+																					"width": "100%"
+																				}
+																			}
+																		}
+																	}
+																],
+																"_style": {
+																	"flex": {
+																		"grow": 1
+																	}
+																}
+															}
+														},
+														{
+															"ak.somestring.Flexbox": {
+																"align_items": "flex_start",
+																"children": [
+																	{
+																		"ak.somestring.Flexbox": {
+																			"decoration": {
+																				"ak.somestring.BoxDecoration": {
+																					"corner_radius": "17dp"
+																				}
+																			},
+																			"children": [
+																				{
+																					"ls.components.Image": {
+																						"media_id": "10101230968216658",
+																						"preview_url": "https://scontent.xx.whoaa.net/v/t1.0-9/50800535_10101230968226638_6755212111762161664_n.jpg?_nc_cat=101&_nc_log=1&_nc_oc=AQmKcqYvt6DI7aeGk3k_oF6RHSVZkUg7f9hnBCWilyaOGdCWO0-u9_zssC5qGvca6wqsrz3AP0y1RPLPiZj8ycCv&_nc_ad=z-m&_nc_cid=0&_nc_zor=9&_nc_ht=scontent.xx&oh=2fffbab8f0a102d196454ee0138c1850&oe=5CC15206",
+																						"height": 34,
+																						"width": 34,
+																						"_style": {
+																							"flex": {
+																								"width": "34dp",
+																								"height": "34dp"
+																							}
+																						}
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"margin_right": "12dp",
+																					"width": "34dp",
+																					"height": "34dp"
+																				}
+																			}
+																		}
+																	},
+																	{
+																		"ak.somestring.Flexbox": {
+																			"flex_direction": "column",
+																			"align_items": "flex_start",
+																			"children": [
+																				{
+																					"ak.somestring.RichText": {
+																						"children": [
+																							{
+																								"ak.somestring.TextSpan": {
+																									"text": "eric",
+																									"text_size": "15sp",
+																									"text_style": "bold",
+																									"text_color": "#ffffff"
+																								}
+																							}
+																						],
+																						"_style": {
+																							"flex": {
+																								"margin_bottom": "2dp",
+																								"width": "100%"
+																							}
+																						}
+																					}
+																				},
+																				{
+																					"ak.somestring.RichText": {
+																						"children": [
+																							{
+																								"ak.somestring.TextSpan": {
+																									"text": "2h",
+																									"text_size": "13sp",
+																									"text_style": "normal",
+																									"text_color": "#ffffff"
+																								}
+																							}
+																						],
+																						"_style": {
+																							"flex": {
+																								"width": "100%"
+																							}
+																						}
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"width": "100%",
+																					"height": "100%"
+																				}
+																			}
+																		}
+																	}
+																],
+																"_style": {
+																	"flex": {
+																		"position_type": "absolute",
+																		"top": "30dp",
+																		"left": "10dp",
+																		"height": "48dp"
+																	}
+																}
+															}
+														},
+														{
+															"ak.somestring.Flexbox": {
+																"children": [
+																	{
+																		"ls.components.StoriesReplyBar": {}
+																	}
+																],
+																"_style": {
+																	"flex": {
+																		"width": "100%",
+																		"height": "45dp",
+																		"margin_top": "auto",
+																		"margin_bottom": "auto"
+																	}
+																}
+															}
+														}
+													],
+													"_style": {
+														"flex": {
+															"position_type": "absolute",
+															"width": "100%",
+															"height": "100%",
+															"grow": 1
+														}
+													}
+												}
+											},
+											{
+												"ak.somestring.Flexbox": {
+													"flex_direction": "column",
+													"align_items": "stretch",
+													"children": [
+														{
+															"ak.somestring.Flexbox": {
+																"flex_direction": "column",
+																"align_items": "stretch",
+																"children": [
+																	{
+																		"ak.somestring.Flexbox": {
+																			"children": [
+																				{
+																					"ls.components.Video": {
+																						"media_id": "10156395664922983",
+																						"video_url": "https://video.xx.whoaa.net/v/t42.9040-2/51636103_316525608877874_407931582842667008_n.mp4?_nc_cat=109&efg=eyJ2ZW5jb2RlX3RhZyI6InN2ZV9oZCJ9&_nc_log=1&_nc_oc=AQm6aMctRAFdMe3C66upF2JulQP4mV3Hd4THkueZex952PR389F6Ay9XHm1S40dV1x7M1I-fAW5y3iH7JlQ3MgDM&_nc_ht=video.xx&oh=e17b1f7ec67619d57a5b1cda5e076fef&oe=5C587F7D",
+																						"preview_url": "https://scontent.xx.whoaa.net/v/t15.5256-10/s960x960/51767715_10156395667952983_4168426706077483008_n.jpg?_nc_cat=104&_nc_log=1&_nc_oc=AQnVwEZk2vG8Q3TcoR0SxdXSi8rL_GaST2aH3i9auDcDnJNTRKvuYEFfd_qKGBhmD4-bo-f8BY5j9jHyit765O7P&_nc_ad=z-m&_nc_cid=0&_nc_zor=9&_nc_ht=scontent.xx&oh=9a17e4bcf8a2a9aabc21d2ecf9f8611b&oe=5CB3D14B",
+																						"show_media_play_button": false,
+																						"media_height": 960,
+																						"media_width": 540
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"grow": 1
+																				}
+																			}
+																		}
+																	},
+																	{
+																		"ak.somestring.Flexbox": {
+																			"flex_direction": "column",
+																			"align_items": "stretch",
+																			"children": [
+																				{
+																					"ak.somestring.Flexbox": {
+																						"flex_direction": "row",
+																						"align_items": "stretch",
+																						"children": [
+																							{
+																								"ak.somestring.Flexbox": {
+																									"flex_direction": "row",
+																									"align_items": "stretch",
+																									"decoration": {
+																										"ak.somestring.BoxDecoration": {
+																											"background": {
+																												"ak.somestring.ColorDrawable": {
+																													"color": "#ffffff"
+																												}
+																											}
+																										}
+																									},
+																									"children": [
+																										{
+																											"ak.somestring.Flexbox": {
+																												"id": 33300006,
+																												"_style": {
+																													"flex": {
+																														"grow": 1
+																													}
+																												}
+																											}
+																										}
+																									],
+																									"_style": {
+																										"flex": {
+																											"margin_right": "4dp",
+																											"grow": 1
+																										}
+																									}
+																								}
+																							},
+																							{
+																								"ak.somestring.Flexbox": {
+																									"decoration": {
+																										"ak.somestring.BoxDecoration": {
+																											"background": {
+																												"ak.somestring.ColorDrawable": {
+																													"color": "#cccccc"
+																												}
+																											}
+																										}
+																									},
+																									"_style": {
+																										"flex": {
+																											"margin_right": "4dp",
+																											"grow": 1
+																										}
+																									}
+																								}
+																							},
+																							{
+																								"ak.somestring.Flexbox": {
+																									"decoration": {
+																										"ak.somestring.BoxDecoration": {
+																											"background": {
+																												"ak.somestring.ColorDrawable": {
+																													"color": "#cccccc"
+																												}
+																											}
+																										}
+																									},
+																									"_style": {
+																										"flex": {
+																											"margin_right": "4dp",
+																											"grow": 1
+																										}
+																									}
+																								}
+																							}
+																						],
+																						"_style": {
+																							"flex": {
+																								"height": "2dp",
+																								"margin_left": "4dp"
+																							}
+																						}
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"position_type": "absolute",
+																					"left": "0dp",
+																					"top": "10dp",
+																					"margin_top": "10dp",
+																					"right": "0dp",
+																					"height": "2dp",
+																					"width": "100%"
+																				}
+																			}
+																		}
+																	}
+																],
+																"_style": {
+																	"flex": {
+																		"grow": 1
+																	}
+																}
+															}
+														},
+														{
+															"ak.somestring.Flexbox": {
+																"align_items": "flex_start",
+																"children": [
+																	{
+																		"ak.somestring.Flexbox": {
+																			"decoration": {
+																				"ak.somestring.BoxDecoration": {
+																					"corner_radius": "17dp"
+																				}
+																			},
+																			"children": [
+																				{
+																					"ls.components.Image": {
+																						"media_id": "10156395664922983",
+																						"height": 34,
+																						"width": 34,
+																						"_style": {
+																							"flex": {
+																								"width": "34dp",
+																								"height": "34dp"
+																							}
+																						}
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"margin_right": "12dp",
+																					"width": "34dp",
+																					"height": "34dp"
+																				}
+																			}
+																		}
+																	},
+																	{
+																		"ak.somestring.Flexbox": {
+																			"flex_direction": "column",
+																			"align_items": "flex_start",
+																			"children": [
+																				{
+																					"ak.somestring.RichText": {
+																						"children": [
+																							{
+																								"ak.somestring.TextSpan": {
+																									"text": "eric",
+																									"text_size": "15sp",
+																									"text_style": "bold",
+																									"text_color": "#ffffff"
+																								}
+																							}
+																						],
+																						"_style": {
+																							"flex": {
+																								"margin_bottom": "2dp",
+																								"width": "100%"
+																							}
+																						}
+																					}
+																				},
+																				{
+																					"ak.somestring.RichText": {
+																						"children": [
+																							{
+																								"ak.somestring.TextSpan": {
+																									"text": "20h",
+																									"text_size": "13sp",
+																									"text_style": "normal",
+																									"text_color": "#ffffff"
+																								}
+																							}
+																						],
+																						"_style": {
+																							"flex": {
+																								"width": "100%"
+																							}
+																						}
+																					}
+																				}
+																			],
+																			"_style": {
+																				"flex": {
+																					"width": "100%",
+																					"height": "100%"
+																				}
+																			}
+																		}
+																	}
+																],
+																"_style": {
+																	"flex": {
+																		"position_type": "absolute",
+																		"top": "30dp",
+																		"left": "10dp",
+																		"height": "48dp"
+																	}
+																}
+															}
+														},
+														{
+															"ak.somestring.Flexbox": {
+																"children": [
+																	{
+																		"ls.components.StoriesReplyBar": {}
+																	}
+																],
+																"_style": {
+																	"flex": {
+																		"width": "100%",
+																		"height": "45dp",
+																		"margin_top": "auto",
+																		"margin_bottom": "auto"
+																	}
+																}
+															}
+														}
+													],
+													"_style": {
+														"flex": {
+															"position_type": "absolute",
+															"width": "100%",
+															"height": "100%",
+															"grow": 1
+														}
+													}
+												}
+											}
+										],
+										"_style": {
+											"flex": {
+												"width": "100%",
+												"height": "100%"
+											}
+										}
+									}
+								}
+							],
+							"_style": {
+								"flex": {
+									"height": "100%"
+								}
+							}
+						}
+					}
+				]
+			}
+		}
+	}
+}

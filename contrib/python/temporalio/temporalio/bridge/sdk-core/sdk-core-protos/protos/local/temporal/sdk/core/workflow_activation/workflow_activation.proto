@@ -1,0 +1,398 @@
+syntax = "proto3";
+
+/**
+ * Definitions of the different workflow activation jobs returned from [crate::Core::poll_task]. The
+ * lang SDK applies these activation jobs to drive workflows.
+ */
+package coresdk.workflow_activation;
+option ruby_package = "Temporalio::Internal::Bridge::Api::WorkflowActivation";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/api/update/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/sdk/core/activity_result/activity_result.proto";
+import "temporal/sdk/core/child_workflow/child_workflow.proto";
+import "temporal/sdk/core/common/common.proto";
+import "temporal/sdk/core/nexus/nexus.proto";
+
+// An instruction to the lang sdk to run some workflow code, whether for the first time or from
+// a cached state.
+//
+// ## Job ordering guarantees and semantics
+//
+// Core will, by default, order jobs within the activation as follows:
+// 1. init workflow
+// 2. patches
+// 3. random-seed-updates
+// 4. signals/updates
+// 5. all others
+// 6. local activity resolutions
+// 7. queries
+// 8. evictions
+//
+// This is because:
+// * Patches are expected to apply to the entire activation
+// * Signal and update handlers should be invoked before workflow routines are iterated. That is to
+//  say before the users' main workflow function and anything spawned by it is allowed to continue.
+// * Local activities resolutions go after other normal jobs because while *not* replaying, they
+//  will always take longer than anything else that produces an immediate job (which is
+//  effectively instant). When *replaying* we need to scan ahead for LA markers so that we can
+//  resolve them in the same activation that they completed in when not replaying. However, doing
+//  so would, by default, put those resolutions *before* any other immediate jobs that happened
+//  in that same activation (prime example: cancelling not-wait-for-cancel activities). So, we do
+//  this to ensure the LA resolution happens after that cancel (or whatever else it may be) as it
+//  normally would have when executing.
+// * Queries always go last (and, in fact, always come in their own activation)
+// * Evictions also always come in their own activation
+//
+// Core does this reordering to ensure that langs observe jobs in the same order during replay as
+// they would have during execution. However, in principle, this ordering is not necessary
+// (excepting queries/evictions, which definitely must come last) if lang layers apply all jobs to
+// state *first* (by resolving promises/futures, marking handlers to be invoked, etc as they iterate
+// over the jobs) and then only *after* that is done, drive coroutines/threads/whatever. If
+// execution works this way, then determinism is only impacted by the order routines are driven in
+// (which must be stable based on lang implementation or convention), rather than the order jobs are
+// processed.
+//
+// ## Evictions
+//
+// Evictions appear as an activations that contains only a `remove_from_cache` job. Such activations
+// should not cause the workflow code to be invoked and may be responded to with an empty command
+// list.
+message WorkflowActivation {
+    // The id of the currently active run of the workflow. Also used as a cache key. There may
+    // only ever be one active workflow task (and hence activation) of a run at one time.
+    string run_id = 1;
+    // The current time as understood by the workflow, which is set by workflow task started events
+    google.protobuf.Timestamp timestamp = 2;
+    // Whether or not the activation is replaying past events
+    bool is_replaying = 3;
+    // Current history length as determined by the event id of the most recently processed event.
+    // This ensures that the number is always deterministic
+    uint32 history_length = 4;
+    // The things to do upon activating the workflow
+    repeated WorkflowActivationJob jobs = 5;
+    // Internal flags which are available for use by lang. If `is_replaying` is false, all
+    // internal flags may be used. This is not a delta - all previously used flags always
+    // appear since this representation is cheap.
+    repeated uint32 available_internal_flags = 6;
+    // The history size in bytes as of the last WFT started event
+    uint64 history_size_bytes = 7;
+    // Set true if the most recent WFT started event had this suggestion
+    bool continue_as_new_suggested = 8;
+    // Set to the deployment version of the worker that processed this task,
+    // which may be empty. During replay this version may not equal the version
+    // of the replaying worker. If not replaying and this worker has a defined
+    // Deployment Version, it will equal that. It will also be empty for
+    // evict-only activations. The deployment name may be empty, but not the
+    // build id, if this worker was using the deprecated Build ID-only
+    // feature(s).
+    common.WorkerDeploymentVersion deployment_version_for_current_task = 9;
+}
+
+message WorkflowActivationJob {
+    oneof variant {
+        // A workflow is starting, record all of the information from its start event
+        InitializeWorkflow initialize_workflow = 1;
+        // A timer has fired, allowing whatever was waiting on it (if anything) to proceed
+        FireTimer fire_timer = 2;
+        // Workflow was reset. The randomness seed must be updated.
+        UpdateRandomSeed update_random_seed = 4;
+        // A request to query the workflow was received. It is guaranteed that queries (one or more)
+        // always come in their own activation after other mutating jobs.
+        QueryWorkflow query_workflow = 5;
+        // A request to cancel the workflow was received.
+        CancelWorkflow cancel_workflow = 6;
+        // A request to signal the workflow was received.
+        SignalWorkflow signal_workflow = 7;
+        // An activity was resolved, result could be completed, failed or cancelled
+        ResolveActivity resolve_activity = 8;
+        // A patch marker has been detected and lang is being told that change exists. This
+        // job is strange in that it is sent pre-emptively to lang without any corresponding
+        // command being sent first.
+        NotifyHasPatch notify_has_patch = 9;
+        // A child workflow execution has started or failed to start
+        ResolveChildWorkflowExecutionStart resolve_child_workflow_execution_start = 10;
+        // A child workflow was resolved, result could be completed or failed
+        ResolveChildWorkflowExecution resolve_child_workflow_execution = 11;
+        // An attempt to signal an external workflow resolved
+        ResolveSignalExternalWorkflow resolve_signal_external_workflow = 12;
+        // An attempt to cancel an external workflow resolved
+        ResolveRequestCancelExternalWorkflow resolve_request_cancel_external_workflow = 13;
+        // A request to handle a workflow update.
+        DoUpdate do_update = 14;
+        // A nexus operation started.
+        ResolveNexusOperationStart resolve_nexus_operation_start = 15;
+        // A nexus operation resolved.
+        ResolveNexusOperation resolve_nexus_operation = 16;
+        // Remove the workflow identified by the [WorkflowActivation] containing this job from the
+        // cache after performing the activation. It is guaranteed that this will be the only job
+        // in the activation if present.
+        RemoveFromCache remove_from_cache = 50;
+    }
+}
+
+// Initialize a new workflow
+message InitializeWorkflow {
+    // The identifier the lang-specific sdk uses to execute workflow code
+    string workflow_type = 1;
+    // The workflow id used on the temporal server
+    string workflow_id = 2;
+    // Inputs to the workflow code
+    repeated temporal.api.common.v1.Payload arguments = 3;
+    // The seed must be used to initialize the random generator used by SDK.
+    // RandomSeedUpdatedAttributes are used to deliver seed updates.
+    uint64 randomness_seed = 4;
+    // Used to add metadata e.g. for tracing and auth, meant to be read and written to by interceptors.
+    map<string, temporal.api.common.v1.Payload> headers = 5;
+    // Identity of the client who requested this execution
+    string identity = 6;
+    // If this workflow is a child, information about the parent
+    common.NamespacedWorkflowExecution parent_workflow_info = 7;
+    // Total workflow execution timeout including retries and continue as new.
+    google.protobuf.Duration workflow_execution_timeout = 8;
+    // Timeout of a single workflow run.
+    google.protobuf.Duration workflow_run_timeout = 9;
+    // Timeout of a single workflow task.
+    google.protobuf.Duration workflow_task_timeout = 10;
+    // Run id of the previous workflow which continued-as-new or retired or cron executed into this
+    // workflow, if any.
+    string continued_from_execution_run_id = 11;
+    // If this workflow was a continuation, indicates the type of continuation.
+    temporal.api.enums.v1.ContinueAsNewInitiator continued_initiator = 12;
+    // If this workflow was a continuation and that continuation failed, the details of that.
+    temporal.api.failure.v1.Failure continued_failure = 13;
+    // If this workflow was a continuation and that continuation completed, the details of that.
+    temporal.api.common.v1.Payloads last_completion_result = 14;
+    // This is the very first run id the workflow ever had, following continuation chains.
+    string first_execution_run_id = 15;
+    // This workflow's retry policy
+    temporal.api.common.v1.RetryPolicy retry_policy = 16;
+    // Starting at 1, the number of times we have tried to execute this workflow
+    int32 attempt = 17;
+    // If this workflow runs on a cron schedule, it will appear here
+    string cron_schedule = 18;
+    // The absolute time at which the workflow will be timed out.
+    // This is passed without change to the next run/retry of a workflow.
+    google.protobuf.Timestamp workflow_execution_expiration_time = 19;
+    // For a cron workflow, this contains the amount of time between when this iteration of
+    // the cron workflow was scheduled and when it should run next per its cron_schedule.
+    google.protobuf.Duration cron_schedule_to_schedule_interval = 20;
+    // User-defined memo
+    temporal.api.common.v1.Memo memo = 21;
+    // Search attributes created/updated when this workflow was started
+    temporal.api.common.v1.SearchAttributes search_attributes = 22;
+    // When the workflow execution started event was first written
+    google.protobuf.Timestamp start_time = 23;
+    // Contains information about the root workflow execution. It is possible for the namespace to
+    // be different than this workflow if using OSS and cross-namespace children, but this
+    // information is not retained. Users should take care to track it by other means in such
+    // situations.
+    //
+    // The root workflow execution is defined as follows:
+    //   1. A workflow without parent workflow is its own root workflow.
+    //   2. A workflow that has a parent workflow has the same root workflow as its parent workflow.
+    //
+    // See field in WorkflowExecutionStarted for more detail.
+    temporal.api.common.v1.WorkflowExecution root_workflow = 24;
+    // Priority of this workflow execution
+    temporal.api.common.v1.Priority priority = 25;
+}
+
+// Notify a workflow that a timer has fired
+message FireTimer {
+    // Sequence number as provided by lang in the corresponding StartTimer command
+    uint32 seq = 1;
+}
+
+// Notify a workflow that an activity has been resolved
+message ResolveActivity {
+    // Sequence number as provided by lang in the corresponding ScheduleActivity command
+    uint32 seq = 1;
+    activity_result.ActivityResolution result = 2;
+    // Set to true if the resolution is for a local activity. This is used internally by Core and
+    // lang does not need to care about it.
+    bool is_local = 3;
+}
+
+// Notify a workflow that a start child workflow execution request has succeeded, failed or was
+// cancelled.
+message ResolveChildWorkflowExecutionStart {
+    // Sequence number as provided by lang in the corresponding StartChildWorkflowExecution command
+    uint32 seq = 1;
+    oneof status {
+        ResolveChildWorkflowExecutionStartSuccess succeeded = 2;
+        ResolveChildWorkflowExecutionStartFailure failed = 3;
+        ResolveChildWorkflowExecutionStartCancelled cancelled = 4;
+    }
+}
+
+// Simply pass the run_id to lang
+message ResolveChildWorkflowExecutionStartSuccess {
+    string run_id = 1;
+}
+
+// Provide lang the cause of failure
+message ResolveChildWorkflowExecutionStartFailure {
+    // Lang should have this information but it's more convenient to pass it back
+    // for error construction on the lang side.
+    string workflow_id = 1;
+    string workflow_type = 2;
+    child_workflow.StartChildWorkflowExecutionFailedCause cause = 3;
+}
+
+// `failure` should be ChildWorkflowFailure with cause set to CancelledFailure.
+// The failure is constructed in core for lang's convenience.
+message ResolveChildWorkflowExecutionStartCancelled {
+    temporal.api.failure.v1.Failure failure = 1;
+}
+
+// Notify a workflow that a child workflow execution has been resolved
+message ResolveChildWorkflowExecution {
+    // Sequence number as provided by lang in the corresponding StartChildWorkflowExecution command
+    uint32 seq = 1;
+    child_workflow.ChildWorkflowResult result = 2;
+}
+
+// Update the workflow's random seed
+message UpdateRandomSeed {
+    uint64 randomness_seed = 1;
+}
+
+// Query a workflow
+message QueryWorkflow {
+    // For PollWFTResp `query` field, this will be set to the special value `legacy`. For the
+    // `queries` field, the server provides a unique identifier. If it is a `legacy` query,
+    // lang cannot issue any commands in response other than to answer the query.
+    string query_id = 1;
+    // The query's function/method/etc name
+    string query_type = 2;
+    repeated temporal.api.common.v1.Payload arguments = 3;
+    // Headers attached to the query
+    map<string, temporal.api.common.v1.Payload> headers = 5;
+}
+
+// Cancel a running workflow
+message CancelWorkflow {
+    // User-specified reason the cancel request was issued
+    string reason = 1;
+}
+
+// Send a signal to a workflow
+message SignalWorkflow {
+    string signal_name = 1;
+    repeated temporal.api.common.v1.Payload input = 2;
+    // Identity of the sender of the signal
+    string identity = 3;
+    // Headers attached to the signal
+    map<string, temporal.api.common.v1.Payload> headers = 5;
+}
+
+// Inform lang what the result of a call to `patched` or similar API should be -- this is always
+// sent pre-emptively, so any time it is sent the change is present
+message NotifyHasPatch {
+    string patch_id = 1;
+}
+
+message ResolveSignalExternalWorkflow {
+    // Sequence number as provided by lang in the corresponding SignalExternalWorkflowExecution
+    // command
+    uint32 seq = 1;
+    // If populated, this signal either failed to be sent or was cancelled depending on failure
+    // type / info.
+    temporal.api.failure.v1.Failure failure = 2;
+}
+
+message ResolveRequestCancelExternalWorkflow {
+    // Sequence number as provided by lang in the corresponding
+    // RequestCancelExternalWorkflowExecution command
+    uint32 seq = 1;
+    // If populated, this signal either failed to be sent or was cancelled depending on failure
+    // type / info.
+    temporal.api.failure.v1.Failure failure = 2;
+}
+
+// Lang is requested to invoke an update handler on the workflow. Lang should invoke the update
+// validator first (if requested). If it accepts the update, immediately invoke the update handler.
+// Lang must reply to the activation containing this job with an `UpdateResponse`.
+message DoUpdate {
+    // A workflow-unique identifier for this update
+    string id = 1;
+    // The protocol message instance ID - this is used to uniquely track the ID server side and
+    // internally.
+    string protocol_instance_id = 2;
+    // The name of the update handler
+    string name = 3;
+    // The input to the update
+    repeated temporal.api.common.v1.Payload input = 4;
+    // Headers attached to the update
+    map<string, temporal.api.common.v1.Payload> headers = 5;
+    // Remaining metadata associated with the update. The `update_id` field is stripped from here
+    // and moved to `id`, since it is guaranteed to be present.
+    temporal.api.update.v1.Meta meta = 6;
+    // If set true, lang must run the update's validator before running the handler. This will be
+    // set false during replay, since validation is not re-run during replay.
+    bool run_validator = 7;
+}
+
+message ResolveNexusOperationStart {
+    // Sequence number as provided by lang in the corresponding ScheduleNexusOperation command
+    uint32 seq = 1;
+    oneof status {
+        // The operation started asynchronously. Contains a token that can be used to perform
+        // operations on the started operation by, ex, clients. A `ResolveNexusOperation` job will
+        // follow at some point.
+        string operation_token = 2;
+        // If true the operation "started" but only because it's also already resolved. A
+        // `ResolveNexusOperation` job will be in the same activation.
+        bool started_sync = 3;
+        // The operation either failed to start, was cancelled before it started, timed out, or
+        // failed synchronously. Details are included inside the message. In this case, the
+        // subsequent ResolveNexusOperation will never be sent.
+        temporal.api.failure.v1.Failure failed = 4;
+    }
+}
+
+message ResolveNexusOperation {
+    // Sequence number as provided by lang in the corresponding ScheduleNexusOperation command
+    uint32 seq = 1;
+    nexus.NexusOperationResult result = 2;
+}
+
+message RemoveFromCache {
+    string message = 1;
+
+    enum EvictionReason {
+        UNSPECIFIED = 0;
+        // Workflow cache is full
+        CACHE_FULL = 1;
+        // Workflow received a partial task but was not in the cache. Typically it won't be in the
+        // lang cache either at this point, but we send an eviction to be sure.
+        CACHE_MISS = 2;
+        // The workflow produced results inconsistent with history.
+        NONDETERMINISM = 3;
+        // The lang side completed the workflow activation with a failure.
+        LANG_FAIL = 4;
+        // The lang side explicitly requested this workflow be evicted.
+        LANG_REQUESTED = 5;
+        // The workflow task we tried to respond to didn't exist. The workflow might have already
+        // finished, or the WFT timed out but we didn't learn about that yet.
+        TASK_NOT_FOUND = 6;
+        // There was new work that must be handled while we attempted to complete the WFT. Ex:
+        // a new signal came in while trying to complete the workflow.
+        UNHANDLED_COMMAND = 7;
+        // There was some fatal error processing the workflow, typically an internal error, but
+        // can also happen if then network drops out while paginating. Check message string.
+        FATAL = 8;
+        // Something went wrong attempting to fetch more history events.
+        PAGINATION_OR_HISTORY_FETCH = 9;
+        // The workflow is being completed with a terminal command and we sent the WFT completion
+        // to server successfully.
+        WORKFLOW_EXECUTION_ENDING = 10;
+    }
+    EvictionReason reason = 2;
+}

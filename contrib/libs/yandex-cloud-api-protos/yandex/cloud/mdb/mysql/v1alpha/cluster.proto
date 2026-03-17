@@ -1,0 +1,248 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mysql.v1alpha;
+
+import "google/protobuf/timestamp.proto";
+import "google/type/timeofday.proto";
+import "yandex/cloud/mdb/mysql/v1alpha/config/mysql5_7.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mysql/v1alpha;mysql";
+option java_package = "yandex.cloud.api.mdb.mysql.v1alpha";
+
+// A MySQL cluster. For more information, see
+// the [documentation](/docs/managed-mysql/concepts).
+message Cluster {
+  enum Environment {
+    ENVIRONMENT_UNSPECIFIED = 0;
+
+    // Stable environment with a conservative update policy:
+    // only hotfixes are applied during regular maintenance.
+    PRODUCTION = 1;
+
+    // Environment with more aggressive update policy: new versions
+    // are rolled out irrespective of backward compatibility.
+    PRESTABLE = 2;
+  }
+
+  enum Health {
+
+    // State of the cluster is unknown ([Host.health] for every host in the cluster is UNKNOWN).
+    HEALTH_UNKNOWN = 0;
+
+    // Cluster is alive and well ([Host.health] for every host in the cluster is ALIVE).
+    ALIVE = 1;
+
+    // Cluster is inoperable ([Host.health] for every host in the cluster is DEAD).
+    DEAD = 2;
+
+    // Cluster is working below capacity ([Host.health] for at least one host in the cluster is not ALIVE).
+    DEGRADED = 3;
+  }
+
+  enum Status {
+
+    // Cluster state is unknown.
+    STATUS_UNKNOWN = 0;
+
+    // Cluster is being created.
+    CREATING = 1;
+
+    // Cluster is running normally.
+    RUNNING = 2;
+
+    // Cluster encountered a problem and cannot operate.
+    ERROR = 3;
+
+    // Cluster is being updated.
+    UPDATING = 4;
+
+    // Cluster is stopping.
+    STOPPING = 5;
+
+    // Cluster stopped.
+    STOPPED = 6;
+
+    // Cluster is starting.
+    STARTING = 7;
+  }
+
+  // ID of the MySQL cluster.
+  // This ID is assigned by Managed Service for MySQL at creation time.
+  string id = 1;
+
+  // ID of the folder that the MySQL cluster belongs to.
+  string folder_id = 2;
+
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the MySQL cluster.
+  // The name must be unique within the folder, comply with RFC 1035
+  // and be 1-63 characters long.
+  string name = 4;
+
+  // Description of the MySQL cluster. 0-256 characters long.
+  string description = 5;
+
+  // Custom labels for the MySQL cluster as `key:value` pairs.
+  // Maximum 64 per resource.
+  map<string, string> labels = 6;
+
+  // Deployment environment of the MySQL cluster.
+  Environment environment = 7;
+
+  // Description of monitoring systems relevant to the MySQL cluster.
+  repeated Monitoring monitoring = 8;
+
+  // Configuration of the MySQL cluster.
+  ClusterConfig config = 9;
+
+  // ID of the network that the cluster belongs to.
+  string network_id = 10;
+
+  // Aggregated cluster health.
+  Health health = 11;
+
+  // Current state of the cluster.
+  Status status = 12;
+}
+
+message Monitoring {
+  // Name of the monitoring system.
+  string name = 1;
+
+  // Description of the monitoring system.
+  string description = 2;
+
+  // Link to the monitoring system charts for the MySQL cluster.
+  string link = 3;
+}
+
+message ClusterConfig {
+  // Version of MySQL server software.
+  string version = 1;
+
+  // Configuration for MySQL servers in the cluster.
+  oneof mysql_config {
+    // Configuration of a MySQL 5.7 server.
+    config.MysqlConfigSet5_7 mysql_config_5_7 = 2 [json_name="mysqlConfig_5_7"];
+  }
+
+  // Resources allocated to MySQL hosts.
+  Resources resources = 3;
+
+  // Time to start the daily backup, in the UTC timezone.
+  google.type.TimeOfDay backup_window_start = 4;
+}
+
+message Host {
+
+  enum Role {
+
+    // Role of the host in the cluster is unknown.
+    ROLE_UNKNOWN = 0;
+
+    // Host is the master MySQL server in the cluster.
+    MASTER = 1;
+
+    // Host is a replica MySQL server in the cluster.
+    REPLICA = 2;
+  }
+
+  enum Health {
+
+    // Health of the host is unknown.
+    HEALTH_UNKNOWN = 0;
+
+    // The host is performing all its functions normally.
+    ALIVE = 1;
+
+    // The host is inoperable, and cannot perform any of its essential functions.
+    DEAD = 2;
+
+    // The host is degraded, and can perform only some of its essential functions.
+    DEGRADED = 3;
+  }
+
+  // Name of the MySQL host. The host name is assigned by Managed Service for MySQL
+  // at creation time, and cannot be changed. 1-63 characters long.
+  //
+  // The name is unique across all database hosts that exist on the platform,
+  // as it defines the FQDN of the host.
+  string name = 1;
+
+  // ID of the MySQL host. The ID is assigned by Managed Service for MySQL
+  // at creation time.
+  string cluster_id = 2;
+
+  // ID of the availability zone where the MySQL host resides.
+  string zone_id = 3;
+
+  // Resources allocated to the host.
+  Resources resources = 4;
+
+  // Role of the host in the cluster.
+  Role role = 5;
+
+  // Status code of the aggregated health of the host.
+  Health health = 6;
+
+  // Services provided by the host.
+  repeated Service services = 7;
+
+  // ID of the subnet that the host belongs to.
+  string subnet_id = 8;
+
+  // Flag showing public IP assignment status to this host.
+  bool assign_public_ip = 9;
+}
+
+
+message Service {
+
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+
+    // Host provides the MySQL error log.
+    MYSQL_ERROR = 1;
+
+    // Host provides the MySQL general query log.
+    MYSQL_GENERAL = 2;
+
+    // Host provides the MySQL slow query log.
+    MYSQL_SLOW_QUERY = 3;
+  }
+
+  enum Health {
+
+    // Health of the server is unknown.
+    HEALTH_UNKNOWN = 0;
+
+    // The server is working normally.
+    ALIVE = 1;
+
+    // The server is dead or unresponsive.
+    DEAD = 2;
+  }
+
+  // Type of the service provided by the host.
+  Type type = 1;
+
+  // Status code of server availability.
+  Health health = 2;
+}
+
+message Resources {
+
+  // ID of the preset for computational resources available to a host (CPU, memory etc.).
+  // All available presets are listed in the [documentation](/docs/managed-mysql/concepts/instance-types).
+  string resource_preset_id = 1;
+
+  // Volume of the storage available to a host.
+  int64 disk_size = 2;
+
+  // Type of the storage environment for the host.
+  // Possible values:
+  // * network-ssd - network SSD drive,
+  // * local-ssd - local SSD storage.
+  string disk_type_id = 3;
+}

@@ -1,0 +1,24 @@
+mark_as_py3_sources:
+  - sentry_sdk/integrations/aiohttp.py
+  - sentry_sdk/integrations/asgi.py
+  - sentry_sdk/integrations/asyncio.py
+  - sentry_sdk/integrations/django/asgi.py
+  - sentry_sdk/integrations/fastapi.py
+  - sentry_sdk/integrations/httpx.py
+  - sentry_sdk/integrations/opentelemetry/*
+  - sentry_sdk/integrations/quart.py
+  - sentry_sdk/integrations/sanic.py
+  - sentry_sdk/integrations/starlette.py
+  - sentry_sdk/integrations/starlite.py
+  - sentry_sdk/integrations/strawberry.py
+  - sentry_sdk/integrations/tornado.py
+  - sentry_sdk/integrations/grpc/*.py
+  - sentry_sdk/integrations/clickhouse_driver.py
+  - sentry_sdk/tracing_utils_py3.py
+  - sentry_sdk/integrations/gql.py
+  - sentry_sdk/integrations/graphene.py
+  - sentry_sdk/integrations/arq.py
+  - sentry_sdk/integrations/asyncpg.py
+  - sentry_sdk/integrations/redis/asyncio.py
+  - sentry_sdk/integrations/openai.py
+  - sentry_sdk/crons/_decorator.py

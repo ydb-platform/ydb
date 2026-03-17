@@ -1,0 +1,11 @@
+--- a/contrib/libs/libev/ev.c
++++ b/contrib/libs/libev/ev.c
+@@ -860,7 +860,7 @@ typedef int ecb_bool;
+ #endif
+ 
+ #if _MSC_VER >= 1400
+-  #define ecb_noinline __declspec (noinline)
++  #define ecb_noinline
+ #else
+   #define ecb_noinline ecb_attribute ((__noinline__))
+ #endif

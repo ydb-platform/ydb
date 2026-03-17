@@ -1,0 +1,635 @@
+syntax = "proto3";
+
+package yandex.cloud.iot.devices.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/iot/devices/v1/registry.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iot/devices/v1;devices";
+option java_package = "yandex.cloud.api.iot.devices.v1";
+
+// A set of methods for managing registry.
+service RegistryService {
+
+  // Returns the specified registry.
+  //
+  // To get the list of available registries, make a [List] request.
+  rpc Get(GetRegistryRequest) returns (Registry) {
+    option (google.api.http) = {get: "/iot-devices/v1/registries/{registry_id}"};
+  }
+
+  rpc GetByName(GetByNameRegistryRequest) returns (Registry) {
+    option (google.api.http) = {get: "/iot-devices/v1/registries:getByName"};
+  }
+
+  // Retrieves the list of registries in the specified folder.
+  rpc List(ListRegistriesRequest) returns (ListRegistriesResponse) {
+    option (google.api.http) = {get: "/iot-devices/v1/registries"};
+  }
+
+  // Creates a registry in the specified folder.
+  rpc Create(CreateRegistryRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/iot-devices/v1/registries"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateRegistryMetadata"
+      response: "Registry"
+    };
+  }
+
+  // Updates the specified registry.
+  rpc Update(UpdateRegistryRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/iot-devices/v1/registries/{registry_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateRegistryMetadata"
+      response: "Registry"
+    };
+  }
+
+  // Deletes the specified registry.
+  rpc Delete(DeleteRegistryRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iot-devices/v1/registries/{registry_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteRegistryMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Retrieves the list of registry certificates for the specified registry.
+  rpc ListCertificates(ListRegistryCertificatesRequest) returns (ListRegistryCertificatesResponse) {
+    option (google.api.http) = {get: "/iot-devices/v1/registries/{registry_id}/certificates"};
+  }
+
+  // Adds a certificate.
+  rpc AddCertificate(AddRegistryCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/iot-devices/v1/registries/{registry_id}/certificates"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddRegistryCertificateMetadata"
+      response: "RegistryCertificate"
+    };
+  }
+
+  // Deletes the specified registry certificate.
+  rpc DeleteCertificate(DeleteRegistryCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iot-devices/v1/registries/{registry_id}/certificates/{fingerprint}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteRegistryCertificateMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Retrieves the list of passwords for the specified registry.
+  rpc ListPasswords(ListRegistryPasswordsRequest) returns (ListRegistryPasswordsResponse) {
+    option (google.api.http) = {get: "/iot-devices/v1/registries/{registry_id}/passwords"};
+  }
+
+  // Adds password for the specified registry.
+  rpc AddPassword(AddRegistryPasswordRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/iot-devices/v1/registries/{registry_id}/passwords"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddRegistryPasswordMetadata"
+      response: "RegistryPassword"
+    };
+  }
+
+  // Deletes the specified password.
+  rpc DeletePassword(DeleteRegistryPasswordRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iot-devices/v1/registries/{registry_id}/passwords/{password_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteRegistryPasswordMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Retrieves the list of device topic aliases for the specified registry.
+  rpc ListDeviceTopicAliases(ListDeviceTopicAliasesRequest) returns (ListDeviceTopicAliasesResponse) {
+    option (google.api.http) = {get: "/iot-devices/v1/registries/{registry_id}:listDeviceTopicAliases"};
+  }
+
+  // Retrieves the list of YDS exports for the specified registry.
+  rpc ListDataStreamExports(ListDataStreamExportsRequest) returns (ListDataStreamExportsResponse);
+
+  // Adds YDS export for the specified registry.
+  rpc AddDataStreamExport(AddDataStreamExportRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddDataStreamExportMetadata"
+      response: "DataStreamExport"
+    };
+  }
+
+  // Deletes the specified YDS export.
+  rpc DeleteDataStreamExport(DeleteDataStreamExportRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteDataStreamExportMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified registry.
+  rpc ListOperations(ListRegistryOperationsRequest) returns (ListRegistryOperationsResponse) {
+    option (google.api.http) = {get: "/iot-devices/v1/registries/{registry_id}/operations"};
+  }
+
+  // Disables the specified registry.
+  rpc Disable (DisableRegistryRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/iot-devices/v1/registries/{registry_id}:disable"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DisableRegistryMetadata"
+      response: "Registry"
+    };
+  }
+
+  // Enables the specified registry.
+  rpc Enable (EnableRegistryRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/iot-devices/v1/registries/{registry_id}:enable"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "EnableRegistryMetadata"
+      response: "Registry"
+    };
+  }
+}
+
+message GetRegistryRequest {
+  // ID of the registry to return.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message GetByNameRegistryRequest {
+  // ID of the folder to list registries in.
+  //
+  // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the registry to return.
+  //
+  // To get a registry Name make a [RegistryService.List] request.
+  string registry_name = 2 [
+    (required) = true,
+    (length) = "<=50",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+}
+
+message ListRegistriesRequest {
+  // ID of the folder to list registries in.
+  //
+  // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a [ListRegistriesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListRegistriesResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListRegistriesResponse {
+  // List of registries.
+  repeated Registry registries = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListRegistriesRequest.page_size], use `next_page_token` as the value
+  // for the [ListRegistriesRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateRegistryRequest {
+  // ID of the folder to create a registry in.
+  //
+  // To get a folder ID, make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the registry. The name must be unique within the folder.
+  string name = 2 [
+    (length) = "<=50",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Description of the registry.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 4 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // Registry certificates.
+  repeated Certificate certificates = 5;
+
+  // Registry passwords.
+  //
+  // The password must contain at least three character categories among the following: upper case latin, lower case latin, numbers and special symbols.
+  string password = 6;
+
+  // Options for logging registry events
+  LogOptions log_options = 7;
+
+  // Specification of a registry certificate.
+  message Certificate {
+    // Public part of the registry certificate.
+    string certificate_data = 1;
+  }
+}
+
+message CreateRegistryMetadata {
+  // ID of the registry that is being created.
+  string registry_id = 1;
+}
+
+message UpdateRegistryRequest {
+  // ID of the registry to update.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which fields of the registry are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the registry. The name must be unique within the folder.
+  string name = 3 [
+    (length) = "<=50",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Description of the registry.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  //
+  // Existing set of `labels` is completely replaced by the provided set.
+  map<string, string> labels = 5 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // Options for logging registry events
+  LogOptions log_options = 6;
+}
+
+message UpdateRegistryMetadata {
+  // ID of the registry that is being updated.
+  string registry_id = 1;
+}
+
+message DeleteRegistryRequest {
+  // ID of the registry to delete.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteRegistryMetadata {
+  // ID of the registry that is being deleted.
+  string registry_id = 1;
+}
+
+message ListRegistryCertificatesRequest {
+  // ID of the registry to list certificates for.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListRegistryCertificatesResponse {
+  // List of certificates for the specified registry.
+  repeated RegistryCertificate certificates = 1;
+}
+
+message AddRegistryCertificateRequest {
+  reserved 2;
+  // ID of the registry for which the certificate is being added.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Public part of the certificate that is being added.
+  string certificate_data = 3;
+}
+
+message AddRegistryCertificateMetadata {
+  // ID of the registry certificate that is being added.
+  string registry_id = 1;
+
+  // Fingerprint of the certificate that is being added.
+  string fingerprint = 2;
+}
+
+message DeleteRegistryCertificateRequest {
+  // ID of the registry to delete a certificate for.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Fingerprint of the certificate that is being deleted.
+  string fingerprint = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteRegistryCertificateMetadata {
+  // ID of a registry for which the certificate is being delete.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Fingerprint of the certificate to deleted.
+  string fingerprint = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListRegistryPasswordsRequest {
+  // ID of the registry to list passwords in.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListRegistryPasswordsResponse {
+  // List of passwords for the specified registry.
+  repeated RegistryPassword passwords = 1;
+}
+
+message AddRegistryPasswordRequest {
+  // ID of the registry to add a password for.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Passwords for the registry.
+  //
+  // The password must contain at least three character categories among the following: upper case latin, lower case latin, numbers and special symbols.
+  string password = 2 [(length) = ">=14"];
+}
+
+message AddRegistryPasswordMetadata {
+  // ID of the registry for which the password is being added.
+  string registry_id = 1;
+
+  // ID of a password that is being added.
+  string password_id = 2;
+}
+
+message DeleteRegistryPasswordRequest {
+  // ID of the registry to delete a password for.
+  //
+  // To get a registry ID make a [DeviceService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the password to delete.
+  //
+  // To get a password ID make a [RegistryService.ListPasswords] request.
+  string password_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteRegistryPasswordMetadata {
+  // ID of a registry for which the password is being delete.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the password to delete.
+  //
+  // To get a password ID make a [RegistryService.ListPasswords] request.
+  string password_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListDeviceTopicAliasesRequest {
+  // ID of the registry to list aliases for device topic.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a [ListDeviceTopicAliasesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListDeviceTopicAliasesResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListDeviceTopicAliasesResponse {
+  // List of device aliases for the specified registry.
+  repeated DeviceAlias aliases = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListDeviceTopicAliasesRequest.page_size], use `next_page_token` as the value
+  // for the [ListDeviceTopicAliasesRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListRegistryOperationsRequest {
+  // ID of the registry to list operations for.
+  string registry_id = 1 [(required) = true];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a [ListRegistryOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListRegistryOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // Currently you can use filtering only on [Registry.name] field.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListRegistryOperationsResponse {
+  // List of operations for the specified registry.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListRegistryOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListRegistryOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message AddDataStreamExportRequest {
+  reserved 3;
+  // Name of the YDS export. The name must be unique within the folder.
+  string name = 1 [
+    (length) = "<=50",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // ID of the registry to add a YDS export for.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string registry_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // MQTT topic whose messages export to YDS.
+  string mqtt_topic_filter = 4 [(length) = "<=1024"];
+
+  // YDS database.
+  string database = 5 [
+    (required) = true,
+    (length) = "<=512"
+  ];
+
+  // YDS stream name.
+  string stream = 6 [
+    (required) = true,
+    (length) = "<=512"
+  ];
+
+  // ID of the service account which has permission to write to data stream.
+  string service_account_id = 7 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message AddDataStreamExportMetadata {
+  // ID of the registry for which the YDS export was added.
+  string registry_id = 1;
+
+  // ID of the added YDS export.
+  string data_stream_export_id = 2;
+}
+
+message DeleteDataStreamExportRequest {
+  // ID of a registry for which the YDS export is being deleted.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the YDS export to delete.
+  string data_stream_export_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteDataStreamExportMetadata {
+  // ID of a registry for which the YDS export was deleted.
+  string registry_id = 1 [(required) = true];
+
+  // ID of the deleted YDS export.
+  string data_stream_export_id = 2 [(required) = true];
+}
+
+message ListDataStreamExportsRequest {
+  // ID of the registry to list YDS exports in.
+  //
+  // To get a registry ID make a [RegistryService.List] request.
+  string registry_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListDataStreamExportsResponse {
+  // List of YDS exports for the specified registry.
+  repeated DataStreamExport data_stream_exports = 1;
+}
+
+message DisableRegistryRequest {
+  // ID of the registry to disable.
+  string registry_id = 1 [(required) = true];
+}
+
+message DisableRegistryMetadata {
+  // ID of the registry that was disabled.
+  string registry_id = 1 [(required) = true];
+}
+
+message EnableRegistryRequest {
+  // ID of the registry to enable.
+  string registry_id = 1 [(required) = true];
+}
+
+message EnableRegistryMetadata {
+  // ID of the registry that was enabled.
+  string registry_id = 1 [(required) = true];
+}

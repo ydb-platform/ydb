@@ -1,0 +1,113 @@
+#!/bin/sh
+
+. "$TESTSUITE_LIB_UTILS"
+
+if [ "x$MYSQL_PORT" = "x" ]; then
+    die "MYSQL_PORT must be set"
+fi
+if [ "x$MYSQL_TMPDIR" = "x" ]; then
+    die "MYSQL_TMPDIR must be set"
+fi
+
+# Use ramdisk for data if available
+RAMDISK=/mnt/ramdisk/$USER
+if mkdir -p $RAMDISK 2> /dev/null; then
+    MYSQL_BASEDIR=$RAMDISK/_mysql${WORKER_SUFFIX_PATH}
+else
+    MYSQL_BASEDIR=$MYSQL_TMPDIR
+fi
+MYSQL_DATADIR=$MYSQL_BASEDIR/data
+MYSQL_PIDFILE=$MYSQL_BASEDIR/mysql.pid
+MYSQL_LOGFILE=$MYSQL_BASEDIR/mysql.log
+
+MYSQLD=$(which mysqld 2>/dev/null)
+MYSQLADMIN=$(which mysqladmin 2>/dev/null)
+
+if [ "x$MYSQLD" = "x" ]; then
+    die "No mysqld binary found, please install mysql (or mariadb):
+
+$ sudo apt-get install mysql-server-core-5.7 mysql-client
+"
+fi
+
+DBTYPE="mysql"
+if $MYSQLD --version 2>/dev/null | grep -iq mariadb; then
+    DBTYPE="mariadb"
+fi
+
+mkdir -p $MYSQL_BASEDIR
+
+run_mysqld() {
+    $MYSQLD --datadir="$MYSQL_DATADIR"                  \
+            --pid-file="$MYSQL_PIDFILE"                 \
+            --log-error="$MYSQL_LOGFILE"                \
+            --socket="$MYSQL_BASEDIR/mysql.sock"        \
+            --secure-file-priv="$MYSQL_BASEDIR"         \
+            --port=$MYSQL_PORT                          \
+            --default-storage-engine=INNODB             \
+            --character-set-server=utf8mb4              \
+            "$@"
+}
+
+run_mysqladmin() {
+    $MYSQLADMIN \
+            --socket="$MYSQL_BASEDIR/mysql.sock"        \
+            --secure-file-priv="$MYSQL_BASEDIR"         \
+            --port=$MYSQL_PORT                          \
+            --character-set-server=utf8mb4              \
+            "$@"
+}
+
+mysql_die() {
+    dump_log_stderr "$MYSQL_LOGFILE"
+    die "$@"
+}
+
+initialize_db() {
+    if [ "$DBTYPE" = "mysql" ]; then
+        run_mysqld --initialize-insecure || mysql_die "mysqld initialization failed:
+
+if you see permissions denied error for data directory that may be
+caused by AppArmoor rules. Try this:
+
+$ sudo apt-get install apparmor-utils
+$ sudo aa-disable /usr/sbin/mysqld
+"
+    else
+        mysql_install_db --auth-root-authentication-method=normal --datadir="$MYSQL_DATADIR" || mysql_die "mysql_install_db failed"
+    fi
+}
+
+start_db() {
+    if [ "$DBTYPE" = "mysql" ]; then
+        run_mysqld --daemonize || mysql_die "mysqld_safe start failed"
+    else
+        run_mysqld -- &
+    fi
+
+    for i in $(seq 1 60); do
+        if run_mysqladmin ping; then
+            break
+        fi
+
+        echo "Waiting for mysqld to open port..."
+        sleep 1
+    done
+}
+
+start() {
+    $MYSQLD --version
+    echo "Testsuite Mysql directory: $MYSQL_BASEDIR"
+
+    rm -rf "$MYSQL_DATADIR"
+
+    initialize_db
+    start_db
+}
+
+stop() {
+    stop_daemon $MYSQLD $MYSQL_PIDFILE
+    rm -rf "$MYSQL_DATADIR"
+}
+
+script_main "$@"

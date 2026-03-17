@@ -1,0 +1,202 @@
+[
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "CBBSBA22XXX",
+    "bank_code": "000",
+    "name": "Centralna banka BH",
+    "short_name": "Centralna banka BH"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "PBSCBA22XXX",
+    "bank_code": "101",
+    "name": "PRIVREDNA BANKA SARAJEVO DD",
+    "short_name": "PRIVREDNA BANKA SARAJEVO DD"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "UBKSBA22XXX",
+    "bank_code": "102",
+    "name": "Union banka dd Sarajevo",
+    "short_name": "Union banka dd Sarajevo"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "TBTUBA22XXX",
+    "bank_code": "132",
+    "name": "NLB BANKA D",
+    "short_name": "NLB BANKA D"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "IKBZBA2XXXX",
+    "bank_code": "134",
+    "name": "ASA BANKA D",
+    "short_name": "ASA BANKA D"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "FMBABA22XXX",
+    "bank_code": "137",
+    "name": "MOJA BANKA dd Sarajevo",
+    "short_name": "MOJA BANKA dd Sarajevo"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "SABRBA22XXX",
+    "bank_code": "140",
+    "name": "ASA BANKA NA\u0160A I SNA\u017dNA D",
+    "short_name": "ASA BANKA NA\u0160A I SNA\u017dNA D"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "BBIBBA22XXX",
+    "bank_code": "141",
+    "name": "Bosna Bank International dd Sarajevo",
+    "short_name": "Bosna Bank International dd Sarajevo"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "UPBKBA22XXX",
+    "bank_code": "154",
+    "name": "Intesa Sanpaolo banka dd Sarajevo",
+    "short_name": "Intesa Sanpaolo banka dd Sarajevo"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "VAKUBA22XXX",
+    "bank_code": "160",
+    "name": "Vakufska banka dd Sarajevo",
+    "short_name": "Vakufska banka dd Sarajevo"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "RZBABA2SXXX",
+    "bank_code": "161",
+    "name": "RAIFFEISEN BANK D",
+    "short_name": "RAIFFEISEN BANK D"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "TZBBBA22XXX",
+    "bank_code": "186",
+    "name": "ZIRAAT BANK BH dd",
+    "short_name": "ZIRAAT BANK BH dd"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "MEBBBA22XXX",
+    "bank_code": "194",
+    "name": "Procredit bank dd Sarajevo",
+    "short_name": "Procredit bank dd Sarajevo"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "IBBHBA22XXX",
+    "bank_code": "195",
+    "name": "Razvojna banka Federacije BIH",
+    "short_name": "Razvojna banka Federacije BIH"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "KINBBA22XXX",
+    "bank_code": "198",
+    "name": "KOMERCIJALNO",
+    "short_name": "KOMERCIJALNO"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "ABSBBA22XXX",
+    "bank_code": "199",
+    "name": "Sparkasse Bank d",
+    "short_name": "Sparkasse Bank d"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "HAABBA22XXX",
+    "bank_code": "306",
+    "name": "ADDIKO BANK DD",
+    "short_name": "ADDIKO BANK DD"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "UNCRBA22XXX",
+    "bank_code": "338",
+    "name": "UniCredit bank dd Mostar",
+    "short_name": "UniCredit bank dd Mostar"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "BLBABA22XXX",
+    "bank_code": "551",
+    "name": "UniCredit Bank ad Banja Luka",
+    "short_name": "UniCredit Bank ad Banja Luka"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "HAABBA2BXXX",
+    "bank_code": "552",
+    "name": "Hypo Alpe",
+    "short_name": "Hypo Alpe"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "PAVLBA22XXX",
+    "bank_code": "554",
+    "name": "NA\u0160A BANKA A",
+    "short_name": "NA\u0160A BANKA A"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "RAZBBA22XXX",
+    "bank_code": "562",
+    "name": "NLB BANKA A",
+    "short_name": "NLB BANKA A"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "SABRBA2BXXX",
+    "bank_code": "567",
+    "name": "Sberbank a",
+    "short_name": "Sberbank a"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "BALVBA22XXX",
+    "bank_code": "568",
+    "name": "Banka Srpske ad Banja Luka",
+    "short_name": "Banka Srpske ad Banja Luka"
+  },
+  {
+    "country_code": "BA",
+    "primary": true,
+    "bic": "MFBLBA22XXX",
+    "bank_code": "572",
+    "name": "MF banka ad Banja Luka",
+    "short_name": "MF banka ad Banja Luka"
+  }
+]

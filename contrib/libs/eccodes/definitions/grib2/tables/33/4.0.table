@@ -1,0 +1,124 @@
+# Code table 4.0 - Product definition template number
+0 0 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time
+1 1 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time
+2 2 Derived forecasts based on all ensemble members at a horizontal level or in a horizontal layer at a point in time
+3 3 Derived forecasts based on a cluster of ensemble members over a rectangular area at a horizontal level or in a horizontal layer at a point in time
+4 4 Derived forecasts based on a cluster of ensemble members over a circular area at a horizontal level or in a horizontal layer at a point in time
+5 5 Probability forecasts at a horizontal level or in a horizontal layer at a point in time
+6 6 Percentile forecasts at a horizontal level or in a horizontal layer at a point in time
+7 7 Analysis or forecast error at a horizontal level or in a horizontal layer at a point in time
+8 8 Average, accumulation, extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+9 9 Probability forecasts at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+10 10 Percentile forecasts at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+11 11 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval
+12 12 Derived forecasts based on all ensemble members at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval
+13 13 Derived forecasts based on a cluster of ensemble members over a rectangular area, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval
+14 14 Derived forecasts based on a cluster of ensemble members over a circular area, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval
+15 15 Average, accumulation, extreme values or other statistically processed values over a spatial area at a horizontal level or in a horizontal layer at a point in time
+# 16-19 Reserved
+20 20 Radar product
+# 21-29 Reserved
+30 30 Satellite product (deprecated)
+31 31 Satellite product
+32 32 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for simulated (synthetic) satellite data
+33 33 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for simulated (synthetic) satellite data
+34 34 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval for simulated (synthetic) satellite data
+35 35 Satellite product with or without associated quality values
+# 36-39 Reserved
+40 40 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for atmospheric chemical constituents
+41 41 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for atmospheric chemical constituents
+42 42 Average, accumulation, and/or extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for atmospheric chemical constituents
+43 43 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for atmospheric chemical constituents
+44 44 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for aerosol
+45 45 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for aerosol
+46 46 Average, accumulation, and/or extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for aerosol
+47 47 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for aerosol
+48 48 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for optical properties of aerosol
+49 49 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for optical properties of aerosol
+# 50 Reserved
+51 51 Categorical forecasts at a horizontal level or in a horizontal layer at a point in time
+# 52 Reserved
+53 53 Partitioned parameters at a horizontal level or in a horizontal layer at a point in time
+54 54 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for partitioned parameters
+55 55 Spatio-temporal changing tiles at a horizontal level or horizontal layer at a point in time
+56 56 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for spatio-temporal changing tile parameters (deprecated)
+57 57 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for atmospheric chemical constituents based on a distribution function
+58 58 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for atmospheric chemical constituents based on a distribution function
+59 59 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for spatio-temporal changing tile parameters (corrected version of template 4.56)
+60 60 Individual ensemble reforecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time
+61 61 Individual ensemble reforecast, control and perturbed, at a horizontal level or in a horizontal layer, in a continuous or non-continuous time interval
+62 62 Average, accumulation, and/or extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for spatio-temporal changing tiles at a horizontal level or horizontal layer at a point in time
+63 63 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for spatio-temporal changing tiles
+# 64-66 Reserved
+67 67 Average, accumulation, and/or extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for atmospheric chemical constituents based on a distribution function
+68 68 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for atmospheric chemical constituents based on a distribution function
+# 69 Reserved
+70 70 Post-processing analysis or forecast at a horizontal level or in a horizontal layer at a point in time
+71 71 Post-processing individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time
+72 72 Post-processing average, accumulation, extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+73 73 Post-processing individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer, in a continuous or non-continuous time interval
+# 74-75 Reserved
+76 76 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for atmospheric chemical constituents with source or sink
+77 77 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for atmospheric chemical constituents with source or sink
+78 78 Average, accumulation, and/or extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for atmospheric chemical constituents with source or sink
+79 79 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for atmospheric chemical constituents with source or sink
+80 80 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for optical properties of aerosol with source or sink
+81 81 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for optical properties of aerosol with source or sink
+82 82 Average, accumulation, and/or extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for aerosol with source or sink
+83 83 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for aerosol with source or sink
+84 84 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for aerosol with source or sink
+85 85 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for aerosol
+86 86 Quantile forecasts at a horizontal level or in a horizontal layer at a point in time
+87 87 Quantile forecasts at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+88 88 Analysis or forecast at a horizontal level or in a horizontal layer at a specified local time
+89 89 Post-processed quantile forecasts at a horizontal level or in a horizontal layer at a point in time
+90 90 Post-processed quantile forecasts at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+91 91 Categorical forecasts at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+92 92 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a specified local time
+93 93 Post-processing analysis or forecast at a horizontal level or in a horizontal layer at a specified local time
+94 94 Post-processing individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a specified local time
+95 95 Average, accumulation, extreme values or other statistically processed value at a horizontal level or in a horizontal layer at a specified local time
+96 96 Average, accumulation, extreme values or other statistically processed values of an individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a specified local time
+97 97 Average, accumulation, extreme values or other statistically processed values of post-processing analysis or forecast at a horizontal level or in a horizontal layer at a specified local time
+98 98 Average, accumulation, extreme values or other statistically processed values of a post-processing individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a specified local time
+99 99 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for wave 2D spectra with explicit list of frequencies and directions
+100 100 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for wave 2D spectra with explicit list of frequencies and directions
+101 101 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for wave 2D spectra with frequencies and directions defined by formulae
+102 102 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for wave 2D spectra with frequencies and directions defined by formulae
+103 103 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for waves selected by period range
+104 104 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for waves selected by period range
+105 105 Anomalies, significance and other derived products from an analysis or forecast in relation to a reference period at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+106 106 Anomalies, significance and other derived products from an individual ensemble forecast, control and perturbed in relation to a reference period at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+107 107 Anomalies, significance and other derived products from derived forecasts based on all ensemble members in relation to a reference period at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+108 108 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for generic optical products
+109 109 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for generic optical products
+110 110 Average, accumulation, extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for generic optical products
+111 111 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval for generic optical products
+112 112 Anomalies, significance and other derived products as probability forecasts in relation to a reference period at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+113 113 Generalised tiles at a horizontal level or horizontal layer at a point in time
+114 114 Average, accumulation, and/or extreme values or other statistically processed values on generalised tiles at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+115 115 Individual ensemble forecast, control and perturbed on generalised tiles at a horizontal level or in a horizontal layer at a point in time
+116 116 Individual ensemble forecast, control and perturbed on generalised tiles at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+117 117 Individual large ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time
+118 118 Individual large ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval
+119 119 Probability forecasts from large ensembles at a horizontal level or in a horizontal layer at a point in time
+120 120 Probability forecasts from large ensembles at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+121 121 Probability forecasts from large ensembles with spatiotemporal processing based on focal (moving window) statistics at a horizontal level or in a horizontal layer at a point in time
+122 122 Probability forecasts from large ensembles with spatiotemporal processing based on focal (moving window) statistics at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+123 123 Probability forecasts from large ensembles with spatiotemporal processing based on focal (moving window) statistics in relation to a reference period at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+124 124 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for radionuclides
+125 125 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for radionuclides
+126 126 Average, accumulation, and/or extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for radionuclides
+127 127 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for radionuclides
+# 128-253 Reserved
+254 254 CCITT IA5 character string
+# 255-999 Reserved
+1000 1000 Cross-section of analysis and forecast at a point in time
+1001 1001 Cross-section of averaged or otherwise statistically processed analysis or forecast over a range of time
+1002 1002 Cross-section of analysis and forecast, averaged or otherwise statistically processed over latitude or longitude
+# 1003-1099 Reserved
+1100 1100 Hovmoller-type grid with no averaging or other statistical processing
+1101 1101 Hovmoller-type grid with averaging or other statistical processing
+# 1102-32767 Reserved
+# 32768-65534 Reserved for local use
+65535 65535 Missing

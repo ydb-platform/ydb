@@ -1,0 +1,17 @@
+{% extends "admin/object_history.html" %}
+{% load i18n %}
+
+
+{% block content %}
+  <div id="content-main">
+    {% if not revert_disabled %}<p>
+      {% blocktrans %}Choose a date from the list below to revert to a previous version of this object.{% endblocktrans %}</p>{% endif %}
+    <div class="module">
+      {% if page_obj.object_list %}
+        {% include object_history_list_template %}
+      {% else %}
+        <p>{% trans "This object doesn't have a change history." %}</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

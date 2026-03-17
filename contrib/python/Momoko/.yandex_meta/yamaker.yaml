@@ -1,0 +1,2 @@
+requirements:
+  - tornado: contrib/python/tornado/tornado-4

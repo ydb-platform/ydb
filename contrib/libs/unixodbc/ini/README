@@ -1,0 +1,29 @@
+***************************************************************
+* This code is LGPL. You CAN make commercial solutions using  *
+* LGPL software.                                              *
+*                                                             *
+* Peter Harvey 21.FEB.99 pharvey@codebydesign.com             *
+***************************************************************
+
++-------------------------------------------------------------+
+| unixODBC                                                    |
+| INI lib (libini.so)                                         |
++-------------------------------------------------------------+
+
+This library provides some usefull functions
+for processing INI files (such as odbc.ini).
+It is heavily used in unixODBC by the ODBCConfig
+and unixODBC Driver Config libs.
+
+
+Peter Harvey
+pharvey@codebydesign.com
+22.MAR.99
+
++-------------------------------------------------------------+
+| Please visit;                                               |
+| www.unixodbc.org                                            |
++-------------------------------------------------------------+
+
+
+

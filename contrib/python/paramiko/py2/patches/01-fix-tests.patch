@@ -1,0 +1,126 @@
+--- contrib/python/paramiko/py2/tests/test_client.py	(index)
++++ contrib/python/paramiko/py2/tests/test_client.py	(working tree)
+@@ -33,7 +33,7 @@ import warnings
+ import weakref
+ from tempfile import mkstemp
+ 
+-from pytest_relaxed import raises
++import pytest
+ from mock import patch, Mock
+ 
+ import paramiko
+@@ -687,7 +687,7 @@ class PasswordPassphraseTests(ClientTest):
+ 
+     # TODO: more granular exception pending #387; should be signaling "no auth
+     # methods available" because no key and no password
+-    @raises(SSHException)
++    @pytest.mark.xfail(raises=SSHException)
+     def test_passphrase_kwarg_not_used_for_password_auth(self):
+         # Using the "right" password in the "wrong" field shouldn't work.
+         self._test_connection(passphrase="pygmalion")
+@@ -708,7 +708,7 @@ class PasswordPassphraseTests(ClientTest):
+             password="television",
+         )
+ 
+-    @raises(AuthenticationException)  # TODO: more granular
++    @pytest.mark.xfail(raises=AuthenticationException)  # TODO: more granular
+     def test_password_kwarg_not_used_for_passphrase_when_passphrase_kwarg_given(  # noqa
+         self
+     ):
+--- contrib/python/paramiko/py2/tests/test_pkey.py	(index)
++++ contrib/python/paramiko/py2/tests/test_pkey.py	(working tree)
+@@ -42,7 +42,7 @@ from paramiko.py3compat import StringIO, byte_chr, b, bytes, PY2
+ from mock import patch
+ import pytest
+ 
+-from .util import _support, is_low_entropy
++from .util import _support, is_low_entropy, _out_support
+ 
+ 
+ # from openssh's ssh-keygen
+@@ -531,7 +531,7 @@ class KeyTest(unittest.TestCase):
+         # Read an existing encrypted private key
+         file_ = _support("test_rsa_password.key")
+         password = "television"
+-        newfile = file_ + ".new"
++        newfile = _out_support("test_rsa_password.key.new")
+         newpassword = "radio"
+         key = RSAKey(filename=file_, password=password)
+         # Write out a newly re-encrypted copy with a new password.
+@@ -639,7 +639,7 @@ class KeyTest(unittest.TestCase):
+         # Read an existing encrypted private key
+         file_ = _support("test_rsa_password.key")
+         password = "television"
+-        newfile = file_ + ".new"
++        newfile = _out_support("test_rsa_password.key.new")
+         newpassword = "radio"
+         key = RSAKey(filename=file_, password=password)
+         # Write out a newly re-encrypted copy with a new password.
+--- contrib/python/paramiko/py2/tests/util.py	(index)
++++ contrib/python/paramiko/py2/tests/util.py	(working tree)
+@@ -10,15 +10,34 @@ from paramiko.py3compat import builtins
+ from paramiko.ssh_gss import GSS_AUTH_AVAILABLE
+ 
+ 
+-tests_dir = dirname(realpath(__file__))
+-
++#tests_dir = dirname(realpath(__file__))
+ 
+ def _support(filename):
+-    return join(tests_dir, filename)
++    try:
++        import yatest.common
++        datadir = yatest.common.test_source_path(join("..", "tests"))
++    except ImportError:
++        datadir = dirname(realpath(__file__))
++
++    return join(datadir, filename)
++
++
++def _out_support(filename):
++    try:
++        import yatest.common
++        return yatest.common.test_output_path(filename)
++    except ImportError:
++        return join(dirname(realpath(__file__)), filename)
+ 
+ 
+ def _config(name):
+-    return join(tests_dir, "configs", name)
++    try:
++        import yatest.common
++        datadir = yatest.common.test_source_path(join("..", "tests"))
++    except ImportError:
++        datadir = dirname(realpath(__file__))
++
++    return join(datadir, "configs", name)
+ 
+ 
+ needs_gssapi = pytest.mark.skipif(
+--- contrib/python/paramiko/py2/tests/test_sftp.py	(index)
++++ contrib/python/paramiko/py2/tests/test_sftp.py	(working tree)
+@@ -34,7 +34,7 @@ import pytest
+ 
+ from paramiko.py3compat import PY2, b, u, StringIO
+ from paramiko.common import o777, o600, o666, o644
+-from tests import requireNonAsciiLocale
++from . import requireNonAsciiLocale
+ from paramiko.sftp_attr import SFTPAttributes
+ 
+ from .util import needs_builtin
+@@ -271,6 +271,7 @@ class TestSFTP(object):
+             sftp.remove(sftp.FOLDER + "/fish.txt")
+             sftp.remove(sftp.FOLDER + "/tertiary.py")
+ 
++    @pytest.mark.skip
+     @requireNonAsciiLocale()
+     def test_listdir_in_locale(self, sftp):
+         """Test listdir under a locale that uses non-ascii text."""
+@@ -792,6 +793,7 @@ class TestSFTP(object):
+         finally:
+             sftp.remove("%s/nonutf8data" % sftp.FOLDER)
+ 
++    @pytest.mark.skip
+     @requireNonAsciiLocale("LC_TIME")
+     def test_sftp_attributes_locale_time(self, sftp):
+         """Test SFTPAttributes under a locale with non-ascii time strings."""

@@ -1,0 +1,235 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0721a449f1fe86679026be65754c97fd
+BELONGS ya.make
+    License text:
+         * Copyright 2002 Niels Provos <provos@citi.umich.edu>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/uv/tree.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 264feb97ee7d125668f163e77231dce4
+BELONGS ya.make
+    License text:
+        copyright the Internet Systems Consortium, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE-extra [35:36]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29f4b114792d2c494707b305f2b8b853
+BELONGS ya.make
+    License text:
+        /* Copyright libuv project contributors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/strscpy.c [1:1]
+        src/strscpy.h [1:1]
+        src/strtok.c [1:1]
+        src/strtok.h [1:1]
+        src/thread-common.c [1:1]
+        src/unix/bsd-ifaddrs.c [1:1]
+        src/unix/darwin-stub.h [1:1]
+        src/unix/procfs-exepath.c [1:1]
+        src/uv-data-getter-setters.c [1:1]
+        src/win/detect-wakeup.c [1:1]
+        src/win/fs-fd-hash-inl.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d3d058e3ffdc3d85a2c64c172360b45
+BELONGS ya.make
+    License text:
+        Copyright Joyent, Inc. and other Node contributors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE-extra [6:6]
+        include/uv.h [1:1]
+        include/uv/darwin.h [1:1]
+        include/uv/errno.h [1:1]
+        include/uv/linux.h [1:1]
+        include/uv/threadpool.h [1:1]
+        include/uv/unix.h [1:1]
+        include/uv/version.h [1:1]
+        include/uv/win.h [1:1]
+        src/fs-poll.c [1:1]
+        src/threadpool.c [1:1]
+        src/timer.c [1:1]
+        src/unix/async.c [1:1]
+        src/unix/core.c [1:1]
+        src/unix/darwin-proctitle.c [1:1]
+        src/unix/darwin.c [1:1]
+        src/unix/dl.c [1:1]
+        src/unix/fs.c [1:1]
+        src/unix/fsevents.c [1:1]
+        src/unix/getaddrinfo.c [1:1]
+        src/unix/getnameinfo.c [1:1]
+        src/unix/internal.h [1:1]
+        src/unix/kqueue.c [1:1]
+        src/unix/linux.c [1:1]
+        src/unix/loop-watcher.c [1:1]
+        src/unix/loop.c [1:1]
+        src/unix/pipe.c [1:1]
+        src/unix/poll.c [1:1]
+        src/unix/process.c [1:1]
+        src/unix/proctitle.c [1:1]
+        src/unix/signal.c [1:1]
+        src/unix/stream.c [1:1]
+        src/unix/tcp.c [1:1]
+        src/unix/thread.c [1:1]
+        src/unix/tty.c [1:1]
+        src/unix/udp.c [1:1]
+        src/uv-common.c [1:1]
+        src/uv-common.h [1:1]
+        src/version.c [1:1]
+        src/win/async.c [1:1]
+        src/win/core.c [1:1]
+        src/win/dl.c [1:1]
+        src/win/error.c [1:1]
+        src/win/fs-event.c [1:1]
+        src/win/fs.c [1:1]
+        src/win/getaddrinfo.c [1:1]
+        src/win/getnameinfo.c [1:1]
+        src/win/handle-inl.h [1:1]
+        src/win/handle.c [1:1]
+        src/win/internal.h [1:1]
+        src/win/loop-watcher.c [1:1]
+        src/win/pipe.c [1:1]
+        src/win/poll.c [1:1]
+        src/win/process-stdio.c [1:1]
+        src/win/process.c [1:1]
+        src/win/req-inl.h [1:1]
+        src/win/signal.c [1:1]
+        src/win/stream-inl.h [1:1]
+        src/win/stream.c [1:1]
+        src/win/tcp.c [1:1]
+        src/win/thread.c [1:1]
+        src/win/tty.c [1:1]
+        src/win/udp.c [1:1]
+        src/win/util.c [1:1]
+        src/win/winapi.c [1:1]
+        src/win/winapi.h [1:1]
+        src/win/winsock.c [1:1]
+        src/win/winsock.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a8020c5cf38b2f9c6bea6ca411f7b3f
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015-present libuv project contributors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77ce03ea9bc52a8d32a18be3eacda9d9
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2013, Ben Noordhuis <info@bnoordhuis.nl>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/heap-inl.h [1:1]
+        src/queue.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8b665a861662af4e0ef64cf95ff1be4e
+BELONGS ya.make
+    License text:
+        \#define IS_SLASH(c) ((c) == L'\\' || (c) == L'/')
+        \#define IS_LETTER(c) (((c) >= L'a' && (c) <= L'z') || \
+          ((c) >= L'A' && (c) <= L'Z'))
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/win/fs.c [145:147]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c41965341485a2df4783b9c00729acf
+BELONGS ya.make
+FILE_IGNORE include/uv/tree.h found in files: LICENSE-extra at line 32
+    License text:
+          - tree.h (from FreeBSD), copyright Niels Provos. Two clause BSD license.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE-extra [32:32]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b0ba0e82ac2b1e74adc884bf65ffb51a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
+         * Copyright (c) 1996-1999 by Internet Software Consortium.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/inet.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc29529640c21b4e2edb4de301da717e
+BELONGS ya.make
+    License text:
+        /* Copyright the libuv project contributors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/win/snprintf.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c77c02a30f970451b71b72c5c8d97a70
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
+         * Copyright (c) 1996-1999 by Internet Software Consortium.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/inet.c [2:3]

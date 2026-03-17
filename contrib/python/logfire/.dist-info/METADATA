@@ -1,0 +1,218 @@
+Metadata-Version: 2.4
+Name: logfire
+Version: 4.25.0
+Summary: The best Python observability tool! 🪵🔥
+Project-URL: Homepage, https://logfire.pydantic.dev/
+Project-URL: Source, https://github.com/pydantic/logfire
+Project-URL: Documentation, https://logfire.pydantic.dev/docs/
+Project-URL: Changelog, https://logfire.pydantic.dev/docs/release-notes/
+Author-email: Pydantic Team <engineering@pydantic.dev>, Samuel Colvin <samuel@pydantic.dev>, Hasan Ramezani <hasan@pydantic.dev>, Adrian Garcia Badaracco <adrian@pydantic.dev>, David Montague <david@pydantic.dev>, Marcelo Trylesinski <marcelo@pydantic.dev>, David Hewitt <david.hewitt@pydantic.dev>, Alex Hall <alex@pydantic.dev>, Jiri Kuncar <jiri@pydantic.dev>
+License-Expression: MIT
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Environment :: MacOS X
+Classifier: Framework :: OpenTelemetry
+Classifier: Framework :: OpenTelemetry :: Distros
+Classifier: Framework :: OpenTelemetry :: Exporters
+Classifier: Framework :: OpenTelemetry :: Instrumentations
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: System Administrators
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: Unix
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Internet
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.9
+Requires-Dist: executing>=2.0.1
+Requires-Dist: opentelemetry-exporter-otlp-proto-http<1.40.0,>=1.39.0
+Requires-Dist: opentelemetry-instrumentation>=0.41b0
+Requires-Dist: opentelemetry-sdk<1.40.0,>=1.39.0
+Requires-Dist: protobuf>=4.23.4
+Requires-Dist: rich>=13.4.2
+Requires-Dist: tomli>=2.0.1; python_version < '3.11'
+Requires-Dist: typing-extensions>=4.1.0
+Provides-Extra: aiohttp
+Requires-Dist: opentelemetry-instrumentation-aiohttp-client>=0.42b0; extra == 'aiohttp'
+Provides-Extra: aiohttp-client
+Requires-Dist: opentelemetry-instrumentation-aiohttp-client>=0.42b0; extra == 'aiohttp-client'
+Provides-Extra: aiohttp-server
+Requires-Dist: opentelemetry-instrumentation-aiohttp-server>=0.55b0; extra == 'aiohttp-server'
+Provides-Extra: asgi
+Requires-Dist: opentelemetry-instrumentation-asgi>=0.42b0; extra == 'asgi'
+Provides-Extra: asyncpg
+Requires-Dist: opentelemetry-instrumentation-asyncpg>=0.42b0; extra == 'asyncpg'
+Provides-Extra: aws-lambda
+Requires-Dist: opentelemetry-instrumentation-aws-lambda>=0.42b0; extra == 'aws-lambda'
+Provides-Extra: celery
+Requires-Dist: opentelemetry-instrumentation-celery>=0.42b0; extra == 'celery'
+Provides-Extra: datasets
+Requires-Dist: httpx>=0.27.2; extra == 'datasets'
+Requires-Dist: pydantic-evals>=1.0.0; (python_version >= '3.10') and extra == 'datasets'
+Requires-Dist: pydantic>=2; extra == 'datasets'
+Provides-Extra: django
+Requires-Dist: opentelemetry-instrumentation-asgi>=0.42b0; extra == 'django'
+Requires-Dist: opentelemetry-instrumentation-django>=0.42b0; extra == 'django'
+Provides-Extra: dspy
+Requires-Dist: openinference-instrumentation-dspy>=0; extra == 'dspy'
+Provides-Extra: fastapi
+Requires-Dist: opentelemetry-instrumentation-fastapi>=0.42b0; extra == 'fastapi'
+Provides-Extra: flask
+Requires-Dist: opentelemetry-instrumentation-flask>=0.42b0; extra == 'flask'
+Provides-Extra: google-genai
+Requires-Dist: opentelemetry-instrumentation-google-genai>=0.4b0; extra == 'google-genai'
+Provides-Extra: httpx
+Requires-Dist: opentelemetry-instrumentation-httpx>=0.42b0; extra == 'httpx'
+Provides-Extra: litellm
+Requires-Dist: openinference-instrumentation-litellm>=0; extra == 'litellm'
+Provides-Extra: mysql
+Requires-Dist: opentelemetry-instrumentation-mysql>=0.42b0; extra == 'mysql'
+Provides-Extra: psycopg
+Requires-Dist: opentelemetry-instrumentation-psycopg>=0.42b0; extra == 'psycopg'
+Requires-Dist: packaging; extra == 'psycopg'
+Provides-Extra: psycopg2
+Requires-Dist: opentelemetry-instrumentation-psycopg2>=0.42b0; extra == 'psycopg2'
+Requires-Dist: packaging; extra == 'psycopg2'
+Provides-Extra: pymongo
+Requires-Dist: opentelemetry-instrumentation-pymongo>=0.42b0; extra == 'pymongo'
+Provides-Extra: redis
+Requires-Dist: opentelemetry-instrumentation-redis>=0.42b0; extra == 'redis'
+Provides-Extra: requests
+Requires-Dist: opentelemetry-instrumentation-requests>=0.42b0; extra == 'requests'
+Provides-Extra: sqlalchemy
+Requires-Dist: opentelemetry-instrumentation-sqlalchemy>=0.42b0; extra == 'sqlalchemy'
+Provides-Extra: sqlite3
+Requires-Dist: opentelemetry-instrumentation-sqlite3>=0.42b0; extra == 'sqlite3'
+Provides-Extra: starlette
+Requires-Dist: opentelemetry-instrumentation-starlette>=0.42b0; extra == 'starlette'
+Provides-Extra: system-metrics
+Requires-Dist: opentelemetry-instrumentation-system-metrics>=0.42b0; extra == 'system-metrics'
+Provides-Extra: variables
+Requires-Dist: pydantic>=2; extra == 'variables'
+Provides-Extra: wsgi
+Requires-Dist: opentelemetry-instrumentation-wsgi>=0.42b0; extra == 'wsgi'
+Description-Content-Type: text/markdown
+
+# Pydantic Logfire — Know more. Build faster.
+
+<p align="center">
+  <a href="https://github.com/pydantic/logfire/actions?query=event%3Apush+branch%3Amain+workflow%3ACI"><img src="https://github.com/pydantic/logfire/actions/workflows/main.yml/badge.svg?event=push" alt="CI" /></a>
+  <a href="https://codecov.io/gh/pydantic/logfire"><img src="https://codecov.io/gh/pydantic/logfire/graph/badge.svg?token=735CNGCGFD" alt="codecov" /></a>
+  <a href="https://pypi.python.org/pypi/logfire"><img src="https://img.shields.io/pypi/v/logfire.svg" alt="pypi" /></a>
+  <a href="https://github.com/pydantic/logfire/blob/main/LICENSE"><img src="https://img.shields.io/github/license/pydantic/logfire.svg" alt="license" /></a>
+  <a href="https://github.com/pydantic/logfire"><img src="https://img.shields.io/pypi/pyversions/logfire.svg" alt="versions" /></a>
+  <a href="https://logfire.pydantic.dev/docs/join-slack/"><img src="https://img.shields.io/badge/Slack-Join%20Slack-4A154B?logo=slack" alt="Join Slack" /></a>
+</p>
+
+From the team behind Pydantic Validation, **Pydantic Logfire** is an observability platform built on the same belief as our open source library — that the most powerful tools can be easy to use.
+
+What sets Logfire apart:
+
+- **Simple and Powerful:** Logfire's dashboard is simple relative to the power it provides, ensuring your entire engineering team will actually use it.
+- **Python-centric Insights:** From rich display of Python objects, to event-loop telemetry, to profiling Python code and database queries, Logfire gives you unparalleled visibility into your Python application's behavior.
+- **SQL:** Query your data using standard SQL — all the control and (for many) nothing new to learn. Using SQL also means you can query your data with existing BI tools and database querying libraries.
+- **OpenTelemetry:** Logfire is an opinionated wrapper around OpenTelemetry, allowing you to leverage existing tooling, infrastructure, and instrumentation for many common Python packages, and enabling support for virtually any language. We offer full support for all OpenTelemetry signals (traces, metrics and logs).
+- **Pydantic Integration:** Understand the data flowing through your Pydantic Validation models and get built-in analytics on validations.
+
+See the [documentation](https://logfire.pydantic.dev/docs/) for more information.
+
+**Feel free to report issues and ask any questions about Logfire in this repository!**
+
+This repo contains the Python SDK for `logfire` and documentation; the server application for recording and displaying data is closed source.
+
+## Using Logfire
+
+This is a very brief overview of how to use Logfire, the [documentation](https://logfire.pydantic.dev/docs/) has much more detail.
+
+### Install
+
+```bash
+pip install logfire
+```
+
+[_(learn more)_](https://logfire.pydantic.dev/docs/guides/first_steps/#install)
+
+## Authenticate
+
+```bash
+logfire auth
+```
+
+[_(learn more)_](https://logfire.pydantic.dev/docs/guides/first_steps/#authentication)
+
+### Manual tracing
+
+Here's a simple manual tracing (aka logging) example:
+
+```python skip-run="true" skip-reason="blocking"
+from datetime import date
+
+import logfire
+
+logfire.configure()
+logfire.info('Hello, {name}!', name='world')
+
+with logfire.span('Asking the user their {question}', question='age'):
+    user_input = input('How old are you [YYYY-mm-dd]? ')
+    dob = date.fromisoformat(user_input)
+    logfire.debug('{dob=} {age=!r}', dob=dob, age=date.today() - dob)
+```
+
+[_(learn more)_](https://logfire.pydantic.dev/docs/guides/onboarding-checklist/add-manual-tracing/)
+
+### Integration
+
+Or you can also avoid manual instrumentation and instead integrate with [lots of popular packages](https://logfire.pydantic.dev/docs/integrations/), here's an example of integrating with FastAPI:
+
+```py skip-run="true" skip-reason="global-instrumentation"
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+import logfire
+
+app = FastAPI()
+
+logfire.configure()
+logfire.instrument_fastapi(app)
+# next, instrument your database connector, http library etc. and add the logging handler
+
+
+class User(BaseModel):
+    name: str
+    country_code: str
+
+
+@app.post('/')
+async def add_user(user: User):
+    # we would store the user here
+    return {'message': f'{user.name} added'}
+```
+
+[_(learn more)_](https://logfire.pydantic.dev/docs/integrations/fastapi/)
+
+Logfire gives you a view into how your code is running like this:
+
+![Logfire screenshot](https://logfire.pydantic.dev/docs/images/index/logfire-screenshot-fastapi-200.png)
+
+## Contributing
+
+We'd love anyone interested to contribute to the Logfire SDK and documentation, see the [contributing guide](https://github.com/pydantic/logfire/blob/main/CONTRIBUTING.md).
+
+## Reporting a Security Vulnerability
+
+See our [security policy](https://github.com/pydantic/logfire/security).
+
+## Logfire Open-Source and Closed-Source Boundaries
+
+The Logfire SDKs (we also have them for [TypeScript](https://github.com/pydantic/logfire-js) and [Rust](https://github.com/pydantic/logfire-rust)) are open source, and you can use them to export data to [any OTel-compatible backend](https://logfire.pydantic.dev/docs/how-to-guides/alternative-backends/).
+
+The Logfire platform (the UI and backend) is closed source. You can self-host it by purchasing an [enterprise license](https://logfire.pydantic.dev/docs/enterprise/).

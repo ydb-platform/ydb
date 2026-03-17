@@ -1,0 +1,191 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.assistants.v1;
+
+import "yandex/cloud/ai/common/common.proto";
+import "yandex/cloud/ai/assistants/v1/assistant.proto";
+import "yandex/cloud/ai/assistants/v1/common.proto";
+import "yandex/cloud/validation.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/assistants/v1;assistants";
+option java_package = "yandex.cloud.api.ai.assistants.v1";
+
+// AssistantService provides operations for managing assistants.
+service AssistantService {
+  // Create a new assistant.
+  rpc Create(CreateAssistantRequest) returns (Assistant) {
+    option (google.api.http) = {post: "/assistants/v1/assistants" body: "*"};
+  }
+
+  // Retrieve details of a specific assistant by its ID.
+  rpc Get(GetAssistantRequest) returns (Assistant) {
+    option (google.api.http) = {get: "/assistants/v1/assistants/{assistant_id}"};
+  }
+
+  // Update an existing assistant.
+  rpc Update(UpdateAssistantRequest) returns (Assistant) {
+    option (google.api.http) = {patch: "/assistants/v1/assistants/{assistant_id}" body: "*"};
+  }
+
+  // Delete an assistant by its ID.
+  rpc Delete(DeleteAssistantRequest) returns (DeleteAssistantResponse) {
+    option (google.api.http) = {delete: "/assistants/v1/assistants/{assistant_id}"};
+  }
+
+  // List assistants in a specific folder.
+  rpc List(ListAssistantsRequest) returns (ListAssistantsResponse) {
+    option (google.api.http) = {get: "/assistants/v1/assistants"};
+  }
+
+  // Lists all versions of a specific assistant.
+  rpc ListVersions(ListAssistantVersionsRequest) returns (ListAssistantVersionsResponse) {
+    option (google.api.http) = {get: "/assistants/v1/assistants:listVersions"};
+  }
+}
+
+// Request to create a new assistant.
+message CreateAssistantRequest {
+  string folder_id = 1 [(required) = true];
+
+  // Name of the assistant.
+  string name = 2;
+
+  // Description of the assistant.
+  string description = 3;
+
+  // Expiration configuration for the assistant.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 4;
+
+  // Set of key-value pairs to label the user.
+  map<string, string> labels = 5;
+
+  // The [ID of the model](/docs/foundation-models/concepts/yandexgpt/models) to be used for completion generation.
+  string model_uri = 6 [(required) = true];
+
+  // Instructions or guidelines that the assistant should follow when generating responses or performing tasks.
+  // These instructions can help guide the assistant's behavior and responses.
+  string instruction = 7;
+
+  // Configuration options for truncating the prompt when the token count exceeds a specified limit.
+  PromptTruncationOptions prompt_truncation_options = 8;
+
+  // Configuration options for completion generation.
+  CompletionOptions completion_options = 9;
+
+  // List of tools that the assistant can use to perform additional tasks.
+  // One example is the SearchIndexTool, which is used for Retrieval-Augmented Generation (RAG).
+  repeated Tool tools = 10;
+
+  // Specifies the format of the model's response.
+  ResponseFormat response_format = 11;
+}
+
+// Request message for retrieving an assistant by ID.
+message GetAssistantRequest {
+  // ID of the assistant to retrieve.
+  string assistant_id = 1 [(required) = true];
+}
+
+// Request message for updating an existing assistant.
+message UpdateAssistantRequest {
+  // ID of the assistant to update.
+  string assistant_id = 1 [(required) = true];
+
+  // Field mask specifying which fields to update.
+  google.protobuf.FieldMask update_mask = 2 [(required) = true];
+
+  // New name for the assistant.
+  string name = 3;
+
+  // New description for the assistant.
+  string description = 4;
+
+  // New expiration configuration for the assistant.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 5;
+
+  // New set of labels for the assistant.
+  map<string, string> labels = 6;
+
+  // The new [ID of the model](/docs/foundation-models/concepts/yandexgpt/models) to be used for completion generation.
+  string model_uri = 7;
+
+  // New instructions or guidelines for the assistant to follow.
+  string instruction = 8;
+
+  // New configuration for truncating the prompt.
+  PromptTruncationOptions prompt_truncation_options = 9;
+
+  // New configuration for completion generation.
+  CompletionOptions completion_options = 10;
+
+  // New list of tools the assistant can use.
+  repeated Tool tools = 11;
+
+  ResponseFormat response_format = 12;
+}
+
+// Request message for deleting an assistant by ID.
+message DeleteAssistantRequest {
+  // ID of the assistant to delete.
+  string assistant_id = 1 [(required) = true];
+}
+
+// Response message for the delete operation.
+message DeleteAssistantResponse {
+}
+
+// Request message for listing assistants in a specific folder.
+message ListAssistantsRequest {
+  // Folder ID from which to list assistants.
+  string folder_id = 1 [(required) = true];
+
+  // Maximum number of assistants to return per page.
+  int64 page_size = 2;
+
+  // Token to retrieve the next page of results.
+  string page_token = 3;
+}
+
+// Response message for the list operation.
+message ListAssistantsResponse {
+  // List of assistants in the specified folder.
+  repeated Assistant assistants = 1;
+
+  // Token to retrieve the next page of results.
+  string next_page_token = 2;
+}
+
+// Request to list all versions of a specific assistant.
+message ListAssistantVersionsRequest {
+  // ID of the assistant whose versions are to be listed.
+  string assistant_id = 1 [(required) = true];
+
+  // Maximum number of versions to return per page.
+  int64 page_size = 2;
+
+  // Token to retrieve the next page of results.
+  string page_token = 3;
+}
+
+// Represents a specific version of an assistant.
+message AssistantVersion {
+  // ID of the assistant version.
+  string id = 1;
+
+  // Mask specifying which fields were updated in this version.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Assistant configuration for this version.
+  Assistant assistant = 3;
+}
+
+// Response message containing the list versions operation.
+message ListAssistantVersionsResponse {
+  // List of assistant versions.
+  repeated AssistantVersion versions = 1;
+
+  // Token to retrieve the next page of results.
+  string next_page_token = 2;
+}

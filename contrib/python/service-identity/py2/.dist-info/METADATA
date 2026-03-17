@@ -1,0 +1,148 @@
+Metadata-Version: 2.1
+Name: service-identity
+Version: 21.1.0
+Summary: Service identity verification for pyOpenSSL & cryptography.
+Home-page: https://service-identity.readthedocs.io/
+Author: Hynek Schlawack
+Author-email: hs@ox.cx
+Maintainer: Hynek Schlawack
+Maintainer-email: hs@ox.cx
+License: MIT
+Project-URL: Documentation, https://service-identity.readthedocs.io/
+Project-URL: Bug Tracker, https://github.com/pyca/service-identity/issues
+Project-URL: Source Code, https://github.com/pyca/service-identity
+Project-URL: Funding, https://github.com/sponsors/hynek
+Keywords: cryptography,openssl,pyopenssl
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: English
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX :: BSD
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Programming Language :: Python
+Classifier: Topic :: Security :: Cryptography
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Description-Content-Type: text/x-rst
+Requires-Dist: attrs (>=19.1.0)
+Requires-Dist: pyasn1-modules
+Requires-Dist: pyasn1
+Requires-Dist: cryptography
+Requires-Dist: six
+Requires-Dist: ipaddress ; python_version < "3.3"
+Provides-Extra: dev
+Requires-Dist: coverage[toml] (>=5.0.2) ; extra == 'dev'
+Requires-Dist: pytest ; extra == 'dev'
+Requires-Dist: sphinx ; extra == 'dev'
+Requires-Dist: furo ; extra == 'dev'
+Requires-Dist: idna ; extra == 'dev'
+Requires-Dist: pyOpenSSL ; extra == 'dev'
+Provides-Extra: docs
+Requires-Dist: sphinx ; extra == 'docs'
+Requires-Dist: furo ; extra == 'docs'
+Provides-Extra: idna
+Requires-Dist: idna ; extra == 'idna'
+Provides-Extra: tests
+Requires-Dist: coverage[toml] (>=5.0.2) ; extra == 'tests'
+Requires-Dist: pytest ; extra == 'tests'
+
+=============================
+Service Identity Verification
+=============================
+
+.. image:: https://readthedocs.org/projects/service-identity/badge/?version=stable
+   :target: https://service-identity.readthedocs.io/en/stable/?badge=stable
+   :alt: Documentation Status
+
+.. image:: https://github.com/pyca/service-identity/workflows/CI/badge.svg?branch=main
+   :target: https://github.com/pyca/service-identity/actions?workflow=CI
+   :alt: CI Status
+
+.. image:: https://codecov.io/github/pyca/service-identity/branch/main/graph/badge.svg
+   :target: https://codecov.io/github/pyca/service-identity
+   :alt: Test Coverage
+
+.. image:: https://img.shields.io/badge/code%20style-black-000000.svg
+   :target: https://github.com/ambv/black
+   :alt: Code style: black
+
+.. image:: https://www.irccloud.com/invite-svg?channel=%23cryptography-dev&amp;hostname=irc.freenode.net&amp;port=6697&amp;ssl=1
+    :target: https://www.irccloud.com/invite?channel=%23cryptography-dev&amp;hostname=irc.freenode.net&amp;port=6697&amp;ssl=1
+
+.. begin
+
+Use this package if:
+
+- you use pyOpenSSL_ and don’t want to be MITM_\ ed or
+- if you want to verify that a `PyCA cryptography`_ certificate is valid for a certain hostname or IP address.
+
+``service-identity`` aspires to give you all the tools you need for verifying whether a certificate is valid for the intended purposes.
+
+In the simplest case, this means *host name verification*.
+However, ``service-identity`` implements `RFC 6125`_ fully and plans to add other relevant RFCs too.
+
+``service-identity``\ ’s documentation lives at `Read the Docs <https://service-identity.readthedocs.io/>`_, the code on `GitHub <https://github.com/pyca/service-identity>`_.
+
+
+.. _Twisted: https://twistedmatrix.com/
+.. _pyOpenSSL: https://pypi.org/project/pyOpenSSL/
+.. _MITM: https://en.wikipedia.org/wiki/Man-in-the-middle_attack
+.. _RFC 6125: https://www.rfc-editor.org/info/rfc6125
+.. _PyCA cryptography: https://cryptography.io/
+
+
+Release Information
+===================
+
+21.1.0 (2021-05-09)
+-------------------
+
+
+Backward-incompatible changes:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Python 3.4 is not supported anymore.
+  It has been unsupported by the Python core team for a while now, its PyPI downloads are negligible, and our CI provider removed it as a supported option.
+
+  It's very unlikely that ``service-identity`` will break under 3.4 anytime soon, which is why we do *not* block its installation on Python 3.4.
+  But we don't test it anymore and will block it once someone reports breakage.
+
+
+Deprecations:
+^^^^^^^^^^^^^
+
+*none*
+
+
+Changes:
+^^^^^^^^
+
+- ``service_identity.exceptions.VerificationError`` can now be pickled and is overall more well-behaved as an exception.
+  This raises the requirement of ``attrs`` to 19.1.0.
+
+`Full changelog <https://service-identity.readthedocs.io/en/stable/changelog.html>`_.
+
+Authors
+=======
+
+``service-identity`` is written and maintained by `Hynek Schlawack <https://hynek.me/>`_.
+
+The development is kindly supported by `Variomedia AG <https://www.variomedia.de/>`_.
+
+Other contributors can be found in `GitHub's overview <https://github.com/pyca/service-identity/graphs/contributors>`_.
+
+

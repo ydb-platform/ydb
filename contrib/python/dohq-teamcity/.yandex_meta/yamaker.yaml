@@ -1,0 +1,3 @@
+mark_as_sources:
+  - dohq_teamcity/models/test.py
+  - dohq_teamcity/models/tests.py

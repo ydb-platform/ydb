@@ -1,0 +1,10 @@
+requirements:
+  - six
+  - ujson: contrib/deprecated/python/ujson
+keep:
+  - LICENSE
+  - README.md
+  - tests/*
+exclude_from_macros:
+  - LICENSE
+  - README.md

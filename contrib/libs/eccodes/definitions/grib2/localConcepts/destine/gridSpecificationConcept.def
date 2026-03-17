@@ -1,0 +1,13 @@
+# Concept gridSpecification
+'H16' = {numberOfDataPoints=3072; gridDefinitionTemplateNumber=150; Nside=16;}
+'H32' = {numberOfDataPoints=12288; gridDefinitionTemplateNumber=150; Nside=32;}
+'H64' = {numberOfDataPoints=49152; gridDefinitionTemplateNumber=150; Nside=64;}
+'H128' = {numberOfDataPoints=196608; gridDefinitionTemplateNumber=150; Nside=128;}
+'H256' = {numberOfDataPoints=786432; gridDefinitionTemplateNumber=150; Nside=256;}
+'H512' = {numberOfDataPoints=3145728; gridDefinitionTemplateNumber=150; Nside=512;}
+'H1024' = {numberOfDataPoints=12582912; gridDefinitionTemplateNumber=150; Nside=1024;}
+'O1280' = {numberOfDataPoints=6599680; gridDefinitionTemplateNumber=40; Nj=2560;}
+'O2560' = {numberOfDataPoints=26306560; gridDefinitionTemplateNumber=40; Nj=5120;}
+'O8000' = {numberOfDataPoints=256288000; gridDefinitionTemplateNumber=40; Nj=16000;}
+'F90' = {numberOfDataPoints=65160; gridDefinitionTemplateNumber=0; Ni=360; Nj=181; }
+'F360' = {numberOfDataPoints=1038240; gridDefinitionTemplateNumber=0; Ni=1440; Nj=721; }

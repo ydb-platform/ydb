@@ -1,0 +1,159 @@
+constant P_INST = 0;
+constant P_TAVG = 1;
+constant P_TACC = 3;
+
+constant TYPE_AN = 2;
+constant TYPE_FC = 9;
+constant TYPE_CF = 10;
+constant TYPE_PF = 11;
+constant TYPE_FF = 25;
+constant TYPE_OF = 26;
+constant TYPE_OR = 70;
+constant TYPE_FX = 71;
+
+constant coordAveraging0 = "inst";
+constant coordAveraging1 = "tavg";
+constant coordAveraging2 = 2;
+constant coordAveraging3 = "tacc";
+constant coordAveragingTims = "tims";
+
+constant isectionNumber2 = "h";
+constant isectionNumber3 = "m";
+constant isectionNumber4 = "z";
+
+constant tsectionNumber3 = "v";
+constant tsectionNumber4 = "z";
+constant tsectionNumber5 = "m";
+
+constant GRIB_DEPTH      = 2;
+constant GRIB_LONGITUDE  = 3;
+constant GRIB_LATITUDE   = 4;
+
+meta verificationDate   g1verificationdate(dataDate, dataTime, endStep) : read_only;
+
+if (horizontalCoordinateDefinition == 0) {
+    if (coordinate1Flag == 1 ) {
+        # range
+        if (averaging1Flag == P_TAVG ) {
+            if (marsType == TYPE_OR
+            || marsType == TYPE_FC
+            || marsType == TYPE_FF
+            || marsType == TYPE_FX)
+            {
+                meta marsRange evaluate((coordinate1End - coordinate1Start)/3600);
+                alias mars.range = marsRange;
+            }
+        }
+        # section
+        if (coordinate2Flag == 2) { alias mars.section = isectionNumber2; }
+        if (coordinate2Flag == 3) { alias mars.section = isectionNumber3; }
+        if (coordinate2Flag == 4) { alias mars.section = isectionNumber4; }
+
+        # levelist  latitude longitude
+        if (coordinate2Flag == GRIB_DEPTH) {
+            meta marsLevelist         divdouble( coordinate2Start,1000 );
+            meta roundedMarsLevelist  round( marsLevelist ,1000);
+            alias mars.levelist = roundedMarsLevelist ;
+        }
+        if (coordinate2Flag == GRIB_LONGITUDE) {
+            meta marsLongitude divdouble( coordinate2Start,1000000 );
+            meta roundedMarsLongitude round( marsLongitude ,1000);
+            alias mars.longitude = roundedMarsLongitude ;
+        }
+
+        if (coordinate2Flag == GRIB_LATITUDE) {
+            meta marsLatitude divdouble( coordinate2Start,1000000 );
+            meta roundedMarsLatitude  round( marsLatitude ,1000);
+            alias mars.latitude = roundedMarsLatitude ;
+        }
+
+        #product
+        if (averaging1Flag == 0) { alias mars.product = coordAveraging0;}
+        if (averaging1Flag == 1) { alias mars.product = coordAveraging1;}
+        if (averaging1Flag == 2) { alias mars.product = coordAveraging2;}
+        if (averaging1Flag == 3) { alias mars.product = coordAveraging3;}
+
+        # date
+        if (  (marsType == TYPE_OR && averaging1Flag == P_TAVG)
+           || (marsType == TYPE_OR && averaging1Flag == P_TACC)
+           || (marsType == TYPE_FX && averaging1Flag == P_TAVG))
+           {
+               #remove mars.date;
+               alias mars.date = verificationDate;
+               #remove mars.step;
+               constant stepZero = 0;
+               alias mars.step = stepZero;
+           }
+    }
+    else
+    {
+        meta coordinateIndexNumber evaluate(coordinate4Flag+coordinate3Flag);
+
+        # levelist latitude longitude
+        if (coordinateIndexNumber== 3) {
+            meta marsLatitude  divdouble( coordinate1Start,1000000);
+            meta marsLongitude divdouble( coordinate2Start,1000000);
+
+            meta roundedMarsLatitude round(  marsLatitude ,1000);
+            meta roundedMarsLongitude round( marsLongitude ,1000);
+
+            alias mars.latitude = roundedMarsLatitude ;
+            alias mars.longitude = roundedMarsLongitude ;
+        }
+
+        if (coordinateIndexNumber == 4) {
+            meta marsLevelist  divdouble( coordinate1Start,1000);
+            meta marsLatitude  divdouble( coordinate2Start,1000000);
+
+            meta roundedMarsLevelist round(  marsLevelist ,1000);
+            meta roundedMarsLatitude round(  marsLatitude ,1000);
+
+            alias mars.levelist = roundedMarsLevelist ;
+            alias mars.latitude = roundedMarsLatitude ;
+        }
+
+        if (coordinateIndexNumber == 5) {
+            meta marsLevelist  divdouble( coordinate1Start,1000);
+            meta marsLongitude divdouble( coordinate2Start,1000000);
+
+            meta roundedMarsLevelist round(  marsLevelist ,1000);
+            meta roundedMarsLongitude round( marsLongitude ,1000);
+
+            alias mars.levelist = roundedMarsLevelist ;
+            alias mars.longitude = roundedMarsLongitude ;
+        }
+
+        # section
+        if (coordinateIndexNumber == 3) { alias mars.section = tsectionNumber3; }
+        if (coordinateIndexNumber == 4) { alias mars.section = tsectionNumber4; }
+        if (coordinateIndexNumber == 5) { alias mars.section = tsectionNumber5; }
+
+        # range
+        if (averaging1Flag == P_INST) {
+              if ((marsType == TYPE_OR)
+               ||(marsType == TYPE_FC)
+               ||(marsType == TYPE_CF)
+               ||(marsType == TYPE_PF)
+               ||(marsType == TYPE_FF)
+               ||(marsType == TYPE_OF))
+               {
+                  if (coordinate4Flag == 1){
+                    meta marsRange evaluate((coordinate4OfLastGridPoint - coordinate4OfFirstGridPoint)/3600);
+                  } else {
+                     meta marsRange evaluate((coordinate3OfLastGridPoint - coordinate3OfFirstGridPoint)/3600);
+                  }
+                  alias mars.range = marsRange;
+               }
+           }
+        # product
+        alias mars.product = coordAveragingTims;
+        # date
+        if (marsType == TYPE_OR && averaging1Flag == P_INST) {
+            #remove mars.date;
+            alias mars.date = verificationDate;
+            #remove mars.step;
+            constant stepZero = 0;
+            alias mars.step =stepZero;
+        }
+    }
+}

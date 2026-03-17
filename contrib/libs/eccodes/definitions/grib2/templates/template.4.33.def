@@ -1,0 +1,10 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.33, Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for simulated (synthetic) satellite data
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.point_in_time.def"
+include "grib2/templates/template.4.satellite.def"
+include "grib2/templates/template.4.eps.def"

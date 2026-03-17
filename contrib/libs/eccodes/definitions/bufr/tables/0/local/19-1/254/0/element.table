@@ -1,0 +1,54 @@
+#code|abbreviation|type|name|unit|scale|reference|width|crex_unit|crex_scale|crex_width
+001007|satelliteIdentifier|table|SATELLITE IDENTIFIER|CODE TABLE|0|0|10|CODE TABLE|0|4
+001031|centre|table|IDENTIFICATION OF ORIGINATING/GENERATING CENTRE|CODE TABLE|0|0|16|CODE TABLE|0|5
+010200|meanDynamicTopographyAccuracy|double|MEAN DYNAMIC TOPOGRAPHY ACCURACY|m|3|-131072|18|m|3|6
+010220|pressureHighPrecision|double|PRESSURE (HIGH PRECISION)|Pa|-1|0|30
+002019|satelliteInstruments|table|SATELLITE INSTRUMENTS|CODE TABLE|0|0|11|CODE TABLE|0|4
+002020|satelliteClassification|table|SATELLITE CLASSIFICATION|CODE TABLE|0|0|9|CODE TABLE|0|3
+004001|year|long|YEAR|a|0|0|12|a|0|4
+004002|month|long|MONTH|mon|0|0|4|mon|0|2
+004003|day|long|DAY|d|0|0|6|d|0|2
+004004|hour|long|HOUR|h|0|0|5|h|0|2
+004005|minute|long|MINUTE|min|0|0|6|min|0|2
+004006|second|long|SECOND|s|0|0|6|s|0|2
+040197|SatelliteManoeuvreIndicator|table|SATELLITE MANOEUVRE INDICATOR|CODE TABLE|0|0|3
+040220|qualityIndicatorForAtmosphericTemperature|double|QUALITY INDICATOR FOR ATMOSPHERIC TEMPERATURE|double|1|0|8
+040221|qualityIndicatorForAtmosphericWaterVapour|double|QUALITY INDICATOR FOR ATMOSPHERIC WATER_VAPOUR|double|1|0|8
+040223|qualityIndicatorForSurfaceTemperature|double|QUALITY INDICATOR FOR SURFACE TEMPERATURE|double|1|0|8
+040231|cloudinessSummary|table|CLOUDINESS SUMMARY|CODE TABLE|0|0|3 
+040232|newValidationFlagForIASILevel1PRD|table|NEW VALIDATION FLAG FOR IASI LEVEL 1 PRODUCT|CODE TABLE|0|0|3
+040233|validationFlagForAMSUBLevel1PRD|table|VALIDATION FLAG FOR AMSU-B LEVEL 1 PRODUCT|CODE TABLE|0|0|3
+040235|retrievalInitialization|table|RETRIEVAL INITIALISATION|CODE TABLE|0|0|8
+040236|convergenceOfTheIterativeRetrieval|table|CONVERGENCE OF THE ITERATIVE RETRIEVAL|CODE TABLE|0|0|3
+040237|validationFlagOfMHSLevel1DataFlow|table|VALIDATION FLAG OF MHS  LEVEL 1 DATA FLOW|CODE TABLE|0|0|3
+040238|validationFlagOfNWPForecast|table|VALIDATION FLAG OF NWP FORECAST|CODE TABLE|0|0|3
+040239|indicationOfSuperAdiabaticAndSuperSaturationInFinalRet|table|INDICATION OF SUPER-ADIABATIC AND SUPER-SATURATION IN FINAL RET|FLAG TABLE|0|0|8
+040240|numberOfIterationUsedForRetrieval|long|NUMBER OF ITERATION USED FOR RETRIEVAL|long|0|0|8
+040242|generalRetrievalQualityFlag|table|GENERAL RETRIEVAL QUALITY FLAG|CODE TABLE|0|0|3
+040243|retrievalFlags|table|RETRIEVAL FLAGS|CODE TABLE|0|0|31 
+040244|numberOfVectorsDescribingTheCharMatrices|long|NUMBER OF VECTORS DESCRIBING THE CHAR. MATRICES|Numeric|0|0|8
+040245|numberOfLayersActuallyRetrieved|long|NUMBER OF LAYERS ACTUALLY RETRIEVED|Numeric|0|0|8
+040246|numberOfCOProfilesRetrievedInScanline|long|NUMBER OF CO PROFILES RETRIEVED IN SCANLINE|Numeric|0|0|8
+040247|airPartialColumnsOnEachRetrievedLayer|double|AIR PARTIAL COLUMNS ON EACH RETRIEVED LAYER|Numeric|-20|0|16
+040248|aPrioriPartialColumnsForCOonEachRetrievedLayer|double|A-PRIORI PARTIAL COLUMNS FOR CO EN EACH RETRIEVED LAYER|Numeric|-13|0|16
+040249|scalVecMultAprioriCoVecDefRetrCoVec|double|SCAL. VEC. MULT. A-PRI. CO VEC. DEF. RETR. CO VEC.|Numeric|5|0|26
+040250|mainEigenValuesOfTheSensitivityMatrix|double|MAIN EIGENVALUES OF THE SENSITIVITY MATRIX|Numeric|6|0|31
+040251|mainEigenVectorsOfTheSensitivityMatrix|double|MAIN EIGENVECTORS OF THE SENSITIVITY MATRIX|Numeric|6|-1000000000|31
+040252|retrievalFlagsPart1ProcessingAndInputsPotentialErrors|flag|RETRIEVAL FLAGS PART 1 PROCESSING AND INPUTS POTENTIAL ERRORS|FLAG TABLE|0|0|13 
+040253|retrievalFlagsPart2DiagnosticsOnTheRetrieval|flag|RETRIEVAL FLAGS PART 2 DIAGNOSTICS ON THE RETRIEVAL|FLAG TABLE|0|0|21 
+005001|latitude|double|LATITUDE (HIGH ACCURACY)|deg|5|-9000000|25|deg|5|7
+005021|bearingOrAzimuth|double|BEARING OR AZIMUTH|deg|2|0|16|deg|2|5
+005022|solarAzimuth|double|SOLAR AZIMUTH|deg|2|0|16|deg|2|5
+005040|orbitNumber|long|ORBIT NUMBER|Numeric|0|0|24|Numeric|0|8
+005041|scanLineNumber|long|SCAN LINE NUMBER|Numeric|0|0|8|Numeric|0|3
+005043|fieldOfViewNumber|long|FIELD OF VIEW NUMBER|Numeric|0|0|8|Numeric|0|3
+006001|longitude|double|LONGITUDE (HIGH ACCURACY)|deg|5|-18000000|26|deg|5|8
+007007|height|long|HEIGHT|m|0|-1000|17|m|0|6
+007024|satelliteZenithAngle|double|SATELLITE ZENITH ANGLE|deg|2|-9000|15|deg|2|5
+007025|solarZenithAngle|double|SOLAR ZENITH ANGLE|deg|2|-9000|15|deg|2|5
+025060|softwareIdentification|long|SOFTWARE IDENTIFICATION|Numeric|0|0|14|Numeric|0|5
+025200|bandSpecificOceanQualityFlag|flag|BAND SPECIFIC OCEAN QUALITY FLAG|Flag table|0|0|9|Flag table|0|3
+025201|altimeterEchoProcessingMode|table|Altimeter Echo Processing Mode|Code Table|0|0|8|Code Table|0|3
+025202|altimeterTrackingMode|table|Altimeter Tracking Mode|Code Table|0|0|8|Code Table|0|3
+025203|seaIceFreeboard|double|Sea Ice Freeboard|m|3|-131072|18|m|3|6
+010200|meanDynamicTopographyAccuracy|double|MEAN DYNAMIC TOPOGRAPHY ACCURACY|m|3|-131072|18|m|3|6

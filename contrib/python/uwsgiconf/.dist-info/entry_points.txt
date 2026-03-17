@@ -1,0 +1,3 @@
+[console_scripts]
+uwsgiconf = uwsgiconf.cli:main
+

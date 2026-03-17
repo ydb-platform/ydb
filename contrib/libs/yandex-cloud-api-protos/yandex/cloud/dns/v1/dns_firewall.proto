@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package yandex.cloud.dns.v1;
+
+import "yandex/cloud/validation.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/dns/v1;dns";
+option java_package = "yandex.cloud.api.dns.v1";
+
+// A DNS firewall. For details about the concept, see [DNS firewalls](/docs/dns/concepts/dns-firewall).
+message DnsFirewall {
+  // ID of the DNS firewall. Generated at creation time.
+  string id = 1;
+
+  // ID of the folder that the DNS firewall belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+  
+  // Name of the DNS firewall.
+  // The name is unique within the folder.
+  string name = 4;
+
+  // Description of the DNS firewall.
+  string description = 5;
+
+  // DNS firewall labels as `key:value` pairs.
+  map<string, string> labels = 6;
+
+  //Prevents accidental firewall removal.
+  bool deletion_protection = 7;
+
+  // Whether the DNS firewall is enabled.
+  bool enabled = 8;
+
+  // Resource settings.
+  // Specifies resources that the DNS firewall applies to.
+  ResourceConfig resource_config = 9;
+
+  // List of FQDNs that the DNS firewall allows to pass.
+  repeated string whitelist_fqdns = 10 [(size) = "<=255", (length) = "<=255", (unique) = true];
+
+  // List of FQDNs that the DNS firewall blocks.
+  repeated string blacklist_fqdns = 11 [(size) = "<=255", (length) = "<=255", (unique) = true];
+
+  message ResourceConfig {
+    // Type of the resource.
+    ResourceType type = 1;
+    // Resource ids.
+    repeated string resource_ids = 2 [(size) = "0-100", (length) = "<=64", (unique) = true];
+    // Whether the locking policy is enabled.
+    bool locking_policy_enabled = 3;
+
+    enum ResourceType {
+      // Unspecified resource type.
+      RESOURCE_TYPE_UNSPECIFIED = 0;
+      // VPC network resource type.
+      NETWORK = 1;
+      // Folder resource type.
+      FOLDER = 2;
+      // Cloud resource type.
+      CLOUD = 3;
+    }
+  }
+}

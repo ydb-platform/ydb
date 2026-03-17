@@ -1,0 +1,27 @@
+# Рулбук деплоя на устройства
+#
+# Операторы:
+#   *  Один аргумент
+#   ~  Несколько аргументов (минимум один)
+#
+# Параметры:
+#   %timeout=...  Таймаут выполнения команды (в секундах, по умолчанию 30)
+#
+# Ответы на вопросы
+#
+# <команда>
+#   dialog: <вопрос> ::: <ответ> <параметры>
+#
+# Если <вопрос> заключён в слеши (//), то воспринимается как регулярка, иначе - точное совпадение.
+# Параметы:
+#   %send_nl=...  Посылать ли перевод строки после ответа (bool, по умолчанию true)
+# -----
+
+crypto key generate rsa %timeout=60
+    dialog: Do you really want to replace them? [yes/no]: ::: no
+    dialog: How many bits in the modulus [512]: ::: 2048
+no username * privilege * secret * *
+    dialog: This operation will remove all username related configurations with same name.Do you want to continue? [confirm] ::: Y  %send_nl=0
+
+copy running-config startup-config
+    dialog: Destination filename [startup-config]? ::: startup-config

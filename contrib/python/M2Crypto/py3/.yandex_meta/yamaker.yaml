@@ -1,0 +1,8 @@
+requirements:
+  - contrib/libs/openssl
+exclude_from_macros:
+  - SWIG/*.def
+  - SWIG/*.i
+  - SWIG/Makefile
+copy:
+  - SWIG/*

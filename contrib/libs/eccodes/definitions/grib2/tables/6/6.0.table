@@ -1,0 +1,7 @@
+# CODE TABLE 6.0, Bit Map Indicator
+
+0 0  A bit map applies to this product and is specified in this Section
+1 1  A bit map pre-determined by the originating/generating Centre applies to this product and is not specified in this Section
+# 2 253  A bit map pre-determined by the originating/generating Centre applies to this product and is not specified in this Section
+254 254  A bit map defined previously in the same "GRIB" message applies to this product
+255 255  A bit map does not apply to this product

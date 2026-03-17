@@ -1,0 +1,55 @@
+default fallback
+================
+
+    >>> import re
+    >>> import re2
+    >>> re2.set_fallback_notification(re2.FALLBACK_QUIETLY)
+
+This pattern builds with re2
+
+    >>> pattern = re2.compile(r"foo")
+    >>> isinstance(pattern, re2.Pattern)
+    True
+    >>> isinstance(pattern, re2.FallbackPattern)
+    False
+
+This pattern builds with default fallback module (re)
+
+    >>> fallback_pattern = re2.compile(r"foo(?!bar)")
+    >>> isinstance(fallback_pattern, re2.Pattern)
+    False
+    >>> isinstance(fallback_pattern, re2.FallbackPattern)
+    True
+    >>> isinstance(fallback_pattern._pattern, re.Pattern)
+    True
+
+custom mock module fallback
+===========================
+
+    >>> from types import ModuleType
+    >>> mock_re = ModuleType("mock_re")
+    >>> mock_re.Pattern = type("MockPattern", (), {"groupindex": 0, "groups": {}})
+    >>> mock_re.compile = lambda pattern, flags=0: mock_re.Pattern()
+    >>> re2.set_fallback_module(mock_re)
+
+This pattern builds with re2
+
+    >>> pattern = re2.compile(r"foo")
+    >>> isinstance(pattern, re2.Pattern)
+    True
+    >>> isinstance(pattern, re2.FallbackPattern)
+    False
+
+This pattern builds with the desired fallback module (mock_re)
+
+    >>> fallback_pattern = re2.compile(r"foo(?!bar)")
+    >>> isinstance(fallback_pattern, re2.Pattern)
+    False
+    >>> isinstance(fallback_pattern, re2.FallbackPattern)
+    True
+    >>> isinstance(fallback_pattern._pattern, mock_re.Pattern)
+    True
+
+    >>> import re
+    >>> re2.set_fallback_module(re)
+    >>> re2.set_fallback_notification(re2.FALLBACK_QUIETLY)

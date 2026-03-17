@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.files.v1;
+
+import "yandex/cloud/ai/common/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/files/v1;files";
+option java_package = "yandex.cloud.api.ai.files.v1";
+
+message File {
+  // Unique identifier of the file.
+  string id = 1;
+
+  // ID of the folder that the file belongs to.
+  string folder_id = 2;
+
+  // Name of the file.
+  string name = 3;
+
+  // Description of the file.
+  string description = 4;
+
+  // MIME type of the file, indicating the file's format (e.g., "application/pdf")
+  string mime_type = 5;
+
+  // Identifier of the subject who created this file.
+  string created_by = 6;
+
+  // Timestamp representing when the file was created.
+  google.protobuf.Timestamp created_at = 7;
+
+  // Identifier of the subject who last updated this file.
+  string updated_by = 8;
+
+  // Timestamp representing the last time this file was updated.
+  google.protobuf.Timestamp updated_at = 9;
+
+  // Configuration for the expiration of the file, defining when and how the file will expire.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 10;
+
+  // Timestamp representing when the file will expire.
+  google.protobuf.Timestamp expires_at = 11;
+
+  // Set of key-value pairs that can be used to organize and categorize the file.
+  map<string, string> labels = 12;
+}

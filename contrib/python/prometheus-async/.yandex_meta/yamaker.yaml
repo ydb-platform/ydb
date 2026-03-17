@@ -1,0 +1,2 @@
+keep:
+  - tests/conftest.py  # original file from lib but moved from root directory to tests/

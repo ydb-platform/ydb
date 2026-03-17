@@ -1,0 +1,8 @@
+NAME="Guix System"
+ID=guix
+PRETTY_NAME="Guix System"
+LOGO=guix-icon
+HOME_URL="https://guix.gnu.org"
+DOCUMENTATION_URL="https://guix.gnu.org/en/manual"
+SUPPORT_URL="https://guix.gnu.org/en/help"
+BUG_REPORT_URL="https://lists.gnu.org/mailman/listinfo/bug-guix"

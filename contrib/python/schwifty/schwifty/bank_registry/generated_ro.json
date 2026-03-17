@@ -1,0 +1,386 @@
+[
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BUCUROBU",
+    "bank_code": "BUCU",
+    "name": "ALPHA BANK ROMANIA",
+    "short_name": "ALPHA BANK ROMANIA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "ARBLROBU",
+    "bank_code": "ARBL",
+    "name": "ANGLO-ROMANIAN BANK LIMITED (BUCHAREST BRANCH)",
+    "short_name": "ANGLO-ROMANIAN BANK LIMITED (BUCHAREST BRANCH)"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "MINDROBU",
+    "bank_code": "MIND",
+    "name": "ATE BANK ROMANIA S.A.",
+    "short_name": "ATE BANK ROMANIA S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BPOSROBU",
+    "bank_code": "BPOS",
+    "name": "BANC POST S.A.",
+    "short_name": "BANC POST S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "DAROROBU",
+    "bank_code": "DARO",
+    "name": "BANCA C.R. FIRENZE ROMANIA S.A.",
+    "short_name": "BANCA C.R. FIRENZE ROMANIA S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "CARPRO22",
+    "bank_code": "CARP",
+    "name": "BANCA COMERCIALA CARPATICA SA",
+    "short_name": "BANCA COMERCIALA CARPATICA SA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BFERROBU",
+    "bank_code": "BFER",
+    "name": "BANCA COMERCIALA FEROVIARA S.A.",
+    "short_name": "BANCA COMERCIALA FEROVIARA S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BITRROBU",
+    "bank_code": "BITR",
+    "name": "BANCA ITALO-ROMENA SPA, SUCURSALA BUCURESTI",
+    "short_name": "BANCA ITALO-ROMENA SPA, SUCURSALA BUCURESTI"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "MILBROBU",
+    "bank_code": "MILB",
+    "name": "BANCA MILLENNIUM S.A.",
+    "short_name": "BANCA MILLENNIUM S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BRMAROBU",
+    "bank_code": "BRMA",
+    "name": "BANCA ROMANEASCA S.A.",
+    "short_name": "BANCA ROMANEASCA S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BTRLRO22",
+    "bank_code": "BTRL",
+    "name": "BANCA TRANSILVANIA S.A.",
+    "short_name": "BANCA TRANSILVANIA S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "DAFBRO22",
+    "bank_code": "DAFB",
+    "name": "BANK LEUMI ROMANIA S.A.",
+    "short_name": "BANK LEUMI ROMANIA S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BCYPROBU",
+    "bank_code": "BCYP",
+    "name": "BANK OF CYPRUS PCL NICOSIA, ROMANIAN BRANCH",
+    "short_name": "BANK OF CYPRUS PCL NICOSIA, ROMANIAN BRANCH"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BCRLROBU",
+    "bank_code": "BCRL",
+    "name": "BCR BANCA PENTRU LOCUINTE S.A.",
+    "short_name": "BCR BANCA PENTRU LOCUINTE S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BLOMROBU",
+    "bank_code": "BLOM",
+    "name": "BLOM BANK FRANCE S.A. ROMANIA BRANCH",
+    "short_name": "BLOM BANK FRANCE S.A. ROMANIA BRANCH"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BRDEROBU",
+    "bank_code": "BRDE",
+    "name": "BRD \u2013 GROUPE SOCIETE GENERALE SA",
+    "short_name": "BRD \u2013 GROUPE SOCIETE GENERALE SA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "CECEROBU",
+    "bank_code": "CECE",
+    "name": "CEC BANK-S.A.",
+    "short_name": "CEC BANK-S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "CITIROBU",
+    "bank_code": "CITI",
+    "name": "CITIBANK EUROPE PLC, DUBLIN-SUCURSALA ROMANIA",
+    "short_name": "CITIBANK EUROPE PLC, DUBLIN-SUCURSALA ROMANIA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "FNNBROBU",
+    "bank_code": "FNNB",
+    "name": "CREDIT EUROPE BANK (ROMANIA) S.A.",
+    "short_name": "CREDIT EUROPE BANK (ROMANIA) S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "CRCOROBU",
+    "bank_code": "CRCO",
+    "name": "CREDITCOOP CASA CENTRALA",
+    "short_name": "CREDITCOOP CASA CENTRALA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "DPFAROBU",
+    "bank_code": "DPFA",
+    "name": "DEPFA BANK PLC",
+    "short_name": "DEPFA BANK PLC"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BSEAROBU",
+    "bank_code": "BSEA",
+    "name": "EMPORIKI BANK ROMANIA",
+    "short_name": "EMPORIKI BANK ROMANIA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "EXIMROBU",
+    "bank_code": "EXIM",
+    "name": "EXIMBANK OF ROMANIA",
+    "short_name": "EXIMBANK OF ROMANIA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "FTSBROBU",
+    "bank_code": "FTSB",
+    "name": "FORTIS BANK SA (BUCHAREST BRANCH)",
+    "short_name": "FORTIS BANK SA (BUCHAREST BRANCH)"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "UGBIROBU",
+    "bank_code": "UGBI",
+    "name": "GARANTIBANK INTERNATIONAL NV",
+    "short_name": "GARANTIBANK INTERNATIONAL NV"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "HVBLROBU",
+    "bank_code": "HVBL",
+    "name": "HVB BANCA PENTRU LOCUINTE S.A.",
+    "short_name": "HVB BANCA PENTRU LOCUINTE S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "INGBROBU",
+    "bank_code": "INGB",
+    "name": "ING BANK N.V., BUCHAREST BRANCH",
+    "short_name": "ING BANK N.V., BUCHAREST BRANCH"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "WBANRO22",
+    "bank_code": "WBAN",
+    "name": "INTESA SANPAOLO ROMANIA S.A.",
+    "short_name": "INTESA SANPAOLO ROMANIA S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "CAIXROBX",
+    "bank_code": "CAIX",
+    "name": "LA CAIXA, SUCURSALA ROMANIA",
+    "short_name": "LA CAIXA, SUCURSALA ROMANIA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BRELROBU",
+    "bank_code": "BREL",
+    "name": "LIBRA BANK S.A.",
+    "short_name": "LIBRA BANK S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "EGNAROBX",
+    "bank_code": "EGNA",
+    "name": "MARFIN BANK (ROMANIA) S.A.",
+    "short_name": "MARFIN BANK (ROMANIA) S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "TREZROBU",
+    "bank_code": "TREZ",
+    "name": "MINISTRY OF PUBLIC FINANCE",
+    "short_name": "MINISTRY OF PUBLIC FINANCE"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "CRDZROBU",
+    "bank_code": "CRDZ",
+    "name": "MKB ROMEXTERRA BANK S.A.",
+    "short_name": "MKB ROMEXTERRA BANK S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "NBORROBP",
+    "bank_code": "NBOR",
+    "name": "NATIONAL BANK OF ROMANIA",
+    "short_name": "NATIONAL BANK OF ROMANIA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "NBORROBS",
+    "bank_code": "NBOR",
+    "name": "NATIONAL BANK OF ROMANIA",
+    "short_name": "NATIONAL BANK OF ROMANIA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "NBORROBU",
+    "bank_code": "NBOR",
+    "name": "NATIONAL BANK OF ROMANIA",
+    "short_name": "NATIONAL BANK OF ROMANIA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "OTPVROBU",
+    "bank_code": "OTPV",
+    "name": "OTP BANK ROMANIA S.A.",
+    "short_name": "OTP BANK ROMANIA S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "PIRBROBU",
+    "bank_code": "PIRB",
+    "name": "PIRAEUS BANK ROMANIA",
+    "short_name": "PIRAEUS BANK ROMANIA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "PORLROBU",
+    "bank_code": "PORL",
+    "name": "PORSCHE BANK ROMANIA SA",
+    "short_name": "PORSCHE BANK ROMANIA SA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "MIROROBU",
+    "bank_code": "MIRO",
+    "name": "PROCREDITBANK S.A.",
+    "short_name": "PROCREDITBANK S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "RZBLROBU",
+    "bank_code": "RZBL",
+    "name": "RAIFFEISEN BANCA PENTRU LOCUINTE S.A.",
+    "short_name": "RAIFFEISEN BANCA PENTRU LOCUINTE S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "RZBRROBU",
+    "bank_code": "RZBR",
+    "name": "RAIFFEISEN BANK S.A.",
+    "short_name": "RAIFFEISEN BANK S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "ABNAROBU",
+    "bank_code": "ABNA",
+    "name": "RBS BANK (ROMANIA) S.A.",
+    "short_name": "RBS BANK (ROMANIA) S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "RNCBROBU",
+    "bank_code": "RNCB",
+    "name": "ROMANIAN COMMERCIAL BANK",
+    "short_name": "ROMANIAN COMMERCIAL BANK"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "ROINROBU",
+    "bank_code": "ROIN",
+    "name": "ROMANIAN INTERNATIONAL BANK SA",
+    "short_name": "ROMANIAN INTERNATIONAL BANK SA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "TRFDROBU",
+    "bank_code": "TRFD",
+    "name": "TRANSFOND S.A.",
+    "short_name": "TRANSFOND S.A."
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "BACXROBU",
+    "bank_code": "BACX",
+    "name": "UNICREDIT TIRIAC BANK SA",
+    "short_name": "UNICREDIT TIRIAC BANK SA"
+  },
+  {
+    "country_code": "RO",
+    "primary": true,
+    "bic": "VBBUROBU",
+    "bank_code": "VBBU",
+    "name": "VOLKSBANK ROMANIA S.A.",
+    "short_name": "VOLKSBANK ROMANIA S.A."
+  }
+]

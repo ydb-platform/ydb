@@ -1,0 +1,1034 @@
+[
+  {
+    "bank_code": "",
+    "name": "ABDULHADI ABDULLAH AL-QAHTANI SONS GROUP HOLDING COMPANY CJSC",
+    "short_name": "ABDULHADI ABDULLAH AL-QAHTANI SONS GROUP HOLDING COMPANY",
+    "bic": "ALQASADK",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "AL INMA BANK",
+    "short_name": "AL INMA BANK",
+    "bic": "INMASARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "AL RA'IDAH INVESTMENT COMPANY",
+    "short_name": "AL RA'IDAH INVESTMENT COMPANY",
+    "bic": "ALRDSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "AL RAJHI BANK",
+    "short_name": "AL RAJHI BANK",
+    "bic": "RJHISARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ALAWWAL INVEST",
+    "short_name": "ALAWWAL INVEST",
+    "bic": "SAHCSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ALFANAR CO. LTD",
+    "short_name": "ALFANAR CO. LTD",
+    "bic": "FANRSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ALMARAI COMPANY",
+    "short_name": "ALMARAI COMPANY",
+    "bic": "ALMRSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ARAB NATIONAL BANK",
+    "short_name": "ARAB NATIONAL BANK",
+    "bic": "ARNBSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ARAB PETROLEUM INVESTMENTS CORPORATION",
+    "short_name": "ARAB PETROLEUM INVESTMENTS CORPORATION",
+    "bic": "APICSADM",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ARABIAN AGRICULTURAL SERVICES COMPANY",
+    "short_name": "ARABIAN AGRICULTURAL SERVICES COMPANY",
+    "bic": "AGSCSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ARAMCO CHEMICALS COMPANY",
+    "short_name": "ARAMCO CHEMICALS COMPANY",
+    "bic": "ARHMSADD",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ARAMCO TRADING COMPANY",
+    "short_name": "ARAMCO TRADING COMPANY",
+    "bic": "SAPCSADH",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ARAMCO TRADING COMPANY",
+    "short_name": "ARAMCO TRADING COMPANY",
+    "bic": "SAPCSADHAEF",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ARAMCO TRADING COMPANY",
+    "short_name": "ARAMCO TRADING COMPANY",
+    "bic": "SAPCSADHUKL",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ARAMCO TRADING COMPANY",
+    "short_name": "ARAMCO TRADING COMPANY",
+    "bic": "SAPCSADHSSG",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL BILAD",
+    "short_name": "BANK AL BILAD",
+    "bic": "ALBISARIDAM",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL BILAD",
+    "short_name": "BANK AL BILAD",
+    "bic": "ALBISARIJED",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL BILAD",
+    "short_name": "BANK AL BILAD",
+    "bic": "ALBISARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL BILAD",
+    "short_name": "BANK AL BILAD",
+    "bic": "ALBISARICAP",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL BILAD",
+    "short_name": "BANK AL BILAD",
+    "bic": "ALBISARITFC",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE013",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE026",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE009",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE025",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE002",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE007",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE006",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE021",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE019",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE011",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE010",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJEFWR",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE016",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANK AL-JAZIRA",
+    "short_name": "BANK AL-JAZIRA",
+    "bic": "BJAZSAJE027",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANKMUSCAT",
+    "short_name": "BANKMUSCAT",
+    "bic": "BMUSSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANQUE SAUDI FRANSI",
+    "short_name": "BANQUE SAUDI FRANSI",
+    "bic": "BSFRSARIEST",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANQUE SAUDI FRANSI",
+    "short_name": "BANQUE SAUDI FRANSI",
+    "bic": "BSFRSARIWST",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANQUE SAUDI FRANSI",
+    "short_name": "BANQUE SAUDI FRANSI",
+    "bic": "BSFRSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANQUE SAUDI FRANSI",
+    "short_name": "BANQUE SAUDI FRANSI",
+    "bic": "BSFRSARIRYD",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BANQUE SAUDI FRANSI",
+    "short_name": "BANQUE SAUDI FRANSI",
+    "bic": "BSFRSARIGEM",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BNP PARIBAS INVESTMENT COMPANY KSA",
+    "short_name": "BNP PARIBAS INVESTMENT COMPANY KSA",
+    "bic": "BNPASARB",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BNP PARIBAS INVESTMENT COMPANY KSA",
+    "short_name": "BNP PARIBAS INVESTMENT COMPANY KSA",
+    "bic": "BNPASARBWMI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "BNP PARIBAS SAUDI ARABIA",
+    "short_name": "BNP PARIBAS SAUDI ARABIA",
+    "bic": "BNPASARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "CITIGROUP SAUDI ARABIA",
+    "short_name": "CITIGROUP SAUDI ARABIA",
+    "bic": "CITISARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "CITIGROUP SAUDI ARABIA",
+    "short_name": "CITIGROUP SAUDI ARABIA",
+    "bic": "CITISARISIG",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "CREDIT SUISSE AG, RIYADH BRANCH",
+    "short_name": "CREDIT SUISSE AG, RIYADH BRANCH",
+    "bic": "CRESSARY",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "CREDIT SUISSE SAUDI ARABIA",
+    "short_name": "CREDIT SUISSE SAUDI ARABIA",
+    "bic": "CRESSARA20R",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "CREDIT SUISSE SAUDI ARABIA",
+    "short_name": "CREDIT SUISSE SAUDI ARABIA",
+    "bic": "CRESSARA",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "short_name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "bic": "DEUTSARIGES",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "short_name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "bic": "DEUTSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "short_name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "bic": "DEUTSARA",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "short_name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "bic": "DEUTSARAAWM",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "short_name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "bic": "DEUTSARACUS",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "short_name": "DEUTSCHE BANK AG, RIYADH BRANCH",
+    "bic": "DEUTSARICUS",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "DEUTSCHE SECURITIES SAUDI ARABIA",
+    "short_name": "DEUTSCHE SECURITIES SAUDI ARABIA",
+    "bic": "DEUTSARB",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "EMIRATES NBD PJSC",
+    "short_name": "EMIRATES NBD PJSC",
+    "bic": "EBILSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "FIRST ABU DHABI BANK",
+    "short_name": "FIRST ABU DHABI BANK",
+    "bic": "FABMSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "GULF INTERNATIONAL BANK (GIB) SAUDI ARABIA CLOSED",
+    "short_name": "GULF INTERNATIONAL BANK (GIB) SAUDI ARABIA CLOSED",
+    "bic": "GULFSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "INDUSTRIAL AND COMMERCIAL BANK OF CHINA RIYADH BRANCH, SA",
+    "short_name": "INDUSTRIAL AND COMMERCIAL BANK OF CHINA RIYADH BRANCH, SA",
+    "bic": "ICBKSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "INDUSTRIALIZATION AND ENERGY SERVICES CO. (TAQA)",
+    "short_name": "INDUSTRIALIZATION AND ENERGY SERVICES CO. (TAQA)",
+    "bic": "IENESADH",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "INTERNATIONAL CO. FOR WATER AND POWER PROJECTS",
+    "short_name": "INTERNATIONAL CO. FOR WATER AND POWER PROJECTS",
+    "bic": "ACWASARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "INTERNATIONAL ISLAMIC TRADE FINANCE CORPORATION (MEMBER ISLAMIC DEVELOPMENT BANK GROUP)",
+    "short_name": "INTERNATIONAL ISLAMIC TRADE FINANCE CORPORATION",
+    "bic": "ITFKSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ISLAMIC CORPORATION FOR THE DEVELOPMENT OF THE PRIVATE SECTOR (MEMBER, ISLAMIC DEVELOPMENT BANK GROUP)",
+    "short_name": "ISLAMIC CORPORATION FOR THE DEVELOPMENT OF THE PRIVATE SECTOR",
+    "bic": "ICDKSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ISLAMIC DEVELOPMENT BANK",
+    "short_name": "ISLAMIC DEVELOPMENT BANK",
+    "bic": "ISLDSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ISLAMIC DEVELOPMENT BANK",
+    "short_name": "ISLAMIC DEVELOPMENT BANK",
+    "bic": "ISLDSAJEICD",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ISLAMIC DEVELOPMENT BANK",
+    "short_name": "ISLAMIC DEVELOPMENT BANK",
+    "bic": "ISLDSAJEITF",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "J.P. MORGAN SAUDI ARABIA COMPANY",
+    "short_name": "J.P. MORGAN SAUDI ARABIA COMPANY",
+    "bic": "JPMGSARY",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "J.P. MORGAN SAUDI ARABIA COMPANY",
+    "short_name": "J.P. MORGAN SAUDI ARABIA COMPANY",
+    "bic": "JPMGSARYDCC",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "JPMORGAN CHASE BANK, N.A. RIYADH",
+    "short_name": "JPMORGAN CHASE BANK, N.A. RIYADH",
+    "bic": "CHASSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "JPMORGAN CHASE BANK, N.A. RIYADH",
+    "short_name": "JPMORGAN CHASE BANK, N.A. RIYADH",
+    "bic": "CHASSARISAU",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "MERRILL LYNCH KINGDOM OF SAUDI ARABIA",
+    "short_name": "MERRILL LYNCH KINGDOM OF SAUDI ARABIA",
+    "bic": "MLSASARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "MUFG BANK, LTD. RIYADH BRANCH",
+    "short_name": "MUFG BANK, LTD. RIYADH BRANCH",
+    "bic": "BOTKSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NAHDI MEDICAL COMPANY",
+    "short_name": "NAHDI MEDICAL COMPANY",
+    "bic": "NHDISAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL BANK OF BAHRAIN",
+    "short_name": "NATIONAL BANK OF BAHRAIN",
+    "bic": "NBOBSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL BANK OF KUWAIT",
+    "short_name": "NATIONAL BANK OF KUWAIT",
+    "bic": "NBOKSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL BANK OF PAKISTAN",
+    "short_name": "NATIONAL BANK OF PAKISTAN",
+    "bic": "NBPASARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL BISCUITS AND CONFECTIONERY COMPANY",
+    "short_name": "NATIONAL BISCUITS AND CONFECTIONERY COMPANY",
+    "bic": "NBCCSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL COMMERCIAL BANK, THE",
+    "short_name": "NATIONAL COMMERCIAL BANK, THE",
+    "bic": "NCBKSAJE615",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL COMMERCIAL BANK, THE",
+    "short_name": "NATIONAL COMMERCIAL BANK, THE",
+    "bic": "NCBKSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL COMMERCIAL BANK, THE",
+    "short_name": "NATIONAL COMMERCIAL BANK, THE",
+    "bic": "NCBKSAJE101",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL COMMERCIAL BANK, THE",
+    "short_name": "NATIONAL COMMERCIAL BANK, THE",
+    "bic": "NCBKSAJE613",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL COMMERCIAL BANK, THE",
+    "short_name": "NATIONAL COMMERCIAL BANK, THE",
+    "bic": "NCBKSAJE555",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL COMMERCIAL BANK, THE",
+    "short_name": "NATIONAL COMMERCIAL BANK, THE",
+    "bic": "NCBKSAJE614",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL FOOD INDUSTRIES CO. LTD",
+    "short_name": "NATIONAL FOOD INDUSTRIES CO. LTD",
+    "bic": "NAFDSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NATIONAL INDUSTRIALIZATION COMPANY",
+    "short_name": "NATIONAL INDUSTRIALIZATION COMPANY",
+    "bic": "NAICSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NAYIFAT FINANCE COMPANY",
+    "short_name": "NAYIFAT FINANCE COMPANY",
+    "bic": "NYFTSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "NCB CAPITAL COMPANY",
+    "short_name": "NCB CAPITAL COMPANY",
+    "bic": "NCCOSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "OMAR KASSEM ALESAYI MARKETING CO. LIMITED",
+    "short_name": "OMAR KASSEM ALESAYI MARKETING CO. LIMITED",
+    "bic": "OKAMSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "QATAR NATIONAL BANK",
+    "short_name": "QATAR NATIONAL BANK",
+    "bic": "QNBASARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "RAWABI HOLDING COMPANY",
+    "short_name": "RAWABI HOLDING COMPANY",
+    "bic": "RAWASADK",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "RIYAD BANK",
+    "short_name": "RIYAD BANK",
+    "bic": "RIBLSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SADARA CHEMICAL COMPANY",
+    "short_name": "SADARA CHEMICAL COMPANY",
+    "bic": "SDCCSADA",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAMBA FINANCIAL GROUP",
+    "short_name": "SAMBA FINANCIAL GROUP",
+    "bic": "SAMBSARIACS",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAMBA FINANCIAL GROUP",
+    "short_name": "SAMBA FINANCIAL GROUP",
+    "bic": "SAMBSARIJCS",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAMBA FINANCIAL GROUP",
+    "short_name": "SAMBA FINANCIAL GROUP",
+    "bic": "SAMBSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAMBA FINANCIAL GROUP",
+    "short_name": "SAMBA FINANCIAL GROUP",
+    "bic": "SAMBSARIRCS",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAMBA FINANCIAL GROUP",
+    "short_name": "SAMBA FINANCIAL GROUP",
+    "bic": "SAMBSARIRCP",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAMBA FINANCIAL GROUP",
+    "short_name": "SAMBA FINANCIAL GROUP",
+    "bic": "SAMBSARIRFX",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI ARABIAN MONETARY AUTHORITY",
+    "short_name": "SAUDI ARABIAN MONETARY AUTHORITY",
+    "bic": "SAMASARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI ARAMCO",
+    "short_name": "SAUDI ARAMCO",
+    "bic": "ARAMSADH",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI ARAMCO BASE OIL COMPANY - LUBEREF",
+    "short_name": "SAUDI ARAMCO BASE OIL COMPANY - LUBEREF",
+    "bic": "LBRFSAJD",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI ARAMCO MOBIL REFINERY COMPANY LIMITED (SAMREF)",
+    "short_name": "SAUDI ARAMCO MOBIL REFINERY COMPANY LIMITED (SAMREF)",
+    "bic": "SRMRSADB",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI BASIC INDUSTRIES CORPORATION (SABIC)",
+    "short_name": "SAUDI BASIC INDUSTRIES CORPORATION (SABIC)",
+    "bic": "SBHQSARR",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI BRITISH BANK, THE",
+    "short_name": "SAUDI BRITISH BANK, THE",
+    "bic": "SABBSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI BRITISH BANK, THE (FORMERLY ALAWWAL BANK)",
+    "short_name": "SAUDI BRITISH BANK, THE (FORMERLY ALAWWAL BANK)",
+    "bic": "AAALSARIALK",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI BRITISH BANK, THE (FORMERLY ALAWWAL BANK)",
+    "short_name": "SAUDI BRITISH BANK, THE (FORMERLY ALAWWAL BANK)",
+    "bic": "AAALSARIJED",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI BRITISH BANK, THE (FORMERLY ALAWWAL BANK)",
+    "short_name": "SAUDI BRITISH BANK, THE (FORMERLY ALAWWAL BANK)",
+    "bic": "AAALSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI BRITISH BANK, THE (FORMERLY ALAWWAL BANK)",
+    "short_name": "SAUDI BRITISH BANK, THE (FORMERLY ALAWWAL BANK)",
+    "bic": "AAALSARIRYD",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI BRITISH BANK, THE (FORMERLY ALAWWAL BANK)",
+    "short_name": "SAUDI BRITISH BANK, THE (FORMERLY ALAWWAL BANK)",
+    "bic": "AAALSARICTD",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI CHEVRON PHILLIPS CO.",
+    "short_name": "SAUDI CHEVRON PHILLIPS CO.",
+    "bic": "SCHMSADE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI ECONOMIC AND DEVELOPMENT COMPANY FOR SECURITIES",
+    "short_name": "SAUDI ECONOMIC AND DEVELOPMENT COMPANY FOR SECURITIES",
+    "bic": "SEDPSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI FRANSI CAPITAL",
+    "short_name": "SAUDI FRANSI CAPITAL",
+    "bic": "SFCPSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI INTERNATIONAL PETROCHEMICAL CO. (SIPCHEM)",
+    "short_name": "SAUDI INTERNATIONAL PETROCHEMICAL CO. (SIPCHEM)",
+    "bic": "SIPHSADB",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI INVESTMENT BANK, THE",
+    "short_name": "SAUDI INVESTMENT BANK, THE",
+    "bic": "SIBCSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI INVESTMENT BANK, THE",
+    "short_name": "SAUDI INVESTMENT BANK, THE",
+    "bic": "SIBCSARISPV",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SAUDI TELECOM COMPANY",
+    "short_name": "SAUDI TELECOM COMPANY",
+    "bic": "STCOSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SECURITIES CLEARING CENTER COMPANY CLOSED JOINT STOCK COMPANY",
+    "short_name": "SECURITIES CLEARING CENTER COMPANY CLOSED JOINT STOCK COMPANY",
+    "bic": "SCCYSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "SEERA GROUP HOLDING",
+    "short_name": "SEERA GROUP HOLDING",
+    "bic": "TAYRSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "STANDARD CHARTERED BANK BRANCH",
+    "short_name": "STANDARD CHARTERED BANK BRANCH",
+    "bic": "SCBLSAR2",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "STANDARD CHARTERED CAPITAL (SAUDI ARABIA)",
+    "short_name": "STANDARD CHARTERED CAPITAL (SAUDI ARABIA)",
+    "bic": "SCBLSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "T.C. ZIRAAT BANKASI A.S.",
+    "short_name": "T.C. ZIRAAT BANKASI A.S.",
+    "bic": "TCZBSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "THE ISLAMIC CORP FOR THE INSURANCE OF INVESTMENT AND EXPORT CREDIT (MEMBER ISLAMIC DEVELOPMENT BANKGROUP)",
+    "short_name": "THE ISLAMIC CORP FOR THE INSURANCE OF INVESTMENT AND EXPORT CREDIT",
+    "bic": "ICECSAJE",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "THE NATIONAL SHIPPING COMPANY OF SAUDI ARABIA",
+    "short_name": "THE NATIONAL SHIPPING COMPANY OF SAUDI ARABIA",
+    "bic": "BARISARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "THE SAUDI FUND FOR DEVELOPMENT",
+    "short_name": "THE SAUDI FUND FOR DEVELOPMENT",
+    "bic": "SFFDSARI",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "UNITED ELECTRONICS COMPANY",
+    "short_name": "UNITED ELECTRONICS COMPANY",
+    "bic": "EXTRSADA",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "WISAYAH GLOBAL INVESTMENT COMPANY",
+    "short_name": "WISAYAH GLOBAL INVESTMENT COMPANY",
+    "bic": "WGICSADK",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "YANBU ARAMCO SINOPEC REFINING (YASREF) LIMITED",
+    "short_name": "YANBU ARAMCO SINOPEC REFINING (YASREF) LIMITED",
+    "bic": "YASRSADB",
+    "primary": true,
+    "country_code": "SA"
+  },
+  {
+    "bank_code": "",
+    "name": "ZAHID TRACTOR AND HM",
+    "short_name": "ZAHID TRACTOR AND HM",
+    "bic": "ZTHMSAJE",
+    "primary": true,
+    "country_code": "SA"
+  }
+]

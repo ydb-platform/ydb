@@ -1,0 +1,9 @@
+--- contrib/restricted/boost/uuid/include/boost/uuid/uuid.hpp	(index)
++++ contrib/restricted/boost/uuid/include/boost/uuid/uuid.hpp	(working tree)
+@@ -209,4 +209,6 @@ struct is_pod<uuids::uuid> : true_type {};
+ #pragma warning(pop) // Restore warnings to previous state.
+ #endif
+ 
++#include <boost/uuid/uuid_hash.hpp>
++
+ #endif // BOOST_UUID_HPP

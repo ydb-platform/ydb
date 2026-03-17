@@ -1,0 +1,88 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     GPL-2.0-or-later     352b84e0a01d1bb12a355c7767e9c776
+BELONGS ya.make
+    License text:
+        License: GPLv2+
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        .dist-info/METADATA [8:8]
+
+KEEP     GPL-2.0-only         6731edef2727e51a061f498b5d6a282a
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 17, LICENSE at line 75
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        LICENSE [17:355]
+
+KEEP     GPL-2.0-or-later     6ec59b58505a3de249b7f0d9c7b01256
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        core/uwsgi.c [8:20]
+
+KEEP     GPL-2.0-or-later     8303dcfdba9e61d3dcc4b699969608a3
+BELONGS ya.make
+    License text:
+        Classifier: License :: OSI Approved :: GNU General Public License v2 or later (GPLv2+)
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        .dist-info/METADATA [10:10]
+
+KEEP     GPL-2.0-or-later WITH GCC-exception-2.0 af6964a819899b4b2ba5a85550463ec6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GCC-exception-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/GCC-exception-2.0
+    Files with this license:
+        LICENSE [3:12]

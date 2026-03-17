@@ -1,0 +1,6 @@
+keep:
+  - netaddr/tests/test_netaddr.py
+exclude_from_macros:
+  - netaddr/tests/test_netaddr.py
+disable_dos_to_unix:
+  - netaddr/eui/*

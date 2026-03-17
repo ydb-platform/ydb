@@ -1,0 +1,34 @@
+--- a/bli_config.h
++++ b/bli_config.h
+@@ -41,31 +41,10 @@
+ 
+ 
+ // Enabled sub-configurations (config_list)
+-#define BLIS_CONFIG_SKX
+-#define BLIS_CONFIG_KNL
+-#define BLIS_CONFIG_HASWELL
+-#define BLIS_CONFIG_SANDYBRIDGE
+-#define BLIS_CONFIG_PENRYN
+-#define BLIS_CONFIG_ZEN2
+-#define BLIS_CONFIG_ZEN
+-#define BLIS_CONFIG_EXCAVATOR
+-#define BLIS_CONFIG_STEAMROLLER
+-#define BLIS_CONFIG_PILEDRIVER
+-#define BLIS_CONFIG_BULLDOZER
+ #define BLIS_CONFIG_GENERIC
+ 
+ 
+ // Enabled kernel sets (kernel_list)
+-#define BLIS_KERNELS_SKX
+-#define BLIS_KERNELS_KNL
+-#define BLIS_KERNELS_SANDYBRIDGE
+-#define BLIS_KERNELS_PENRYN
+-#define BLIS_KERNELS_ZEN2
+-#define BLIS_KERNELS_HASWELL
+-#define BLIS_KERNELS_ZEN
+-#define BLIS_KERNELS_PILEDRIVER
+-#define BLIS_KERNELS_BULLDOZER
+-#define BLIS_KERNELS_GENERIC
+ 
+ 
+ #if 1

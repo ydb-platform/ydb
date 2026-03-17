@@ -1,0 +1,4 @@
+keep:
+  - tests/settings.py
+exclude_from_macros:
+  - rest_framework_csv/testfixtures/nonewlines.csv

@@ -1,0 +1,5 @@
+[console_scripts]
+zarr = zarr._cli.cli:app
+
+[pytest11]
+zarr = zarr.testing

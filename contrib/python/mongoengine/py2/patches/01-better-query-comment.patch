@@ -1,0 +1,32 @@
+--- contrib/python/mongoengine/py2/mongoengine/queryset/base.py	(index)
++++ contrib/python/mongoengine/py2/mongoengine/queryset/base.py	(working tree)
+@@ -1556,6 +1556,9 @@ class BaseQuerySet(object):
+ 
+             cursor_args[fields_name]['_text_score'] = {'$meta': 'textScore'}
+ 
++        if self._comment is not None:
++            cursor_args['comment'] = self._comment
++
+         return cursor_args
+ 
+     @property
+@@ -1609,9 +1612,6 @@ class BaseQuerySet(object):
+         if self._batch_size is not None:
+             self._cursor_obj.batch_size(self._batch_size)
+ 
+-        if self._comment is not None:
+-            self._cursor_obj.comment(self._comment)
+-
+         return self._cursor_obj
+ 
+     def __deepcopy__(self, memo):
+@@ -1627,6 +1627,9 @@ class BaseQuerySet(object):
+                     self._mongo_query = {'$and': [self._initial_query, self._mongo_query]}
+                 else:
+                     self._mongo_query.update(self._initial_query)
++            if self._comment:
++                self._mongo_query['$comment'] = self._comment
++
+         return self._mongo_query
+ 
+     @property

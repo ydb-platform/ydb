@@ -1,0 +1,24 @@
+--- contrib/python/snowflake-sqlalchemy/tests/conftest.py	(index)
++++ contrib/python/snowflake-sqlalchemy/tests/conftest.py	(working tree)
+@@ -16,1 +16,7 @@ import snowflake.connector
+-from .parameters import CONNECTION_PARAMETERS
++CONNECTION_PARAMETERS = {
++    'account':  'testaccount',
++    'user':     'user1',
++    'password': 'testpasswd',
++    'schema':   'testschema',
++    'database': 'testdb',
++}
+@@ -173,1 +180,1 @@ def engine_testaccount(request):
+-@pytest.fixture(scope="session", autouse=True)
++# @pytest.fixture(scope="session", autouse=True)
+--- contrib/python/snowflake-sqlalchemy/tests/test_copy.py	(index)
++++ contrib/python/snowflake-sqlalchemy/tests/test_copy.py	(working tree)
+@@ -36,6 +36,7 @@ def test_external_stage(sql_compiler):
+     )
+ 
+ 
++@pytest.mark.skip
+ def test_copy_into_location(engine_testaccount, sql_compiler):
+     meta = MetaData()
+     food_items = Table(

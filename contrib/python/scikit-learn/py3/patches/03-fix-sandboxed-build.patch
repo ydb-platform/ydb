@@ -1,0 +1,13 @@
+--- a/sklearn/neighbors/_partition_nodes.pyx	(index)
++++ b/sklearn/neighbors/_partition_nodes.pyx	(working tree)
+@@ -17,6 +17,9 @@
+ from cython cimport floating
+ 
+ 
++cdef extern from "algorithm":
++    pass
++
+ cdef extern from *:
+     """
+     #include <algorithm>
+

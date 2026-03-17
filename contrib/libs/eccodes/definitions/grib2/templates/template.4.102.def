@@ -1,0 +1,11 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.102, Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for wave 2D spectra with frequencies and directions defined by formulae
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.wave.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.point_in_time.def"
+include "grib2/templates/template.4.eps.def"
+include "grib2/templates/template.4.wave_spectra_formula.def"

@@ -1,0 +1,66 @@
+#Provided by Florian Weidle (ZAMG/Austria)
+#Mean sea level pressure
+'Pa' = {
+	 table2Version = 201 ;
+	 indicatorOfParameter = 151 ;
+	}
+#Convective available potential energy
+'J kg**-1' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 238 ;
+    }
+#Convective inhibition
+'J kg**-1' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 243 ;
+    }
+#Total Precipitation
+'kg m**-2' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 208 ;
+    }
+#2 metre dewpoint temperature
+'K' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 168 ;
+    }
+#2 metre temperature
+'K' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 167 ;
+    }
+#10 metre U wind component
+'m s**-1' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 165 ;
+    }
+#10 metre V wind component
+'m s**-1' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 166 ;
+    }
+#10 metre wind gust
+'m s**-1' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 206 ;
+    }
+#Large-scale precipitation
+'kg m**-2' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 232 ;
+    }
+#Land-sea mask
+'Proportion' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 81 ;
+    }
+#Geopotential
+'m**2 s**-2' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 235 ;
+    }
+#Geopotential Height
+'gpm' = {
+     table2Version = 201 ;
+     indicatorOfParameter = 233 ;
+    }

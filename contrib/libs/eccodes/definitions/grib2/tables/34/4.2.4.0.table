@@ -1,0 +1,10 @@
+# Product discipline 4 - Space weather products, parameter category 0: temperature
+0 0 Temperature (K)
+1 1 Electron temperature (K)
+2 2 Proton temperature (K)
+3 3 Ion temperature (K)
+4 4 Parallel temperature (K)
+5 5 Perpendicular temperature (K)
+# 6-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

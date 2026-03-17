@@ -1,0 +1,4 @@
+requirements:
+  - Pygments
+disable_dos_to_unix:
+  - tests/misc/CRLF_line_ends.txt

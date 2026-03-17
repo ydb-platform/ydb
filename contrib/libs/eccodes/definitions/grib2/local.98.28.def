@@ -1,0 +1,9 @@
+# (C) Copyright 2005- ECMWF.
+
+# Local definition 28 - COSMO local area EPS
+
+unsigned[4] baseDateEPS : dump;
+unsigned[2] baseTimeEPS  : dump;
+unsigned[1] numberOfRepresentativeMember : dump;
+unsigned[1] numberOfMembersInCluster  : dump;
+unsigned[1] totalInitialConditions  : dump;

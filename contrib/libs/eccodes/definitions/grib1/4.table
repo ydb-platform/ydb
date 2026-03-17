@@ -1,0 +1,15 @@
+# CODE TABLE 4 Unit of Time
+0 m Minute
+1 h Hour
+2 D Day
+3 M Month
+4 Y Year
+5 10Y Decade
+6 30Y Normal (30 years)
+7 C Century
+10 3h 3 hours
+11 6h 6 hours
+12 12h 12 hours
+13 15m 15 minutes
+14 30m 30 minutes
+254 s Second

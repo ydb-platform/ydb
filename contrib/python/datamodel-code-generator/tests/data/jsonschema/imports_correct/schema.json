@@ -1,0 +1,24 @@
+{
+  "properties": {
+    "inner": {
+      "discriminator": {
+        "mapping": {
+          "a": "./type_1.json",
+          "A": "./type_1.json"
+        },
+        "propertyName": "type_"
+      },
+      "oneOf": [
+        {
+          "$ref": "./type_1.json"
+        }
+      ],
+      "title": "Inner"
+    }
+  },
+  "required": [
+    "inner"
+  ],
+  "title": "Response",
+  "type": "object"
+}

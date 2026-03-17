@@ -1,0 +1,12 @@
+--- contrib/python/srsly/ya.make	(index)
++++ contrib/python/srsly/ya.make	(working tree)
+@@ -28,6 +28,9 @@
+     srsly.ruamel_yaml.cyaml
+ )
+
++# TODO: https://a.yandex-team.ru/arcadia/contrib/libs/protobuf_old/protoherobora.py?rev=r16542589#L94
++INCLUDE(symbols.cmake)
++
+ SRCS(
+     srsly/ujson/JSONtoObj.c
+     srsly/ujson/lib/dconv_wrapper.cc

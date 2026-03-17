@@ -1,0 +1,4 @@
+exclude:
+  - mcp/cli/*
+requirements:
+  - pydantic: contrib/python/pydantic/pydantic-2

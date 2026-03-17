@@ -1,0 +1,39 @@
+--- contrib/python/statsmodels/py3/statsmodels/tsa/exponential_smoothing/_ets_smooth.pyx	(index)
++++ contrib/python/statsmodels/py3/statsmodels/tsa/exponential_smoothing/_ets_smooth.pyx	(working tree)
+@@ -1,5 +1,5 @@
+ #!python
+-#cython: wraparound=False, boundscheck=False, cdivision=True
++#cython: wraparound=False, boundscheck=False, cdivision=True, cpow=True
+ 
+ from cpython cimport bool
+ import numpy as np
+--- contrib/python/statsmodels/py3/statsmodels/tsa/statespace/_filters/_inversions.pyx	(index)
++++ contrib/python/statsmodels/py3/statsmodels/tsa/statespace/_filters/_inversions.pyx	(working tree)
+@@ -1,6 +1,7 @@
+ #cython: boundscheck=False
+ #cython: wraparound=False
+ #cython: cdivision=False
++#cython: cpow=True
+ """
+ State Space Models
+ 
+--- contrib/python/statsmodels/py3/statsmodels/tsa/statespace/_filters/_univariate.pyx	(index)
++++ contrib/python/statsmodels/py3/statsmodels/tsa/statespace/_filters/_univariate.pyx	(working tree)
+@@ -2,6 +2,7 @@
+ #cython: boundscheck=False
+ #cython: wraparound=False
+ #cython: cdivision=False
++#cython: cpow=True
+ """
+ State Space Models
+ 
+--- contrib/python/statsmodels/py3/statsmodels/tsa/statespace/_filters/_univariate_diffuse.pyx	(index)
++++ contrib/python/statsmodels/py3/statsmodels/tsa/statespace/_filters/_univariate_diffuse.pyx	(working tree)
+@@ -2,6 +2,7 @@
+ #cython: boundscheck=False
+ #cython: wraparound=False
+ #cython: cdivision=False
++#cython: cpow=True
+ """
+ State Space Models
+ 

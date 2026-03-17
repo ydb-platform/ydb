@@ -1,0 +1,49 @@
+#
+# Copyright (c), 2016-2021, SISSA (International School for Advanced Studies).
+# All rights reserved.
+# This file is distributed under the terms of the MIT License.
+# See the file 'LICENSE' in the root directory of the present
+# distribution, or http://opensource.org/licenses/MIT.
+#
+# Auto-generated code: don't edit this file
+#
+"""
+Sample of XSD generated code using test PythonGenerator class.
+"""
+import xmlschema
+
+{% if schema.target_namespace -%}
+__NAMESPACE__ = "{{ schema.target_namespace }}"
+{%- endif %}
+#
+# Schema types
+#
+{#- Render global types #}
+{% for xsd_type in ( schema.types.values()|sort_types ) %}
+class {{ xsd_type|name }}:
+
+    content_type = '{{ xsd_type.content_type_label }}'
+
+{% endfor %}
+
+#
+# Schema elements
+#
+{#- Render global elements #}
+{% for xsd_element in schema.elements.values() %}
+class {{ xsd_element|name|capitalize }}:
+    {% if xsd_element.type.is_global() -%}
+
+        xsd_type = {{ xsd_element.type|name }}
+
+    {%- elif xsd_element.type.is_simple() -%}
+
+        xsd_type = {{ xsd_element.type.root_type|name }}
+
+    {%- else %}
+
+    pass
+
+    {%- endif %}
+
+{% endfor %}

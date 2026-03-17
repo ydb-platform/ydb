@@ -1,0 +1,93 @@
+<!-- 
+
+     File isocyr1.ent produced by the dsssl script ent.dsl
+     from input data in unicode.xml.
+
+     Please report any errors to 
+     David Carlisle <davidc@nag.co.uk>.
+
+     The numeric character values assigned to each entity
+     (should) match either official Unicode assignments
+     or assignments in the STIX proposal for characters
+     for Mathematics.
+
+     The STIX assignments are temporary and will change if
+     the proposal or some variant of it is adopted by the
+     Unicode Consortium.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1986
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+-->
+
+<!ENTITY acy        "&#1072;"  ><!--U0430 =small a, Cyrillic -->
+<!ENTITY Acy        "&#1040;"  ><!--U0410 =capital A, Cyrillic -->
+<!ENTITY bcy        "&#1073;"  ><!--U0431 =small be, Cyrillic -->
+<!ENTITY Bcy        "&#1041;"  ><!--U0411 =capital BE, Cyrillic -->
+<!ENTITY chcy       "&#1095;"  ><!--U0447 =small che, Cyrillic -->
+<!ENTITY CHcy       "&#1063;"  ><!--U0427 =capital CHE, Cyrillic -->
+<!ENTITY dcy        "&#1076;"  ><!--U0434 =small de, Cyrillic -->
+<!ENTITY Dcy        "&#1044;"  ><!--U0414 =capital DE, Cyrillic -->
+<!ENTITY ecy        "&#1101;"  ><!--U044D =small e, Cyrillic -->
+<!ENTITY Ecy        "&#1069;"  ><!--U042D =capital E, Cyrillic -->
+<!ENTITY fcy        "&#1092;"  ><!--U0444 =small ef, Cyrillic -->
+<!ENTITY Fcy        "&#1060;"  ><!--U0424 =capital EF, Cyrillic -->
+<!ENTITY gcy        "&#1075;"  ><!--U0433 =small ghe, Cyrillic -->
+<!ENTITY Gcy        "&#1043;"  ><!--U0413 =capital GHE, Cyrillic -->
+<!ENTITY hardcy     "&#1098;"  ><!--U044A =small hard sign, Cyrillic -->
+<!ENTITY HARDcy     "&#1066;"  ><!--U042A =capital HARD sign, Cyrillic -->
+<!ENTITY icy        "&#1080;"  ><!--U0438 =small i, Cyrillic -->
+<!ENTITY iecy       "&#1077;"  ><!--U0435 =small ie, Cyrillic -->
+<!ENTITY iocy       "&#1105;"  ><!--U0451 =small io, Russian -->
+<!ENTITY Icy        "&#1048;"  ><!--U0418 =capital I, Cyrillic -->
+<!ENTITY IEcy       "&#1045;"  ><!--U0415 =capital IE, Cyrillic -->
+<!ENTITY IOcy       "&#1025;"  ><!--U0401 =capital IO, Russian -->
+<!ENTITY jcy        "&#1081;"  ><!--U0439 =small short i, Cyrillic -->
+<!ENTITY Jcy        "&#1049;"  ><!--U0419 =capital short I, Cyrillic -->
+<!ENTITY kcy        "&#1082;"  ><!--U043A =small ka, Cyrillic -->
+<!ENTITY khcy       "&#1093;"  ><!--U0445 =small ha, Cyrillic -->
+<!ENTITY Kcy        "&#1050;"  ><!--U041A =capital KA, Cyrillic -->
+<!ENTITY KHcy       "&#1061;"  ><!--U0425 =capital HA, Cyrillic -->
+<!ENTITY lcy        "&#1083;"  ><!--U043B =small el, Cyrillic -->
+<!ENTITY Lcy        "&#1051;"  ><!--U041B =capital EL, Cyrillic -->
+<!ENTITY mcy        "&#1084;"  ><!--U043C =small em, Cyrillic -->
+<!ENTITY Mcy        "&#1052;"  ><!--U041C =capital EM, Cyrillic -->
+<!ENTITY ncy        "&#1085;"  ><!--U043D =small en, Cyrillic -->
+<!ENTITY numero     "&#8470;"  ><!--U2116 =numero sign -->
+<!ENTITY Ncy        "&#1053;"  ><!--U041D =capital EN, Cyrillic -->
+<!ENTITY ocy        "&#1086;"  ><!--U043E =small o, Cyrillic -->
+<!ENTITY Ocy        "&#1054;"  ><!--U041E =capital O, Cyrillic -->
+<!ENTITY pcy        "&#1087;"  ><!--U043F =small pe, Cyrillic -->
+<!ENTITY Pcy        "&#1055;"  ><!--U041F =capital PE, Cyrillic -->
+<!ENTITY rcy        "&#1088;"  ><!--U0440 =small er, Cyrillic -->
+<!ENTITY Rcy        "&#1056;"  ><!--U0420 =capital ER, Cyrillic -->
+<!ENTITY scy        "&#1089;"  ><!--U0441 =small es, Cyrillic -->
+<!ENTITY shchcy     "&#1097;"  ><!--U0449 =small shcha, Cyrillic -->
+<!ENTITY shcy       "&#1096;"  ><!--U0448 =small sha, Cyrillic -->
+<!ENTITY softcy     "&#1100;"  ><!--U044C =small soft sign, Cyrillic -->
+<!ENTITY Scy        "&#1057;"  ><!--U0421 =capital ES, Cyrillic -->
+<!ENTITY SHcy       "&#1064;"  ><!--U0428 =capital SHA, Cyrillic -->
+<!ENTITY SHCHcy     "&#1065;"  ><!--U0429 =capital SHCHA, Cyrillic -->
+<!ENTITY SOFTcy     "&#1068;"  ><!--U042C =capital SOFT sign, Cyrillic -->
+<!ENTITY tcy        "&#1090;"  ><!--U0442 =small te, Cyrillic -->
+<!ENTITY tscy       "&#1094;"  ><!--U0446 =small tse, Cyrillic -->
+<!ENTITY Tcy        "&#1058;"  ><!--U0422 =capital TE, Cyrillic -->
+<!ENTITY TScy       "&#1062;"  ><!--U0426 =capital TSE, Cyrillic -->
+<!ENTITY ucy        "&#1091;"  ><!--U0443 =small u, Cyrillic -->
+<!ENTITY Ucy        "&#1059;"  ><!--U0423 =capital U, Cyrillic -->
+<!ENTITY vcy        "&#1074;"  ><!--U0432 =small ve, Cyrillic -->
+<!ENTITY Vcy        "&#1042;"  ><!--U0412 =capital VE, Cyrillic -->
+<!ENTITY yacy       "&#1103;"  ><!--U044F =small ya, Cyrillic -->
+<!ENTITY ycy        "&#1099;"  ><!--U044B =small yeru, Cyrillic -->
+<!ENTITY yucy       "&#1102;"  ><!--U044E =small yu, Cyrillic -->
+<!ENTITY YAcy       "&#1071;"  ><!--U042F =capital YA, Cyrillic -->
+<!ENTITY Ycy        "&#1067;"  ><!--U042B =capital YERU, Cyrillic -->
+<!ENTITY YUcy       "&#1070;"  ><!--U042E =capital YU, Cyrillic -->
+<!ENTITY zcy        "&#1079;"  ><!--U0437 =small ze, Cyrillic -->
+<!ENTITY zhcy       "&#1078;"  ><!--U0436 =small zhe, Cyrillic -->
+<!ENTITY Zcy        "&#1047;"  ><!--U0417 =capital ZE, Cyrillic -->
+<!ENTITY ZHcy       "&#1046;"  ><!--U0416 =capital ZHE, Cyrillic -->

@@ -1,0 +1,7 @@
+# (C) Copyright 2005- ECMWF.
+
+# GRID DEFINITION Oblique Lambert conformal, secant or tangent, conic or bi-polar
+# grib 1 -> 2
+constant gridDefinitionTemplateNumber     = 30;
+
+template commonBlock "grib1/grid_definition_lambert.def";

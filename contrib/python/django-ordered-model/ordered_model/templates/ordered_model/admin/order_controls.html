@@ -1,0 +1,9 @@
+{% load static %}
+<a href="{{ urls.top }}{{query_string}}">
+    <img src="{% static 'ordered_model/arrow-top.gif' %}"></a>
+<a href="{{ urls.up }}{{query_string}}">
+    <img src="{% static 'ordered_model/arrow-up.gif' %}"></a>
+<a href="{{ urls.down }}{{query_string}}">
+    <img src="{% static 'ordered_model/arrow-down.gif' %}"></a>
+<a href="{{ urls.bottom }}{{query_string}}">
+    <img src="{% static 'ordered_model/arrow-bottom.gif' %}"></a>

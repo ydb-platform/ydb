@@ -1,0 +1,79 @@
+/*
+
+Presentational hints stylsheet for HTML.
+
+This stylesheet contains all the presentational hints rules that can be
+expressed as CSS.
+
+See https://www.w3.org/TR/html5/rendering.html#rendering
+
+TODO: Attribute values are not case-insensitive, but they should be. We can add
+a "i" flag when CSS Selectors Level 4 is supported.
+
+*/
+
+pre[wrap] { white-space: pre-wrap }
+
+br[clear=left i] { clear: left }
+br[clear=right i] { clear: right }
+br[clear=all i], br[clear=both i] { clear: both }
+
+:is(ol, li)[type="1"] { list-style-type: decimal }
+:is(ol, li)[type=a] { list-style-type: lower-alpha }
+:is(ol, li)[type=A] { list-style-type: upper-alpha }
+:is(ol, li)[type=i] { list-style-type: lower-roman }
+:is(ol, li)[type=I] { list-style-type: upper-roman }
+:is(ul, li)[type=disc i] { list-style-type: disc }
+:is(ul, li)[type=circle i] { list-style-type: circle }
+:is(ul, li)[type=square i] { list-style-type: square }
+
+table[align=left i] { float: left }
+table[align=right i] { float: right }
+table[align=center i] { margin-left: auto; margin-right: auto }
+:is(thead, tbody, tfoot, tr, td, th)[align=absmiddle i] { text-align: center }
+
+caption[align=bottom i] { caption-side: bottom }
+:is(p, h1, h2, h3, h4, h5, h6)[align=left i] { text-align: left }
+:is(p, h1, h2, h3, h4, h5, h6)[align=right i] { text-align: right }
+:is(p, h1, h2, h3, h4, h5, h6)[align=center i] { text-align: center }
+:is(p, h1, h2, h3, h4, h5, h6)[align=justify i] { text-align: justify }
+:is(thead, tbody, tfoot, tr, td, th)[valign=top i] { vertical-align: top }
+:is(thead, tbody, tfoot, tr, td, th)[valign=middle i] { vertical-align: middle }
+:is(thead, tbody, tfoot, tr, td, th)[valign=bottom i] { vertical-align: bottom }
+:is(thead, tbody, tfoot, tr, td, th)[valign=baseline i] { vertical-align: baseline }
+
+:is(td, th)[nowrap] { white-space: nowrap }
+
+table:is([rules=none i], [rules=groups i], [rules=rows i], [rules=cols i]) { border-style: hidden; border-collapse: collapse }
+table[border]:not([border="0 i"]) { border-style: outset }
+table[frame=void i] { border-style: hidden }
+table[frame=above i] { border-style: outset hidden hidden hidden }
+table[frame=below i] { border-style: hidden hidden outset hidden }
+table[frame=hsides i] { border-style: outset hidden outset hidden }
+table[frame=lhs i] { border-style: hidden hidden hidden outset }
+table[frame=rhs i] { border-style: hidden outset hidden hidden }
+table[frame=vsides i] { border-style: hidden outset }
+table[frame=box i], table[frame=border i] { border-style: outset }
+
+table[border]:not([border="0"]) > tr > :is(td, th), table[border]:not([border="0"]) > :is(thead, tbody, tfoot) > tr > :is(td, th) { border-width: 1px; border-style: inset }
+table:is([rules=none i], [rules=groups i], [rules=rows i]) > tr > :is(td, th), table:is([rules=none i], [rules=groups i], [rules=rows i]) > :is(thead, tbody, tfoot) > tr > :is(td, th) { border-width: 1px; border-style: none }
+table[rules=cols i] > tr > :is(td, th), table[rules=cols i] > :is(thead, tbody, tfoot) > tr > :is(td, th) { border-width: 1px; border-style: none solid }
+table[rules=all i] > tr > :is(td, th), table[rules=all i] > :is(thead, tbody, tfoot) > tr > :is(td, th) { border-width: 1px; border-style: solid }
+table[rules=groups i] > colgroup { border-left-width: 1px; border-left-style: solid; border-right-width: 1px; border-right-style: solid }
+table[rules=groups i] > :is(thead, tbody, tfoot) { border-top-width: 1px; border-top-style: solid; border-bottom-width: 1px; border-bottom-style: solid }
+table[rules=rows i] > tr, table[rules=rows i] > :is(thead, tbody, tfoot) > tr { border-top-width: 1px; border-top-style: solid; border-bottom-width: 1px; border-bottom-style: solid }
+
+hr[align=left i] { margin-left: 0; margin-right: auto }
+hr[align=right i] { margin-left: auto; margin-right: 0 }
+hr[align=center i] { margin-left: auto; margin-right: auto }
+hr[color], hr[noshade] { border-style: solid }
+
+iframe[frameborder="0"], iframe[frameborder=no i] { border: none }
+
+:is(applet, embed, iframe, img, input, object)[align=left i] { float: left }
+:is(applet, embed, iframe, img, input, object)[align=right i] { float: right }
+:is(applet, embed, iframe, img, input, object)[align=top i] { vertical-align: top }
+:is(applet, embed, iframe, img, input, object)[align=baseline i] { vertical-align: baseline }
+:is(applet, embed, iframe, img, input, object)[align=texttop i] { vertical-align: text-top }
+:is(applet, embed, iframe, img, input, object):is([align=middle i], [align=absmiddle i], [align=absmiddle i]) { vertical-align: middle }
+:is(applet, embed, iframe, img, input, object)[align=bottom i] { vertical-align: bottom }

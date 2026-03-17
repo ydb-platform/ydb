@@ -1,0 +1,3 @@
+# To rebuild the grammar:
+
+make LEX_OUTPUT_ROOT=lex.yy -f extrules.am  grib_yacc.c grib_yacc.h grib_lex.c 

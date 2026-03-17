@@ -1,0 +1,6 @@
+# Code table 4.221 - Treatment of missing data
+0 0 Not included
+1 1 Extrapolated
+# 2-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,3 @@
+[opentelemetry_propagator]
+xray = opentelemetry.propagators.aws:AwsXRayPropagator
+xray-lambda = opentelemetry.propagators.aws:AwsXRayLambdaPropagator

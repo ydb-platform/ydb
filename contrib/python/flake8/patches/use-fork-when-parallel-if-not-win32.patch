@@ -1,0 +1,28 @@
+--- contrib/python/flake8/flake8/checker.py	(index)
++++ contrib/python/flake8/flake8/checker.py	(working tree)
+@@ -1,6 +1,7 @@
+ """Checker Manager and Checker classes."""
+ from __future__ import annotations
+ 
++import sys
+ import argparse
+ import contextlib
+ import errno
+@@ -232,7 +233,7 @@ class Manager:
+         :issue:`117`) this also implements fallback to serial processing.
+         """
+         try:
+-            if self.jobs > 1 and len(self.filenames) > 1:
++            if self.jobs > 1 and len(self.filenames) > 1 and sys.platform != "win32":
+                 self.run_parallel()
+             else:
+                 self.run_serial()
+@@ -586,6 +587,8 @@ def _try_initialize_processpool(
+ ) -> multiprocessing.pool.Pool | None:
+     """Return a new process pool instance if we are able to create one."""
+     try:
++        if sys.platform != "win32":
++            return multiprocessing.get_context("fork").Pool(job_count, _mp_init, initargs=(argv,))
+         return multiprocessing.Pool(job_count, _mp_init, initargs=(argv,))
+     except OSError as err:
+         if err.errno not in SERIAL_RETRY_ERRNOS:

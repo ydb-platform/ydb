@@ -1,0 +1,11 @@
+--- contrib/python/chdb/cpp/base/poco/NetSSL_OpenSSL/src/Context.cpp	(index)
++++ contrib/python/chdb/cpp/base/poco/NetSSL_OpenSSL/src/Context.cpp	(working tree)
+@@ -592,7 +592,7 @@ void Context::createSSLContext()
+ 	SSL_CTX_set_default_passwd_cb(_pSSLContext, &SSLManager::privateKeyPassphraseCallback);
+ 	Utility::clearErrorStack();
+ 	SSL_CTX_set_options(_pSSLContext, SSL_OP_ALL);
+-	SSL_CTX_set_options(_pSSLContext, SSL_OP_IGNORE_UNEXPECTED_EOF);
++	// SSL_CTX_set_options(_pSSLContext, SSL_OP_IGNORE_UNEXPECTED_EOF);
+ }
+ 
+ 

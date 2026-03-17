@@ -1,0 +1,2 @@
+[console_scripts]
+salt-lint = saltlint.cli:run

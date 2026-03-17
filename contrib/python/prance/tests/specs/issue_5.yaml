@@ -1,0 +1,14 @@
+swagger: '2.0'
+info:
+  title: Test API
+  version: "0.1"
+produces:
+  - application/json
+basePath: /api/v1
+paths:
+  /test:
+    post:
+      operationId: test_api.api.fromurl.post
+      responses:
+        200: #<---
+          description: Returns something

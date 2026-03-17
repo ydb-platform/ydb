@@ -1,0 +1,29 @@
+# Product discipline 0 - Meteorological products
+0 0 Temperature
+1 1 Moisture
+2 2 Momentum
+3 3 Mass
+4 4 Short-wave radiation
+5 5 Long-wave radiation
+6 6 Cloud
+7 7 Thermodynamic stability indices
+8 8 Kinematic stability indices
+9 9 Temperature probabilities
+10 10 Moisture probabilities
+11 11 Momentum probabilities
+12 12 Mass probabilities
+13 13 Aerosols
+14 14 Trace gases (e.g. ozone, CO2)
+15 15 Radar
+16 16 Forecast radar imagery
+17 17 Electrodynamics
+18 18 Nuclear/radiology
+19 19 Physical atmospheric properties
+20 20 Atmospheric chemical constituents
+21 21 Thermodynamic properties
+22 22 Drought indices
+# 23-189 Reserved
+190 190 CCITT IA5 string
+191 191 Miscellaneous
+# 192-254 Reserved for local use
+255 255 Missing

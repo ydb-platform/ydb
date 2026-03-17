@@ -1,0 +1,8 @@
+# class e4
+
+# NOTE: MARS step is startStep. See GRIB-378
+alias mars.step = startStep;
+alias mars.number=perturbationNumber;
+
+alias monthlyVerificationTime = validityTime;
+alias monthlyVerificationDate = dataDate;

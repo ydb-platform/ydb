@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package yandex.cloud.k8s.marketplace.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/marketplace/v1;k8s_marketplace";
+option java_package = "yandex.cloud.api.k8s.marketplace.v1";
+
+// A Helm Release.
+message HelmRelease {
+  reserved 9;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Helm release status is unknown
+    UNKNOWN = 1;
+
+    // Helm release deployed.
+    DEPLOYED = 2;
+
+    // Helm release uninstalled.
+    UNINSTALLED = 3;
+
+    // Helm release superseded.
+    SUPERSEDED = 4;
+
+    // Helm release installation failed.
+    FAILED = 5;
+
+    // Helm release is being uninstalled.
+    UNINSTALLING = 6;
+
+    // Helm release is to be installed.
+    PENDING_INSTALL = 7;
+
+    // Helm release is to be updated.
+    PENDING_UPGRADE = 8;
+
+    // Helm release is to be rolled back.
+    PENDING_ROLLBACK = 9;
+  }
+
+  // ID of a helm release.
+  string id = 1;
+
+  // ID of the Kubernetes cluster.
+  string cluster_id = 2;
+
+  // Name of the application.
+  string app_name = 3;
+
+  // Namespace of the application.
+  string app_namespace = 4;
+
+  // Kubernetes marketplace product id.
+  string product_id = 5;
+
+  // Kubernetes marketplace product name.
+  string product_name = 6;
+
+  // Kubernetes marketplace product version.
+  string product_version = 10;
+
+  // Status of a helm release.
+  Status status = 7;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 8;
+}

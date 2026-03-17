@@ -1,0 +1,240 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2020-01-21 19:08+0700\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: admin.py:48
+msgid "Make selected dispatches pending"
+msgstr ""
+
+#: config.py:9
+msgid "Messaging"
+msgstr ""
+
+#: messages/base.py:34
+msgid "Notification"
+msgstr ""
+
+#: messages/email.py:9
+msgid "Email notification"
+msgstr ""
+
+#: messages/plain.py:13
+msgid "Text notification"
+msgstr ""
+
+#: messengers/facebook.py:31
+msgid "Facebook"
+msgstr ""
+
+#: messengers/smtp.py:14
+msgid "E-mail"
+msgstr ""
+
+#: messengers/smtp.py:97
+msgid "No Subject"
+msgstr ""
+
+#: messengers/telegram.py:15
+msgid "Telegram"
+msgstr ""
+
+#: messengers/twitter.py:15
+msgid "Tweet"
+msgstr ""
+
+#: messengers/vkontakte.py:31
+msgid "VKontakte"
+msgstr ""
+
+#: messengers/xmpp.py:16
+msgid "XMPP"
+msgstr ""
+
+#: models.py:64
+#, python-format
+msgid "Value `%r` is not a valid context."
+msgstr ""
+
+#: models.py:90 models.py:200 models.py:381 models.py:395
+msgid "Time created"
+msgstr ""
+
+#: models.py:93
+msgid "Sender"
+msgstr ""
+
+#: models.py:96 models.py:398
+msgid "Message class"
+msgstr ""
+
+#: models.py:97 models.py:398
+msgid "Message logic class identifier."
+msgstr ""
+
+#: models.py:99
+msgid "Message context"
+msgstr ""
+
+#: models.py:102
+msgid "Priority"
+msgstr ""
+
+#: models.py:103
+msgid ""
+"Number describing message sending priority. Messages with different "
+"priorities can be sent with different periodicity."
+msgstr ""
+
+#: models.py:107
+msgid "Dispatches ready"
+msgstr ""
+
+#: models.py:108
+msgid ""
+"Indicates whether dispatches for this message are already formed and ready "
+"to delivery."
+msgstr ""
+
+#: models.py:111 models.py:205
+msgid "Message"
+msgstr ""
+
+#: models.py:112
+msgid "Messages"
+msgstr ""
+
+#: models.py:182
+msgid "Pending"
+msgstr ""
+
+#: models.py:183
+msgid "Processing"
+msgstr ""
+
+#: models.py:184
+msgid "Sent"
+msgstr ""
+
+#: models.py:185
+msgid "Error"
+msgstr ""
+
+#: models.py:186
+msgid "Failed"
+msgstr ""
+
+#: models.py:193
+msgid "Unread"
+msgstr ""
+
+#: models.py:194
+msgid "Read"
+msgstr ""
+
+#: models.py:203
+msgid "Time dispatched"
+msgstr ""
+
+#: models.py:203
+msgid "Time of the last delivery attempt."
+msgstr ""
+
+#: models.py:208 models.py:401
+msgid "Messenger"
+msgstr ""
+
+#: models.py:208 models.py:401
+msgid "Messenger class identifier."
+msgstr ""
+
+#: models.py:211 models.py:404
+msgid "Recipient"
+msgstr ""
+
+#: models.py:213 models.py:406
+msgid "Address"
+msgstr ""
+
+#: models.py:213 models.py:406
+msgid "Recipient address."
+msgstr ""
+
+#: models.py:216
+msgid "Retry count"
+msgstr ""
+
+#: models.py:216
+msgid "A number of delivery retries has already been made."
+msgstr ""
+
+#: models.py:218
+msgid "Message cache"
+msgstr ""
+
+#: models.py:221
+msgid "Dispatch status"
+msgstr ""
+
+#: models.py:223
+msgid "Read status"
+msgstr ""
+
+#: models.py:226 models.py:382
+msgid "Dispatch"
+msgstr ""
+
+#: models.py:227
+msgid "Dispatches"
+msgstr ""
+
+#: models.py:383
+msgid "Text"
+msgstr ""
+
+#: models.py:386
+msgid "Dispatch error"
+msgstr ""
+
+#: models.py:387
+msgid "Dispatch errors"
+msgstr ""
+
+#: models.py:409
+msgid "Subscription"
+msgstr ""
+
+#: models.py:410
+msgid "Subscriptions"
+msgstr ""
+
+#: templates/sitemessage/messages/_base.html:21
+msgid "You can unsubscribe from this list using"
+msgstr ""
+
+#: templates/sitemessage/messages/_base.html:21
+msgid "this link"
+msgstr ""
+
+#: toolbox.py:116
+#, python-format
+msgid "You have %(count)s undelivered dispatch(es) at %(url)s"
+msgstr ""
+
+#: toolbox.py:120
+msgid "[SITEMESSAGE] Undelivered dispatches"
+msgstr ""

@@ -1,0 +1,43 @@
+0	0	Air
+1	1	Ozone
+2	2	Water vapour
+3	3	Methane
+4	4	Carbon dioxide
+5	5	Carbon monoxide
+6	6	Nitrogen dioxide
+7	7	Nitrous oxide
+8	8	Nitrogen monoxide
+9	9	Formaldehyde
+10	10	Sulphur dioxide
+11	11	Nitric acid
+12	12	All nitrogen oxides (NOy) expressed as nitrogen
+13	13	Peroxyacetyl nitrate
+14	14	Hydroxyl radical
+15	15	Ammonia
+16	16	Ammonium
+17	17	Radon
+18	18	Dimethyl sulphide
+19	19	Hexachlorocyclohexane
+20	20	Alpha hexachlorocyclohexane
+21	21	Elemental mercury
+22	22	Divalent mercury
+23	23	Hexachlorobiphenyl
+24	24	NOx expressed as nitrogen
+25	25	Non-methane volatile organic compounds expressed as carbon
+26	26	Anthropogenic non-methane volatile organic compounds expressed as carbon
+27	27	Biogenic non-methane volatile organic compounds expressed as carbon
+40000	40000	Sulphate dry aerosol
+40001	40001	Black carbon dry aerosol
+40002	40002	Particulate organic matter dry aerosol
+40003	40003	Primary particulate organic matter dry aerosol
+40004	40004	Secondary particulate organic matter dry aerosol
+40005	40005	Sea salt dry aerosol
+40006	40006	Dust dry aerosol
+40007	40007	Mercury dry aerosol
+40008	40008	PM10 aerosol
+40009	40009	PM2P5 aerosol
+40010	40010	PM1 aerosol
+40011	40011	Nitrate dry aerosol
+40012	40012	Ammonium dry aerosol
+40013	40013	Water in ambient aerosol
+65535	65535	Missing

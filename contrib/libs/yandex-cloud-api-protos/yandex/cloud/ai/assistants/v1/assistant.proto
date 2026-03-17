@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.assistants.v1;
+
+import "yandex/cloud/ai/common/common.proto";
+import "yandex/cloud/ai/assistants/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/assistants/v1;assistants";
+option java_package = "yandex.cloud.api.ai.assistants.v1";
+
+// Assistant represents an AI assistant configuration with various settings and metadata.
+message Assistant {
+  // Unique identifier of the assistant.
+  string id = 1;
+
+  // ID of the folder that the assistant belongs to.
+  string folder_id = 2;
+
+  // Name of the assistant.
+  string name = 3;
+
+  // Description of the assistant.
+  string description = 4;
+
+  // Identifier of the subject who created this assistant.
+  string created_by = 5;
+
+  // Timestamp representing when the assistant was created.
+  google.protobuf.Timestamp created_at = 6;
+
+  // Identifier of the subject who last updated this assistant.
+  string updated_by = 7;
+
+  // Timestamp representing the last time this assistant was updated.
+  google.protobuf.Timestamp updated_at = 8;
+
+  // Configuration for the expiration of the assistant, defining when and how the assistant will expire.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 9;
+
+  // Timestamp representing when the assistant will expire.
+  google.protobuf.Timestamp expires_at = 10;
+
+  // Set of key-value pairs that can be used to organize and categorize the assistant.
+  map<string, string> labels = 11;
+
+  // The [ID of the model](/docs/foundation-models/concepts/yandexgpt/models) to be used for completion generation.
+  string model_uri = 12;
+
+  // Instructions or guidelines that the assistant should follow when generating responses or performing tasks.
+  // These instructions can help guide the assistant's behavior and responses.
+  string instruction = 13;
+
+  // Configuration options for truncating the prompt when the token count exceeds a specified limit.
+  PromptTruncationOptions prompt_truncation_options = 14;
+
+  // Configuration options for completion generation.
+  CompletionOptions completion_options = 15;
+
+  // List of tools that the assistant can use to perform additional tasks.
+  // One example is the SearchIndexTool, which is used for Retrieval-Augmented Generation (RAG).
+  repeated Tool tools = 16;
+
+  // Specifies the format of the model's response.
+  ResponseFormat response_format = 17;
+}

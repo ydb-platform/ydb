@@ -1,0 +1,1 @@
+import{a8 as t}from"./index-Cp3b7MWQ.js";const e=[["path",{d:"M4 10c0-4.4 3.6-8 8-8s8 3.6 8 8-3.6 8-8 8H4",key:"tuf4su"}],["polyline",{points:"8 22 4 18 8 14",key:"evkj9s"}]],a=t("iteration-cw",e);export{e as __iconNode,a as default};

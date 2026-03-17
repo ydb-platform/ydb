@@ -1,0 +1,654 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  001ca03e64d54ef98bae8ee0d59fbe7b
+BELONGS ya.make
+    License text:
+        The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.hdrhistogram [7:7]
+        LICENSES.txt [119:119]
+
+KEEP     Zlib                 01bfb3959c2e1439904e6804e7d2384b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSES.txt [553:570]
+        src/tinycthread.c [5:22]
+        src/tinycthread.h [5:22]
+
+KEEP     MIT                  0585e7e428d74d4344eca1dc6d89be08
+BELONGS ya.make
+    License text:
+         * The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/rdhdrhistogram.c [8:8]
+
+KEEP     BSD-2-Clause         24f135451bab98a6fb2b8af9782ac1f4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 99.46
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        src/rdfloat.h [7:26]
+        src/rdhdrhistogram.c [37:56]
+        src/rdhdrhistogram.h [7:26]
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSES.txt [231:431]
+
+KEEP     BSD-2-Clause         305f2d5bc89008a3875ab2c15c3c7246
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [7:26]
+        LICENSES.txt [9:28]
+
+KEEP     MIT                  35760d2da2b20bfabe222cfb384d2cfd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.hdrhistogram [11:27]
+        LICENSES.txt [123:139]
+
+KEEP     ISC                  37d6ee4f380562858ecbe8d962f609e9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 33.33
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSES.txt [99:102]
+
+KEEP     Zlib                 44715a946fa2799cf1f612531bfe345c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        src/crc32c.c [384:398]
+
+KEEP     BSD-3-Clause         45298eabab08a7b87a5642703a897bb8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSES.txt [515:539]
+
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.murmur2 [9:25]
+        LICENSES.txt [182:198]
+
+KEEP     BSD-2-Clause         552563652f652f63f4671ad717034a9a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.wingetopt [29:48]
+        LICENSES.txt [603:622]
+        src/rdsysqueue.h [34:53]
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.cjson [5:21]
+        LICENSE.pycrc [7:23]
+        LICENSES.txt [37:53]
+        LICENSES.txt [441:457]
+
+KEEP     BSD-2-Clause         61b4a7433605bb84e562f8db3747f55a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        src/rdkafka_lz4.c [7:25]
+
+KEEP     Zlib                 67b2ad08eab6a391d9cb20b213851263
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 99.25
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.nanopb [1:22]
+
+KEEP     BSD-2-Clause         68092a45bf6b6ec767dc44b4ccef998d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.lz4 [7:26]
+        LICENSES.txt [150:169]
+
+KEEP     Apache-2.0           6be6e1f00b4be9d77f9af4eafafdc77a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 99.56
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.opentelemetry [1:203]
+
+KEEP     BSD-3-Clause         6daffccbe81cc81cf1b75435c1342138
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/queue.h [7:29]
+
+SKIP     LicenseRef-scancode-proprietary-license 70a4a6676daba76a3cb283f6edc891c1
+BELONGS ya.make
+	# Not a license, but a backward compatibility guideline for external contributions
+    License text:
+         * public structs - existing fields may not be modified and new fields must
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [56:56]
+
+KEEP     Public-Domain        73b9d4b7f903e04e7935d4bc0537f5c6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE.regexp [4:4]
+        LICENSES.txt [499:499]
+
+KEEP     BSD-3-Clause         7691780387d6d677aadd3ec5c33acef1
+BELONGS ya.make
+FILE_INCLUDE LICENSE.snappy found in files: LICENSE.snappy at line 2
+FILE_IGNORE src/snappy.c found in files: LICENSE.snappy at line 2
+FILE_IGNORE src/snappy.h found in files: LICENSE.snappy at line 2
+FILE_IGNORE src/snappy_compat.h found in files: LICENSE.snappy at line 2
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.snappy [2:35]
+
+KEEP     Zlib                 8588ed27102788c4934a33df75a5881a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 99.25
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.tinycthread [3:26]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 8a045940e6ab9a1583f9a087c090a2aa
+BELONGS ya.make
+    # warrantly disclaimer
+    License text:
+        LANDON CURT NOLL DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        LICENSES.txt [96:96]
+
+KEEP     Apache-2.0           8a87c7ff53745fc150839caca1207d7d
+BELONGS ya.make
+    License text:
+                                   "(requires Apache Kafka >= v2.3.0): "
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 66.67
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        src/rdkafka_request.c [2085:2085]
+
+KEEP     Zlib                 9331ff5ffd25871369e8fc29c7823733
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSES.txt [207:224]
+
+KEEP     BSD-3-Clause         aff91b162b1ebf52634a56dff62c4137
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.queue [6:28]
+        LICENSES.txt [467:489]
+
+KEEP     MIT                  b86f92e26fd701d7586fe0fb46cb52a5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/cJSON.c [4:20]
+        src/cJSON.h [4:20]
+
+KEEP     Public-Domain        b8e50596fa9910727f20003f1d79c925
+BELONGS ya.make
+    License text:
+        Please do not copyright this code.  This code is in the public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE.fnv1a [4:4]
+        LICENSES.txt [94:94]
+
+KEEP     ISC                  bb9db98323922a3c0778bec67bc07410
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 61.68
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE.fnv1a [6:12]
+
+KEEP     Public-Domain        c6449d0b34e748d6351273320a5bfcbd
+BELONGS ya.make
+    License text:
+        // MurmurHash2 was written by Austin Appleby, and is placed in the public
+        // domain. The author hereby disclaims copyright to this source code.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE.murmur2 [6:7]
+        LICENSES.txt [179:180]
+
+KEEP     Zlib                 d5b94f8908ad88e2410213b0e494716d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.crc32c [10:24]
+        LICENSES.txt [68:82]
+        src/crc32c.c [19:33]
+
+KEEP     MIT                  dc25c67114d1b44de498aff024276368
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/rdhdrhistogram.c [12:28]
+
+KEEP     BSD-2-Clause         e11ebdbd47f64dc0cd51268d19916c9b
+BELONGS src-cpp/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        src-cpp/ConfImpl.cpp [7:26]
+        src-cpp/ConsumerImpl.cpp [7:26]
+        src-cpp/HandleImpl.cpp [8:27]
+        src-cpp/HeadersImpl.cpp [7:26]
+        src-cpp/KafkaConsumerImpl.cpp [7:26]
+        src-cpp/MessageImpl.cpp [7:26]
+        src-cpp/MetadataImpl.cpp [7:26]
+        src-cpp/ProducerImpl.cpp [7:26]
+        src-cpp/QueueImpl.cpp [7:26]
+        src-cpp/RdKafka.cpp [7:26]
+        src-cpp/TopicImpl.cpp [7:26]
+        src-cpp/TopicPartitionImpl.cpp [7:26]
+        src-cpp/rdkafkacpp.h [8:27]
+        src-cpp/rdkafkacpp_int.h [8:27]
+        src/crc32c.h [7:26]
+        src/rd.h [8:27]
+        src/rdaddr.c [7:26]
+        src/rdaddr.h [7:26]
+        src/rdatomic.h [7:26]
+        src/rdavg.h [7:26]
+        src/rdavl.c [7:26]
+        src/rdavl.h [7:26]
+        src/rdbase64.c [7:26]
+        src/rdbase64.h [7:26]
+        src/rdbuf.c [7:26]
+        src/rdbuf.h [7:26]
+        src/rdcrc32.c [7:26]
+        src/rdcrc32.h [7:26]
+        src/rddl.c [7:26]
+        src/rddl.h [7:26]
+        src/rdendian.h [7:26]
+        src/rdfnv1a.c [7:26]
+        src/rdfnv1a.h [7:26]
+        src/rdgz.c [7:26]
+        src/rdgz.h [7:26]
+        src/rdinterval.h [8:27]
+        src/rdkafka.c [8:27]
+        src/rdkafka.h [8:27]
+        src/rdkafka_admin.c [8:27]
+        src/rdkafka_admin.h [8:27]
+        src/rdkafka_assignment.c [8:27]
+        src/rdkafka_assignment.h [7:26]
+        src/rdkafka_assignor.c [8:27]
+        src/rdkafka_assignor.h [8:27]
+        src/rdkafka_aux.c [8:27]
+        src/rdkafka_aux.h [8:27]
+        src/rdkafka_background.c [7:26]
+        src/rdkafka_broker.c [8:27]
+        src/rdkafka_broker.h [8:27]
+        src/rdkafka_buf.c [8:27]
+        src/rdkafka_buf.h [8:27]
+        src/rdkafka_cert.c [7:26]
+        src/rdkafka_cert.h [7:26]
+        src/rdkafka_cgrp.c [8:27]
+        src/rdkafka_cgrp.h [8:27]
+        src/rdkafka_conf.c [8:27]
+        src/rdkafka_conf.h [8:27]
+        src/rdkafka_confval.h [7:26]
+        src/rdkafka_coord.c [7:26]
+        src/rdkafka_coord.h [7:26]
+        src/rdkafka_error.c [7:26]
+        src/rdkafka_error.h [7:26]
+        src/rdkafka_event.c [8:27]
+        src/rdkafka_event.h [8:27]
+        src/rdkafka_feature.c [8:27]
+        src/rdkafka_feature.h [7:26]
+        src/rdkafka_fetcher.c [8:27]
+        src/rdkafka_fetcher.h [7:26]
+        src/rdkafka_header.c [7:26]
+        src/rdkafka_header.h [7:26]
+        src/rdkafka_idempotence.c [7:26]
+        src/rdkafka_idempotence.h [7:26]
+        src/rdkafka_int.h [8:27]
+        src/rdkafka_interceptor.c [7:26]
+        src/rdkafka_interceptor.h [7:26]
+        src/rdkafka_lz4.h [7:26]
+        src/rdkafka_metadata.c [8:27]
+        src/rdkafka_metadata.h [8:27]
+        src/rdkafka_metadata_cache.c [8:27]
+        src/rdkafka_mock.c [8:27]
+        src/rdkafka_mock.h [8:27]
+        src/rdkafka_mock_cgrp.c [8:27]
+        src/rdkafka_mock_handlers.c [8:27]
+        src/rdkafka_mock_int.h [8:27]
+        src/rdkafka_msg.c [8:27]
+        src/rdkafka_msgset.h [8:27]
+        src/rdkafka_msgset_reader.c [8:27]
+        src/rdkafka_msgset_writer.c [8:27]
+        src/rdkafka_offset.c [8:27]
+        src/rdkafka_offset.h [8:27]
+        src/rdkafka_op.c [8:27]
+        src/rdkafka_op.h [8:27]
+        src/rdkafka_partition.c [8:27]
+        src/rdkafka_partition.h [8:27]
+        src/rdkafka_pattern.c [7:26]
+        src/rdkafka_pattern.h [7:26]
+        src/rdkafka_plugin.c [7:26]
+        src/rdkafka_plugin.h [7:26]
+        src/rdkafka_proto.h [9:28]
+        src/rdkafka_protocol.h [8:27]
+        src/rdkafka_queue.c [8:27]
+        src/rdkafka_queue.h [8:27]
+        src/rdkafka_range_assignor.c [8:27]
+        src/rdkafka_request.c [8:27]
+        src/rdkafka_request.h [8:27]
+        src/rdkafka_roundrobin_assignor.c [7:26]
+        src/rdkafka_sasl.c [8:27]
+        src/rdkafka_sasl.h [7:26]
+        src/rdkafka_sasl_cyrus.c [8:27]
+        src/rdkafka_sasl_int.h [7:26]
+        src/rdkafka_sasl_oauthbearer.c [8:27]
+        src/rdkafka_sasl_oauthbearer.h [7:26]
+        src/rdkafka_sasl_plain.c [7:26]
+        src/rdkafka_sasl_scram.c [8:27]
+        src/rdkafka_ssl.c [8:27]
+        src/rdkafka_ssl.h [7:26]
+        src/rdkafka_sticky_assignor.c [8:27]
+        src/rdkafka_subscription.c [7:26]
+        src/rdkafka_telemetry.c [7:26]
+        src/rdkafka_telemetry.h [7:26]
+        src/rdkafka_telemetry_decode.c [7:26]
+        src/rdkafka_telemetry_decode.h [7:26]
+        src/rdkafka_telemetry_encode.c [7:26]
+        src/rdkafka_telemetry_encode.h [7:26]
+        src/rdkafka_timer.c [7:26]
+        src/rdkafka_timer.h [7:26]
+        src/rdkafka_topic.c [8:27]
+        src/rdkafka_topic.h [8:27]
+        src/rdkafka_transport.c [8:27]
+        src/rdkafka_transport.h [7:26]
+        src/rdkafka_transport_int.h [7:26]
+        src/rdkafka_txnmgr.c [7:26]
+        src/rdkafka_txnmgr.h [7:26]
+        src/rdkafka_zstd.c [7:26]
+        src/rdkafka_zstd.h [7:26]
+        src/rdlist.c [8:27]
+        src/rdlist.h [8:27]
+        src/rdlog.c [7:26]
+        src/rdlog.h [7:26]
+        src/rdmap.c [8:27]
+        src/rdmap.h [8:27]
+        src/rdmurmur2.c [7:26]
+        src/rdmurmur2.h [7:26]
+        src/rdports.c [7:26]
+        src/rdports.h [7:26]
+        src/rdposix.h [7:26]
+        src/rdrand.c [7:26]
+        src/rdrand.h [7:26]
+        src/rdregex.c [7:26]
+        src/rdregex.h [7:26]
+        src/rdstring.c [8:27]
+        src/rdstring.h [8:27]
+        src/rdsysqueue.h [8:27]
+        src/rdtime.h [7:26]
+        src/rdtypes.h [7:26]
+        src/rdunittest.c [8:27]
+        src/rdunittest.h [7:26]
+        src/rdvarint.c [7:26]
+        src/rdvarint.h [7:26]
+        src/rdwin32.h [7:26]
+        src/snappy.h [7:26]
+        src/tinycthread_extra.c [7:26]
+        src/tinycthread_extra.h [7:26]
+        src/win32_config.h [7:26]
+
+KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE.wingetopt [6:16]
+        LICENSES.txt [580:590]
+
+KEEP     BSD-2-Clause         f23d9fc4f707ad2597542c8f9318953e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 91.89
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        src/rdkafka_msg.h [7:24]
+        src/rdkafka_msgbatch.h [7:24]
+
+KEEP     BSD-3-Clause         f8141230e736a81272884d33c51c5ad4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/snappy.c [12:36]
+        src/snappy_compat.h [4:28]
+
+KEEP     Apache-2.0           f95244ac99cf03114a319bed22f287dc
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSES.txt at line 1
+    License text:
+        LICENSE
+        --------------------------------------------------------------
+        librdkafka - Apache Kafka C driver library
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 60.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSES.txt [1:3]
+
+KEEP     BSD-2-Clause         feb6b4b51d5b8f0ef28ecdcd8715d793
+BELONGS ya.make
+    License text:
+        **librdkafka** is licensed under the 2-clause BSD license.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        README.md [15:15]

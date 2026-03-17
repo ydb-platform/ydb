@@ -1,0 +1,674 @@
+[
+  {
+    "country_code": "PT",
+    "bank_code": "0001",
+    "bic": "BGALPTTGXXX",
+    "name": "BANCO DE PORTUGAL, EP",
+    "short_name": "BANCO DE PORTUGAL, EP",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0007",
+    "bic": "BESCPTPL",
+    "name": "NOVO BANCO, S.A.",
+    "short_name": "NOVO BANCO, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0008",
+    "bic": "BAIPPTPLXXX",
+    "name": "BANCO BAI EUROPA S.A.",
+    "short_name": "BANCO BAI EUROPA S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0010",
+    "bic": "BBPIPTPL",
+    "name": "BANCO BPI S.A.",
+    "short_name": "BANCO BPI S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0014",
+    "bic": "IVVSPTPL",
+    "name": "BANCO INVEST, S.A.",
+    "short_name": "BANCO INVEST, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0018",
+    "bic": "TOTAPTPL",
+    "name": "BANCO SANTANDER TOTTA, S.A.",
+    "short_name": "BANCO SANTANDER TOTTA, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0019",
+    "bic": "BBVAPTPLXXX",
+    "name": "BANCO BILBAO VIZCAYA ARGENTARIA, S.A.",
+    "short_name": "BANCO BILBAO VIZCAYA ARGENTARIA, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0022",
+    "bic": "BRASPTPLXXX",
+    "name": "BANCO DO BRASIL AG",
+    "short_name": "BANCO DO BRASIL AG",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0023",
+    "bic": "ACTVPTPLXXX",
+    "name": "BANCO ACTIVOBANK, S.A.",
+    "short_name": "BANCO ACTIVOBANK, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0025",
+    "bic": "CXBIPTPLXXX",
+    "name": "CAIXA - BANCO DE INVESTIMENTO, S.A.",
+    "short_name": "CAIXA - BANCO DE INVESTIMENTO, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0027",
+    "bic": "BPIPPTPLXXX",
+    "name": "BANCO PORTUGUÊS DE INVESTIMENTO, S.A.",
+    "short_name": "BANCO PORTUGUÊS DE INVESTIMENTO, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0032",
+    "bic": "BARCPTPCXXX",
+    "name": "BARCLAYS BANK IRELAND PLC",
+    "short_name": "BARCLAYS BANK IRELAND PLC",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0033",
+    "bic": "BCOMPTPL",
+    "name": "BANCO COMERCIAL PORTUGUÊS, S.A.",
+    "short_name": "BANCO COMERCIAL PORTUGUÊS, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0034",
+    "bic": "BNPAPTPLXXX",
+    "name": "BNP PARIBAS",
+    "short_name": "BNP PARIBAS",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0035",
+    "bic": "CGDIPTPL",
+    "name": "CAIXA GERAL DE DEPÓSITOS, S.A.",
+    "short_name": "CAIXA GERAL DE DEPÓSITOS, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0036",
+    "bic": "MPIOPTPL",
+    "name": "CAIXA ECONÓMICA MONTEPIO GERAL, CAIXA ECONÓMICA BANCÁRIA, S.A.",
+    "short_name": "CAIXA ECONÓMICA MONTEPIO GERAL, CAIXA ECONÓMICA BANCÁRIA, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0038",
+    "bic": "BNIFPTPL",
+    "name": "BANCO SANTANDER TOTTA, S.A. (ex-BANIF – BANCO INTERNACIONAL DO FUNCHAL, S.A.)",
+    "short_name": "BANCO SANTANDER TOTTA, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0043",
+    "bic": "DEUTPTPLXXX",
+    "name": "DEUTSCHE BANK AG",
+    "short_name": "DEUTSCHE BANK",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0045",
+    "bic": "CCCMPTPLXXX",
+    "name": "CAIXA CENTRAL DE CRÉDITO AGRÍCOLA MÚTUO",
+    "short_name": "CAIXA CENTRAL DE CRÉDITO AGRÍCOLA MÚTUO",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0046",
+    "bic": "CRBNPTPLXXX",
+    "name": "BANCO POPULAR PORTUGAL, S.A.",
+    "short_name": "BANCO POPULAR PORTUGAL, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0047",
+    "bic": "ESSIPTPLXXX",
+    "name": "HAITONG BANK, S.A.",
+    "short_name": "HAITONG BANK, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0048",
+    "bic": "BFIAPTPLXXX",
+    "name": "BANCO FINANTIA, S.A.",
+    "short_name": "BANCO FINANTIA, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0049",
+    "bic": "",
+    "name": "BANCO DE INVESTIMENTO IMOBILIÁRIO, S.A.",
+    "short_name": "BANCO DE INVESTIMENTO IMOBILIÁRIO, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0057",
+    "bic": "CAEPPTP1XXX",
+    "name": "CAIXA ECONÓMICA DO PORTO",
+    "short_name": "CAIXA ECONÓMICA DO PORTO",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0058",
+    "bic": "",
+    "name": "CAIXA ECONÓMICA SOCIAL - CAIXA ECONÓMICA ANEXA",
+    "short_name": "CAIXA ECONÓMICA SOCIAL - CAIXA ECONÓMICA ANEXA",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0059",
+    "bic": "CEMAPTP2XXX",
+    "name": "CAIXA ECONÓMICA DA MISERICÓRDIA DE ANGRA DO HEROÍSMO, CAIXA ECONÓMICA BANCÁRIA, S.A.",
+    "short_name": "CAIXA ECONÓMICA DA MISERICÓRDIA DE ANGRA DO HEROÍSMO",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0060",
+    "bic": "MASNPTP1XXX",
+    "name": "BANCO MADESANT - SOCIEDADE UNIPESSOAL, S.A.",
+    "short_name": "BANCO MADESANT",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0061",
+    "bic": "BDIGPTPLXXX",
+    "name": "BANCO DE INVESTIMENTO GLOBAL, S.A.",
+    "short_name": "BANCO DE INVESTIMENTO GLOBAL, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0063",
+    "bic": "BNFIPTPLXXX",
+    "name": "BISON BANK, S.A.",
+    "short_name": "BISON BANK, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0064",
+    "bic": "BPGPPTPLXXX",
+    "name": "BANCO PORTUGUÊS DE GESTÃO S.A.",
+    "short_name": "BANCO PORTUGUÊS DE GESTÃO S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0065",
+    "bic": "BESZPTPLXXX",
+    "name": "BEST - BANCO ELECTRÓNICO DE SERVIÇO TOTAL, S.A.",
+    "short_name": "BEST",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0073",
+    "bic": "IBNBPTP1XXX",
+    "name": "SANTANDER CONSUMER FINANCE, S.A.",
+    "short_name": "SANTANDER CONSUMER FINANCE, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0076",
+    "bic": "",
+    "name": "MONTEPIO INVESTIMENTO, S.A.",
+    "short_name": "MONTEPIO INVESTIMENTO, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0079",
+    "bic": "BPNPPTPLXXX",
+    "name": "BANCO BIC PORTUGUÊS, S.A.",
+    "short_name": "BANCO BIC PORTUGUÊS, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0082",
+    "bic": "FCEFPTP1XXX",
+    "name": "FCE BANK PLC",
+    "short_name": "FCE BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0085",
+    "bic": "ITAUPTPLXXX",
+    "name": "ITAÚ BBA INTERNATIONAL PLC",
+    "short_name": "ITAÚ BBA INTERNATIONAL PLC",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0086",
+    "bic": "EFISPTPLXXX",
+    "name": "BANCO EFISA, S.A.",
+    "short_name": "BANCO EFISA, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0097",
+    "bic": "CCCHPTP1XXX",
+    "name": "CAIXA DE CRÉDITO AGRÍCOLA MÚTUO DA CHAMUSCA, CRL",
+    "short_name": "CAIXA DE CRÉDITO AGRÍCOLA MÚTUO DA CHAMUSCA, CRL",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0098",
+    "bic": "CERTPTP1XXX",
+    "name": "CAIXA DE CRÉDITO AGRÍCOLA MÚTUO DE BOMBARRAL, CRL",
+    "short_name": "CAIXA DE CRÉDITO AGRÍCOLA MÚTUO DE BOMBARRAL, CRL",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0112",
+    "bic": "BESCPTPLXXX",
+    "name": "ESPIRITO S.A.NTO BANK OF FLORIDA",
+    "short_name": "ESPIRITO S.A.NTO BANK OF FLORIDA",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0151",
+    "bic": "CGDIPTPLXXX",
+    "name": "FINANCEIRA EL CORTE INGLÉS PORTUGAL, S.F.C., S.A.",
+    "short_name": "FINANCEIRA EL CORTE INGLÉS PORTUGAL, S.F.C., S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0160",
+    "bic": "BESAPTPAXXX",
+    "name": "NOVO BANCO DOS AÇORES, S.A.",
+    "short_name": "NOVO BANCO DOS AÇORES, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0169",
+    "bic": "CITIPTPXXXX",
+    "name": "CITIBANK EUROPE PLC",
+    "short_name": "CITIBANK EUROPE PLC",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0170",
+    "bic": "CAGLPTPLXXX",
+    "name": "ABANCA CORPORACIÓN BANCARIA, S.A.",
+    "short_name": "ABANCA CORPORACIÓN BANCARIA, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0173",
+    "bic": "PRIBPTPXXXX",
+    "name": "EDMOND DE ROTHSCHILD EUROPE",
+    "short_name": "EDMOND DE ROTHSCHILD EUROPE",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0185",
+    "bic": "DSBLPTPLXXX",
+    "name": "DEXIA CRÉDIT LOCAL S.A.",
+    "short_name": "DEXIA CRÉDIT LOCAL S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0189",
+    "bic": "BAPAPTPLXXX",
+    "name": "BANCO ATLÂNTICO EUROPA, S.A.",
+    "short_name": "BANCO ATLÂNTICO EUROPA, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0191",
+    "bic": "BNICPTPL",
+    "name": "BNI - BANCO DE NEGÓCIOS INTERNACIONAL (EUROPA), S.A.",
+    "short_name": "BNI",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0193",
+    "bic": "CTTVPTPLXXX",
+    "name": "BANCO CTT, S.A.",
+    "short_name": "BANCO CTT, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0194",
+    "bic": "",
+    "name": "BANIF - BANCO INTERNACIONAL DO FUNCHAL, S.A.",
+    "short_name": "BANIF",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0195",
+    "bic": "CITIPTPX",
+    "name": "ITAÚ BBA EUROPE, S.A.",
+    "short_name": "ITAÚ BBA EUROPE, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0225",
+    "bic": "DBRCPTP1XXX",
+    "name": "DIF BROKER - SOCIEDADE FINANCEIRA DE CORRETAGEM, S.A.",
+    "short_name": "DIF BROKER",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0235",
+    "bic": "BLJCPTPTXXX",
+    "name": "BANCO L.J. CARREGOSA, S.A.",
+    "short_name": "BANCO L.J. CARREGOSA, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0236",
+    "bic": "",
+    "name": "MONTEPIO HOLDING, SGPS, S.A.",
+    "short_name": "MONTEPIO HOLDING, SGPS, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0238",
+    "bic": "BNPAPTPLXXX",
+    "name": "BNP PARIBAS LEASE GROUP",
+    "short_name": "BNP PARIBAS LEASE GROUP",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0246",
+    "bic": "PRUUPTP1XXX",
+    "name": "BANCO PRIMUS, S.A.",
+    "short_name": "BANCO PRIMUS, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0257",
+    "bic": "PARBPTP1XXX",
+    "name": "BNP PARIBAS SECURITIES SERVICES",
+    "short_name": "BNP PARIBAS SECURITIES SERVICES",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0260",
+    "bic": "CCIEPTPXXXX",
+    "name": "ST. GALLER KANTONALBANK, AG",
+    "short_name": "ST. GALLER KANTONALBANK, AG",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0266",
+    "bic": "BKCHPTPLXXX",
+    "name": "BANK OF CHINA (EUROPE) S.A.",
+    "short_name": "BANK OF CHINA",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0269",
+    "bic": "BKBKPTPLXXX",
+    "name": "BANKINTER, S.A.",
+    "short_name": "BANKINTER, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0272",
+    "bic": "WZNKPTPLXXX",
+    "name": "WIZINK BANK, S.A.",
+    "short_name": "WIZINK",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0275",
+    "bic": "BSABPTPLXXX",
+    "name": "BANCO DE SABADELL, S.A.",
+    "short_name": "BANCO DE SABADELL, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0280",
+    "bic": "BKCHPTPL",
+    "name": "EFG BANK (LUXEMBOURG) S.A.",
+    "short_name": "EFG BANK (LUXEMBOURG) S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0305",
+    "bic": "BPNPPTPLXXX",
+    "name": "321CRÉDITO, INSTITUIÇÃO FINANCEIRA DE CRÉDITO S.A.",
+    "short_name": "321CRÉDITO, INSTITUIÇÃO FINANCEIRA DE CRÉDITO S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0307",
+    "bic": "BNPAPTPLXXX",
+    "name": "FORTIS LEASE PORTUGAL - SOCIEDADE FINANCEIRA DE CRÉDITO, S.A.",
+    "short_name": "FORTIS LEASE PORTUGAL - SOCIEDADE FINANCEIRA DE CRÉDITO, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0313",
+    "bic": "GBSCPTP1XXX",
+    "name": "GOLDEN BROKER - SOCIEDADE CORRETORA, S.A.",
+    "short_name": "GOLDEN BROKER - SOCIEDADE CORRETORA, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0407",
+    "bic": "FIVRPTP1XXX",
+    "name": "MONTEPIO VALOR - SOCIEDADE GESTORA DE FUNDOS DE INVESTIMENTO, S.A.",
+    "short_name": "MONTEPIO VALOR - SOCIEDADE GESTORA DE FUNDOS DE INVESTIMENTO, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0500",
+    "bic": "BBRUPTPLXXX",
+    "name": "ING BANK NV",
+    "short_name": "ING BANK NV",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0547",
+    "bic": "BAUUPTP1XXX",
+    "name": "BANKINTER GESTÃO DE ATIVOS, S.A.",
+    "short_name": "BANKINTER GESTÃO DE ATIVOS, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0581",
+    "bic": "CTGFPTP1XXX",
+    "name": "CAIXA GESTÃO DE ATIVOS SOCIEDADE GESTORA DE FUNDOS DE INVESTIMENTO, S.A.",
+    "short_name": "CAIXA GESTÃO DE ATIVOS SOCIEDADE GESTORA DE FUNDOS DE INVESTIMENTO, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0616",
+    "bic": "EFIMPTP1XXX",
+    "name": "GNB - SOCIEDADE GESTORA DE FUNDOS DE INVESTIMENTO MOBILIÁRIO, S.A.",
+    "short_name": "GNB - SOCIEDADE GESTORA DE FUNDOS DE INVESTIMENTO MOBILIÁRIO, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0658",
+    "bic": "ESGPPTP1XXX",
+    "name": "GNB - SOCIEDADE GESTORA DE PATRIMÓNIOS, S.A.",
+    "short_name": "GNB - SOCIEDADE GESTORA DE PATRIMÓNIOS, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0677",
+    "bic": "SAGCPTP1XXX",
+    "name": "SANTANDER ASSET MANAGEMENT - SOCIEDADE  GESTORA DE FUNDOS DE INVESTIMENTO MOBILIÁRIO, S.A.",
+    "short_name": "SANTANDER ASSET MANAGEMENT",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0698",
+    "bic": "UIFCPTP1XXX",
+    "name": "UNICRE - INSTITUIÇÃO FINANCEIRA DE CRÉDITO, S.A.",
+    "short_name": "UNICRE - INSTITUIÇÃO FINANCEIRA DE CRÉDITO, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0777",
+    "bic": "FICCPTP1XXX",
+    "name": "PATRIS - SOCIEDADE CORRETORA, S.A.",
+    "short_name": "PATRIS",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0781",
+    "bic": "IGCPPTPLXXX",
+    "name": "AGÊNCIA DE GESTÃO DA TESOURARIA E DA DÍVIDA PÚBLICA – IGCP, E.P.E.",
+    "short_name": "AGÊNCIA DE GESTÃO DA TESOURARIA E DA DÍVIDA PÚBLICA – IGCP, E.P.E.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0800",
+    "bic": "BIFDPTP1XXX",
+    "name": "BBVA, INSTITUIÇÃO FINANCEIRA DE CRÉDITO S.A.",
+    "short_name": "BBVA",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0816",
+    "bic": "EFIIPTP1XXX",
+    "name": "GNB - SOCIEDADE GESTORA DE FUNDOS DE INVESTIMENTO IMOBILIÁRIO, S.A.",
+    "short_name": "GNB",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0829",
+    "bic": "PGPAPTP1XXX",
+    "name": "BMO PORTUGAL, GESTÃO DE PATRIMÓNIOS, S.A.",
+    "short_name": "BMO PORTUGAL",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0848",
+    "bic": "CETMPTP1XXX",
+    "name": "BANCO BNP PARIBAS PERSONAL FINANCE, S.A.",
+    "short_name": "BANCO BNP PARIBAS PERSONAL FINANCE, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0916",
+    "bic": "CRBBPTP1XXX",
+    "name": "BANCO CREDIBOM, S.A.",
+    "short_name": "BANCO CREDIBOM, S.A.",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0964",
+    "bic": "",
+    "name": "SONAE - SGPS, S.A.",
+    "short_name": "SONAE",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0981",
+    "bic": "LPSCPTP1XXX",
+    "name": "LUSO PARTNERS - SOCIEDADE CORRETORA, S.A.",
+    "short_name": "LUSO PARTNERS",
+    "primary": true
+  },
+  {
+    "country_code": "PT",
+    "bank_code": "0991",
+    "bic": "",
+    "name": "SANTANDER TOTTA, SGPS, S.A.",
+    "short_name": "SANTANDER TOTTA",
+    "primary": true
+  }
+]

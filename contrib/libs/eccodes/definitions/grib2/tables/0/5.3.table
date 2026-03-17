@@ -1,0 +1,4 @@
+1 1 Direction Degrees true
+2 2 Frequency (s-1)
+3 3 Radial number (2pi/lambda) (m-1)
+255 255 Missing

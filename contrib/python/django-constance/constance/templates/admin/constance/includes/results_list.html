@@ -1,0 +1,57 @@
+{% load admin_list static i18n %}
+<div id="results">
+    <table>
+        <thead>
+            <tr>
+                <th><div class="text">{% trans "Name" %}</div></th>
+                <th><div class="text">{% trans "Default" %}</div></th>
+                <th><div class="text">{% trans "Value" %}</div></th>
+                <th><div class="text">{% trans "Is modified" %}</div></th>
+            </tr>
+        </thead>
+        {% for item in config_values %}
+        <tr class="{% cycle 'row1' 'row2' %}">
+            <th>
+                <span class="item-name" id="{{ item.name|slugify }}">
+                    {{ item.name }}
+                    <a class="item-anchor" href="#{{ item.name|slugify }}" title="Link to this setting">¶</a>
+                </span>
+                <div class="help">{{ item.help_text|linebreaksbr }}</div>
+            </th>
+            <td>
+                {{ item.default|linebreaks }}
+            </td>
+            <td>
+                {{ item.form_field.errors }}
+                {% if item.is_file %}{% trans "Current file" %}: <a href="{% get_media_prefix as MEDIA_URL %}{{ MEDIA_URL }}{{ item.value }}" target="_blank">{{ item.value }}</a>{% endif %}
+                {{ item.form_field }}
+                {% if not item.is_file %}
+                    <br>
+                    <a href="#" class="reset-link"
+                        data-field-id="{{ item.form_field.auto_id }}"
+                        data-field-type="{% spaceless %}
+                        {% if item.is_checkbox %}checkbox
+                        {% elif item.is_datetime %}datetime
+                        {% elif item.is_date %}date
+                        {% endif %}
+                        {% endspaceless %}"
+                        data-default="{% spaceless %}
+                        {% if item.is_checkbox %}{% if item.raw_default %} true {% else %} false {% endif %}
+                        {% elif item.is_date %}{{ item.raw_default|date:"U" }}
+                        {% elif item.is_datetime %}{{ item.raw_default|date:"U" }}
+                        {% else %}{{ item.default }}
+                        {% endif %}
+                        {% endspaceless %}">{% trans "Reset to default" %}</a>
+                {% endif %}
+            </td>
+            <td>
+                {% if item.modified %}
+                    <img src="{% static 'admin/img/icon-yes.'|add:icon_type %}" alt="{{ item.modified }}" />
+                {% else %}
+                    <img src="{% static 'admin/img/icon-no.'|add:icon_type %}" alt="{{ item.modified }}" />
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>

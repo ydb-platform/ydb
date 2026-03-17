@@ -1,0 +1,32 @@
+commit 1ab6674220ee4139bf291b971d6770f5ac7611ef
+merge: 49141dc575e8424356a2e4f2c814d17d2776d6d5 3e14c803fed9b10c5f5af1cab1c85847e7dd49e3
+author: shadchin
+date: 2023-01-01T20:12:42+03:00
+revision: 10606294
+
+    IGNIETFERRO-2000 Fix nose with Python 3.11
+    
+    REVIEW: 3323704
+
+--- contrib/deprecated/python/nose/py3/nose/util.py	(49141dc575e8424356a2e4f2c814d17d2776d6d5)
++++ contrib/deprecated/python/nose/py3/nose/util.py	(1ab6674220ee4139bf291b971d6770f5ac7611ef)
+@@ -449,15 +449,15 @@ def try_run(obj, names):
+             if type(obj) == types.ModuleType:
+                 # py.test compatibility
+                 if isinstance(func, types.FunctionType):
+-                    args, varargs, varkw, defaults = \
+-                        inspect.getargspec(func)
++                    args, varargs, varkw, defaults, *_ = \
++                        inspect.getfullargspec(func)
+                 else:
+                     # Not a function. If it's callable, call it anyway
+                     if hasattr(func, '__call__') and not inspect.ismethod(func):
+                         func = func.__call__
+                     try:
+-                        args, varargs, varkw, defaults = \
+-                            inspect.getargspec(func)
++                        args, varargs, varkw, defaults, *_ = \
++                            inspect.getfullargspec(func)
+                         args.pop(0) # pop the self off
+                     except TypeError:
+                         raise TypeError("Attribute %s of %r is not a python "

@@ -1,0 +1,81 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2006-2010 Oracle and/or its affiliates.  All rights reserved.
+# Copyright (c) 2012-2014 Cisco Systems, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI wrapper compiler error
+# messages.
+#
+[no-language-support]
+Unfortunately, this installation of Open MPI was not compiled with
+%s support.  As such, the %s compiler is non-functional.
+#
+[no-profiling-support]
+Warning: the "-lpmpi" flag was included on the command line,
+indicating use of MPI profiling layer.  However, Open MPI was not
+compiled with support for the MPI profiling layer.  This flag has
+therefore been ignored.
+#
+[no-compiler-specified]
+No underlying compiler was specified in the wrapper compiler data file
+(e.g., mpicc-wrapper-data.txt)
+#
+[no-compiler-found]
+The Open MPI wrapper compiler was unable to find the specified compiler
+%s in your PATH.
+
+Note that this compiler was either specified at configure time or in
+one of several possible environment variables.
+#
+[version]
+%s: %s %s (Language: %s)
+#
+[usage]
+%s [-showme[:<command,compile,link,incdirs,
+              libdirs,libs,version,help>]] args
+
+  -showme:command    Show command used to invoke real compiler
+  -showme:compile    Show flags added when compiling
+  -showme:link       Show flags added when linking
+  -showme:incdirs    Show list of include dirs added when compiling
+  -showme:libdirs    Show list of library dirs added when linking
+  -showme:libs       Show list of libraries added when linking
+  -showme:version    Show version of %s
+  -showme:help       This help message
+#
+[file-not-found]
+%s could not find the file %s, needed for %s support.
+This may indicate an incomplete install and linking will likely fail.
+#
+[spawn-failed]
+Unable to call the compiler (%s). The failure return the error
+%s.
+The failed command was [%s].
+#
+[compiler-failed]
+The child process (%s) exit with error %d.
+The failed command was [%s].
+#
+[no-options-support]
+The %s wrapper compiler was unable to find a block of options in its
+configuration to support your compiler mode.  Your application was not
+compiled. or linked.
+
+The wrapper compiler command line was:
+
+  %s

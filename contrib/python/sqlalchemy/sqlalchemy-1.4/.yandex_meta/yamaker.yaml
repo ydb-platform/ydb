@@ -1,0 +1,11 @@
+exclude_from_macros:
+  - sqlalchemy/dialects/type_migration_guidelines.txt
+mark_as_py3_sources:
+  - sqlalchemy/dialects/mysql/aiomysql.py
+  - sqlalchemy/dialects/mysql/asyncmy.py
+  - sqlalchemy/dialects/sqlite/aiosqlite.py
+  - sqlalchemy/dialects/postgresql/asyncpg.py
+  - sqlalchemy/ext/asyncio/*
+  - sqlalchemy/ext/mypy/*
+  - sqlalchemy/util/*_py3k.py
+  - sqlalchemy/util/tool_support.py

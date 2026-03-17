@@ -1,0 +1,97 @@
+Metadata-Version: 2.4
+Name: scenedetect
+Version: 0.6.7.1
+Summary: Video scene cut/shot detection program and Python library.
+Home-page: https://www.scenedetect.com
+Author: Brandon Castellano
+Author-email: brandon248@gmail.com
+License: BSD-3-Clause
+Project-URL: Homepage, https://www.scenedetect.com
+Project-URL: Repository, https://github.com/Breakthrough/PySceneDetect/
+Project-URL: Documentation, https://www.scenedetect.com/docs/
+Project-URL: Bug Tracker, https://github.com/Breakthrough/PySceneDetect/issues/
+Keywords: video computer-vision analysis
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Environment :: Console :: Curses
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: End Users/Desktop
+Classifier: Intended Audience :: System Administrators
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Multimedia :: Video
+Classifier: Topic :: Multimedia :: Video :: Conversion
+Classifier: Topic :: Multimedia :: Video :: Non-Linear Editor
+Classifier: Topic :: Utilities
+Requires-Python: >=3.7
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: click<8.3.0,~=8.0
+Requires-Dist: numpy
+Requires-Dist: platformdirs
+Requires-Dist: tqdm
+Provides-Extra: opencv
+Requires-Dist: opencv-python; extra == "opencv"
+Provides-Extra: opencv-headless
+Requires-Dist: opencv-python-headless; extra == "opencv-headless"
+Provides-Extra: pyav
+Requires-Dist: av>=9.2; extra == "pyav"
+Provides-Extra: moviepy
+Requires-Dist: moviepy; extra == "moviepy"
+Dynamic: license-file
+
+
+PySceneDetect
+==========================================================
+
+Video Scene Cut Detection and Analysis Tool
+----------------------------------------------------------
+
+.. image:: https://img.shields.io/pypi/status/scenedetect.svg
+   :target: https://github.com/Breakthrough/PySceneDetect
+
+.. image:: https://img.shields.io/github/release/Breakthrough/PySceneDetect.svg
+   :target: https://github.com/Breakthrough/PySceneDetect
+
+.. image:: https://img.shields.io/pypi/l/scenedetect.svg
+   :target: http://pyscenedetect.readthedocs.org/en/latest/copyright/
+
+.. image:: https://img.shields.io/github/stars/Breakthrough/PySceneDetect.svg?style=social&label=View%20on%20Github
+   :target: https://github.com/Breakthrough/PySceneDetect
+
+----------------------------------------------------------
+
+Documentation: https://www.scenedetect.com/docs
+
+Github Repo: https://github.com/Breakthrough/PySceneDetect/
+
+Install: ``pip install --upgrade scenedetect[opencv]``
+
+----------------------------------------------------------
+
+**PySceneDetect** is a tool for detecting shot changes in videos, and can automatically split videos into separate clips.  PySceneDetect is free and open-source software, and has several detection methods to find fast-cuts and threshold-based fades.
+
+For example, to split a video: ``scenedetect -i video.mp4 split-video``
+
+You can also use the Python API (`docs <https://www.scenedetect.com/docs/latest/>`_) to do the same:
+
+.. code-block:: python
+
+    from scenedetect import detect, AdaptiveDetector, split_video_ffmpeg
+    scene_list = detect('my_video.mp4', AdaptiveDetector())
+    split_video_ffmpeg('my_video.mp4', scene_list)
+
+----------------------------------------------------------
+
+Licensed under BSD 3-Clause (see the ``LICENSE`` file for details).
+
+Copyright (C) 2014-2024 Brandon Castellano.
+All rights reserved.
+

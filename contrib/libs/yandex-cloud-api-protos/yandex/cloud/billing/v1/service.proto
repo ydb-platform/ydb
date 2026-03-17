@@ -1,0 +1,19 @@
+syntax = "proto3";
+package yandex.cloud.billing.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/billing/v1;billing";
+option java_package = "yandex.cloud.api.billing.v1";
+
+
+// A Service resource.
+message Service {
+
+    // ID of the service.
+    string id = 1;
+
+    // Name of the service, e.g. `Compute Cloud`, `VPC`.
+    string name = 2;
+
+    // Description of the service.
+    string description = 3;
+}

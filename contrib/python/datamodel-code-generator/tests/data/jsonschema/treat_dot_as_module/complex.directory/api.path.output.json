@@ -1,0 +1,10 @@
+{
+  "properties": {
+    "output": {
+      "default": "output",
+      "title": "Output"
+    }
+  },
+  "title": "Output",
+  "type": "object"
+}

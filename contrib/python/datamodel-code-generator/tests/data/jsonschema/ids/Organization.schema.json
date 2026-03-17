@@ -1,0 +1,42 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "Organization.schema.json",
+    "title": "Organization",
+    "description": "An organization such as a school, NGO, corporation, club, etc.",
+    "type": "object",
+    "required": [
+        "type",
+        "name"
+    ],
+    "properties": {
+        "id": {
+            "$ref": "id.schema.json"
+        },
+        "type": {
+            "$ref": "type.schema.json",
+            "enum": [
+                "Organization"
+            ]
+        },
+        "name": {
+            "$ref": "name.schema.json"
+        },
+        "contactPoint": {
+            "$ref": "ContactPoint.schema.json"
+        },
+        "sameAs": {
+            "$ref": "sameAs.schema.json"
+        },
+        "url": {
+            "$ref": "URI.schema.json"
+        }
+    },
+    "examples": [
+        {
+            "id": "https://ror.org/02a809t02",
+            "type": "Organization",
+            "name": "Vizzuality",
+            "sameAs": "https://ror.org/02a809t02"
+        }
+    ]
+}

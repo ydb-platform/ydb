@@ -1,0 +1,9 @@
+--- contrib/python/blis/blis/benchmark.py	(index)
++++ contrib/python/blis/blis/benchmark.py	(working tree)
+@@ -103,5 +103,5 @@ def main(nI=128 * 3, nO=128 * 3, batch_size=2000):
+     print("%.2f seconds" % numpy_time)
+ 
+ 
+-if __name__:
++if __name__ == '__main__':
+     main()

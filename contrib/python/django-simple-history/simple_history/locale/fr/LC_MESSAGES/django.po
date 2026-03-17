@@ -1,0 +1,138 @@
+# French translation for django-simple-history
+# Copyright (C) 2020
+# This file is distributed under the same license as the django-simple-history package.
+# Raynald de Lahondes <delahondes@github.com>, 2020.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-simple-history\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-04-04 01:50+0300\n"
+"PO-Revision-Date: 2020-04-25 22:50+0200\n"
+"Last-Translator: Renaud Perrin <leminaw@github.com>\n"
+"Language-Team: French <django-commons@github.com>\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Generator: Poedit 2.3\n"
+
+#: .\simple_history\admin.py:102
+#, python-format
+msgid "View history: %s"
+msgstr "Historique de vue: %s"
+
+#: .\simple_history\admin.py:104
+#, python-format
+msgid "Change history: %s"
+msgstr "Historique de changement: %s"
+
+#: .\simple_history\admin.py:110
+#, python-format
+msgid "The %(name)s \"%(obj)s\" was changed successfully."
+msgstr "L'objet \"%(obj)s\" %(name)s a été changé avec succès."
+
+#: .\simple_history\admin.py:116
+msgid "You may edit it again below"
+msgstr "Vous pouvez le modifier à nouveau ci-dessous"
+
+#: .\simple_history\admin.py:216
+#, python-format
+msgid "View %s"
+msgstr "Voir %s"
+
+#: .\simple_history\admin.py:218
+#, python-format
+msgid "Revert %s"
+msgstr "Rétablir %s"
+
+#: .\simple_history\models.py:433
+msgid "Created"
+msgstr "Créé"
+
+#: .\simple_history\models.py:433
+msgid "Changed"
+msgstr "Modifié"
+
+#: .\simple_history\models.py:433
+msgid "Deleted"
+msgstr "Effacé"
+
+#: .\simple_history\templates\simple_history\object_history.html:11
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr ""
+"Choisissez une date dans la liste ci-dessous pour revenir à une version "
+"précédente de cet objet."
+
+#: .\simple_history\templates\simple_history\object_history.html:16
+msgid "This object doesn't have a change history."
+msgstr "Cet objet n'a pas d'historique."
+
+#: .\simple_history\templates\simple_history\object_history_form.html:7
+msgid "Home"
+msgstr "Accueil"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:11
+msgid "History"
+msgstr "Historique"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:12
+#, python-format
+msgid "View %(verbose_name)s"
+msgstr "Voir %(verbose_name)s"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Rétablir %(verbose_name)s"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:25
+msgid ""
+"Press the 'Revert' button below to revert to this version of the object."
+msgstr ""
+"Cliquez sur le bouton 'Rétablir' ci-dessous pour revenir à cette version de "
+"l' objet."
+
+#: .\simple_history\templates\simple_history\object_history_form.html:25
+msgid "Press the 'Change History' button below to edit the history."
+msgstr ""
+"Cliquez sur le bouton 'Historique' ci-dessous pour modifier l'historique."
+
+#: .\simple_history\templates\simple_history\object_history_list.html:9
+msgid "Object"
+msgstr "Objet"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:13
+msgid "Date/time"
+msgstr "Date/heure"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:14
+msgid "Comment"
+msgstr "Commentaire"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:15
+msgid "Changed by"
+msgstr "Modifié par"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:16
+msgid "Change reason"
+msgstr "Raison de la modification"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:42
+msgid "None"
+msgstr "Aucun"
+
+#: .\simple_history\templates\simple_history\submit_line.html:4
+msgid "Revert"
+msgstr "Rétablir"
+
+#: .\simple_history\templates\simple_history\submit_line.html:6
+msgid "Change History"
+msgstr "Historique des changements"
+
+#: .\simple_history\templates\simple_history\submit_line.html:7
+msgid "Close"
+msgstr "Fermer"

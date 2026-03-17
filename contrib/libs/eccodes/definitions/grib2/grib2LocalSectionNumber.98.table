@@ -1,0 +1,29 @@
+0 0 Empty local section
+1 1 MARS labelling
+5 5 Forecast probability data
+7 7 Sensitivity data
+9 9 Singular vectors and ensemble perturbations
+11 11 Supplementary data used by the analysis
+12 12 Seasonal forecast monthly mean data for lagged systems
+14 14 Brightness temperature
+15 15 Seasonal forecast data
+16 16 Seasonal forecast monthly mean data
+18 18 Multianalysis ensemble data
+20 20 4D variational increments
+21 21 Sensitive area predictions
+24 24 Satellite Channel Data
+25 25 4DVar model errors
+26 26 MARS labelling or ensemble forecast data (with hindcast support)
+28 28 COSMO local area EPS
+30 30 Forecasting Systems with Variable Resolution
+36 36 MARS labelling for long window 4DVar system
+37 37 Brightness temperature for long window 4Dvar system
+38 38 4D variational increments for long window 4DVar system
+39 39 4DVar model errors for long window 4Dvar system
+41 41 The Flood Awareness System
+42 42 Lead Centre for Wave Forecast Verification
+43 43 EERIE project MARS labelling
+60 60 Ocean data analysis date and analysis time
+192 192 Multiple ECMWF local definitions
+300 300 Multi-dimensional parameters (deprecated)
+500 500 Observation diagnostics

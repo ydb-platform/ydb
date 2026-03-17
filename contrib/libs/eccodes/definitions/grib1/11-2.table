@@ -1,0 +1,34 @@
+# CODE TABLE 11-2, Flag
+
+#  Undocumented use of octet 14 extededFlags
+#  Taken from d2ordr.F
+#         R------- only bit 1 is reserved.
+#         -0------ single datum at each grid point.
+#         -1------ matrix of values at each grid point.
+#         --0----- no secondary bit map.
+#         --1----- secondary bit map present.
+#         ---0---- second order values have constant width.
+#         ---1---- second order values have different widths.
+#         ----0--- no general extended second order packing.
+#         ----1--- general extended second order packing used.
+#         -----0-- standard field ordering in section 4.
+#         -----1-- boustrophedonic ordering in section 4.
+
+
+1 0 Reserved
+1 1 Reserved
+2 0 Single datum at each grid point
+2 1 Matrix of values at each grid point
+3 0 No secondary bitmap Present
+3 1 Secondary bitmap Present
+4 0 Second-order values constant width
+4 1 Second-order values different widths
+5 0 no general extended second order packing
+5 1 general extended second order packing used
+6 0 standard field ordering in section 4
+6 1 boustrophedonic ordering in section 4
+#         ------00 no spatial differencing used.
+#         ------01 1st-order spatial differencing used.
+#         ------10 2nd-order    "         "         " .
+#         ------11 3rd-order    "         "         " .
+

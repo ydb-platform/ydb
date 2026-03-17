@@ -1,0 +1,62 @@
+ScanCode Licenses
+=================
+
+Copyright (c) nexB Inc. and others. All rights reserved.
+ScanCode is a trademark of nexB Inc.
+
+SPDX-License-Identifier: Apache-2.0 AND CC-BY-4.0
+
+ScanCode software is licensed under the Apache License version 2.0.
+ScanCode data is licensed under CC-BY-4.0.
+
+See https://www.apache.org/licenses/LICENSE-2.0 for the Apache-2.0 license text.
+See https://creativecommons.org/licenses/by/4.0/legalcode for the CC-BY-4.0 license text.
+
+See https://github.com/nexB/scancode-toolkit for support or download. 
+See https://aboutcode.org for more information about nexB OSS projects
+
+
+Third-party software licenses
+=============================
+
+ScanCode embeds third-party free and open source software packages under various
+licenses including permissive, limited copyleft and copyleft licenses. The
+origin and license of each package is documented by a .ABOUT file included
+in the ScanCode codetree and the releases archive.
+
+The corresponding source code for pre-compiled third-party software is available
+for immediate download from the same release page where you obtained ScanCode,
+including:
+
+- https://github.com/nexB/scancode-toolkit/
+- https://pypi.org/project/scancode-toolkit/
+- https://thirdparty.aboutcode.org/pypi/
+- https://github.com/nexB/thirdparty-packages/pypi/
+- https://github.com/nexB/scancode-plugins/
+- https://github.com/nexB/scancode-thirdparty-src/
+- https://github.com/nexB/thirdparty-packages/
+
+You may also contact us to request the source code by email at info@nexb.com or
+by postal mail at:
+
+  nexB Inc., ScanCode open source code request
+  4966 El Camino Real #119, Los Altos, CA 94022, USA
+
+Please indicate in your communication the ScanCode version for which you are
+requesting source code.
+
+
+ScanCode data attribution
+=========================
+
+ScanCode includes datasets (e.g. for license detection) that are licensed under
+CC-BY-4.0
+
+The preferred attribution for use of ScanCode data is::
+
+    Copyright (c) nexB Inc. and others. All rights reserved.
+    ScanCode is a trademark of nexB Inc.
+    SPDX-License-Identifier: CC-BY-4.0
+    See https://creativecommons.org/licenses/by/4.0/legalcode for the license text.
+    See https://github.com/nexB/scancode-toolkit for support or download. 
+    See https://aboutcode.org for more information about nexB OSS projects.

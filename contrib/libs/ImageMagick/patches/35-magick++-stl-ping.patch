@@ -1,0 +1,56 @@
+--- a/Magick++/lib/Magick++/STL.h
++++ b/Magick++/lib/Magick++/STL.h
+@@ -2765,6 +2765,53 @@
+     readImages(sequence_,blob_,options);
+   }
+
++  // Write results of ping images into existing container (appending to container)
++  template<class Container>
++  void pingImages(Container *sequence_,const std::string &imageSpec_,
++    ReadOptions &options)
++  {
++    MagickCore::Image
++      *images;
++
++    MagickCore::ImageInfo
++      *imageInfo;
++
++    imageInfo=options.imageInfo();
++    imageSpec_.copy(imageInfo->filename,MaxTextExtent-1);
++    imageInfo->filename[imageSpec_.length()] = 0;
++    GetPPException;
++    images=MagickCore::PingImage(imageInfo,exceptionInfo);
++    insertImages(sequence_,images);
++    ThrowPPException(options.quiet());
++  }
++
++  template<class Container>
++  void pingImages(Container *sequence_,const std::string &imageSpec_)
++  {
++    ReadOptions options;
++    pingImages(sequence_,imageSpec_,options);
++  }
++
++  template<class Container>
++  void pingImages(Container *sequence_,const Blob &blob_,ReadOptions &options)
++  {
++    MagickCore::Image
++      *images;
++
++    GetPPException;
++    images=MagickCore::PingBlob(options.imageInfo(),blob_.data(),
++      blob_.length(),exceptionInfo);
++    insertImages(sequence_,images);
++    ThrowPPException(options.quiet());
++  }
++
++  template<class Container>
++  void pingImages(Container *sequence_,const Blob &blob_)
++  {
++    ReadOptions options;
++    pingImages(sequence_,blob_,options);
++  }
++
+   // Returns a separate grayscale image for each channel specified.
+   template <class Container >
+   void separateImages( Container *separatedImages_,

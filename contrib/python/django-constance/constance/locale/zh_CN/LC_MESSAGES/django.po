@@ -1,0 +1,100 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+#
+# Translators:
+# Yifu Yu <root@jackyyf.com>, 2015
+msgid ""
+msgstr ""
+"Project-Id-Version: django-constance\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2017-06-13 19:40+0530\n"
+"PO-Revision-Date: 2015-03-15 18:40+0000\n"
+"Last-Translator: Yifu Yu <root@jackyyf.com>\n"
+"Language-Team: Chinese (China) (http://www.transifex.com/jezdez/django-"
+"constance/language/zh_CN/)\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: admin.py:113
+#, fuzzy, python-format
+#| msgid ""
+#| "Constance doesn't support config values of the type %(config_type)s. "
+#| "Please fix the value of '%(name)s'."
+msgid ""
+"Default value type must be equal to declared config parameter type. Please "
+"fix the default value of '%(name)s'."
+msgstr "Constance不支持保存类型为%(config_type)s的值，请修正%(name)s的值。"
+
+#: admin.py:123
+#, python-format
+msgid ""
+"Constance doesn't support config values of the type %(config_type)s. Please "
+"fix the value of '%(name)s'."
+msgstr "Constance不支持保存类型为%(config_type)s的值，请修正%(name)s的值。"
+
+#: admin.py:147
+msgid ""
+"The settings have been modified by someone else. Please reload the form and "
+"resubmit your changes."
+msgstr "设置已经被他人修改过，请刷新页面并重新提交您的更改。"
+
+#: admin.py:160
+msgid ""
+"CONSTANCE_CONFIG_FIELDSETS does not contain fields that exist in "
+"CONSTANCE_CONFIG."
+msgstr ""
+
+#: admin.py:224
+msgid "Live settings updated successfully."
+msgstr "成功更新实时配置"
+
+#: admin.py:285
+msgid "config"
+msgstr "配置"
+
+#: apps.py:8
+msgid "Constance"
+msgstr "Constance模块"
+
+#: backends/database/models.py:19
+msgid "constance"
+msgstr "Constance模块"
+
+#: backends/database/models.py:20
+msgid "constances"
+msgstr "Constance模块"
+
+#: management/commands/constance.py:30
+msgid "Get/Set In-database config settings handled by Constance"
+msgstr ""
+
+#: templates/admin/constance/change_list.html:75
+msgid "Save"
+msgstr "保存"
+
+#: templates/admin/constance/change_list.html:84
+msgid "Home"
+msgstr "首页"
+
+#: templates/admin/constance/includes/results_list.html:5
+msgid "Name"
+msgstr "名称"
+
+#: templates/admin/constance/includes/results_list.html:6
+msgid "Default"
+msgstr "默认值"
+
+#: templates/admin/constance/includes/results_list.html:7
+msgid "Value"
+msgstr "值"
+
+#: templates/admin/constance/includes/results_list.html:8
+msgid "Is modified"
+msgstr "是否修改过"
+
+#~ msgid "Constance config"
+#~ msgstr "Constance 配置页面"

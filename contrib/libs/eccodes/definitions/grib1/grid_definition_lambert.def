@@ -1,0 +1,113 @@
+unsigned[2] Nx  : dump;
+alias Ni =  Nx;
+alias numberOfPointsAlongXAxis =  Nx;
+alias geography.Nx=Nx;
+
+unsigned[2] Ny  : dump;
+alias Nj =  Ny;
+alias numberOfPointsAlongYAxis =  Ny;
+alias geography.Ny=Ny;
+
+# La1 - latitude of first grid point
+signed[3] latitudeOfFirstGridPoint :  edition_specific;
+meta geography.latitudeOfFirstGridPointInDegrees
+      scale(latitudeOfFirstGridPoint,oneConstant,grib1divider,truncateDegrees) : dump;
+alias La1 = latitudeOfFirstGridPoint;
+alias La1InDegrees=latitudeOfFirstGridPointInDegrees;
+#meta latitudeOfFirstGridPointInMicrodegrees times(latitudeOfFirstGridPoint,thousand);
+
+
+# Lo1 - longitude of first grid point
+signed[3] longitudeOfFirstGridPoint  : edition_specific;
+meta geography.longitudeOfFirstGridPointInDegrees
+      scale(longitudeOfFirstGridPoint,oneConstant,grib1divider,truncateDegrees) : dump;
+alias Lo1 = longitudeOfFirstGridPoint;
+alias Lo1InDegrees = longitudeOfFirstGridPointInDegrees;
+#meta longitudeOfFirstGridPointInMicrodegrees times(longitudeOfFirstGridPoint,thousand);
+
+# Resolution and component flags
+include "grib1/resolution_flags.def";
+
+# LoV - orientation of the grid; i.e.  the east longitude value of the meridian which is parallel to the Y-axis
+signed[3] LoV : edition_specific  ;
+meta geography.LoVInDegrees
+    scale(LoV,oneConstant,grib1divider,truncateDegrees) : dump;
+alias orientationOfTheGrid = LoV;
+alias orientationOfTheGridInDegrees = LoVInDegrees;
+
+# Dx - X-direction grid length (in units of metres)
+unsigned[3] DxInMetres  : dump;
+alias xDirectionGridLength=DxInMetres;
+alias geography.DxInMetres=DxInMetres ;
+alias Dx = DxInMetres;
+alias Di = DxInMetres;
+
+# Dy - Y-direction grid length (in units of metres)
+unsigned[3] DyInMetres  : dump;
+alias yDirectionGridLength=DyInMetres;
+alias geography.DyInMetres=DyInMetres;
+alias Dy= DyInMetres;
+alias Dj = DyInMetres;
+
+unsigned[1] projectionCentreFlag  : dump;
+# Also add the old spelling  of "centre" for backward compatibility
+alias projectionCenterFlag=projectionCentreFlag;
+
+# for change_scanning_direction
+alias yFirst=latitudeOfFirstGridPointInDegrees;
+alias xFirst=longitudeOfFirstGridPointInDegrees;
+
+include "grib1/scanning_mode.def";
+
+# Latin 1 - first latitude from the pole at which the secant cone cuts the sphere
+signed[3] Latin1 : edition_specific, no_copy;
+meta geography.Latin1InDegrees scale(Latin1,oneConstant,grib1divider,truncateDegrees) : dump;
+alias firstLatitude=Latin1;
+alias firstLatitudeInDegrees=Latin1InDegrees;
+
+# GRIB Edition 1 does not have the LaD parameter so we use Latin1 instead
+constant LaDInDegrees = Latin1InDegrees : dump;
+alias geography.LaDInDegrees=LaDInDegrees;
+
+# Latin 2 - second latitude from the pole at which the secant cone cuts the sphere
+signed[3] Latin2 :edition_specific,no_copy;
+alias secondLatitude=Latin2;
+meta geography.Latin2InDegrees scale(Latin2,oneConstant,grib1divider,truncateDegrees) : dump;
+alias secondLatitudeInDegrees=Latin2InDegrees;
+
+signed[3] latitudeOfSouthernPole : no_copy;
+meta  geography.latitudeOfSouthernPoleInDegrees
+        scale(latitudeOfSouthernPole,oneConstant,grib1divider,truncateDegrees) : dump;
+
+signed[3] longitudeOfSouthernPole : no_copy;
+meta  geography.longitudeOfSouthernPoleInDegrees
+        scale(longitudeOfSouthernPole,oneConstant,grib1divider,truncateDegrees) : dump;
+
+meta numberOfDataPoints number_of_points(Nx,Ny,PLPresent,pl) : dump;
+alias numberOfPoints=numberOfDataPoints;
+meta numberOfValues number_of_values(values,bitsPerValue,numberOfDataPoints,
+                                    bitmapPresent,bitmap,numberOfCodedValues) : dump;
+#alias ls.valuesCount=numberOfValues;
+
+iterator lambert_conformal(numberOfPoints,missingValue,values,
+          radius,Nx,Ny,
+          LoVInDegrees,LaDInDegrees,
+          Latin1InDegrees,Latin2InDegrees,
+          latitudeOfFirstGridPointInDegrees,longitudeOfFirstGridPointInDegrees,
+          Dx,Dy,
+          iScansNegatively,
+          jScansPositively,
+          jPointsAreConsecutive,
+          alternativeRowScanning);
+
+
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);
+
+nearest lambert_conformal(values,radius,Nx,Ny);
+
+pad padding_grid3_1(2);

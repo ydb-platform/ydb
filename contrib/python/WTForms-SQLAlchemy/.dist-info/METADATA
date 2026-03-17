@@ -1,0 +1,90 @@
+Metadata-Version: 2.3
+Name: WTForms-SQLAlchemy
+Version: 0.4.2
+Summary: SQLAlchemy tools for WTForms
+Project-URL: Documentation, https://wtforms-sqlalchemy.readthedocs.io/
+Project-URL: Changes, https://wtforms-sqlalchemy.readthedocs.io/changes/
+Project-URL: Source Code, https://github.com/pallets-eco/wtforms-sqlalchemy/
+Project-URL: Issue Tracker, https://github.com/pallets-eco/wtforms-sqlalchemy/issues/
+Project-URL: Chat, https://discord.gg/pallets
+Maintainer: WTForms
+License: Copyright (c) 2020 by Thomas Johansson, James Crasta and others.
+        All rights reserved.
+        
+        Redistribution and use in source and binary forms, with or without modification,
+        are permitted provided that the following conditions are met:
+        
+            * Redistributions of source code must retain the above copyright
+              notice, this list of conditions and the following disclaimer.
+        
+            * Redistributions in binary form must reproduce the above copyright notice,
+              this list of conditions and the following disclaimer in the documentation
+              and/or other materials provided with the distribution.
+        
+            * The names of the contributors may not be used to endorse or promote
+              products derived from this software without specific prior written
+              permission.
+        
+        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+        ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+        WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+        DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+        ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+        (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+        LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+        ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+        (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+        SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+License-File: LICENSE.txt
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI :: Application
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Requires-Python: >=3.9
+Requires-Dist: sqlalchemy>=1.4
+Requires-Dist: wtforms>=3.1
+Description-Content-Type: text/x-rst
+
+WTForms-SQLAlchemy
+==================
+
+.. image:: https://github.com/wtforms/wtforms-sqlalchemy/actions/workflows/tests.yaml/badge.svg
+    :target: https://github.com/wtforms/wtforms-sqlalchemy/actions/workflows/tests.yaml
+.. image:: https://readthedocs.org/projects/wtforms-sqlalchemy/badge/?version=latest&style=flat
+    :target: https://wtforms-sqlalchemy.readthedocs.io
+
+WTForms-SQLAlchemy is a fork of the ``wtforms.ext.sqlalchemy`` package from WTForms.
+The package has been renamed to ``wtforms_sqlalchemy`` but otherwise should
+function the same as ``wtforms.ext.sqlalchemy`` did.
+
+to install::
+
+    pip install WTForms-SQLAlchemy
+
+An example using Flask is included in ``examples/flask``.
+
+Features
+--------
+
+1. Provide ``SelectField`` integration with SQLAlchemy models
+
+   - ``wtforms_sqlalchemy.fields.QuerySelectField``
+   - ``wtforms_sqlalchemy.fields.QuerySelectMultipleField``
+
+2. Generate forms from SQLAlchemy models using
+   ``wtforms_sqlalchemy.orm.model_form``
+
+Rationale
+---------
+
+The reasoning for splitting out this package is that WTForms 2.0 has
+deprecated all its ``wtforms.ext.<library>`` packages and they will
+not receive any further feature updates. The authors feel that packages
+for companion libraries work better with their own release schedule and
+the ability to diverge more from WTForms.

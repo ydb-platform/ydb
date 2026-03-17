@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1;
+
+option java_package = "yandex.cloud.api.speechsense.v1";
+option java_outer_classname = "ClassifierProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1;speechsense";
+
+message Classifier {
+  // Classifier id
+  string id = 1;
+
+  // Classifier name
+  string name = 2;
+
+  // Classifier description
+  string description = 3;
+}

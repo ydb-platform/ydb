@@ -1,0 +1,4 @@
+{% cache 60, "fragment1" %}{{somevar}}{% endcache %}
+{% cache 60, "fragment1", "key1" %}{{somevar}}{% endcache %}
+{% cache 60, "fragment1", "key1", somevar %}{{somevar}}{% endcache %}
+{% cache timeout, "fragment2" %}{{somevar}}{% endcache %}

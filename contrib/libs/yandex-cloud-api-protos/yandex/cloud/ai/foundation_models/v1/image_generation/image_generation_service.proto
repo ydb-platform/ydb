@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.foundation_models.v1.image_generation;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/ai/foundation_models/v1/image_generation/image_generation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/foundation_models/v1/image_generation;image_generation";
+option java_package = "yandex.cloud.api.ai.foundation_models.v1.image_generation";
+
+
+// Request for the service to generate an image.
+//
+// For examples of usage, see [step-by-step guide](/docs/foundation-models/operations/yandexart/request).
+message ImageGenerationRequest {
+
+  // The [model URI](/docs/foundation-models/concepts/yandexart/models) to be used for image generation.
+  string model_uri = 1;
+  // A list of messages representing the context for the image generation model.
+  repeated Message messages = 2;
+  // Image generation options.
+  ImageGenerationOptions generation_options = 3;
+}
+
+// Response containing generated image.
+message ImageGenerationResponse {
+
+  // The image is serialized as an array of bytes encoded in [Base64](https://en.wikipedia.org/wiki/Base64).
+  bytes image = 1;
+  // The model version changes with each new releases.
+  string model_version = 2;
+}
+
+// Service for creating images based on a text description. 
+service ImageGenerationAsyncService {
+
+  // A method for generating an image based on a textual description.
+  rpc Generate (ImageGenerationRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "ImageGenerationResponse"
+    };
+    option (google.api.http) = {post: "/foundationModels/v1/imageGenerationAsync" body: "*"};
+  }
+
+}

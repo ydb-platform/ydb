@@ -1,0 +1,38 @@
+# (C) Copyright 2005- ECMWF.
+
+unsigned[2] forecastOrSingularVectorNumber  : dump;
+
+constant perturbedType = 60;
+
+if(type != perturbedType)
+{
+  unsigned[2] numberOfIterations : dump;
+  unsigned[2] numberOfSingularVectorsComputed  : dump;
+  unsigned[1] normAtInitialTime : dump ;
+  unsigned[1] normAtFinalTime : dump ;
+  unsigned[4] multiplicationFactorForLatLong  : dump;
+  signed[4] northWestLatitudeOfLPOArea : dump ;
+  signed[4] northWestLongitudeOfLPOArea  : dump;
+  signed[4] southEastLatitudeOfLPOArea  : dump;
+  signed[4] southEastLongitudeOfLPOArea  : dump;
+  unsigned[4] accuracyMultipliedByFactor  : dump;
+  unsigned[2] numberOfSingularVectorsEvolved  : dump;
+  # Ritz numbers:
+  signed[4] NINT_LOG10_RITZ : dump ;
+  signed[4] NINT_RITZ_EXP : dump ;
+
+  alias local.numberOfIterations= numberOfIterations;
+  alias local.numberOfSingularVectorsComputed= numberOfSingularVectorsComputed ;
+  alias local.normAtInitialTime= normAtInitialTime  ;
+  alias local.normAtFinalTime= normAtFinalTime ;
+  alias local.multiplicationFactorForLatLong= multiplicationFactorForLatLong ;
+  alias local.northWestLatitudeOfLPOArea= northWestLatitudeOfLPOArea  ;
+  alias local.northWestLongitudeOfLPOArea= northWestLongitudeOfLPOArea  ;
+  alias local.southEastLatitudeOfLPOArea= southEastLatitudeOfLPOArea  ;
+  alias local.southEastLongitudeOfLPOArea= southEastLongitudeOfLPOArea  ;
+  alias local.accuracyMultipliedByFactor= accuracyMultipliedByFactor ;
+  alias local.numberOfSingularVectorsEvolved= numberOfSingularVectorsEvolved ;
+# Ritz numbers:
+  alias local.NINT_LOG10_RITZ= NINT_LOG10_RITZ ;
+  alias local.NINT_RITZ_EXP= NINT_RITZ_EXP  ;
+}

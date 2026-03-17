@@ -1,0 +1,176 @@
+{
+	"aria": {
+		"sortAscending": " : activer pour trier la colonne par ordre croissant",
+		"sortDescending": " : activer pour trier la colonne par ordre décroissant"
+	},
+	"buttons": {
+		"collection": "Collection",
+		"colvis": "Afficher/Cacher des colonnes",
+		"colvisRestore": "Rétablir visibilité",
+		"copy": "Copier",
+		"copyKeys": "Appuyez sur ctrl ou u2318 + C pour copier les données du tableau dans votre presse-papier.",
+		"copySuccess": {
+			"1": "1 ligne copiée dans le presse-papier",
+			"_": "%d lignes copiées dans le presse-papier"
+		},
+		"copyTitle": "Copier dans le presse-papier",
+		"createState": "Créer un état",
+		"csv": "CSV",
+		"excel": "Excel",
+		"pageLength": {
+			"-1": "Afficher toutes les lignes",
+			"1": "Afficher 1 ligne",
+			"_": "Afficher %d lignes"
+		},
+		"pdf": "PDF",
+		"print": "Imprimer",
+		"removeAllStates": "Supprimer tous les états",
+		"removeState": "Supprimer",
+		"renameState": "Renommer",
+		"savedStates": "États sauvegardés",
+		"stateRestore": "État %d",
+		"updateState": "Mettre à jour"
+	},
+	"datetime": {
+		"amPm": [
+			"am",
+			"pm"
+		],
+		"hours": "Heures",
+		"minutes": "Minutes",
+		"months": {
+			"0": "Janvier",
+			"1": "Février",
+			"10": "Novembre",
+			"11": "Décembre",
+			"2": "Mars",
+			"3": "Avril",
+			"4": "Mai",
+			"5": "Juin",
+			"6": "Juillet",
+			"7": "Août",
+			"8": "Septembre",
+			"9": "Octobre"
+		},
+		"next": "Suivant",
+		"previous": "Précédent",
+		"seconds": "Secondes",
+		"unknown": "-",
+		"weekdays": [
+			"Dim",
+			"Lun",
+			"Mar",
+			"Mer",
+			"Jeu",
+			"Ven",
+			"Sam"
+		]
+	},
+	"decimal": ",",
+	"emptyTable": "Aucune donnée disponible dans le tableau",
+	"info": "Affichage de _START_ à _END_ sur _TOTAL_ entrées",
+	"infoEmpty": "Affichage de 0 à 0 sur 0 entrées",
+	"infoFiltered": "(filtrées depuis un total de _MAX_ entrées)",
+	"infoThousands": " ",
+	"lengthMenu": "Afficher _MENU_ entrées",
+	"loadingRecords": "Chargement...",
+	"paginate": {
+		"first": "Première",
+		"last": "Dernière",
+		"next": "Suivante",
+		"previous": "Précédente"
+	},
+	"processing": "Traitement...",
+	"search": "Rechercher :",
+	"searchBuilder": {
+		"add": "Ajouter une condition",
+		"button": {
+			"0": "<i class=\"fa-solid fa-filter\"></i> Recherche avancée",
+			"_": "<i class=\"fa-solid fa-filter\"></i> Recherche avancée (%d)"
+		},
+		"clearAll": "Effacer tout",
+		"condition": "Condition",
+		"conditions": {
+			"array": {
+				"contains": "Contient",
+				"empty": "Vide",
+				"equals": "Égal à",
+				"not": "Différent de",
+				"notEmpty": "Non vide",
+				"without": "Sans"
+			},
+			"date": {
+				"after": "Après le",
+				"before": "Avant le",
+				"between": "Entre",
+				"empty": "Vide",
+				"equals": "Égal à",
+				"not": "Différent de",
+				"notBetween": "Pas entre",
+				"notEmpty": "Non vide"
+			},
+			"number": {
+				"between": "Entre",
+				"empty": "Vide",
+				"equals": "Égal à",
+				"gt": "Supérieur à",
+				"gte": "Supérieur ou égal à",
+				"lt": "Inférieur à",
+				"lte": "Inférieur ou égal à",
+				"not": "Différent de",
+				"notBetween": "Pas entre",
+				"notEmpty": "Non vide"
+			},
+			"string": {
+				"contains": "Contient",
+				"empty": "Vide",
+				"endsWith": "Se termine par",
+				"equals": "Égal à",
+				"not": "Différent de",
+				"notContains": "Ne contient pas",
+				"notEmpty": "Non vide",
+				"notEndsWith": "Ne termine pas par",
+				"notStartsWith": "Ne commence pas par",
+				"startsWith": "Commence par"
+			}
+		},
+		"data": "Donnée",
+		"deleteTitle": "Supprimer la règle de filtrage",
+		"leftTitle": "Désindenter le critère",
+		"logicAnd": "Et",
+		"logicOr": "Ou",
+		"rightTitle": "Indenter le critère",
+		"title": {
+			"0": "Recherche avancée",
+			"_": "Recherche avancée (%d)"
+		},
+		"value": "Valeur"
+	},
+	"select": {
+		"cells": {
+			"1": "1 cellule sélectionnée",
+			"_": "%d cellules sélectionnées"
+		},
+		"columns": {
+			"1": "1 colonne sélectionnée",
+			"_": "%d colonnes sélectionnées"
+		},
+		"rows": {
+			"1": "1 ligne sélectionnée",
+			"_": "%d lignes sélectionnées"
+		}
+	},
+	"starlette-admin": {
+		"buttons": {
+			"export": "Export"
+		},
+		"conditions": {
+			"false": "Faux",
+			"true": "Vrai",
+			"empty": "Vide",
+			"notEmpty": "Non vide"
+		}
+	},
+	"thousands": " ",
+	"zeroRecords": "Aucune entrée correspondante trouvée"
+}

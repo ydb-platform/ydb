@@ -1,0 +1,5 @@
+'undefined' = { numberOfGridUsed = 0; }
+'ORCA2'     = { numberOfGridUsed = 1; }
+'ORCA1'     = { numberOfGridUsed = 2; }
+'ORCA025'   = { numberOfGridUsed = 3; }
+'ORCA12'    = { numberOfGridUsed = 4; }

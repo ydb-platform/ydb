@@ -1,0 +1,15 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 8fb4a86..8a4e3d7 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -38,6 +38,10 @@ libxml2 = { name = "libxml-2.0", version = "2.9" }
+ name = "librsvg"
+ crate-type = [ "staticlib", "rlib" ]
+ 
++[profile.release]
++debug = true
++panic = "abort"
++
+ [dependencies]
+ # Keep these in sync with respect to the cairo-rs version:
+ #   src/lib.rs - toplevel example in the docs

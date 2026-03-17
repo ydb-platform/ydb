@@ -1,0 +1,332 @@
+syntax = "proto3";
+
+package yandex.cloud.baremetal.v1alpha;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/baremetal/v1alpha/private_subnet.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/baremetal/v1alpha;baremetal";
+option java_package = "yandex.cloud.api.baremetal.v1alpha";
+
+// A set of methods for managing PrivateSubnet resources.
+service PrivateSubnetService {
+  // Returns the specific PrivateSubnet resource.
+  //
+  // To get the list of available PrivateSubnet resources, make a [List] request.
+  rpc Get (GetPrivateSubnetRequest) returns (PrivateSubnet) {
+    option (google.api.http) = {
+      get: "/baremetal/v1alpha/privateSubnets/{private_subnet_id}"
+    };
+  }
+
+  // Retrieves the list of PrivateSubnet resources in the specified folder.
+  rpc List (ListPrivateSubnetRequest) returns (ListPrivateSubnetResponse) {
+    option (google.api.http) = {
+      get: "/baremetal/v1alpha/privateSubnets"
+    };
+  }
+
+  // Creates a private subnet in the specified folder.
+  rpc Create (CreatePrivateSubnetRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/baremetal/v1alpha/privateSubnets"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreatePrivateSubnetMetadata"
+      response: "PrivateSubnet"
+    };
+  }
+
+  // Updates the specified private subnet.
+  rpc Update (UpdatePrivateSubnetRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/baremetal/v1alpha/privateSubnets/{private_subnet_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdatePrivateSubnetMetadata"
+      response: "PrivateSubnet"
+    };
+  }
+
+  // Deletes the specified private subnet.
+  //
+  // Deleting a private subnet removes its data permanently and is irreversible.
+  rpc Delete (DeletePrivateSubnetRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      delete: "/baremetal/v1alpha/privateSubnets/{private_subnet_id}"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeletePrivateSubnetMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified private subnet.
+  rpc ListOperations (ListPrivateSubnetOperationsRequest) returns (ListPrivateSubnetOperationsResponse) {
+    option (google.api.http) = {
+      get: "/baremetal/v1alpha/privateSubnets/{private_subnet_id}/operations"
+    };
+  }
+}
+
+message GetPrivateSubnetRequest {
+  reserved 1;
+
+  // ID of the PrivateSubnet resource to return.
+  //
+  // To get the private subnet ID use a [PrivateSubnetService.List] request.
+  string private_subnet_id = 2 [
+    (pattern) = "[a-z][a-z0-9]*",
+    (length) = "20"
+  ];
+}
+
+message ListPrivateSubnetRequest {
+  // Reserved for future use.
+  reserved 2 to 99;
+
+  // ID of the folder to list private subnets in.
+  //
+  // To get the folder ID use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (pattern) = "[a-z][a-z0-9.-]*",
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is greater than `page_size`,
+  // the service returns a [ListConfigurationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value is 20.
+  int64 page_size = 100 [(value) = "<=100"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListConfigurationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 101;
+
+  // By which column the listing should be ordered and in which direction,
+  // format is "createdAt desc". "id asc" if omitted.
+  // Supported fields: ["id", "name", "createdAt"].
+  // Both snake_case and camelCase are supported for fields.
+  string order_by = 102;
+
+  // A filter expression that filters resources listed in the response.
+  // The expression consists of one or more conditions united by `AND` operator: `<condition1> [AND <condition2> [<...> AND <conditionN>]]`.
+  //
+  // Each condition has the form `<field> <operator> <value>`, where:
+  // 1. `<field>` is the field name. Currently you can use filtering only on the limited number of fields.
+  // 2. `<operator>` is a logical operator, one of `=` (equal), `:` (substring).
+  // 3. `<value>` represents a value.
+  // String values should be written in double (`"`) or single (`'`) quotes. C-style escape sequences are supported (`\"` turns to `"`, `\'` to `'`, `\\` to backslash).
+  // Example: "key1='value' AND key2='value'"
+  // Supported operators: ["AND"].
+  // Supported fields: ["id", "name", "zoneId", "hardwarePoolId"].
+  // Both snake_case and camelCase are supported for fields.
+  string filter = 103;
+}
+
+message ListPrivateSubnetResponse {
+  reserved 1;
+
+  // Reserved for future use.
+  reserved 3 to 99;
+
+  // List of PrivateSubnet resources.
+  repeated PrivateSubnet private_subnets = 2;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // [ListImagesRequest.page_size], use `next_page_token` as the value
+  // for the [ListImagesRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 100;
+}
+
+message CreatePrivateSubnetRequest {
+  // Reserved for future use.
+  reserved 6 to 199;
+
+  // Name of the private subnet.
+  // The name must be unique within the folder.
+  string name = 1 [
+    (pattern) = "[a-z]([-a-z0-9]*[a-z0-9])?",
+    (length) = "2-63"
+  ];
+
+  // Description of the private subnet.
+  string description = 2 [(length) = "<=1024"];
+
+  // ID of the hardware pool where the private subnet resides.
+  //
+  // To get a list of available hardware pools, use the [HardwarePoolService.List] request.
+  string hardware_pool_id = 3 [(length) = "<=20"];
+
+  // VRF options. Optional.
+  VrfOptionsSpec vrf_options_spec = 4;
+
+  // ID of the folder to create a private subnet in.
+  //
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 5 [
+    (pattern) = "[a-z][a-z0-9.-]*",
+    (length) = "<=50"
+  ];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 200 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+}
+
+message VrfOptionsSpec {
+  // ID of the VRF to create private subnet in.
+  //
+  // To get the VRF ID, use a [VrfService.List] request.
+  string vrf_id = 1;
+
+  // CIDR block.
+  // The range of internal addresses that are defined for this private subnet, as
+  // specified in [RFC1918](https://datatracker.ietf.org/doc/html/rfc1918#section-3).
+  // For example, 10.0.0.0/22 or 192.168.0.0/24.
+  string cidr = 2;
+
+  // DHCP options for the subnet.
+  // The absence or null value indicates that DHCP is disabled.
+  DhcpOptionsSpec dhcp_options = 3;
+
+  // Gateway IP address for the subnet.
+  string gateway_ip = 4;
+}
+
+// DHCP options for the private subnet.
+message DhcpOptionsSpec {
+  // Start IP address of the DHCP range (inclusive).
+  // The absence or null value indicates that calculation will be performed based on CIDR.
+  string start_ip = 1;
+
+  // End IP address of the DHCP range (inclusive).
+  // The absence or null value indicates that calculation will be performed based on CIDR.
+  string end_ip = 2;
+}
+
+message CreatePrivateSubnetMetadata {
+  reserved 1;
+
+  // ID of the private subnet that is being created.
+  string private_subnet_id = 2;
+}
+
+message UpdatePrivateSubnetRequest {
+  // Reserved for future use.
+  reserved 6 to 199;
+
+  // ID of the PrivateSubnet resource to update.
+  //
+  // To get the private subnet ID, use a [PrivateSubnetService.List] request.
+  string private_subnet_id = 1 [
+    (pattern) = "[a-z][a-z0-9]*",
+    (length) = "20"
+  ];
+
+  // Field mask that specifies which fields of the PrivateSubnet resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the private subnet.
+  // The name must be unique within the folder.
+  string name = 3 [
+    (pattern) = "[a-z]([-a-z0-9]*[a-z0-9])?",
+    (length) = "2-63"
+  ];
+
+  // Description of the private subnet.
+  string description = 4 [(length) = "<=1024"];
+
+  // VRF options. Optional.
+  VrfOptionsSpec vrf_options_spec = 5;
+
+  // Resource labels as `key:value` pairs.
+  //
+  // Existing set of `labels` is completely replaced by the provided set.
+  map<string, string> labels = 200 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+}
+
+message UpdatePrivateSubnetMetadata {
+  reserved 1;
+
+  // ID of the PrivateSubnet resource that is being updated.
+  string private_subnet_id = 2;
+}
+
+message DeletePrivateSubnetRequest {
+  reserved 1;
+
+  // ID of the private subnet to delete.
+  //
+  // To get the private subnet ID, use a [PrivateSubnetService.List] request.
+  string private_subnet_id = 2 [
+    (pattern) = "[a-z][a-z0-9]*",
+    (length) = "20"
+  ];
+}
+
+message DeletePrivateSubnetMetadata {
+  reserved 1;
+
+  // ID of the PrivateSubnet resource that is being deleted.
+  string private_subnet_id = 2;
+}
+
+message ListPrivateSubnetOperationsRequest {
+  reserved 1;
+
+  // Reserved for future use.
+  reserved 3 to 99;
+
+  // ID of the PrivateSubnet resource to list operations for.
+  string private_subnet_id = 2 [
+    (pattern) = "[a-z][a-z0-9]*",
+    (length) = "20"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is greater than `page_size`,
+  // the service returns a [ListImageOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value is 20.
+  int64 page_size = 100 [(value) = "<=100"];
+
+  // Page token. To get the next page of results, set `page_token` to the
+  // [ListPrivateSubnetOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 101;
+}
+
+message ListPrivateSubnetOperationsResponse {
+  // Reserved for future use.
+  reserved 2 to 99;
+
+  // List of operations for the specified PrivateSubnet resource.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // [ListImageOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListImageOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 100;
+}

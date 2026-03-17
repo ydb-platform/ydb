@@ -1,0 +1,3 @@
+mark_as_tests:
+  - fire/*_test.py
+  - fire/test_*.py

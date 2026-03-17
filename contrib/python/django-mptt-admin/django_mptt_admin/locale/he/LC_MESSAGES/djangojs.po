@@ -1,0 +1,25 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: django-mptt-admin\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2014-11-10 15:29+0200\n"
+"PO-Revision-Date: 2014-11-10 15:30+0200\n"
+"Last-Translator: Udi Oron <udioron@gmail.com>\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Poedit 1.5.7\n"
+
+msgid "edit"
+msgstr "עריכה"
+
+msgid "add"
+msgstr "הוספה"
+
+msgid "move failed"
+msgstr "ההעברה נכשלה"
+
+msgid "Error while loading the data from the server"
+msgstr "שגיאה במהלך שליחת הנתונים לשרת"

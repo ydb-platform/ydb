@@ -1,0 +1,38 @@
+# -*- text -*-
+#
+# Copyright (c) 2016      Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+#
+[rnd-path-too-long]
+The PMIx server was unable to setup a rendezvous file due to your
+system's restriction for Unix's socket's path-length.
+
+   Temporary directory: %s
+   Rendezvous filename: %s
+
+Please try to set TMPDIR to something short (like /tmp) or change
+your computer's name to something shorter (see uname -n).
+[listener-failed-start]
+The PMIx server was unable to setup a rendezvous point. This is
+usually due to a conflicting stale named pipe from a prior failed
+job, thus preventing the server from binding to its assigned socket.
+
+  Rendezvous filename: %s
+
+Please remove the stale file and try again.
+[data-store-failed]
+The PMIx server was unable to store the specified key-value:
+
+  Key: %s
+
+The precise reason for the failure was provided in the above
+"error-log" message. This is probably something that should
+be referred to the PMIx developers.
+[listener-thread-start]
+The PMIx server's listener thread failed to start. We cannot
+continue.

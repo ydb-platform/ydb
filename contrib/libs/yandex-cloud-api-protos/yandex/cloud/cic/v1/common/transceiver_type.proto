@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package yandex.cloud.cic.v1.common;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cic/v1/common;cic";
+option java_package = "yandex.cloud.api.cic.v1.common";
+
+enum TransceiverType {
+  TRANSCEIVER_TYPE_UNSPECIFIED = 0;
+  TRANSCEIVER_TYPE_1000BASE_LX = 1;
+  TRANSCEIVER_TYPE_10GBASE_LR = 2;
+  TRANSCEIVER_TYPE_10GBASE_ER = 3;
+  TRANSCEIVER_TYPE_100GBASE_LR4 = 4;
+  TRANSCEIVER_TYPE_100GBASE_ER4 = 5;
+}

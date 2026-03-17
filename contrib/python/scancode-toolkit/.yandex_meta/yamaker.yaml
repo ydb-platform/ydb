@@ -1,0 +1,3 @@
+exclude:
+  - licensedcode/data/**
+  - formattedcode/templates/**

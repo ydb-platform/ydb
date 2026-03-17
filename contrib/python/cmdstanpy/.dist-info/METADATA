@@ -1,0 +1,105 @@
+Metadata-Version: 2.4
+Name: cmdstanpy
+Version: 1.3.0
+Summary: Python interface to CmdStan
+Author: Stan Dev Team
+License: BSD-3-Clause
+Project-URL: Homepage, https://github.com/stan-dev/cmdstanpy
+Project-URL: Bug Tracker, https://github.com/stan-dev/cmdstanpy/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Science/Research
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE.md
+Requires-Dist: pandas
+Requires-Dist: numpy>=1.21
+Requires-Dist: tqdm
+Requires-Dist: stanio<2.0.0,>=0.4.0
+Provides-Extra: all
+Requires-Dist: xarray; extra == "all"
+Requires-Dist: polars>=1.8.2; extra == "all"
+Provides-Extra: test
+Requires-Dist: flake8; extra == "test"
+Requires-Dist: pylint; extra == "test"
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Requires-Dist: pytest-order; extra == "test"
+Requires-Dist: mypy; extra == "test"
+Requires-Dist: xarray; extra == "test"
+Requires-Dist: polars>=1.8.2; extra == "test"
+Provides-Extra: docs
+Requires-Dist: sphinx<6,>5; extra == "docs"
+Requires-Dist: pydata-sphinx-theme<0.9; extra == "docs"
+Requires-Dist: nbsphinx; extra == "docs"
+Requires-Dist: ipython; extra == "docs"
+Requires-Dist: ipykernel<7; extra == "docs"
+Requires-Dist: ipywidgets; extra == "docs"
+Requires-Dist: sphinx-copybutton; extra == "docs"
+Requires-Dist: xarray; extra == "docs"
+Requires-Dist: matplotlib; extra == "docs"
+Dynamic: license-file
+
+# CmdStanPy
+
+[![codecov](https://codecov.io/gh/stan-dev/cmdstanpy/branch/master/graph/badge.svg)](https://codecov.io/gh/stan-dev/cmdstanpy)
+
+
+CmdStanPy is a lightweight pure-Python interface to CmdStan which provides access to the Stan compiler and all inference algorithms.  It supports both development and production workflows. Because model development and testing may require many iterations, the defaults favor development mode and therefore output files are stored on a temporary filesystem. Non-default options allow all aspects of a run to be specified so that scripts can be used to distributed analysis jobs across nodes and machines.
+
+CmdStanPy is distributed via PyPi: https://pypi.org/project/cmdstanpy/
+
+or Conda Forge: https://anaconda.org/conda-forge/cmdstanpy
+
+### Goals
+
+- Clean interface to Stan services so that CmdStanPy can keep up with Stan releases.
+
+- Provide access to all CmdStan inference methods.
+
+- Easy to install,
+  + minimal Python library dependencies: numpy, pandas
+  + Python code doesn't interface directly with c++, only calls compiled executables
+
+- Modular - CmdStanPy produces a MCMC sample (or point estimate) from the posterior; other packages do analysis and visualization.
+
+- Low memory overhead - by default, minimal memory used above that required by CmdStanPy; objects run CmdStan programs and track CmdStan input and output files.
+
+
+### Source Repository
+
+CmdStanPy and CmdStan are available from GitHub: https://github.com/stan-dev/cmdstanpy and https://github.com/stan-dev/cmdstan
+
+
+### Docs
+
+The latest release documentation is hosted on  https://mc-stan.org/cmdstanpy, older release versions are available from readthedocs:  https://cmdstanpy.readthedocs.io
+
+### Licensing
+
+The CmdStanPy, CmdStan, and the core Stan C++ code are licensed under new BSD.
+
+### Example
+
+```python
+import os
+from cmdstanpy import cmdstan_path, CmdStanModel
+
+# specify locations of Stan program file and data
+stan_file = os.path.join(cmdstan_path(), 'examples', 'bernoulli', 'bernoulli.stan')
+data_file = os.path.join(cmdstan_path(), 'examples', 'bernoulli', 'bernoulli.data.json')
+
+# instantiate a model; compiles the Stan program by default
+model = CmdStanModel(stan_file=stan_file)
+
+# obtain a posterior sample from the model conditioned on the data
+fit = model.sample(chains=4, data=data_file)
+
+# summarize the results (wraps CmdStan `bin/stansummary`):
+fit.summary()
+```

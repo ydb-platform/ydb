@@ -1,0 +1,138 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2012-06-13 09:56+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+
+#: admin.py:139
+msgid "Initial version."
+msgstr "Första versionen."
+
+#: admin.py:161
+#, python-format
+msgid "Deleted %(verbose_name)s."
+msgstr "Tog bort %(verbose_name)s"
+
+#: admin.py:181 templates/reversion/change_list.html:7
+#: templates/reversion/recover_form.html:10
+#: templates/reversion/recover_list.html:10
+#, python-format
+msgid "Recover deleted %(name)s"
+msgstr "Återskapa bortagna %(name)s"
+
+#: admin.py:292
+#, python-format
+msgid "Reverted to previous version, saved on %(datetime)s"
+msgstr "Återgick till föregående version, sparad %(datetime)s"
+
+#: admin.py:292 admin.py:456 templates/reversion/object_history.html:23
+#: templates/reversion/recover_list.html:30
+msgid "DATETIME_FORMAT"
+msgstr "Y-m-d H:i"
+
+#: admin.py:294
+#, python-format
+msgid ""
+"The %(model)s \"%(name)s\" was reverted successfully. You may edit it again "
+"below."
+msgstr ""
+"Återställandet av %(model)s \"%(name)s\" lyckades. Du kan redigera den igen "
+"här nedan."
+
+#: admin.py:377
+#, python-format
+msgid "Recover %(name)s"
+msgstr "Återskapa %(name)s"
+
+#: admin.py:388
+#, python-format
+msgid "Revert %(name)s"
+msgstr "Återställ %(name)s"
+
+#: models.py:68
+msgid "date created"
+msgstr "datum skapad"
+
+#: models.py:74
+msgid "user"
+msgstr "användare"
+
+#: models.py:78
+msgid "comment"
+msgstr "kommentar"
+
+#: templates/reversion/object_history.html:8
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr ""
+"Välj ett datum från listan här under för att återställa till en tidigare "
+"version av det här objektet."
+
+#: templates/reversion/object_history.html:15
+#: templates/reversion/recover_list.html:23
+msgid "Date/time"
+msgstr "Datum/tid"
+
+#: templates/reversion/object_history.html:16
+msgid "User"
+msgstr "Användare"
+
+#: templates/reversion/object_history.html:17
+msgid "Comment"
+msgstr "Kommentar"
+
+#: templates/reversion/object_history.html:36
+msgid ""
+"This object doesn't have a change history. It probably wasn't added via this "
+"admin site."
+msgstr ""
+"Det här objektet saknar ändringshistorik. Det skapades förmodligen inte via "
+"den här admin-sajten."
+
+#: templates/reversion/recover_form.html:7
+#: templates/reversion/recover_list.html:7
+#: templates/reversion/revision_form.html:7
+msgid "Home"
+msgstr "Hem"
+
+#: templates/reversion/recover_form.html:17
+msgid "Press the save button below to recover this version of the object."
+msgstr "Tryck på spara här nedan fär att återskapa den här versionen."
+
+#: templates/reversion/recover_list.html:17
+msgid ""
+"Choose a date from the list below to recover a deleted version of an object."
+msgstr ""
+"Välj ett datum i listan här nedan för att återskapa en borttagen version."
+
+#: templates/reversion/recover_list.html:37
+msgid "There are no deleted objects to recover."
+msgstr "Det finns inga borttagna objekt att återskapa."
+
+#: templates/reversion/revision_form.html:11
+msgid "History"
+msgstr "Historik"
+
+#: templates/reversion/revision_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Återställ %(verbose_name)s"
+
+#: templates/reversion/revision_form.html:25
+msgid "Press the save button below to revert to this version of the object."
+msgstr "Tryck på spara här nedan för att återställa den här versionen."

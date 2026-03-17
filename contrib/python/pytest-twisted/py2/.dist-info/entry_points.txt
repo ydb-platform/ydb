@@ -1,0 +1,2 @@
+[pytest11]
+twisted = pytest_twisted

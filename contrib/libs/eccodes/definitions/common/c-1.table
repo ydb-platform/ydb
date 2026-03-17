@@ -1,0 +1,96 @@
+# COMMON CODE TABLE C-1: Identification of originating/generating centre (GRIB1, BUFR3)
+0 0 Absent
+1 ammc Melbourne (WMC)
+2 2 Melbourne (WMC)
+4 rums Moscow (WMC)
+5 5 Moscow (WMC)
+7 kwbc US National Weather Service - NCEP (WMC)
+8 8 US National Weather Service - NWSTG (WMC)
+9 9 US National Weather Service - Other (WMC)
+10 10 Cairo (RSMC/RAFC)
+12 12 Dakar (RSMC/RAFC)
+14 14 Nairobi (RSMC/RAFC)
+16 16 Atananarivo (RSMC)
+18 18 Tunis-Casablanca (RSMC)
+20 20 Las Palmas (RAFC)
+21 21 Algiers (RSMC)
+22 22 Lagos (RSMC)
+24 fapr Pretoria (RSMC)
+26 26 Khabarovsk (RSMC)
+28 vabb New Delhi (IMD)
+29 dems New Delhi (NCMRWF)
+30 30 Novosibirsk (RSMC)
+32 32 Tashkent (RSMC)
+33 33 Jeddah (RSMC)
+34 rjtd Japanese Meteorological Agency - Tokyo (RSMC)
+36 36 Bankok
+37 37 Ulan Bator
+38 babj Beijing (RSMC)
+40 rksl Seoul
+41 sabm Buenos Aires (RSMC/RAFC)
+43 43 Brasilia (RSMC/RAFC)
+45 45 Santiago
+46 sbsj Brasilian Space Agency - INPE
+51 51 Miami (RSMC/RAFC)
+52 52 National Hurricane Center, Miami
+53 53 Canadian Meteorological Service - Montreal (RSMC)
+54 cwao Canadian Meteorological Service - Montreal (RSMC)
+55 55 San Francisco
+57 57 U.S. Air Force - Global Weather Center
+58 fnmo US Navy - Fleet Numerical Oceanography Center
+59 59 NOAA Forecast Systems Lab, Boulder CO
+60 60 National Center for Atmospheric Research (NCAR), Boulder, CO
+64 64 Honolulu
+65 65 Darwin (RSMC)
+67 67 Melbourne (RSMC)
+69 nzkl Wellington (RSMC/RAFC)
+74 egrr U.K. Met Office - Exeter
+76 76 Moscow (RSMC/RAFC)
+78 edzw Offenbach (RSMC)
+80 cnmc Rome (RSMC)
+82 eswi Norrkoping
+84 lfpw French Weather Service - Toulouse
+85 lfpw French Weather Service - Toulouse
+86 efkl Helsinki
+87 87 Belgrade
+88 enmi Oslo
+89 89 Prague
+90 90 Episkopi
+91 91 Ankara
+92 92 Frankfurt/Main (RAFC)
+93 93 London (WAFC)
+94 ekmi Copenhagen
+95 95 Rota
+96 96 Athens
+97 97 European Space Agency (ESA)
+98 ecmf European Centre for Medium-Range Weather Forecasts
+99 knmi DeBilt, Netherlands
+110 110 Hong-Kong
+160 160 US NOAA/NESDIS
+173 nasa US National Aeronautics and Space Administration (NASA)
+195 wiix Indonesia (NMC)
+204 niwa  National Institute of Water and Atmospheric Research (NIWA - New Zealand)
+# 205-209 Reserved
+210 210  Frascati (ESA/ESRIN)
+211 211  Lannion
+212 212  Lisboa
+213 birk Reykjavik
+214 lemm INM Madrid
+215 lssw Zurich
+216 216  Service ARGOS Toulouse
+218 habp Budapest
+224 lowm Austria
+227 ebum Belgium (NMC)
+233 eidb Dublin
+235 ingv INGV
+239 crfc CERFAX
+244 244 The former Yugoslav Republic of Macedonia (NMC)
+245 245 Ukraine (NMC)
+246 246 Republic of Moldova (NMC)
+247 247 Operational Programme for the Exchange of weather RAdar information (OPERA) - EUMETNET
+250 cosmo COnsortium for Small scale MOdelling (COSMO)
+251 251 Meteorological Cooperation on Operational NWP (MetCoOp)
+252 mpim Max Planck Institute for Meteorology (MPI-M)
+254 eums EUMETSAT Operation Centre
+# 255 Missing value
+255 consensus Consensus

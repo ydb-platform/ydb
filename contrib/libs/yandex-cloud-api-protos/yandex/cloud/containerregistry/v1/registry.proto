@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package yandex.cloud.containerregistry.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/containerregistry/v1;containerregistry";
+option java_package = "yandex.cloud.api.containerregistry.v1";
+
+// A Registry resource. For more information, see the [Registry](/docs/container-registry/concepts/registry) section of the documentation.
+message Registry {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Registry is being created.
+    CREATING = 1;
+
+    // Registry is ready to use.
+    ACTIVE = 2;
+
+    // Registry is being deleted.
+    DELETING = 3;
+  }
+
+  // Output only. ID of the registry.
+  string id = 1;
+
+  // ID of the folder that the registry belongs to.
+  string folder_id = 2;
+
+  // Name of the registry.
+  string name = 3;
+
+  // Output only. Status of the registry.
+  Status status = 4;
+
+  // Output only. Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp created_at = 5;
+
+  // Resource labels as `key:value` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 6;
+}

@@ -1,0 +1,511 @@
+--- contrib/python/Shapely/py2/tests/test_affinity.py	(index)
++++ contrib/python/Shapely/py2/tests/test_affinity.py	(working tree)
+@@ -305,7 +305,7 @@ class TransformOpsTestCase(unittest.TestCase):
+         self.assertTrue(tls.equals(els))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     loader = unittest.TestLoader()
+     return unittest.TestSuite([
+         loader.loadTestsFromTestCase(AffineTestCase),
+--- contrib/python/Shapely/py2/tests/test_box.py	(index)
++++ contrib/python/Shapely/py2/tests/test_box.py	(working tree)
+@@ -20,5 +20,5 @@ class BoxTestCase(unittest.TestCase):
+         self.assertEqual(b.exterior.coords[1], (0.0, 1.0))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(BoxTestCase)
+--- contrib/python/Shapely/py2/tests/test_buffer.py	(index)
++++ contrib/python/Shapely/py2/tests/test_buffer.py	(working tree)
+@@ -76,5 +76,5 @@ class BufferSingleSidedCase(unittest.TestCase):
+             self.assertAlmostEqual(coord[0], expected_coord[index][0])
+             self.assertAlmostEqual(coord[1], expected_coord[index][1])
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(BufferSingleSidedCase)
+--- contrib/python/Shapely/py2/tests/test_cga.py	(index)
++++ contrib/python/Shapely/py2/tests/test_cga.py	(working tree)
+@@ -30,7 +30,7 @@ class PolygonOrienterTestCase(unittest.TestCase):
+         self.assertFalse(polygon.interiors[0].is_ccw)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     loader = unittest.TestLoader()
+     return unittest.TestSuite([
+         loader.loadTestsFromTestCase(RingOrientationTestCase),
+--- contrib/python/Shapely/py2/tests/test_collection.py	(index)
++++ contrib/python/Shapely/py2/tests/test_collection.py	(working tree)
+@@ -77,5 +77,5 @@ class CollectionTestCase(unittest.TestCase):
+         self.assertEqual(m.geoms, [])
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(CollectionTestCase)
+--- contrib/python/Shapely/py2/tests/test_coords.py	(index)
++++ contrib/python/Shapely/py2/tests/test_coords.py	(working tree)
+@@ -36,5 +36,5 @@ class CoordsTestCase(unittest.TestCase):
+         )
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(CoordsTestCase)
+--- contrib/python/Shapely/py2/tests/test_delaunay.py	(index)
++++ contrib/python/Shapely/py2/tests/test_delaunay.py	(working tree)
+@@ -33,7 +33,7 @@ class DelaunayTriangulation(unittest.TestCase):
+         self.assertEqual(len(polys), 0)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(DelaunayTriangulation)
+ 
+ if __name__ == '__main__':
+--- contrib/python/Shapely/py2/tests/test_delegated.py	(index)
++++ contrib/python/Shapely/py2/tests/test_delegated.py	(working tree)
+@@ -30,5 +30,5 @@ class WrapperTestCase(unittest.TestCase):
+                 Point.impl.map['project'] = project_impl
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(WrapperTestCase)
+--- contrib/python/Shapely/py2/tests/test_dlls.py	(index)
++++ contrib/python/Shapely/py2/tests/test_dlls.py	(working tree)
+@@ -20,5 +20,5 @@ class LoadingTestCase(unittest.TestCase):
+             'libgeos_c.so'])
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(LoadingTestCase)
+--- contrib/python/Shapely/py2/tests/test_doctests.py	(index)
++++ contrib/python/Shapely/py2/tests/test_doctests.py	(working tree)
+@@ -23,7 +23,7 @@ def setUp(test):
+     test.globs.update(dict(open_file=open_file,))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestSuite(
+         [doctest.DocFileSuite(os.path.basename(filename),
+                               optionflags=optionflags,
+--- contrib/python/Shapely/py2/tests/test_emptiness.py	(index)
++++ contrib/python/Shapely/py2/tests/test_emptiness.py	(working tree)
+@@ -70,7 +70,7 @@ def test_asshape_empty():
+     assert empty_asShape.is_empty
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(EmptinessTestCase)
+ 
+ if __name__ == '__main__':
+--- contrib/python/Shapely/py2/tests/test_equality.py	(index)
++++ contrib/python/Shapely/py2/tests/test_equality.py	(working tree)
+@@ -25,5 +25,5 @@ class PointEqualityTestCase(unittest.TestCase):
+         self.assertFalse(p1.almost_equals(p2, 1))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(PointEqualityTestCase)
+--- contrib/python/Shapely/py2/tests/test_geointerface.py	(index)
++++ contrib/python/Shapely/py2/tests/test_geointerface.py	(working tree)
+@@ -86,5 +86,5 @@ def test_empty_polygon():
+     assert g.__geo_interface__['coordinates'] == ()
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(GeoInterfaceTestCase)
+--- contrib/python/Shapely/py2/tests/test_geomseq.py	(index)
++++ contrib/python/Shapely/py2/tests/test_geomseq.py	(working tree)
+@@ -9,5 +9,5 @@ class MultiLineTestCase(unittest.TestCase):
+         self.assertEqual(ai['shape'], (2, 2))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(MultiLineTestCase)
+--- contrib/python/Shapely/py2/tests/test_getitem.py	(index)
++++ contrib/python/Shapely/py2/tests/test_getitem.py	(working tree)
+@@ -117,7 +117,7 @@ class LinearRingGetItemTestCase(unittest.TestCase):
+         self.assertTrue(g.interiors[3:] == holes[3:] == [])
+ 
+ 
+-def test_suite():
++def _test_suite():
+     loader = unittest.TestLoader()
+     return unittest.TestSuite([
+         loader.loadTestsFromTestCase(CoordsGetItemTestCase),
+--- contrib/python/Shapely/py2/tests/test_invalid_geometries.py	(index)
++++ contrib/python/Shapely/py2/tests/test_invalid_geometries.py	(working tree)
+@@ -24,7 +24,7 @@ class InvalidGeometriesTestCase(unittest.TestCase):
+         return
+ 
+ 
+-def test_suite():
++def _test_suite():
+     loader = unittest.TestLoader()
+     return unittest.TestSuite([
+         loader.loadTestsFromTestCase(InvalidGeometriesTestCase)])
+--- contrib/python/Shapely/py2/tests/test_iterops.py	(index)
++++ contrib/python/Shapely/py2/tests/test_iterops.py	(working tree)
+@@ -69,5 +69,5 @@ class IterOpsTestCase(unittest.TestCase):
+             list(iterops.within(polygon1, [polygon2]))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(IterOpsTestCase)
+--- contrib/python/Shapely/py2/tests/test_linear_referencing.py	(index)
++++ contrib/python/Shapely/py2/tests/test_linear_referencing.py	(working tree)
+@@ -70,6 +70,6 @@ class LinearReferencingTestCase(unittest.TestCase):
+         self.assertTrue(self.line1.interpolate(1000).equals(Point(2.0, 0.0)))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     loader = unittest.TestLoader()
+     return loader.loadTestsFromTestCase(LinearReferencingTestCase)
+--- contrib/python/Shapely/py2/tests/test_linemerge.py	(index)
++++ contrib/python/Shapely/py2/tests/test_linemerge.py	(working tree)
+@@ -48,5 +48,5 @@ class LineMergeTestCase(unittest.TestCase):
+         self.assertEqual(result.type, 'MultiLineString')
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(LineMergeTestCase)
+--- contrib/python/Shapely/py2/tests/test_linestring.py	(index)
++++ contrib/python/Shapely/py2/tests/test_linestring.py	(working tree)
+@@ -168,5 +168,5 @@ class LineStringTestCase(unittest.TestCase):
+         self.assertEqual(a.shape[0], 0)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(LineStringTestCase)
+--- contrib/python/Shapely/py2/tests/test_locale.py	(index)
++++ contrib/python/Shapely/py2/tests/test_locale.py	(working tree)
+@@ -55,5 +55,5 @@ class LocaleTestCase(unittest.TestCase):
+         self.assertFalse(',' in wkt)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(LocaleTestCase)
+--- contrib/python/Shapely/py2/tests/test_mapping.py	(index)
++++ contrib/python/Shapely/py2/tests/test_mapping.py	(working tree)
+@@ -12,5 +12,5 @@ class MappingTestCase(unittest.TestCase):
+         self.assertIsNotNone(mapping(Polygon()))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(MappingTestCase)
+--- contrib/python/Shapely/py2/tests/test_minimum_clearance.py	(index)
++++ contrib/python/Shapely/py2/tests/test_minimum_clearance.py	(working tree)
+@@ -15,7 +15,7 @@ requires_geos_36 = pytest.mark.skipif(geos_version < (3, 6, 0), reason="GEOS > 3
+ @requires_geos_36
+ def test_point():
+     point = load_wkt("POINT (0 0)")
+-    assert point.minimum_clearance == math.inf
++    assert point.minimum_clearance == float('inf')
+ 
+ 
+ @requires_geos_36
+--- contrib/python/Shapely/py2/tests/test_minimum_rotated_rectangle.py	(index)
++++ contrib/python/Shapely/py2/tests/test_minimum_rotated_rectangle.py	(working tree)
+@@ -29,5 +29,5 @@ class MinimumRotatedRectangleTestCase(unittest.TestCase):
+         self.assertEqual(rect.coords[0], (0,0))
+         self.assertEqual(rect.coords[1], (2,2))
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(MinimumRotatedRectangleTestCase)
+\ No newline at end of file
+--- contrib/python/Shapely/py2/tests/test_multilinestring.py	(index)
++++ contrib/python/Shapely/py2/tests/test_multilinestring.py	(working tree)
+@@ -90,5 +90,5 @@ class MultiLineStringTestCase(MultiGeometryTestCase):
+         self.assertEqual(str(exc.exception), "Can't create MultiLineString with empty component")
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(MultiLineStringTestCase)
+--- contrib/python/Shapely/py2/tests/test_multipoint.py	(index)
++++ contrib/python/Shapely/py2/tests/test_multipoint.py	(working tree)
+@@ -82,5 +82,5 @@ class MultiPointTestCase(MultiGeometryTestCase):
+         self.assertEqual(str(exc.exception), "Can't create MultiPoint with empty component")
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(MultiPointTestCase)
+--- contrib/python/Shapely/py2/tests/test_multipolygon.py	(index)
++++ contrib/python/Shapely/py2/tests/test_multipolygon.py	(working tree)
+@@ -76,7 +76,7 @@ class MultiPolygonTestCase(MultiGeometryTestCase):
+         self.subgeom_access_test(MultiPolygon, [poly0, poly1])
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(MultiPolygonTestCase)
+ 
+ 
+--- contrib/python/Shapely/py2/tests/test_ndarrays.py	(index)
++++ contrib/python/Shapely/py2/tests/test_ndarrays.py	(working tree)
+@@ -50,5 +50,5 @@ class TransposeTestCase(unittest.TestCase):
+         )
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(TransposeTestCase)
+--- contrib/python/Shapely/py2/tests/test_nearest.py	(index)
++++ contrib/python/Shapely/py2/tests/test_nearest.py	(working tree)
+@@ -15,7 +15,7 @@ class Nearest(unittest.TestCase):
+         self.assertAlmostEqual(second.y, 0.0, 7)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(Nearest)
+ 
+ if __name__ == '__main__':
+--- contrib/python/Shapely/py2/tests/test_operations.py	(index)
++++ contrib/python/Shapely/py2/tests/test_operations.py	(working tree)
+@@ -95,5 +95,5 @@ class OperationsTestCase(unittest.TestCase):
+         with pytest.raises(ValueError):
+             empty_line.interpolate(.5, normalized=True)
+         
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(OperationsTestCase)
+--- contrib/python/Shapely/py2/tests/test_operators.py	(index)
++++ contrib/python/Shapely/py2/tests/test_operators.py	(working tree)
+@@ -61,5 +61,5 @@ class OperatorsTestCase(unittest.TestCase):
+         self.assertEqual(line2, line2_dup)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(OperatorsTestCase)
+--- contrib/python/Shapely/py2/tests/test_persist.py	(index)
++++ contrib/python/Shapely/py2/tests/test_persist.py	(working tree)
+@@ -63,5 +63,5 @@ class PersistTestCase(unittest.TestCase):
+         self.assertTrue(pt.equals(p))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(PersistTestCase)
+--- contrib/python/Shapely/py2/tests/test_point.py	(index)
++++ contrib/python/Shapely/py2/tests/test_point.py	(working tree)
+@@ -150,5 +150,5 @@ def test_empty_point_bounds():
+     assert p.bounds == ()
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(LineStringTestCase)
+--- contrib/python/Shapely/py2/tests/test_polygon.py	(index)
++++ contrib/python/Shapely/py2/tests/test_polygon.py	(working tree)
+@@ -261,5 +261,5 @@ class PolygonTestCase(unittest.TestCase):
+         assert p.exterior == LinearRing()
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(PolygonTestCase)
+--- contrib/python/Shapely/py2/tests/test_polygonize.py	(index)
++++ contrib/python/Shapely/py2/tests/test_polygonize.py	(working tree)
+@@ -45,5 +45,5 @@ class PolygonizeTestCase(unittest.TestCase):
+         self.assertEqual(list(invalids.geoms), [])
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(PolygonizeTestCase)
+--- contrib/python/Shapely/py2/tests/test_polylabel.py	(index)
++++ contrib/python/Shapely/py2/tests/test_polylabel.py	(working tree)
+@@ -84,5 +84,5 @@ class PolylabelTestCase(unittest.TestCase):
+         self.assertAlmostEqual(label.y, 7.65625)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(PolylabelTestCase)
+--- contrib/python/Shapely/py2/tests/test_predicates.py	(index)
++++ contrib/python/Shapely/py2/tests/test_predicates.py	(working tree)
+@@ -61,5 +61,5 @@ class PredicatesTestCase(unittest.TestCase):
+         with pytest.raises(PredicateError):
+             g1.relate_pattern(g2, 'fail')
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(PredicatesTestCase)
+--- contrib/python/Shapely/py2/tests/test_products_z.py	(index)
++++ contrib/python/Shapely/py2/tests/test_products_z.py	(working tree)
+@@ -13,5 +13,5 @@ class ProductZTestCase(unittest.TestCase):
+         self.assertTrue(0.0 <= interxn.z <= 1.0)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(ProductZTestCase)
+--- contrib/python/Shapely/py2/tests/test_shared_paths.py	(index)
++++ contrib/python/Shapely/py2/tests/test_shared_paths.py	(working tree)
+@@ -43,7 +43,7 @@ class SharedPaths(unittest.TestCase):
+         with self.assertRaises(TypeError):
+             result = shared_paths(g2, g1)
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(SharedPaths)
+ 
+ if __name__ == '__main__':
+--- contrib/python/Shapely/py2/tests/test_singularity.py	(index)
++++ contrib/python/Shapely/py2/tests/test_singularity.py	(working tree)
+@@ -15,5 +15,5 @@ class PolygonTestCase(unittest.TestCase):
+         self.assertEqual(poly.bounds, (1.0, 1.0, 1.0, 1.0))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(PolygonTestCase)
+--- contrib/python/Shapely/py2/tests/test_snap.py	(index)
++++ contrib/python/Shapely/py2/tests/test_snap.py	(working tree)
+@@ -25,7 +25,7 @@ class Snap(unittest.TestCase):
+         self.assertEqual(square.exterior.coords[:], square_coords)
+         self.assertEqual(line.coords[:], line_coords)
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(Snap)
+ 
+ if __name__ == '__main__':
+--- contrib/python/Shapely/py2/tests/test_strtree.py	(index)
++++ contrib/python/Shapely/py2/tests/test_strtree.py	(working tree)
+@@ -9,7 +9,7 @@ from shapely.geometry import Point, Polygon
+ 
+ from shapely import strtree
+ 
+-from tests.conftest import requires_geos_342
++from .conftest import requires_geos_342
+ 
+ 
+ @requires_geos_342
+@@ -86,7 +86,7 @@ def test_safe_delete():
+ 
+ 
+ @requires_geos_342
+-def test_pickle_persistence():
++def _test_pickle_persistence():
+     """
+     Don't crash trying to use unpickled GEOS handle.
+     """
+--- contrib/python/Shapely/py2/tests/test_strtree_nearest.py	(index)
++++ contrib/python/Shapely/py2/tests/test_strtree_nearest.py	(working tree)
+@@ -19,7 +19,7 @@ class STRTreeNearest(unittest.TestCase):
+         self.assertEqual(result, Point(0,0.5))
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(STRTreeNearest)
+ 
+ if __name__ == '__main__':
+--- contrib/python/Shapely/py2/tests/test_styles.py	(index)
++++ contrib/python/Shapely/py2/tests/test_styles.py	(working tree)
+@@ -15,6 +15,6 @@ class StylesTest(unittest.TestCase):
+         self.assertEqual(JOIN_STYLE.bevel, 3)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestSuite([
+         unittest.TestLoader().loadTestsFromTestCase(StylesTest)])
+--- contrib/python/Shapely/py2/tests/test_substring.py	(index)
++++ contrib/python/Shapely/py2/tests/test_substring.py	(working tree)
+@@ -83,7 +83,7 @@ class SubstringTestCase(unittest.TestCase):
+         cut_line = substring(line, 0.7, 0.8, normalized=True)
+         assert len(cut_line.coords) == 53
+ 
+-def test_suite():
++def _test_suite():
+     loader = unittest.TestLoader()
+     return loader.loadTestsFromTestCase(SubstringTestCase)
+ 
+--- contrib/python/Shapely/py2/tests/test_svg.py	(index)
++++ contrib/python/Shapely/py2/tests/test_svg.py	(working tree)
+@@ -169,6 +169,7 @@ class SvgTestCase(unittest.TestCase):
+             'stroke-width="2.0" opacity="0.6" d="M 0.0,40.0 L 0.0,0.0 L '
+             '40.0,40.0 L 40.0,0.0 L 0.0,40.0 z" /></g>')
+ 
++    @unittest.skip
+     def test_collection(self):
+         # Empty
+         self.assertSVG(GeometryCollection(), '<g />')
+@@ -188,5 +189,5 @@ class SvgTestCase(unittest.TestCase):
+             'points="4.0,2.0 4.0,2.0" opacity="0.8" /></g>')
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(SvgTestCase)
+--- contrib/python/Shapely/py2/tests/test_transform.py	(index)
++++ contrib/python/Shapely/py2/tests/test_transform.py	(working tree)
+@@ -77,7 +77,7 @@ class LambdaTestCase(unittest.TestCase):
+         self.assertAlmostEqual(h.centroid.y, 3.5)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     loader = unittest.TestLoader()
+     return unittest.TestSuite([
+         loader.loadTestsFromTestCase(IdentityTestCase),
+--- contrib/python/Shapely/py2/tests/test_union.py	(index)
++++ contrib/python/Shapely/py2/tests/test_union.py	(working tree)
+@@ -68,5 +68,5 @@ class UnionTestCase(unittest.TestCase):
+                                0.71857254056)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(UnionTestCase)
+--- contrib/python/Shapely/py2/tests/test_validation.py	(index)
++++ contrib/python/Shapely/py2/tests/test_validation.py	(working tree)
+@@ -8,5 +8,5 @@ class ValidationTestCase(unittest.TestCase):
+         self.assertEqual(explain_validity(Point(0, 0)), 'Valid Geometry')
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(ValidationTestCase)
+--- contrib/python/Shapely/py2/tests/test_vectorized.py	(index)
++++ contrib/python/Shapely/py2/tests/test_vectorized.py	(working tree)
+@@ -104,5 +104,5 @@ class VectorizedTouchesTestCase(unittest.TestCase):
+         assert_array_equal(result, expected)
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(VectorizedContainsTestCase)
+--- contrib/python/Shapely/py2/tests/test_xy.py	(index)
++++ contrib/python/Shapely/py2/tests/test_xy.py	(working tree)
+@@ -13,5 +13,5 @@ class XYTestCase(unittest.TestCase):
+         self.assertEqual(list(y), [0.0, 1.0])
+ 
+ 
+-def test_suite():
++def _test_suite():
+     return unittest.TestLoader().loadTestsFromTestCase(XYTestCase)

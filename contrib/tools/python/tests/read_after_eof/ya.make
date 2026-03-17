@@ -1,0 +1,10 @@
+PY2TEST()
+
+TEST_SRCS(
+    test.py
+)
+
+NO_LINT()
+NO_CHECK_IMPORTS()
+
+END()

@@ -1,0 +1,32 @@
+# (C) Copyright 2005- ECMWF.
+
+meta startStep step_in_units(forecastTime,indicatorOfUnitOfTimeRange,stepUnits): no_copy;
+meta endStep g2end_step(startStep,stepUnits) : no_copy;
+
+alias step=startStep;
+alias marsStep=startStep;
+
+alias mars.step=startStep;
+
+alias marsStartStep = startStep;
+alias marsEndStep   = endStep;
+
+meta stepRange g2step_range(startStep): dump;
+alias ls.stepRange=stepRange;
+concept stepTypeInternal {
+  "instant" = {dummy=1;}
+}
+meta stepHumanReadable step_human_readable(stepUnits, stepRange): hidden,no_copy;
+
+alias time.stepType=stepType;
+alias time.stepRange=stepRange;
+alias time.stepUnits=stepUnits;
+alias time.dataDate=dataDate;
+alias time.dataTime=dataTime;
+alias time.startStep=startStep;
+alias time.endStep=endStep;
+
+meta time.validityDate validity_date(dataDate,dataTime,step,stepUnits) : no_copy;
+meta time.validityTime validity_time(dataDate,dataTime,step,stepUnits) : no_copy;
+meta validityDateTime julian_date(validityDate, validityTime) : no_copy;
+

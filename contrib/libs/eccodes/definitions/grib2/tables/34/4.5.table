@@ -1,0 +1,95 @@
+# Code table 4.5 - Fixed surface types and units
+0 0 Reserved
+1 sfc Ground or water surface (-)
+2 2 Cloud base level (-)
+3 3 Level of cloud tops (-)
+4 4 Level of 0 degree C isotherm (-)
+5 5 Level of adiabatic condensation lifted from the surface (-)
+6 6 Maximum wind level (-)
+7 sfc Tropopause (-)
+8 sfc Nominal top of the atmosphere (-)
+9 9 Sea bottom (-)
+10 10 Entire atmosphere (-)
+11 11 Cumulonimbus (CB) base (m)
+12 12 Cumulonimbus (CB) top (m)
+13 13 Lowest level where vertically integrated cloud cover exceeds the specified percentage (cloud base for a given percentage cloud cover) (%)
+14 14 Level of free convection (LFC) (-)
+15 15 Convective condensation level (CCL) (-)
+16 16 Level of neutral buoyancy or equilibrium level (LNB) (-)
+17 sfc Departure level of the most unstable parcel of air (MUDL)
+18 sfc Departure level of a mixed layer parcel of air with specified layer depth (Pa)
+19 19 Lowest level where cloud cover exceeds the specified percentage (%)
+20 20 Isothermal level (K)
+21 21 Lowest level where mass density exceeds the specified value (base for a given threshold of mass density) (kg m-3)
+22 22 Highest level where mass density exceeds the specified value (top for a given threshold of mass density) (kg m-3)
+23 23 Lowest level where air concentration exceeds the specified value (base for a given threshold of air concentration) (Bq m-3)
+24 24 Highest level where air concentration exceeds the specified value (top for a given threshold of air concentration) (Bq m-3)
+25 25 Highest level where radar reflectivity exceeds the specified value (echo top for a given threshold of reflectivity) (dBZ)
+26 26 Convective cloud layer base (m)
+27 27 Convective cloud layer top (m)
+# 28-29 Reserved
+30 30 Specified radius from the centre of the Sun (m)
+31 31 Solar photosphere
+32 32 Ionospheric D-region level
+33 33 Ionospheric E-region level
+34 34 Ionospheric F1-region level
+35 35 Ionospheric F2-region level
+# 36-99 Reserved
+100 pl Isobaric surface (Pa)
+101 sfc Mean sea level
+102 102 Specific altitude above mean sea level (m)
+103 sfc Specified height level above ground (m)
+104 104 Sigma level (sigma value)
+105 ml Hybrid level (-)
+106 sfc Depth below land surface (m)
+107 pt Isentropic (theta) level (K)
+108 108 Level at specified pressure difference from ground to level (Pa)
+109 pv Potential vorticity surface (K m2 kg-1 s-1)
+110 110 Reserved
+111 111 Eta level (-)
+112 112 Reserved
+113 113 Logarithmic hybrid level
+114 sol Snow level (Numeric)
+115 115 Sigma height level
+# 116 Reserved
+117 117 Mixed layer depth (m)
+118 hhl Hybrid height level (-)
+119 hpl Hybrid pressure level (-)
+# 120-149 Reserved
+150 150 Generalized vertical height coordinate
+151 sol Soil level (Numeric)
+152 sol Sea-ice level (Numeric)
+# 153-159 Reserved
+160 160 Depth below sea level (m)
+161 161 Depth below water surface (m)
+162 sfc Lake or river bottom (-)
+163 163 Bottom of sediment layer (-)
+164 164 Bottom of thermally active sediment layer (-)
+165 165 Bottom of sediment layer penetrated by thermal wave (-)
+166 sfc Mixing layer (-)
+167 167 Bottom of root zone (-)
+168 168 Ocean model level (Numeric)
+169 169 Ocean level defined by water density (sigma-theta) difference from near-surface to level (kg m-3)
+170 170 Ocean level defined by water potential temperature difference from near-surface to level (K)
+171 171 Ocean level defined by vertical eddy diffusivity difference from near-surface to level (m2 s-1)
+172 172 Ocean level defined by water density (rho) difference from near-surface to level (m)
+173 173 Top of snow over sea ice on sea, lake or river
+174 sfc Top surface of ice on sea, lake or river
+175 175 Top surface of ice, under snow cover, on sea, lake or river
+176 176 Bottom surface (underside) ice on sea, lake or river
+177 sfc Deep soil (of indefinite depth)
+# 178 Reserved
+179 179 Top surface of glacier ice and inland ice
+180 180 Deep inland or glacier ice (of indefinite depth)
+181 181 Grid tile land fraction as a model surface
+182 182 Grid tile water fraction as a model surface
+183 183 Grid tile ice fraction on sea, lake or river as a model surface
+184 184 Grid tile glacier ice and inland ice fraction as a model surface
+185 185 Roof level
+186 186 Wall level
+187 187 Road level
+188 188 Melt pond top surface
+189 189 Melt pond bottom surface
+# 190-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

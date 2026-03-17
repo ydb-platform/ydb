@@ -1,0 +1,9 @@
+about_resource: mimetypes.py
+name: cpython
+version: 3.9.1
+download_url: https://github.com/python/cpython/blob/v3.9.1/Lib/mimetypes.py
+homepage_url: https://python.org
+license_expression: python
+copyright: Copyright (c) Python Software Foundation
+notes: this is derived and heavily modified from the Python mimetypes.py module
+package_url: pkg:github/python/cpython@v3.9.1#Lib/mimetypes.py

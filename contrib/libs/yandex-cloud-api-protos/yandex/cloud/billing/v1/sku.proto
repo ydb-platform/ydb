@@ -1,0 +1,85 @@
+syntax = "proto3";
+package yandex.cloud.billing.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/billing/v1;billing";
+option java_package = "yandex.cloud.api.billing.v1";
+
+
+// A Stock keeping unit resource.
+message Sku {
+
+    // ID of the SKU.
+    string id = 1;
+
+    // Name of the SKU.
+    string name = 2;
+
+    // Description of the sku.
+    string description = 3;
+
+    // ID of the service that sku belongs to.
+    string service_id = 4;
+
+    // Pricing unit of the SKU, e.g. `core*hour`, `gbyte*hour`.
+    string pricing_unit = 5;
+
+    // List of pricing versions.
+    repeated PricingVersion pricing_versions = 6;
+}
+
+
+// Pricing version of the SKU.
+// Defines current and past prices for the sku.
+message PricingVersion {
+
+    // Type of the pricing version.
+    PricingVersionType type = 1;
+
+    // Timestamp pricing version is active since inclusive.
+    // The pricing version is active until next pricing version effective time exclusive.
+    google.protobuf.Timestamp effective_time = 2;
+
+    // List of pricing expressions.
+    repeated PricingExpression pricing_expressions = 3;
+}
+
+
+// Type of the pricing version.
+enum PricingVersionType {
+
+    PRICING_VERSION_TYPE_UNSPECIFIED = 0;
+
+    // Regular price.
+    STREET_PRICE = 1;
+
+    // Price is overridden by a contract. Defined in the scope of a billing account.
+    CONTRACT_PRICE = 2;
+}
+
+// Pricing expression of the pricing version.
+// Defines price for the sku.
+message PricingExpression {
+
+    // List of rates.
+    repeated Rate rates = 2;
+}
+
+// Rate of the pricing expression.
+// Define unit price for pricing quantity interval.
+message Rate {
+
+    // Start of the pricing quantity interval. The end of the interval is the start pricing quantity of the next rate.
+    string start_pricing_quantity = 1;
+
+    // Unit price for the pricing quantity interval.
+    string unit_price = 2;
+
+    // Currency of the unit price.
+    // Can be one of the following:
+    // * `RUB`
+    // * `USD`
+    // * `KZT`
+    string currency = 3;
+}

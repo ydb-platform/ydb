@@ -1,0 +1,450 @@
+[
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "CBAUAEAAXXX",
+    "bank_code": "001",
+    "name": "Central Bank of UAE",
+    "short_name": "Central Bank of UAE"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "ABNAAEADXXX",
+    "bank_code": "002",
+    "name": "The Royal Bank Of Scotland N",
+    "short_name": "The Royal Bank Of Scotland N"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "ADCBAEAAXXX",
+    "bank_code": "003",
+    "name": "Abu Dhabi Commercial Bank",
+    "short_name": "Abu Dhabi Commercial Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "ABKKAEADXXX",
+    "bank_code": "004",
+    "name": "Al Ahli Bank Of Kuwait K",
+    "short_name": "Al Ahli Bank Of Kuwait K"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "RAFBAEADXXX",
+    "bank_code": "005",
+    "name": "Raf idain Bank",
+    "short_name": "Raf idain Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "ARAIAEADXXX",
+    "bank_code": "007",
+    "name": "Arab African International Bank",
+    "short_name": "Arab African International Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "ABINAEAAXXX",
+    "bank_code": "008",
+    "name": "Al Masraf",
+    "short_name": "Al Masraf"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "ARABAEADXXX",
+    "bank_code": "009",
+    "name": "Arab Bank",
+    "short_name": "Arab Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "BARBAEADXXX",
+    "bank_code": "011",
+    "name": "Bank of Baroda",
+    "short_name": "Bank of Baroda"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "SHARAEASXXX",
+    "bank_code": "012",
+    "name": "Bank of Sharjah",
+    "short_name": "Bank of Sharjah"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "BMISAEAAXXX",
+    "bank_code": "015",
+    "name": "BANQUE MISR",
+    "short_name": "BANQUE MISR"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "BSUIAEADXXX",
+    "bank_code": "016",
+    "name": "Credit Agricole Corporate and Investment Bank",
+    "short_name": "Credit Agricole Corporate and Investment Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "BNPAAEAAXXX",
+    "bank_code": "018",
+    "name": "BNP Paribas",
+    "short_name": "BNP Paribas"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "BARCAEADXXX",
+    "bank_code": "019",
+    "name": "Barclays Bank",
+    "short_name": "Barclays Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "BBMEAEADXXX",
+    "bank_code": "020",
+    "name": "HSBC Bank Middle East ",
+    "short_name": "HSBC Bank Middle East "
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "CITIAEADXXX",
+    "bank_code": "021",
+    "name": "Citibank NA",
+    "short_name": "Citibank NA"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "CLBIAEADXXX",
+    "bank_code": "022",
+    "name": "Commercial Bank International PSC",
+    "short_name": "Commercial Bank International PSC"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "CBDUAEADXXX",
+    "bank_code": "023",
+    "name": "Commercial Bank of Dubai",
+    "short_name": "Commercial Bank of Dubai"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "DUIBAEADXXX",
+    "bank_code": "024",
+    "name": "Dubai Islamic Bank",
+    "short_name": "Dubai Islamic Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "NILBAEAAXXX",
+    "bank_code": "025",
+    "name": "El Nilein Bank",
+    "short_name": "El Nilein Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "EBILAEADXXX",
+    "bank_code": "026",
+    "name": "Emirates NBD Bank PJSC",
+    "short_name": "Emirates NBD Bank PJSC"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "FGBMAEAAXXX",
+    "bank_code": "027",
+    "name": "First Gulf Bank",
+    "short_name": "First Gulf Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "HABBAEADXXX",
+    "bank_code": "028",
+    "name": "Habib Bank Limited",
+    "short_name": "Habib Bank Limited"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "HBZUAEADXXX",
+    "bank_code": "029",
+    "name": "Habib Bank AG Zurich",
+    "short_name": "Habib Bank AG Zurich"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "IBTFAEASXXX",
+    "bank_code": "030",
+    "name": "Investbank PSC",
+    "short_name": "Investbank PSC"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "JANBAEAAXXX",
+    "bank_code": "031",
+    "name": "Janata Bank",
+    "short_name": "Janata Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "BOMLAEADXXX",
+    "bank_code": "033",
+    "name": "Mashreqbank",
+    "short_name": "Mashreqbank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "MEBLAEADXXX",
+    "bank_code": "034",
+    "name": "Emirates Islamic Bank PJSC",
+    "short_name": "Emirates Islamic Bank PJSC"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "NBADAEAAXXX",
+    "bank_code": "035",
+    "name": "National Bank of Abu Dhabi",
+    "short_name": "National Bank of Abu Dhabi"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "NBFUAEAFXXX",
+    "bank_code": "038",
+    "name": "National Bank Of Fujairah",
+    "short_name": "National Bank Of Fujairah"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "NRAKAEAKXXX",
+    "bank_code": "040",
+    "name": "National Bank of Ras Al",
+    "short_name": "National Bank of Ras Al"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "NBSHAEASXXX",
+    "bank_code": "041",
+    "name": "Sharjah Islamic Bank",
+    "short_name": "Sharjah Islamic Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "UMMQAEADXXX",
+    "bank_code": "042",
+    "name": "National Bank Of Umm Al Qaiwain",
+    "short_name": "National Bank Of Umm Al Qaiwain"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "ICBKAEAAXXX",
+    "bank_code": "043",
+    "name": "Industrial and Commercial Bank of China",
+    "short_name": "Industrial and Commercial Bank of China"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "SCBLAEADXXX",
+    "bank_code": "044",
+    "name": "Standard Chartered Bank",
+    "short_name": "Standard Chartered Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "UNBEAEAAXXX",
+    "bank_code": "045",
+    "name": "Union National Bank",
+    "short_name": "Union National Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "UARBAEAAXXX",
+    "bank_code": "046",
+    "name": "United Arab Bank",
+    "short_name": "United Arab Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "UNILAEADXXX",
+    "bank_code": "047",
+    "name": "United Bank Ltd",
+    "short_name": "United Bank Ltd"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "DEUTAEAAXXX",
+    "bank_code": "049",
+    "name": "Deutsche Bank",
+    "short_name": "Deutsche Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "ABDIAEADXXX",
+    "bank_code": "050",
+    "name": "Abu Dhabi Islamic Bank",
+    "short_name": "Abu Dhabi Islamic Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "DBXPAEADXXX",
+    "bank_code": "051",
+    "name": "Dubai Bank",
+    "short_name": "Dubai Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "NISLAEADXXX",
+    "bank_code": "052",
+    "name": "Noor Islamic Bank",
+    "short_name": "Noor Islamic Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "HLALAEAAXXX",
+    "bank_code": "053",
+    "name": "Al Hilal Bank",
+    "short_name": "Al Hilal Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "SAMBAEADXXX",
+    "bank_code": "055",
+    "name": "SAMBA Financial Group",
+    "short_name": "SAMBA Financial Group"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "AJMNAEAJXXX",
+    "bank_code": "057",
+    "name": "Ajman Bank",
+    "short_name": "Ajman Bank"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "GULFAEAAXXX",
+    "bank_code": "092",
+    "name": "GULF INTERNATIONAL BANK",
+    "short_name": "GULF INTERNATIONAL BANK"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "BCITAEABXXX",
+    "bank_code": "093",
+    "name": "INTESA SANPAOLO",
+    "short_name": "INTESA SANPAOLO"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "SRAJAEAAXXX",
+    "bank_code": "113",
+    "name": "SIRAJ FINANCE PJSC",
+    "short_name": "SIRAJ FINANCE PJSC"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "ALANAEAAXXX",
+    "bank_code": "206",
+    "name": "Al Ansari Exchange",
+    "short_name": "Al Ansari Exchange"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "FEXEAEAAXXX",
+    "bank_code": "215",
+    "name": "Al Fardan Exchange",
+    "short_name": "Al Fardan Exchange"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "ALFXAEADXXX",
+    "bank_code": "216",
+    "name": "Al Fuad Exchange",
+    "short_name": "Al Fuad Exchange"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "EIIEAEADXXX",
+    "bank_code": "252",
+    "name": "Emirates India International Exchange",
+    "short_name": "Emirates India International Exchange"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "LAEEAEAAXXX",
+    "bank_code": "267",
+    "name": "Lari Exchange",
+    "short_name": "Lari Exchange"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "UAEXAEAAXXX",
+    "bank_code": "291",
+    "name": "UAE Exchange Center LLC",
+    "short_name": "UAE Exchange Center LLC"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "UECEAEADXXX",
+    "bank_code": "293",
+    "name": "Universal Exchange Centre",
+    "short_name": "Universal Exchange Centre"
+  },
+  {
+    "country_code": "AE",
+    "primary": true,
+    "bic": "WSEEAEADXXX",
+    "bank_code": "294",
+    "name": "Wall Street Exchange Centre LLC",
+    "short_name": "Wall Street Exchange Centre LLC"
+  }
+]

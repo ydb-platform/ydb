@@ -1,0 +1,3 @@
+[console_scripts]
+pycbrf = pycbrf.cli:main
+

@@ -1,0 +1,21 @@
+{
+  "components": {
+    "schemas": {
+      "Namespace": {
+        "type": "object",
+        "required": [
+          "apiVersion",
+          "kind"
+        ],
+        "properties": {
+          "apiVersion": {
+            "const": "v1"
+          },
+          "kind": {
+            "const": "Namespace"
+          }
+        }
+      }
+    }
+  }
+}

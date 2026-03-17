@@ -1,0 +1,41 @@
+# (C) Copyright 2005- ECMWF.
+
+# moved here to allow different bitsPerValue in second order packing
+unsigned[1] bitsPerValue : dump ;
+alias numberOfBitsContainingEachPackedValue = bitsPerValue;
+alias accuracy = bitsPerValue;
+
+# For grib1 -> grib2
+#constant dataRepresentationTemplateNumber = 50;
+
+ibmfloat realPart ;
+position offsetBeforeData;
+transient P=0;
+
+_if (gribex_mode_on()) {
+  transient computeLaplacianOperator=0 : hidden;
+} else {
+  transient computeLaplacianOperator=1 : hidden;
+}
+
+meta codedValues data_g1simple_packing(
+   section4Length,
+   offsetBeforeData,
+   offsetSection4,
+   unitsFactor,
+   unitsBias,
+   changingPrecision,
+   numberOfCodedValues,
+   bitsPerValue,
+   referenceValue,
+   binaryScaleFactor,
+   decimalScaleFactor,
+   optimizeScaleFactor,
+   halfByte
+): read_only;
+
+meta values data_g1shsimple_packing(codedValues,realPart) : dump;
+alias data.packedValues = values;
+meta numberOfCodedValues g1number_of_coded_values_sh_simple(bitsPerValue,offsetBeforeData,offsetAfterData,halfByte,numberOfValues) : dump;
+
+template statistics "common/statistics_spectral.def";

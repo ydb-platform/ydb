@@ -1,0 +1,22 @@
+# (C) Copyright 2005- ECMWF.
+
+position offsetSection4;
+section_length[3]       section4Length ;
+unsigned[1]     reservedSection4 = 0 : hidden;
+position offsetBeforeData;
+
+meta bufrDataEncoded raw(totalLength,section4Length,4) : hidden;
+
+template dataKeys "bufr/dataKeys.def";
+
+meta numericValues bufr_data_array(bufrDataEncoded, numberOfSubsets,expandedCodes,expandedFlags, elementsDescriptorsIndex,compressedData,dataKeys) : no_copy,hidden;
+meta stringValues bufr_string_values(numericValues) : no_copy,hidden;
+
+meta unpack unpack_bufr_values(numericValues)  : no_copy,hidden;
+meta pack pack_bufr_values(numericValues)  : no_copy,hidden;
+
+section_padding section4Padding;
+position offsetEndSection4;
+meta md5Data md5(offsetSection4,section4Length);
+alias dataAccessors=numericValues;
+

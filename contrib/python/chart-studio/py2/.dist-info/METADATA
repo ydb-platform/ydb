@@ -1,0 +1,30 @@
+Metadata-Version: 2.1
+Name: chart-studio
+Version: 1.1.0
+Summary: Utilities for interfacing with plotly's Chart Studio
+Home-page: https://plot.ly/python/
+Author: Chris P
+Author-email: chris@plot.ly
+Maintainer: Jon Mease
+Maintainer-email: jon@plot.ly
+License: MIT
+Project-URL: Github, https://github.com/plotly/plotly.py
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Topic :: Scientific/Engineering :: Visualization
+Description-Content-Type: text/markdown
+Requires-Dist: plotly
+Requires-Dist: requests
+Requires-Dist: retrying (>=1.3.3)
+Requires-Dist: six
+
+# chart-studio
+This package contains utilities for interfacing with Plotly's Chart Studio service (both Chart Studio cloud and Chart Studio On-Prem).  Prior to plotly.py version 4, This functionality was included in the `plotly` package under the `plotly.plotly` module. As part of plotly.py version 4, the Chart Studio functionality was removed from the `plotly` package and released in this `chart-studio` package.
+
+

@@ -1,0 +1,18 @@
+# Product discipline 4 - Space weather products, parameter category 2: charged particle mass and number
+0 0 Particle number density (m-3)
+1 1 Electron density (m-3)
+2 2 Proton density (m-3)
+3 3 Ion density (m-3)
+4 4 Vertical total electron content (TECU)
+5 5 HF absorption frequency (Hz)
+6 6 HF absorption (dB)
+7 7 Spread F (m)
+8 8 h'F (m)
+9 9 Critical frequency (Hz)
+10 10 Maximal usable frequency (MUF) (Hz)
+11 11 Peak height (hm) (m)
+12 12 Peak density (Nm) (m-3)
+13 13 Equivalent slab thickness (tau) (km)
+# 14-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

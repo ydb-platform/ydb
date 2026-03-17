@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package yandex.cloud.monitoring.v3;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/monitoring/v3;monitoring";
+option java_package = "yandex.cloud.api.monitoring.v3";
+
+// Text widget.
+message TextWidget {
+    // Text.
+    string text = 1;
+}

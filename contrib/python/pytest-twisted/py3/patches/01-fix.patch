@@ -1,0 +1,23 @@
+commit 3ecab5ab3dca31cc790400acea201850c1d4e9f3
+merge: cd62d85ebf8f7707fdd6218be63097d9d9ebbc69 c9b16a25ef219a93acb56fc507f6cfc5f292ca10
+author: vvgolubev
+date: 2019-11-06T18:15:28+03:00
+revision: 5893880
+
+    contrib/pytest-twisted: Annotate pytest_pyfunc_call with "tryfirst"
+    
+    contrib/pytest-twisted: Annotate pytest_pyfunc_call with tryfirst
+    This is necessary to override default pytest_pyfunc_call in Arcadia, which is also marked this way
+    
+    REVIEW: 1013156
+
+--- contrib/python/pytest-twisted/py3/pytest_twisted/__init__.py	(index)
++++ contrib/python/pytest-twisted/py3/pytest_twisted/__init__.py	(working tree)
+@@ -360,6 +360,7 @@ def _run_inline_callbacks(f, *args):
+         blockingCallFromThread(_instances.reactor, f, *args)
+ 
+ 
++@pytest.mark.tryfirst
+ def pytest_pyfunc_call(pyfuncitem):
+     """Interface to async test call handler."""
+     # TODO: only handle 'our' tests?  what is the point of handling others?

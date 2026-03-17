@@ -1,0 +1,23 @@
+/*-
+ * See the file LICENSE for redistribution information.
+ *
+ * Copyright (c) 2010, 2012 Oracle and/or its affiliates.  All rights reserved.
+ */
+
+DBPRIVATE
+PREFIX	__repmgr
+
+INCLUDE #include "db_int.h"
+INCLUDE #include "dbinc/db_page.h"
+INCLUDE #include "dbinc/db_dispatch.h"
+INCLUDE #include "dbinc/db_am.h"
+INCLUDE #include "dbinc_auto/repmgr_auto.h"
+INCLUDE
+
+BEGIN member		52	200
+ARG	version         u_int32_t       lu
+ARG	prev_status	u_int32_t	lu
+ARG	status		u_int32_t	lu
+DBT	host		DBT		s
+ARG	port		u_int32_t	lu
+END

@@ -1,0 +1,21 @@
+copy:
+  - LICENSES/*
+  - _version_meson.py
+exclude_from_macros:
+  - LICENSES/*
+  - symbols.cmake
+  - pandas/_libs/src/headers/cmath
+  - "*/meson.build"
+  - _version_meson.py
+keep:
+  - symbols.cmake
+  - pandas/_version_meson.py
+cython_directive:
+  - language_level=3
+  - always_allow_keywords=true
+cython_templates:
+  - pandas/*.pxi.in
+mark_as_cython_c:
+  - pandas/_libs/[!w]*.pyx
+  - pandas/_libs/window/indexers.pyx
+  - pandas/_libs/writers.pyx

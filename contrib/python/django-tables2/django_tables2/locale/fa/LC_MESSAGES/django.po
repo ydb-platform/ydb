@@ -1,0 +1,38 @@
+# This file is distributed under the same license as the django-tables2 package
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"POT-Creation-Date: 2021-05-24 14:23+0430\n"
+"PO-Revision-Date: 2021-05-24 14:31+0430\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: fa\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 2.4.1\n"
+
+#: paginators.py:72
+msgid "That page number is not an integer"
+msgstr "شماره صفحه عددی صحیح نیست"
+
+#: paginators.py:74
+msgid "That page number is less than 1"
+msgstr "شماره صفحه عددی کمتر از 1 است"
+
+#: paginators.py:93
+msgid "That page contains no results"
+msgstr "صفحه شامل هیچ نتیجه ای نیست"
+
+#: templates/django_tables2/bootstrap.html:66
+#: templates/django_tables2/bootstrap4.html:66
+#: templates/django_tables2/table.html:64
+msgid "previous"
+msgstr "قبلی"
+
+#: templates/django_tables2/bootstrap.html:91
+#: templates/django_tables2/bootstrap4.html:86
+#: templates/django_tables2/table.html:88
+msgid "next"
+msgstr "بعدی"

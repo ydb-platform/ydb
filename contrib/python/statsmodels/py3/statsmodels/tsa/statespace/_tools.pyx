@@ -1,0 +1,5483 @@
+#cython: boundscheck=False
+#cython: wraparound=False
+#cython: cdivision=False
+"""
+State Space Model - Cython tools
+
+Author: Chad Fulton
+License: Simplified-BSD
+"""
+
+# Typical imports
+cimport numpy as np
+cimport cython
+import numpy as np
+
+np.import_array()
+
+from statsmodels.src.math cimport *
+cimport scipy.linalg.cython_blas as blas
+cimport scipy.linalg.cython_lapack as lapack
+
+cdef FORTRAN = 1
+
+ctypedef fused sm_type_t:
+    np.float64_t
+    np.float32_t
+    np.complex64_t
+    np.complex128_t
+
+
+# ------------------------------------------------------------------------
+# Array shape validation
+
+cdef validate_matrix_shape(str name, Py_ssize_t *shape, int nrows, int ncols, nobs=None):
+    if not shape[0] == nrows:
+        raise ValueError('Invalid shape for %s matrix: requires %d rows,'
+                         ' got %d' % (name, nrows, shape[0]))
+    if not shape[1] == ncols:
+        raise ValueError('Invalid shape for %s matrix: requires %d columns,'
+                         'got %d' % (name, shape[1], shape[1]))
+    if nobs is not None and shape[2] not in [1, nobs]:
+        raise ValueError('Invalid time-varying dimension for %s matrix:'
+                         ' requires 1 or %d, got %d' % (name, nobs, shape[2]))
+
+
+cdef validate_vector_shape(str name, Py_ssize_t *shape, int nrows, nobs = None):
+    if not shape[0] == nrows:
+        raise ValueError('Invalid shape for %s vector: requires %d rows,'
+                         ' got %d' % (name, nrows, shape[0]))
+    if nobs is not None and not shape[1] in [1, nobs]:
+        raise ValueError('Invalid time-varying dimension for %s vector:'
+                         ' requires 1 or %d got %d' % (name, nobs, shape[1]))
+
+
+# ------------------------------------------------------------------------
+# Blas Wrapping
+
+cdef inline copy(int size, sm_type_t* src_arr, sm_type_t* target,
+                 int incx=1, int incy=1):
+    """
+    Parameters
+    ----------
+    size : int
+        number of elements in vectors `src_arr` and `target`
+    src_arr : sm_type_t*
+        Pointer to Array that we are copying _from_
+    target : sm_type_t*
+        Pointer to Array that we are copying _to_
+    incx : int, default 1
+        Specifies the increment for the elements of `src_arr`
+    incy : int, default 1
+        Specifies the increment for the elements of `target`
+
+    References
+    ----------
+    https://software.intel.com/en-us/mkl-developer-reference-c-cblas-copy
+    """
+    if sm_type_t is np.float32_t:
+        blas.scopy(&size, src_arr, &incx, target, &incy)
+    elif sm_type_t is np.float64_t:
+        blas.dcopy(&size, src_arr, &incx, target, &incy)
+    elif sm_type_t is np.complex64_t:
+        blas.ccopy(&size, src_arr, &incx, target, &incy)
+    elif sm_type_t is np.complex128_t:
+        blas.zcopy(&size, src_arr, &incx, target, &incy)
+
+
+cdef inline swap(int size, sm_type_t* src_arr, sm_type_t* target,
+                 int incx=1, int incy=1):
+    """
+    Parameters
+    ----------
+    size : int
+        number of elements in vectors `src_arr` and `target`
+    src_arr : sm_type_t*
+        Pointer to first of two arrays being swapped
+    target : sm_type_t*
+        Pointer to second of two arrays being swapped
+    incx : int, default 1
+        Specifies the increment for the elements of `src_arr`
+    incy : int, default 1
+        Specifies the increment for the elements of `target`
+
+    References
+    ----------
+    https://software.intel.com/en-us/mkl-developer-reference-c-cblas-swap
+    """
+
+    if sm_type_t is np.float32_t:
+        blas.sswap(&size, src_arr, &incx, target, &incy)
+    elif sm_type_t is np.float64_t:
+        blas.dswap(&size, src_arr, &incx, target, &incy)
+    elif sm_type_t is np.complex64_t:
+        blas.cswap(&size, src_arr, &incx, target, &incy)
+    elif sm_type_t is np.complex128_t:
+        blas.zswap(&size, src_arr, &incx, target, &incy)
+
+
+# ------------------------------------------------------------------------
+
+
+cdef bint _sselect1(np.float32_t * a):
+    return 0
+
+cdef bint _sselect2(np.float32_t * a, np.float32_t * b):
+    return 0
+
+cdef int _ssolve_discrete_lyapunov(np.float32_t * a, np.float32_t * q, int n, int complex_step=False) except *:
+    # Note: some of this code (esp. the Sylvester solving part) cribbed from
+    # https://raw.githubusercontent.com/scipy/scipy/master/scipy/linalg/_solvers.py
+
+    # Solve an equation of the form $A'XA-X=-Q$
+    # a: input / output
+    # q: input / output
+    cdef:
+        int i, j
+        int info
+        int inc = 1
+        int n2 = n**2
+        np.float32_t scale = 0.0
+        np.float32_t tmp = 0.0
+        np.float32_t alpha = 1.0
+        np.float32_t beta = 0.0
+        np.float32_t delta = -2.0
+        char trans
+    cdef np.npy_intp dim[2]
+    cdef np.float32_t [::1,:] apI, capI, u, v
+    cdef int [::1,:] ipiv
+    # Dummy selection function, will not actually be referenced since we do not
+    # need to order the eigenvalues in the ?gees call.
+    cdef:
+        int sdim
+        int lwork = 3*n
+        bint bwork
+    cdef np.npy_intp dim1[1]
+    cdef np.float32_t [::1,:] work
+    cdef np.float32_t [:] wr
+    cdef np.float32_t [:] wi
+
+    # Initialize arrays
+    dim[0] = n; dim[1] = n;
+    apI = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT32, FORTRAN)
+    capI = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT32, FORTRAN)
+    u = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT32, FORTRAN)
+    v = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT32, FORTRAN)
+    ipiv = np.PyArray_ZEROS(2, dim, np.NPY_INT32, FORTRAN)
+
+    dim1[0] = n;
+    wr = np.PyArray_ZEROS(1, dim1, np.NPY_FLOAT32, FORTRAN)
+    wi = np.PyArray_ZEROS(1, dim1, np.NPY_FLOAT32, FORTRAN)
+    #vs = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT32, FORTRAN)
+    dim[0] = lwork; dim[1] = lwork;
+    work = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT32, FORTRAN)
+
+    # - Solve for b.conj().transpose() --------
+
+    # Get apI = a + I (stored in apI)
+    # = (a + eye)
+    # For: c = 2*np.dot(np.dot(inv(a + eye), q), aHI_inv)
+    copy(n2, a, &apI[0, 0])
+    # (for loop below adds the identity)
+
+    # Get conj(a) + I (stored in capI)
+    # a^H + I -> capI
+    # For: aHI_inv = inv(aH + eye)
+    copy(n2, a, &capI[0, 0])
+    # (for loop below adds the identity)
+
+    # Get conj(a) - I (stored in a)
+    # a^H - I -> a
+    # For: b = np.dot(aH - eye, aHI_inv)
+    # (for loop below subtracts the identity)
+
+    # Add / subtract identity matrix
+    for i in range(n):
+        apI[i,i] = apI[i,i] + 1 # apI -> a + eye
+        capI[i,i] = capI[i,i] + 1 # aH + eye
+        a[i + i*n] = a[i + i*n] - 1 # a - eye
+
+    # Solve [conj(a) + I] b' = [conj(a) - I] (result stored in a)
+    # For: b = np.dot(aH - eye, aHI_inv)
+    # Where: aHI_inv = inv(aH + eye)
+    # where b = (a^H - eye) (a^H + eye)^{-1}
+    # or b^H = (a + eye)^{-1} (a - eye)
+    # or (a + eye) b^H = (a - eye)
+    lapack.sgetrf(&n, &n, &capI[0,0], &n, &ipiv[0,0], &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU decomposition error.')
+
+    lapack.sgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                               a, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # Now we have b^H; we could take the conjugate transpose to get b, except
+    # that the input to the continuous Lyapunov equation is exactly
+    # b^H, so we already have the quantity we need.
+
+    # - Solve for (-c) --------
+
+    # where c = 2*np.dot(np.dot(inv(a + eye), q), aHI_inv)
+    # = 2*(a + eye)^{-1} q (a^H + eye)^{-1}
+    # and with q Hermitian
+    # consider x = (a + eye)^{-1} q (a^H + eye)^{-1}
+    # this can be done in two linear solving steps:
+    # 1. consider y = q (a^H + eye)^{-1}
+    #    or y (a^H + eye) = q
+    #    or (a^H + eye)^H y^H = q^H
+    #    or (a + eye) y^H = q
+    # 2. Then consider x = (a + eye)^{-1} y
+    #    or (a + eye) x = y
+
+    # Solve [conj(a) + I] tmp' = q (result stored in q)
+    # For: y = q (a^H + eye)^{-1} => (a + eye) y^H = q
+    lapack.sgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                                        q, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # Replace the result (stored in q) with its (conjugate) transpose
+    for j in range(1, n):
+        for i in range(j):
+            tmp = q[i + j*n]
+            q[i + j*n] = q[j + i*n]
+            q[j + i*n] = tmp
+
+
+    lapack.sgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                                        q, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # q -> -2.0 * q
+    blas.sscal(&n2, &delta, q, &inc)
+
+    # - Solve continuous time Lyapunov --------
+
+    # Now solve the continuous time Lyapunov equation (AX + XA^H = Q), on the
+    # transformed inputs ...
+
+    # ... which requires solving the continuous time Sylvester equation
+    # (AX + XB = Q) where B = A^H
+
+    # Compute the real Schur decomposition of a (unordered)
+    # TODO compute the optimal lwork rather than always using 3*n
+    # a is now the Schur form of A; (r)
+    # u is now the unitary Schur transformation matrix for A; (u)
+    # In the usual case, we will also have:
+    # r = s, so s is also stored in a
+    # u = v, so v is also stored in u
+    # In the complex-step case, we will instead have:
+    # r = s.conj()
+    # u = v.conj()
+    lapack.sgees("V", "N", <lapack.sselect2 *> &_sselect2, &n,
+                          a, &n,
+                          &sdim,
+                          &wr[0], &wi[0],
+                          &u[0,0], &n,
+                          &work[0,0], &lwork,
+                          &bwork, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('Schur decomposition solver error.')
+
+    # Get v (so that in the complex step case we can take the conjugate)
+    copy(n2, &u[0, 0], &v[0, 0])
+    # If complex step, take the conjugate
+
+    # Construct f = u^H*q*u (result overwrites q)
+    # In the usual case, v = u
+    # In the complex step case, v = u.conj()
+    blas.sgemm("N", "N", &n, &n, &n,
+                        &alpha, q, &n,
+                                &v[0,0], &n,
+                        &beta, &capI[0,0], &n)
+    blas.sgemm("C", "N", &n, &n, &n,
+                        &alpha, &u[0,0], &n,
+                                &capI[0,0], &n,
+                        &beta, q, &n)
+
+    # DTRYSL Solve op(A)*X + X*op(B) = scale*C which is here:
+    # r*X + X*r = scale*q
+    # results overwrite q
+    copy(n2, a, &apI[0, 0])
+    lapack.strsyl("N", "C", &inc, &n, &n,
+                           a, &n,
+                           &apI[0,0], &n,
+                           q, &n,
+                           &scale, &info)
+
+    # Scale q by scale
+    if not scale == 1.0:
+        blas.sscal(&n2, <np.float32_t*> &scale, q, &inc)
+
+    # Calculate the solution: u * q * v^H (results overwrite q)
+    # In the usual case, v = u
+    # In the complex step case, v = u.conj()
+    blas.sgemm("N", "C", &n, &n, &n,
+                        &alpha, q, &n,
+                                &v[0,0], &n,
+                        &beta, &capI[0,0], &n)
+    blas.sgemm("N", "N", &n, &n, &n,
+                        &alpha, &u[0,0], &n,
+                                &capI[0,0], &n,
+                        &beta, q, &n)
+
+
+cpdef _scompute_coefficients_from_multivariate_pacf(np.float32_t [::1,:] partial_autocorrelations,
+                                                             np.float32_t [::1,:] error_variance,
+                                                             int transform_variance,
+                                                             int order, int k_endog):
+    """
+    Notes
+    -----
+
+    This uses the ?trmm BLAS functions which are not available in
+    Scipy v0.11.0
+    """
+    # Constants
+    cdef:
+        np.float32_t alpha = 1.0
+        np.float32_t beta = 0.0
+        np.float32_t gamma = -1.0
+        int k_endog2 = k_endog**2
+        int k_endog_order = k_endog * order
+        int k_endog_order1 = k_endog * (order+1)
+        int info, s, k
+    # Local variables
+    cdef:
+        np.npy_intp dim2[2]
+        np.float32_t [::1, :] initial_variance
+        np.float32_t [::1, :] forward_variance
+        np.float32_t [::1, :] backward_variance
+        np.float32_t [::1, :] autocovariances
+        np.float32_t [::1, :] forwards1
+        np.float32_t [::1, :] forwards2
+        np.float32_t [::1, :] backwards1
+        np.float32_t [::1, :] backwards2
+        np.float32_t [::1, :] forward_factors
+        np.float32_t [::1, :] backward_factors
+        np.float32_t [::1, :] tmp
+        np.float32_t [::1, :] tmp2
+    # Pointers
+    cdef:
+        np.float32_t * forwards
+        np.float32_t * prev_forwards
+        np.float32_t * backwards
+        np.float32_t * prev_backwards
+    # ?trmm
+    # cdef strmm_t *strmm = <strmm_t*>Capsule_AsVoidPtr(blas.strmm._cpointer)
+
+    # dim2[0] = self.k_endog; dim2[1] = storage;
+    # self.forecast = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+
+    # If we want to keep the provided variance but with the constrained
+    # coefficient matrices, we need to make a copy here, and then after the
+    # main loop we will transform the coefficients to match the passed variance
+    if not transform_variance:
+        initial_variance = np.asfortranarray(error_variance.copy())
+        # Need to make the input variance large enough that the recursions
+        # do not lead to zero-matrices due to roundoff error, which would case
+        # exceptions from the Cholesky decompositions.
+        # Note that this will still not always ensure positive definiteness,
+        # and for k_endog, order large enough an exception may still be raised
+        error_variance = np.asfortranarray(np.eye(k_endog, dtype=np.float32) * (order + k_endog)**10)
+
+    # Initialize matrices
+    dim2[0] = k_endog; dim2[1] = k_endog;
+    forward_variance = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    backward_variance = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    forward_factors = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    backward_factors = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    tmp2 = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+
+    dim2[0] = k_endog; dim2[1] = k_endog_order;
+    # \phi_{s,k}, s = 1, ..., p
+    #             k = 1, ..., s+1
+    forwards1 = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    forwards2 = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    # \phi_{s,k}^*
+    backwards1 = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    backwards2 = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+
+    dim2[0] = k_endog; dim2[1] = k_endog_order1;
+    autocovariances = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+
+    copy(k_endog2, &error_variance[0, 0], &forward_variance[0, 0])   # \Sigma_s
+    copy(k_endog2, &error_variance[0, 0], &backward_variance[0, 0])  # \Sigma_s^*,  s = 0, ..., p
+    copy(k_endog2, &error_variance[0, 0], &autocovariances[0, 0])  # \Gamma_s
+
+    # error_variance_factor = linalg.cholesky(error_variance, lower=True)
+    copy(k_endog2, &error_variance[0, 0], &forward_factors[0,0])
+    lapack.spotrf("L", &k_endog, &forward_factors[0,0], &k_endog, &info)
+    copy(k_endog2, &forward_factors[0, 0], &backward_factors[0, 0])
+
+    # We fill in the entries as follows:
+    # [1,1]
+    # [2,2], [2,1]
+    # [3,3], [3,1], [3,2]
+    # ...
+    # [p,p], [p,1], ..., [p,p-1]
+    # the last row, correctly ordered, is then used as the coefficients
+    for s in range(order):  # s = 0, ..., p-1
+        if s % 2 == 0:
+            forwards = &forwards1[0, 0]
+            prev_forwards = &forwards2[0, 0]
+            backwards = &backwards1[0, 0]
+            prev_backwards = &backwards2[0, 0]
+        else:
+            forwards = &forwards2[0, 0]
+            prev_forwards = &forwards1[0, 0]
+            backwards = &backwards2[0, 0]
+            prev_backwards = &backwards1[0, 0]
+
+        # Create the "last" (k = s+1) matrix
+        # Note: this is for k = s+1. However, below we then have to fill
+        # in for k = 1, ..., s in order.
+        # P L*^{-1} = x
+        # x L* = P
+        # L*' x' = P'
+        # forwards[:, s*k_endog:(s+1)*k_endog] = np.dot(
+        #     forward_factors,
+        #     linalg.solve_triangular(
+        #         backward_factors, partial_autocorrelations[:, s*k_endog:(s+1)*k_endog].T,
+        #         lower=True, trans='T').T
+        # )
+        for k in range(k_endog):
+            copy(k_endog, &partial_autocorrelations[k, s*k_endog], &tmp[0, k], k_endog)
+        lapack.strtrs("L", "T", "N", &k_endog, &k_endog, &backward_factors[0,0], &k_endog,
+                                                           &tmp[0, 0], &k_endog, &info)
+        # sgemm("N", "T", &k_endog, &k_endog, &k_endog,
+        #   &alpha, &forward_factors[0,0], &k_endog,
+        #           &tmp[0, 0], &k_endog,
+        #   &beta, &forwards[s*k_endog2], &k_endog)
+        blas.strmm("R", "L", "T", "N", &k_endog, &k_endog,
+          &alpha, &forward_factors[0,0], &k_endog,
+                  &tmp[0, 0], &k_endog)
+        for k in range(k_endog):
+            copy(k_endog, &tmp[k, 0], &forwards[s*k_endog2 + k*k_endog], k_endog)
+
+        # P' L^{-1} = x
+        # x L = P'
+        # L' x' = P
+        # backwards[:, s*k_endog:(s+1)*k_endog] = np.dot(
+        #     backward_factors,
+        #     linalg.solve_triangular(
+        #         forward_factors, partial_autocorrelations[:, s*k_endog:(s+1)*k_endog],
+        #         lower=True, trans='T').T
+        # )
+        copy(k_endog2, &partial_autocorrelations[0, s*k_endog], &tmp[0, 0])
+        lapack.strtrs("L", "T", "N", &k_endog, &k_endog, &forward_factors[0, 0], &k_endog,
+                                                           &tmp[0, 0], &k_endog, &info)
+        # sgemm("N", "T", &k_endog, &k_endog, &k_endog,
+        #   &alpha, &backward_factors[0, 0], &k_endog,
+        #           &tmp[0, 0], &k_endog,
+        #   &beta, &backwards[s * k_endog2], &k_endog)
+        blas.strmm("R", "L", "T", "N", &k_endog, &k_endog,
+          &alpha, &backward_factors[0,0], &k_endog,
+                  &tmp[0, 0], &k_endog)
+        for k in range(k_endog):
+            copy(k_endog, &tmp[k, 0], &backwards[s*k_endog2 + k*k_endog], k_endog)
+
+        # Update the variance
+        # Note: if s >= 1, this will be further updated in the for loop
+        # below
+        # Also, this calculation will be re-used in the forward variance
+        # tmp = np.dot(forwards[:, s*k_endog:(s+1)*k_endog], backward_variance)
+        # tmpT = np.dot(backward_variance.T, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        blas.sgemm("T", "T", &k_endog, &k_endog, &k_endog,
+          &alpha, &backward_variance[0, 0], &k_endog,
+                  &forwards[s * k_endog2], &k_endog,
+          &beta, &tmp[0, 0], &k_endog)
+        # autocovariances[:, (s+1)*k_endog:(s+2)*k_endog] = tmp.copy().T
+        copy(k_endog2, &tmp[0, 0], &autocovariances[0, (s+1)*k_endog])
+
+        # Create the remaining k = 1, ..., s matrices,
+        # only has an effect if s >= 1
+        for k in range(s):
+            # forwards[:, k*k_endog:(k+1)*k_endog] = (
+            #     prev_forwards[:, k*k_endog:(k+1)*k_endog] -
+            #     np.dot(
+            #         forwards[:, s*k_endog:(s+1)*k_endog],
+            #         prev_backwards[:, (s-k-1)*k_endog:(s-k)*k_endog]
+            #     )
+            # )
+            copy(k_endog2, &prev_forwards[k * k_endog2], &forwards[k * k_endog2])
+            blas.sgemm("N", "N", &k_endog, &k_endog, &k_endog,
+              &gamma, &forwards[s * k_endog2], &k_endog,
+                      &prev_backwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &forwards[k * k_endog2], &k_endog)
+
+            # backwards[:, k*k_endog:(k+1)*k_endog] = (
+            #     prev_backwards[:, k*k_endog:(k+1)*k_endog] -
+            #     np.dot(
+            #         backwards[:, s*k_endog:(s+1)*k_endog],
+            #         prev_forwards[:, (s-k-1)*k_endog:(s-k)*k_endog]
+            #     )
+            # )
+            copy(k_endog2, &prev_backwards[k * k_endog2], &backwards[k * k_endog2])
+            blas.sgemm("N", "N", &k_endog, &k_endog, &k_endog,
+              &gamma, &backwards[s * k_endog2], &k_endog,
+                      &prev_forwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &backwards[k * k_endog2], &k_endog)
+
+            # autocovariances[:, (s+1)*k_endog:(s+2)*k_endog] += np.dot(
+            #     autocovariances[:, (k+1)*k_endog:(k+2)*k_endog],
+            #     prev_forwards[:, (s-k-1)*k_endog:(s-k)*k_endog].T
+            # )
+            blas.sgemm("N", "T", &k_endog, &k_endog, &k_endog,
+              &alpha, &autocovariances[0, (k+1)*k_endog], &k_endog,
+                      &prev_forwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &autocovariances[0, (s+1)*k_endog], &k_endog)
+
+        # Create forward and backwards variances
+        # backward_variance = (
+        #     backward_variance -
+        #     np.dot(
+        #         np.dot(backwards[:, s*k_endog:(s+1)*k_endog], forward_variance),
+        #         backwards[:, s*k_endog:(s+1)*k_endog].T
+        #     )
+        # )
+        blas.sgemm("N", "N", &k_endog, &k_endog, &k_endog,
+          &alpha, &backwards[s * k_endog2], &k_endog,
+                  &forward_variance[0, 0], &k_endog,
+          &beta, &tmp2[0, 0], &k_endog)
+        blas.sgemm("N", "T", &k_endog, &k_endog, &k_endog,
+          &gamma, &tmp2[0, 0], &k_endog,
+                  &backwards[s * k_endog2], &k_endog,
+          &alpha, &backward_variance[0, 0], &k_endog)
+        # forward_variance = (
+        #     forward_variance -
+        #     np.dot(tmp, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        # )
+        # forward_variance = (
+        #     forward_variance -
+        #     np.dot(tmpT.T, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        # )
+        blas.sgemm("T", "T", &k_endog, &k_endog, &k_endog,
+          &gamma, &tmp[0, 0], &k_endog,
+                  &forwards[s * k_endog2], &k_endog,
+          &alpha, &forward_variance[0, 0], &k_endog)
+
+        # Cholesky factors
+        # forward_factors = linalg.cholesky(forward_variance, lower=True)
+        # backward_factors =  linalg.cholesky(backward_variance, lower=True)
+        copy(k_endog2, &forward_variance[0, 0], &forward_factors[0, 0])
+        lapack.spotrf("L", &k_endog, &forward_factors[0,0], &k_endog, &info)
+        copy(k_endog2, &backward_variance[0, 0], &backward_factors[0, 0])
+        lapack.spotrf("L", &k_endog, &backward_factors[0,0], &k_endog, &info)
+
+
+    # If we do not want to use the transformed variance, we need to
+    # adjust the constrained matrices, as presented in Lemma 2.3, see above
+    if not transform_variance:
+        if order % 2 == 0:
+            forwards = &forwards2[0,0]
+        else:
+            forwards = &forwards1[0,0]
+
+        # Here, we need to construct T such that:
+        # variance = T * initial_variance * T'
+        # To do that, consider the Cholesky of variance (L) and
+        # input_variance (M) to get:
+        # L L' = T M M' T' = (TM) (TM)'
+        # => L = T M
+        # => L M^{-1} = T
+        # initial_variance_factor = np.linalg.cholesky(initial_variance)
+        # L'
+        lapack.spotrf("U", &k_endog, &initial_variance[0,0], &k_endog, &info)
+        # transformed_variance_factor = np.linalg.cholesky(variance)
+        # M'
+        copy(k_endog2, &forward_variance[0, 0], &tmp[0, 0])
+        lapack.spotrf("U", &k_endog, &tmp[0,0], &k_endog, &info)
+        # spotri("L", &k_endog, &tmp[0,0], &k_endog, &info)
+
+        # We need to zero out the lower triangle of L', because ?trtrs only
+        # knows that M' is upper triangular
+        for s in range(k_endog - 1):          # column
+            for k in range(s+1, k_endog):     # row
+                initial_variance[k, s] = 0
+
+        # Note that T is lower triangular
+        # L M^{-1} = T
+        # M' T' = L'
+        # transform = np.dot(initial_variance_factor,
+        #                    np.linalg.inv(transformed_variance_factor))
+        lapack.strtrs("U", "N", "N", &k_endog, &k_endog, &tmp[0,0], &k_endog,
+                                                           &initial_variance[0, 0], &k_endog, &info)
+        # Now:
+        # initial_variance = T'
+
+        for s in range(order):
+            # forwards[:, s*k_endog:(s+1)*k_endog] = (
+            #     np.dot(
+            #         np.dot(transform, forwards[:, s*k_endog:(s+1)*k_endog]),
+            #         inv_transform
+            #     )
+            # )
+            # TF T^{-1} = x
+            # TF = x T
+            # (TF)' = T' x'
+
+            # Get TF
+            copy(k_endog2, &forwards[s * k_endog2], &tmp2[0, 0])
+            blas.strmm("L", "U", "T", "N", &k_endog, &k_endog,
+              &alpha, &initial_variance[0, 0], &k_endog,
+                      &tmp2[0, 0], &k_endog)
+            for k in range(k_endog):
+                copy(k_endog, &tmp2[k, 0], &tmp[0, k], k_endog)
+            # Get x'
+            lapack.strtrs("U", "N", "N", &k_endog, &k_endog, &initial_variance[0,0], &k_endog,
+                                                               &tmp[0, 0], &k_endog, &info)
+            # Get x
+            for k in range(k_endog):
+                copy(k_endog, &tmp[k, 0], &forwards[s * k_endog2 + k*k_endog], k_endog)
+
+
+    if order % 2 == 0:
+        return forwards2, forward_variance
+    else:
+        return forwards1, forward_variance
+
+cpdef _sconstrain_sv_less_than_one(np.float32_t [::1,:] unconstrained, int order, int k_endog):
+    """
+    Transform arbitrary matrices to matrices with singular values less than
+    one.
+
+    Corresponds to Lemma 2.2 in Ansley and Kohn (1986). See
+    `constrain_stationary_multivariate` for more details.
+    """
+    # Constants
+    cdef:
+        np.float32_t alpha = 1.0
+        int k_endog2 = k_endog**2
+        int info, i
+    # Local variables
+    cdef:
+        np.npy_intp dim2[2]
+        np.float32_t [::1, :] constrained
+        np.float32_t [::1, :] tmp
+        np.float32_t [::1, :] eye
+
+    dim2[0] = k_endog; dim2[1] = k_endog * order;
+    constrained = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    dim2[0] = k_endog; dim2[1] = k_endog;
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    eye = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+
+    eye = np.asfortranarray(np.eye(k_endog, dtype=np.float32))
+    for i in range(order):
+        copy(k_endog2, &eye[0, 0], &tmp[0, 0])
+        blas.sgemm("N", "T", &k_endog, &k_endog, &k_endog,
+          &alpha, &unconstrained[0, i*k_endog], &k_endog,
+                  &unconstrained[0, i*k_endog], &k_endog,
+          &alpha, &tmp[0, 0], &k_endog)
+        lapack.spotrf("L", &k_endog, &tmp[0, 0], &k_endog, &info)
+
+        copy(k_endog2, &unconstrained[0, i*k_endog], &constrained[0, i*k_endog])
+        # constrained.append(linalg.solve_triangular(B, A, lower=lower))
+        lapack.strtrs("L", "N", "N", &k_endog, &k_endog, &tmp[0, 0], &k_endog,
+                                                           &constrained[0, i*k_endog], &k_endog, &info)
+    return constrained
+
+cdef int _sldl(np.float32_t * A, int n) except *:
+    # See Golub and Van Loan, Algorithm 4.1.2
+    cdef:
+        int info = 0
+        int j, i, k
+        np.npy_intp dim[1]
+        np.float64_t tol = 1e-15
+        np.float32_t [:] v
+
+    dim[0] = n
+    v = np.PyArray_ZEROS(1, dim, np.NPY_FLOAT32, FORTRAN)
+
+    for j in range(n):
+        # Compute v(1:j)
+        v[j] = A[j + j*n]
+
+        # Positive definite element: use Golub and Van Loan algorithm
+        if v[j].real < -tol:
+            info = -j
+            break
+        elif v[j].real > tol:
+            for i in range(j):
+                v[i] = A[j + i*n] * A[i + i*n]
+                v[j] = v[j] - A[j + i*n] * v[i]
+
+            # Store d(j) and compute L(j+1:n,j)
+            A[j + j*n] = v[j]
+            for i in range(j+1, n):
+                for k in range(j):
+                    A[i + j*n] = A[i + j*n] - A[i + k*n] * v[k]
+                A[i + j*n] = A[i + j*n] / v[j]
+        # Positive semi-definite element: zero the appropriate column
+        else:
+            info = 1
+            for i in range(j, n):
+                A[i + j*n]
+
+    return info
+
+cpdef int sldl(np.float32_t [::1, :] A) except *:
+    _sldl(&A[0,0], A.shape[0])
+
+cdef int _sreorder_missing_diagonal(np.float32_t * a, int * missing, int n):
+    """
+    a is a pointer to an n x n diagonal array A
+    missing is a pointer to an n x 1 array
+    n is the dimension of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(n-1,-1,-1):
+        if not missing[i]:
+            a[i + i*n] = a[k + k*n]
+            k = k - 1
+        else:
+            a[i + i*n] = 0
+
+cdef int _sreorder_missing_submatrix(np.float32_t * a, int * missing, int n):
+    """
+    a is a pointer to an n x n array A
+    missing is a pointer to an n x 1 array
+    n is the dimension of A
+    """
+    cdef int i, j, k, nobs
+
+    _sreorder_missing_rows(a, missing, n, n)
+    _sreorder_missing_cols(a, missing, n, n)
+
+cdef int _sreorder_missing_rows(np.float32_t * a, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    missing is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(n-1,-1,-1):
+        if not missing[i]:
+            swap(m, &a[i], &a[k], n, n)
+            k = k - 1
+
+
+cdef int _sreorder_missing_cols(np.float32_t * a, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    missing is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, k, nobs
+
+    nobs = m
+    # Construct the non-missing index
+    for i in range(m):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(m-1,-1,-1):
+        if not missing[i]:
+            swap(n, &a[i*n], &a[k*n])
+            k = k - 1
+
+
+cpdef int sreorder_missing_matrix(np.float32_t [::1, :, :] A, int [::1, :] missing, int reorder_rows, int reorder_cols, int diagonal) except *:
+    cdef int n, m, T, t
+
+    n, m, T = A.shape[0:3]
+
+    if reorder_rows and reorder_cols:
+        if not n == m:
+            raise RuntimeError('Reordering a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                _sreorder_missing_diagonal(&A[0, 0, t], &missing[0, t], n)
+        else:
+            for t in range(T):
+                _sreorder_missing_submatrix(&A[0, 0, t], &missing[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with reordering a submatrix')
+    elif reorder_rows:
+        for t in range(T):
+            _sreorder_missing_rows(&A[0, 0, t], &missing[0, t], n, m)
+    elif reorder_cols:
+        for t in range(T):
+            _sreorder_missing_cols(&A[0, 0, t], &missing[0, t], n, m)
+
+
+cpdef int sreorder_missing_vector(np.float32_t [::1, :] A, int [::1, :] missing) except *:
+    cdef int i, k, t, n, T, nobs
+
+    n, T = A.shape[0:2]
+
+    for t in range(T):
+        _sreorder_missing_rows(&A[0, t], &missing[0, t], n, 1)
+
+
+cdef int _scopy_missing_diagonal(np.float32_t * a, np.float32_t * b, int * missing, int n):
+    """
+    Copy the non-missing block of diagonal entries
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(nobs):
+        b[i + i*n] = a[i + i*n]
+
+
+cdef int _scopy_missing_submatrix(np.float32_t * a, np.float32_t * b, int * missing, int n):
+    """
+    Copy the non-missing submatrix
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(nobs, &a[i*n], &b[i*n])
+
+
+cdef int _scopy_missing_rows(np.float32_t * a, np.float32_t * b, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(m, &a[i], &b[i], n, n)
+
+
+cdef int _scopy_missing_cols(np.float32_t * a, np.float32_t * b, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, nobs
+
+    nobs = m
+    # Construct the non-missing index
+    for i in range(m):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(n, &a[i*n], &b[i*n])
+
+
+cpdef int scopy_missing_matrix(np.float32_t [::1, :, :] A, np.float32_t [::1, :, :] B, int [::1, :] missing, int missing_rows, int missing_cols, int diagonal) except *:
+    cdef int n, m, T, t, A_T, A_t = 0, time_varying
+
+    n, m, T = B.shape[0:3]
+    A_T = A.shape[2]
+    time_varying = (A_T == T)
+
+    if missing_rows and missing_cols:
+        if not n == m:
+            raise RuntimeError('Copying a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _scopy_missing_diagonal(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n)
+        else:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _scopy_missing_submatrix(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with copying a submatrix')
+    elif missing_rows:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _scopy_missing_rows(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n, m)
+    elif missing_cols:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _scopy_missing_cols(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n, m)
+    pass
+
+
+cpdef int scopy_missing_vector(np.float32_t [::1, :] A, np.float32_t [::1, :] B, int [::1, :] missing) except *:
+    cdef int n, t, T, A_t = 0, A_T
+
+    n, T = B.shape[0:2]
+    A_T = A.shape[1]
+    time_varying = (A_T == T)
+
+    for t in range(T):
+        if time_varying:
+            A_t = t
+        _scopy_missing_rows(&A[0, A_t], &B[0, t], &missing[0, t], n, 1)
+
+cdef int _scopy_index_diagonal(np.float32_t * a, np.float32_t * b, int * index, int n):
+    """
+    Copy the non-index block of diagonal entries
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, k, nobs
+
+    # Perform replacement
+    for i in range(n):
+        if index[i]:
+            b[i + i*n] = a[i + i*n]
+
+
+cdef int _scopy_index_submatrix(np.float32_t * a, np.float32_t * b, int * index, int n):
+    """
+    Copy the non-index submatrix
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    _scopy_index_rows(a, b, index, n, n)
+    _scopy_index_cols(a, b, index, n, n)
+
+
+cdef int _scopy_index_rows(np.float32_t * a, np.float32_t * b, int * index, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i
+
+    # Perform replacement
+    for i in range(n):
+        if index[i]:
+            copy(m, &a[i], &b[i], n, n)
+
+
+cdef int _scopy_index_cols(np.float32_t * a, np.float32_t * b, int * index, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    # Perform replacement
+    for i in range(m):
+        if index[i]:
+            copy(n, &a[i*n], &b[i*n])
+
+
+cpdef int scopy_index_matrix(np.float32_t [::1, :, :] A, np.float32_t [::1, :, :] B, int [::1, :] index, int index_rows, int index_cols, int diagonal) except *:
+    cdef int n, m, T, t, A_T, A_t = 0, time_varying
+
+    n, m, T = B.shape[0:3]
+    A_T = A.shape[2]
+    time_varying = (A_T == T)
+
+    if index_rows and index_cols:
+        if not n == m:
+            raise RuntimeError('Copying a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _scopy_index_diagonal(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n)
+        else:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _scopy_index_submatrix(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with copying a submatrix')
+    elif index_rows:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _scopy_index_rows(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n, m)
+    elif index_cols:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _scopy_index_cols(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n, m)
+
+
+cpdef int scopy_index_vector(np.float32_t [::1, :] A, np.float32_t [::1, :] B, int [::1, :] index) except *:
+    cdef int n, t, T, A_t = 0, A_T
+
+    n, T = B.shape[0:2]
+    A_T = A.shape[1]
+    time_varying = (A_T == T)
+
+    for t in range(T):
+        if time_varying:
+            A_t = t
+        _scopy_index_rows(&A[0, A_t], &B[0, t], &index[0, t], n, 1)
+
+cdef int _sselect_cov(int k_states, int k_posdef, int k_states_total,
+                               np.float32_t * tmp,
+                               np.float32_t * selection,
+                               np.float32_t * cov,
+                               np.float32_t * selected_cov):
+    cdef:
+        int i, k_states2 = k_states**2
+        np.float32_t alpha = 1.0
+        np.float32_t beta = 0.0
+
+    # Only need to do something if there is a covariance matrix
+    # (i.e k_posdof == 0)
+    if k_posdef > 0:
+
+        # #### Calculate selected state covariance matrix
+        # $Q_t^* = R_t Q_t R_t'$
+        #
+        # Combine a selection matrix and a covariance matrix to get
+        # a simplified (but possibly singular) "selected" covariance
+        # matrix (see e.g. Durbin and Koopman p. 43)
+
+        # `tmp0` array used here, dimension $(m \times r)$
+
+        # $\\#_0 = 1.0 * R_t Q_t$
+        # $(m \times r) = (m \times r) (r \times r)$
+        blas.sgemm("N", "N", &k_states, &k_posdef, &k_posdef,
+              &alpha, selection, &k_states_total,
+                      cov, &k_posdef,
+              &beta, tmp, &k_states)
+        # $Q_t^* = 1.0 * \\#_0 R_t'$
+        # $(m \times m) = (m \times r) (m \times r)'$
+        blas.sgemm("N", "T", &k_states, &k_states, &k_posdef,
+              &alpha, tmp, &k_states,
+                      selection, &k_states_total,
+              &beta, selected_cov, &k_states)
+    else:
+        for i in range(k_states2):
+            selected_cov[i] = 0
+
+
+cpdef _scompute_smoothed_state_weights(
+        sKalmanSmoother smoother,
+        sKalmanFilter kfilter,
+        sStatespace model,
+        np.int32_t [:] compute_t,
+        np.int32_t [:] compute_j,
+        np.float32_t scale,
+        int compute_prior_weights=False):
+    cdef:
+        int t, i, j, n_t, n_j, min_j, max_j, p_t, p_j, t0
+        int n = model.nobs
+        int p = model.k_endog
+        int m = model.k_states
+        int pm = p * m
+        int filter_collapsed, compute_K
+        int inc = 1
+        int compute
+        np.int32_t [:] store_t, store_j
+        np.npy_intp dim1[1]
+        np.npy_intp dim2[2]
+        np.npy_intp dim3[3]
+        np.npy_intp dim4[4]
+        np.float32_t alpha = 1.0
+        np.float32_t beta = 0.0
+        np.float32_t gamma = -1.0
+        np.float32_t scalar
+        np.float32_t [::1, :, :] Hi_W, K, prior_weights
+        np.float32_t [::1, :, :, :] weights, state_intercept_weights
+        np.float32_t [::1, :] tmp, F, Fi, FiZ
+        np.float32_t * _Pt
+        np.float32_t * _Z
+        np.float32_t * _H
+        np.float32_t * _FiZ
+        np.float32_t * _K
+
+    n_t = compute_t.size
+    n_j = compute_j.size
+    min_j = compute_j[0]
+    max_j = compute_j[n_j - 1]
+    dim1[0] = n;
+    store_j = np.PyArray_ZEROS(1, dim1, np.NPY_INT32, FORTRAN)
+    for i in range(n_j):
+        j = compute_j[i]
+        store_j[j] = True
+
+    dim1[0] = n;
+    store_t = np.PyArray_ZEROS(1, dim1, np.NPY_INT32, FORTRAN)
+    for i in range(n_t):
+        t = compute_t[i]
+        store_t[t] = True
+
+    # Determine the first index that we need to compute
+    t0 = min(min_j, compute_t[0])
+    # Let double-letters denote indexing that starts from t0
+    nn = n - t0
+
+    # Flags
+    filter_collapsed = kfilter.filter_method & 0x20
+
+    # Create required storage and temporary matrices
+    # Hi_W = np.zeros((p, m, nn), order='F')
+    # K = np.zeros((p, m, nn), order='F')
+    # weights = np.zeros((m, p, nn, nn), order='F') * np.nan
+    # state_intercept_weights = np.zeros((m, m, nn, nn), order='F') * np.nan
+    # tmp = np.zeros((m, m), order='F')
+    # F = np.zeros((p, p), order='F')
+    # Fi = np.zeros((p, p), order='F')
+    # FiZ = np.zeros((p, m), order='F')
+    dim4[0] = m; dim4[1] = p; dim4[2] = nn; dim4[3] = nn;
+    weights = np.PyArray_ZEROS(4, dim4, np.NPY_FLOAT32, FORTRAN) * np.nan
+    dim4[0] = m; dim4[1] = m; dim4[2] = nn; dim4[3] = nn;
+    state_intercept_weights = np.PyArray_ZEROS(4, dim4, np.NPY_FLOAT32, FORTRAN) * np.nan
+    dim3[0] = p; dim3[1] = m; dim3[2] = nn;
+    Hi_W = np.PyArray_ZEROS(3, dim3, np.NPY_FLOAT32, FORTRAN)
+    K = np.PyArray_ZEROS(3, dim3, np.NPY_FLOAT32, FORTRAN)
+    dim3[0] = m; dim3[1] = m; dim3[2] = nn;
+    # Note: the order here is (m, l, t), where the `l` dimension refers to the
+    # element of the initial state vector, and the `m, t` dimensions refer to
+    # the element / time point of the smoothed state vector.
+    prior_weights = np.PyArray_ZEROS(3, dim3, np.NPY_FLOAT32, FORTRAN) * np.nan
+    dim2[0] = p; dim2[1] = p;
+    F = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    Fi = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    dim2[0] = m; dim2[1] = p;
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+    dim2[0] = p; dim2[1] = m;
+    FiZ = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT32, FORTRAN)
+
+    # First pass to compute required quantities, if necessary
+    for t in range(t0, n):
+        # Recall that double-letters denotes indexes that start from t0
+        # Hi_W[:, :, nn], K[:, :, nn], weights[:, :, nn, nn],
+        # state_intercept_weights[:, :, nn, nn], prior_weights[:, :, nn]
+        tt = t - t0
+
+        p_t = p - model.nmissing[t]
+
+        # Handling of exact diffuse periods is not currently available
+        # Also, we can skip computations for periods that are not needed for
+        # the requested t, j combinations
+        if (t < kfilter.nobs_diffuse
+                or (not store_t[t] and (t < min_j or t > max_j))):
+            # No need to set this when using the dictionary
+            # K[tt] = np.zeros((m, p_t)) * np.nan
+            # Hi_W[tt] is already initialized to NaNs, so can skip:
+            # Hi_W[tt, :] = np.nan
+            continue
+
+        # Move the statespace representation to the time period, but do not
+        # apply the collapse (first zero) or diagonalization (second zero)
+        model.seek(t, 0, 0, True)
+
+        # Get statespace objects
+        if p_t == 0:
+            # No need to set this when using the dictionary
+            # K.append(np.zeros((m, 0)))
+            # Hi_W[tt] is already initialized to NaNs, so can skip:
+            # Hi_W[tt, :] = np.nan
+            continue
+
+        # Get filtered objects
+        compute_K = kfilter.univariate_filter[t] or filter_collapsed
+        if compute_K:
+            # Note: typically would need to multiply both P and F by the
+            # scale, but F is inverted and K = T P Z' F^{-1}, the scale terms
+            # cancel out
+            # F = Z @ P @ Z.T + H
+            # Note: here use Fi as a temporary array for the moment
+            # Z @ P
+            blas.sgemm("N", "N", &model._k_endog, &model._k_states, &model._k_states,
+                                &alpha, model._design, &model._k_endog,
+                                        &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                &beta, &FiZ[0, 0], &model.k_endog)
+            for i in range(model._k_endog): # columns
+                for j in range(model._k_endog): # rows
+                    F[j, i] = model._obs_cov[j + i*model._k_endog]
+            blas.sgemm("N", "T", &model._k_endog, &model._k_endog, &model._k_states,
+                                &alpha, &FiZ[0, 0], &model.k_endog,
+                                        model._design, &model._k_endog,
+                                &alpha, &F[0, 0], &model.k_endog)
+            # Note: pinv is required for the cases in which F is singular
+            # Note: use T to make the array Fortran contiguous
+            Fi = np.linalg.pinv(F[:p_t, :p_t]).T
+            blas.sgemm("N", "N", &model._k_endog, &model._k_states, &model._k_endog,
+                                &alpha, &Fi[0, 0], &model._k_endog,
+                                        model._design, &model._k_endog,
+                                &beta, &FiZ[0, 0], &model.k_endog)
+
+            # P_t Z_t' F_t^{-1}
+            # $(m \times p) = (m \times m) (m \times p)$
+            blas.sgemm("N", "T", &model._k_states, &model._k_endog, &model._k_states,
+                                &alpha, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                        &FiZ[0, 0], &model.k_endog,
+                                &beta, &tmp[0, 0], &kfilter.k_states)
+            # T_t P_t Z_t' F_t^{-1}
+            # $(m \times p) = (m \times m) (m \times p)$
+            blas.sgemm("N", "N", &model._k_states, &model._k_endog, &model._k_states,
+                                &alpha, model._transition, &kfilter.k_states,
+                                        &tmp[0, 0], &kfilter.k_states,
+                                &beta, &K[0, 0, tt], &kfilter.k_states)
+
+            _FiZ = &FiZ[0, 0]
+            _K = &K[0, 0, tt]
+        else:
+            _FiZ = &kfilter.tmp3[0, 0, t]
+            _K = &kfilter.kalman_gain[0, 0, t]
+
+        # Compute required quantites
+        # W_j = H_j (F_j^{-1} Z_j - K_j' N_j L_j)
+        # => H_j^{-1} W_j = F_j^{-1} Z_j - K_j' N_j L_j
+        blas.scopy(&pm, _FiZ, &inc, &Hi_W[0, 0, tt], &inc)
+
+        scalar = 1. / scale
+        blas.sgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &scalar, &smoother.scaled_smoothed_estimator_cov[0, 0, t + 1], &kfilter.k_states,
+                                    &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                            &beta, kfilter._tmp0, &kfilter.k_states)
+
+        blas.sgemm("T", "N", &model._k_endog, &model._k_states, &model._k_states,
+                            &gamma, _K, &kfilter.k_states,
+                                    kfilter._tmp0, &kfilter.k_states,
+                            &scalar, &Hi_W[0, 0, tt], &model.k_endog)
+
+    # Second pass to compute weights
+    # for t in compute_t:
+    for t in range(n):
+        # Recall that double-letters denotes indexes that start from t0
+        # Hi_W[:, :, nn], K[:, :, nn], weights[:, :, nn, nn],
+        # state_intercept_weights[:, :, nn, nn], prior_weights[:, :, nn]
+        tt = t - t0
+
+        if t < kfilter.nobs_diffuse or not store_t[t]:
+            continue
+
+        # Backwards from j = t-1, t-2, ... min_j
+        # tmp = I - P_t N_{t - 1}
+        # Note: normally would need to multiply Pt by scale and divide N[t+1]
+        # by `scale`, but since they're being multiplied here, the scale terms
+        # cancel out.
+        blas.sgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &gamma, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                    &smoother.scaled_smoothed_estimator_cov[0, 0, t], &kfilter.k_states,
+                            &beta, kfilter._tmp0, &kfilter.k_states)
+        for i in range(m):
+            kfilter.tmp0[i, i] = kfilter.tmp0[i, i] + 1
+
+        # This is the weight of the prior on the smoothed state at
+        # time t == 0
+        if t == 0 and compute_prior_weights:
+            blas.scopy(&kfilter.k_states2, kfilter._tmp0, &inc, &prior_weights[0, 0, tt], &inc)
+
+        for j in range(t - 1, min_j - 1, -1):
+            # Again, recall that double-letters denotes indexes that start
+            # from t0
+            jj = j - t0
+
+            # Since we are not handling any diffuse observations now, we can
+            # stop as soon as we get to the diffuse periods
+            if j < kfilter.nobs_diffuse:
+                continue
+
+            p_j = p - model.nmissing[j]
+
+            compute_K = kfilter.univariate_filter[t] or filter_collapsed
+            if compute_K:
+                _K = &K[0, 0, jj]
+            else:
+                _K = &kfilter.kalman_gain[0, 0, j]
+
+            # The difference for univariate her would be:
+            # - if j in compute_j, then we have a subloop, i in p_j (but in
+            #   descending order, since we're going backwards here), where
+            #   we need to compute L_{j,i} and update tmp = tmp @ L_{j,i}
+            # - if j not in compute_j, then we only need to update
+            #   tmp = tmp @ L[j] (as in the conventional case), since
+            #   L[j] = \prod_i L_{j, i}
+            if store_j[j]:
+                if p_j > 0:
+                    # weights[:, :p_j, tt, jj] = tmp @ K[jj][:, :p_j]
+                    blas.sgemm("N", "N", &model._k_states, &p_j, &model._k_states,
+                                        &alpha, kfilter._tmp0, &kfilter.k_states,
+                                                _K, &kfilter.k_states,
+                                        &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+                # state_intercept_weights[:, :, tt, jj] = -tmp
+                blas.scopy(&kfilter.k_states2, kfilter._tmp0, &inc,
+                                                        &state_intercept_weights[0, 0, tt, jj], &inc)
+
+            if j > min_j or (j == 0 and compute_prior_weights):
+                # tmp = tmp @ L
+                blas.sgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &alpha, kfilter._tmp0, &kfilter.k_states,
+                                    &smoother.innovations_transition[0, 0, j], &kfilter.k_states,
+                            &beta, kfilter._tmp00, &kfilter.k_states)
+                blas.scopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+                # This is the weight of the prior on the smoothed state at
+                # time t > 0
+                if j == 0 and compute_prior_weights:
+                    blas.scopy(&kfilter.k_states2, kfilter._tmp0, &inc, &prior_weights[0, 0, tt], &inc)
+
+        # For j == t
+        # For the univariate case, some notes:
+        # Note in general about computing weights that we need to define what
+        # we mean by the state at time t. So if we were computing weights for
+        # the predicted state at time t, that would mean we were computing
+        # weights for the expectation of the time t state conditional on all
+        # information dated time t-1 or earlier. So I thnk that j==t refers
+        # to the specific case that j = t and i = p_t, i.e. we have
+        # incorporated all the information from time t. Then j = t but i < p_t
+        # would follow the j < t formula.
+        j = t
+        jj = tt
+        p_j = p - model.nmissing[t]
+        if store_j[j]:
+            if p_j > 0:
+                # weights[:, :p_j, tt, jj] = Pt @ Hi_W[j, :p_j].T
+                blas.sgemm("N", "T", &model._k_states, &p_j, &model._k_states,
+                                    &scale, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                            &Hi_W[0, 0, jj], &model.k_endog,
+                                    &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+            # state_intercept_weights[:, :, tt, jj] = -(Pt @ Lt' @ Nt)
+            # Note: normally would need to multiply Pt by scale and divide Nt
+            # by `scale`, but since they're being multiplied here, the scale terms
+            # cancel out.
+            blas.sgemm("T", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &gamma, &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                                    &smoother.scaled_smoothed_estimator_cov[0, 0, t + 1], &kfilter.k_states,
+                            &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.sgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &alpha, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                    kfilter._tmp00, &kfilter.k_states,
+                            &beta, &state_intercept_weights[0, 0, tt, jj], &kfilter.k_states)
+
+        # Forwards from j = t+1, t+2, ..., max_j
+        # tmp = Pt
+        blas.scopy(&kfilter.k_states2, &kfilter.predicted_state_cov[0, 0, t], &inc, kfilter._tmp0, &inc)
+        if scale != 1:
+            blas.sscal(&kfilter.k_states2, &scale, kfilter._tmp0, &inc)
+        if max_j > t:
+            # tmp = tmp @ L[t].T
+            blas.sgemm("N", "T", &model._k_states, &model._k_states, &model._k_states,
+                                &alpha, kfilter._tmp0, &kfilter.k_states,
+                                        &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                                &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.scopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+        for j in range(t + 1, max_j + 1):
+            # Again, recall that double-letters denotes indexes that start
+            # from t0
+            jj = j - t0
+            p_j = p - model.nmissing[j]
+
+            if store_j[j] and p_j > 0:
+                # weights[:, :p_j, tt, jj] = tmp @ Hi_W[j, :p_j].T
+                blas.sgemm("N", "T", &model._k_states, &p_j, &model._k_states,
+                                    &alpha, kfilter._tmp0, &kfilter.k_states,
+                                            &Hi_W[0, 0, jj], &p,
+                                    &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+            # tmp = tmp @ L[j].T
+            blas.sgemm("N", "T", &model._k_states, &model._k_states, &model._k_states,
+                                &alpha, kfilter._tmp0, &kfilter.k_states,
+                                        &smoother.innovations_transition[0, 0, j], &kfilter.k_states,
+                                &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.scopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+            if store_j[j]:
+                # state_intercept_weights[:, :, tt, jj] = -(tmp @ N_j)
+                scalar = -1 / scale
+                blas.sgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                                &scalar, kfilter._tmp00, &kfilter.k_states,
+                                        &smoother.scaled_smoothed_estimator_cov[0, 0, j + 1], &kfilter.k_states,
+                                &beta, &state_intercept_weights[0, 0, tt, jj], &kfilter.k_states)
+
+    return np.array(weights), np.array(state_intercept_weights), np.array(prior_weights), np.array(Hi_W)
+
+
+cdef bint _dselect1(np.float64_t * a):
+    return 0
+
+cdef bint _dselect2(np.float64_t * a, np.float64_t * b):
+    return 0
+
+cdef int _dsolve_discrete_lyapunov(np.float64_t * a, np.float64_t * q, int n, int complex_step=False) except *:
+    # Note: some of this code (esp. the Sylvester solving part) cribbed from
+    # https://raw.githubusercontent.com/scipy/scipy/master/scipy/linalg/_solvers.py
+
+    # Solve an equation of the form $A'XA-X=-Q$
+    # a: input / output
+    # q: input / output
+    cdef:
+        int i, j
+        int info
+        int inc = 1
+        int n2 = n**2
+        np.float64_t scale = 0.0
+        np.float64_t tmp = 0.0
+        np.float64_t alpha = 1.0
+        np.float64_t beta = 0.0
+        np.float64_t delta = -2.0
+        char trans
+    cdef np.npy_intp dim[2]
+    cdef np.float64_t [::1,:] apI, capI, u, v
+    cdef int [::1,:] ipiv
+    # Dummy selection function, will not actually be referenced since we do not
+    # need to order the eigenvalues in the ?gees call.
+    cdef:
+        int sdim
+        int lwork = 3*n
+        bint bwork
+    cdef np.npy_intp dim1[1]
+    cdef np.float64_t [::1,:] work
+    cdef np.float64_t [:] wr
+    cdef np.float64_t [:] wi
+
+    # Initialize arrays
+    dim[0] = n; dim[1] = n;
+    apI = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT64, FORTRAN)
+    capI = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT64, FORTRAN)
+    u = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT64, FORTRAN)
+    v = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT64, FORTRAN)
+    ipiv = np.PyArray_ZEROS(2, dim, np.NPY_INT32, FORTRAN)
+
+    dim1[0] = n;
+    wr = np.PyArray_ZEROS(1, dim1, np.NPY_FLOAT64, FORTRAN)
+    wi = np.PyArray_ZEROS(1, dim1, np.NPY_FLOAT64, FORTRAN)
+    #vs = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT64, FORTRAN)
+    dim[0] = lwork; dim[1] = lwork;
+    work = np.PyArray_ZEROS(2, dim, np.NPY_FLOAT64, FORTRAN)
+
+    # - Solve for b.conj().transpose() --------
+
+    # Get apI = a + I (stored in apI)
+    # = (a + eye)
+    # For: c = 2*np.dot(np.dot(inv(a + eye), q), aHI_inv)
+    copy(n2, a, &apI[0, 0])
+    # (for loop below adds the identity)
+
+    # Get conj(a) + I (stored in capI)
+    # a^H + I -> capI
+    # For: aHI_inv = inv(aH + eye)
+    copy(n2, a, &capI[0, 0])
+    # (for loop below adds the identity)
+
+    # Get conj(a) - I (stored in a)
+    # a^H - I -> a
+    # For: b = np.dot(aH - eye, aHI_inv)
+    # (for loop below subtracts the identity)
+
+    # Add / subtract identity matrix
+    for i in range(n):
+        apI[i,i] = apI[i,i] + 1 # apI -> a + eye
+        capI[i,i] = capI[i,i] + 1 # aH + eye
+        a[i + i*n] = a[i + i*n] - 1 # a - eye
+
+    # Solve [conj(a) + I] b' = [conj(a) - I] (result stored in a)
+    # For: b = np.dot(aH - eye, aHI_inv)
+    # Where: aHI_inv = inv(aH + eye)
+    # where b = (a^H - eye) (a^H + eye)^{-1}
+    # or b^H = (a + eye)^{-1} (a - eye)
+    # or (a + eye) b^H = (a - eye)
+    lapack.dgetrf(&n, &n, &capI[0,0], &n, &ipiv[0,0], &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU decomposition error.')
+
+    lapack.dgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                               a, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # Now we have b^H; we could take the conjugate transpose to get b, except
+    # that the input to the continuous Lyapunov equation is exactly
+    # b^H, so we already have the quantity we need.
+
+    # - Solve for (-c) --------
+
+    # where c = 2*np.dot(np.dot(inv(a + eye), q), aHI_inv)
+    # = 2*(a + eye)^{-1} q (a^H + eye)^{-1}
+    # and with q Hermitian
+    # consider x = (a + eye)^{-1} q (a^H + eye)^{-1}
+    # this can be done in two linear solving steps:
+    # 1. consider y = q (a^H + eye)^{-1}
+    #    or y (a^H + eye) = q
+    #    or (a^H + eye)^H y^H = q^H
+    #    or (a + eye) y^H = q
+    # 2. Then consider x = (a + eye)^{-1} y
+    #    or (a + eye) x = y
+
+    # Solve [conj(a) + I] tmp' = q (result stored in q)
+    # For: y = q (a^H + eye)^{-1} => (a + eye) y^H = q
+    lapack.dgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                                        q, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # Replace the result (stored in q) with its (conjugate) transpose
+    for j in range(1, n):
+        for i in range(j):
+            tmp = q[i + j*n]
+            q[i + j*n] = q[j + i*n]
+            q[j + i*n] = tmp
+
+
+    lapack.dgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                                        q, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # q -> -2.0 * q
+    blas.dscal(&n2, &delta, q, &inc)
+
+    # - Solve continuous time Lyapunov --------
+
+    # Now solve the continuous time Lyapunov equation (AX + XA^H = Q), on the
+    # transformed inputs ...
+
+    # ... which requires solving the continuous time Sylvester equation
+    # (AX + XB = Q) where B = A^H
+
+    # Compute the real Schur decomposition of a (unordered)
+    # TODO compute the optimal lwork rather than always using 3*n
+    # a is now the Schur form of A; (r)
+    # u is now the unitary Schur transformation matrix for A; (u)
+    # In the usual case, we will also have:
+    # r = s, so s is also stored in a
+    # u = v, so v is also stored in u
+    # In the complex-step case, we will instead have:
+    # r = s.conj()
+    # u = v.conj()
+    lapack.dgees("V", "N", <lapack.dselect2 *> &_dselect2, &n,
+                          a, &n,
+                          &sdim,
+                          &wr[0], &wi[0],
+                          &u[0,0], &n,
+                          &work[0,0], &lwork,
+                          &bwork, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('Schur decomposition solver error.')
+
+    # Get v (so that in the complex step case we can take the conjugate)
+    copy(n2, &u[0, 0], &v[0, 0])
+    # If complex step, take the conjugate
+
+    # Construct f = u^H*q*u (result overwrites q)
+    # In the usual case, v = u
+    # In the complex step case, v = u.conj()
+    blas.dgemm("N", "N", &n, &n, &n,
+                        &alpha, q, &n,
+                                &v[0,0], &n,
+                        &beta, &capI[0,0], &n)
+    blas.dgemm("C", "N", &n, &n, &n,
+                        &alpha, &u[0,0], &n,
+                                &capI[0,0], &n,
+                        &beta, q, &n)
+
+    # DTRYSL Solve op(A)*X + X*op(B) = scale*C which is here:
+    # r*X + X*r = scale*q
+    # results overwrite q
+    copy(n2, a, &apI[0, 0])
+    lapack.dtrsyl("N", "C", &inc, &n, &n,
+                           a, &n,
+                           &apI[0,0], &n,
+                           q, &n,
+                           &scale, &info)
+
+    # Scale q by scale
+    if not scale == 1.0:
+        blas.dscal(&n2, <np.float64_t*> &scale, q, &inc)
+
+    # Calculate the solution: u * q * v^H (results overwrite q)
+    # In the usual case, v = u
+    # In the complex step case, v = u.conj()
+    blas.dgemm("N", "C", &n, &n, &n,
+                        &alpha, q, &n,
+                                &v[0,0], &n,
+                        &beta, &capI[0,0], &n)
+    blas.dgemm("N", "N", &n, &n, &n,
+                        &alpha, &u[0,0], &n,
+                                &capI[0,0], &n,
+                        &beta, q, &n)
+
+
+cpdef _dcompute_coefficients_from_multivariate_pacf(np.float64_t [::1,:] partial_autocorrelations,
+                                                             np.float64_t [::1,:] error_variance,
+                                                             int transform_variance,
+                                                             int order, int k_endog):
+    """
+    Notes
+    -----
+
+    This uses the ?trmm BLAS functions which are not available in
+    Scipy v0.11.0
+    """
+    # Constants
+    cdef:
+        np.float64_t alpha = 1.0
+        np.float64_t beta = 0.0
+        np.float64_t gamma = -1.0
+        int k_endog2 = k_endog**2
+        int k_endog_order = k_endog * order
+        int k_endog_order1 = k_endog * (order+1)
+        int info, s, k
+    # Local variables
+    cdef:
+        np.npy_intp dim2[2]
+        np.float64_t [::1, :] initial_variance
+        np.float64_t [::1, :] forward_variance
+        np.float64_t [::1, :] backward_variance
+        np.float64_t [::1, :] autocovariances
+        np.float64_t [::1, :] forwards1
+        np.float64_t [::1, :] forwards2
+        np.float64_t [::1, :] backwards1
+        np.float64_t [::1, :] backwards2
+        np.float64_t [::1, :] forward_factors
+        np.float64_t [::1, :] backward_factors
+        np.float64_t [::1, :] tmp
+        np.float64_t [::1, :] tmp2
+    # Pointers
+    cdef:
+        np.float64_t * forwards
+        np.float64_t * prev_forwards
+        np.float64_t * backwards
+        np.float64_t * prev_backwards
+    # ?trmm
+    # cdef dtrmm_t *dtrmm = <dtrmm_t*>Capsule_AsVoidPtr(blas.dtrmm._cpointer)
+
+    # dim2[0] = self.k_endog; dim2[1] = storage;
+    # self.forecast = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+
+    # If we want to keep the provided variance but with the constrained
+    # coefficient matrices, we need to make a copy here, and then after the
+    # main loop we will transform the coefficients to match the passed variance
+    if not transform_variance:
+        initial_variance = np.asfortranarray(error_variance.copy())
+        # Need to make the input variance large enough that the recursions
+        # do not lead to zero-matrices due to roundoff error, which would case
+        # exceptions from the Cholesky decompositions.
+        # Note that this will still not always ensure positive definiteness,
+        # and for k_endog, order large enough an exception may still be raised
+        error_variance = np.asfortranarray(np.eye(k_endog, dtype=float) * (order + k_endog)**10)
+
+    # Initialize matrices
+    dim2[0] = k_endog; dim2[1] = k_endog;
+    forward_variance = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    backward_variance = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    forward_factors = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    backward_factors = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    tmp2 = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+
+    dim2[0] = k_endog; dim2[1] = k_endog_order;
+    # \phi_{s,k}, s = 1, ..., p
+    #             k = 1, ..., s+1
+    forwards1 = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    forwards2 = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    # \phi_{s,k}^*
+    backwards1 = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    backwards2 = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+
+    dim2[0] = k_endog; dim2[1] = k_endog_order1;
+    autocovariances = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+
+    copy(k_endog2, &error_variance[0, 0], &forward_variance[0, 0])   # \Sigma_s
+    copy(k_endog2, &error_variance[0, 0], &backward_variance[0, 0])  # \Sigma_s^*,  s = 0, ..., p
+    copy(k_endog2, &error_variance[0, 0], &autocovariances[0, 0])  # \Gamma_s
+
+    # error_variance_factor = linalg.cholesky(error_variance, lower=True)
+    copy(k_endog2, &error_variance[0, 0], &forward_factors[0,0])
+    lapack.dpotrf("L", &k_endog, &forward_factors[0,0], &k_endog, &info)
+    copy(k_endog2, &forward_factors[0, 0], &backward_factors[0, 0])
+
+    # We fill in the entries as follows:
+    # [1,1]
+    # [2,2], [2,1]
+    # [3,3], [3,1], [3,2]
+    # ...
+    # [p,p], [p,1], ..., [p,p-1]
+    # the last row, correctly ordered, is then used as the coefficients
+    for s in range(order):  # s = 0, ..., p-1
+        if s % 2 == 0:
+            forwards = &forwards1[0, 0]
+            prev_forwards = &forwards2[0, 0]
+            backwards = &backwards1[0, 0]
+            prev_backwards = &backwards2[0, 0]
+        else:
+            forwards = &forwards2[0, 0]
+            prev_forwards = &forwards1[0, 0]
+            backwards = &backwards2[0, 0]
+            prev_backwards = &backwards1[0, 0]
+
+        # Create the "last" (k = s+1) matrix
+        # Note: this is for k = s+1. However, below we then have to fill
+        # in for k = 1, ..., s in order.
+        # P L*^{-1} = x
+        # x L* = P
+        # L*' x' = P'
+        # forwards[:, s*k_endog:(s+1)*k_endog] = np.dot(
+        #     forward_factors,
+        #     linalg.solve_triangular(
+        #         backward_factors, partial_autocorrelations[:, s*k_endog:(s+1)*k_endog].T,
+        #         lower=True, trans='T').T
+        # )
+        for k in range(k_endog):
+            copy(k_endog, &partial_autocorrelations[k, s*k_endog], &tmp[0, k], k_endog)
+        lapack.dtrtrs("L", "T", "N", &k_endog, &k_endog, &backward_factors[0,0], &k_endog,
+                                                           &tmp[0, 0], &k_endog, &info)
+        # dgemm("N", "T", &k_endog, &k_endog, &k_endog,
+        #   &alpha, &forward_factors[0,0], &k_endog,
+        #           &tmp[0, 0], &k_endog,
+        #   &beta, &forwards[s*k_endog2], &k_endog)
+        blas.dtrmm("R", "L", "T", "N", &k_endog, &k_endog,
+          &alpha, &forward_factors[0,0], &k_endog,
+                  &tmp[0, 0], &k_endog)
+        for k in range(k_endog):
+            copy(k_endog, &tmp[k, 0], &forwards[s*k_endog2 + k*k_endog], k_endog)
+
+        # P' L^{-1} = x
+        # x L = P'
+        # L' x' = P
+        # backwards[:, s*k_endog:(s+1)*k_endog] = np.dot(
+        #     backward_factors,
+        #     linalg.solve_triangular(
+        #         forward_factors, partial_autocorrelations[:, s*k_endog:(s+1)*k_endog],
+        #         lower=True, trans='T').T
+        # )
+        copy(k_endog2, &partial_autocorrelations[0, s*k_endog], &tmp[0, 0])
+        lapack.dtrtrs("L", "T", "N", &k_endog, &k_endog, &forward_factors[0, 0], &k_endog,
+                                                           &tmp[0, 0], &k_endog, &info)
+        # dgemm("N", "T", &k_endog, &k_endog, &k_endog,
+        #   &alpha, &backward_factors[0, 0], &k_endog,
+        #           &tmp[0, 0], &k_endog,
+        #   &beta, &backwards[s * k_endog2], &k_endog)
+        blas.dtrmm("R", "L", "T", "N", &k_endog, &k_endog,
+          &alpha, &backward_factors[0,0], &k_endog,
+                  &tmp[0, 0], &k_endog)
+        for k in range(k_endog):
+            copy(k_endog, &tmp[k, 0], &backwards[s*k_endog2 + k*k_endog], k_endog)
+
+        # Update the variance
+        # Note: if s >= 1, this will be further updated in the for loop
+        # below
+        # Also, this calculation will be re-used in the forward variance
+        # tmp = np.dot(forwards[:, s*k_endog:(s+1)*k_endog], backward_variance)
+        # tmpT = np.dot(backward_variance.T, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        blas.dgemm("T", "T", &k_endog, &k_endog, &k_endog,
+          &alpha, &backward_variance[0, 0], &k_endog,
+                  &forwards[s * k_endog2], &k_endog,
+          &beta, &tmp[0, 0], &k_endog)
+        # autocovariances[:, (s+1)*k_endog:(s+2)*k_endog] = tmp.copy().T
+        copy(k_endog2, &tmp[0, 0], &autocovariances[0, (s+1)*k_endog])
+
+        # Create the remaining k = 1, ..., s matrices,
+        # only has an effect if s >= 1
+        for k in range(s):
+            # forwards[:, k*k_endog:(k+1)*k_endog] = (
+            #     prev_forwards[:, k*k_endog:(k+1)*k_endog] -
+            #     np.dot(
+            #         forwards[:, s*k_endog:(s+1)*k_endog],
+            #         prev_backwards[:, (s-k-1)*k_endog:(s-k)*k_endog]
+            #     )
+            # )
+            copy(k_endog2, &prev_forwards[k * k_endog2], &forwards[k * k_endog2])
+            blas.dgemm("N", "N", &k_endog, &k_endog, &k_endog,
+              &gamma, &forwards[s * k_endog2], &k_endog,
+                      &prev_backwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &forwards[k * k_endog2], &k_endog)
+
+            # backwards[:, k*k_endog:(k+1)*k_endog] = (
+            #     prev_backwards[:, k*k_endog:(k+1)*k_endog] -
+            #     np.dot(
+            #         backwards[:, s*k_endog:(s+1)*k_endog],
+            #         prev_forwards[:, (s-k-1)*k_endog:(s-k)*k_endog]
+            #     )
+            # )
+            copy(k_endog2, &prev_backwards[k * k_endog2], &backwards[k * k_endog2])
+            blas.dgemm("N", "N", &k_endog, &k_endog, &k_endog,
+              &gamma, &backwards[s * k_endog2], &k_endog,
+                      &prev_forwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &backwards[k * k_endog2], &k_endog)
+
+            # autocovariances[:, (s+1)*k_endog:(s+2)*k_endog] += np.dot(
+            #     autocovariances[:, (k+1)*k_endog:(k+2)*k_endog],
+            #     prev_forwards[:, (s-k-1)*k_endog:(s-k)*k_endog].T
+            # )
+            blas.dgemm("N", "T", &k_endog, &k_endog, &k_endog,
+              &alpha, &autocovariances[0, (k+1)*k_endog], &k_endog,
+                      &prev_forwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &autocovariances[0, (s+1)*k_endog], &k_endog)
+
+        # Create forward and backwards variances
+        # backward_variance = (
+        #     backward_variance -
+        #     np.dot(
+        #         np.dot(backwards[:, s*k_endog:(s+1)*k_endog], forward_variance),
+        #         backwards[:, s*k_endog:(s+1)*k_endog].T
+        #     )
+        # )
+        blas.dgemm("N", "N", &k_endog, &k_endog, &k_endog,
+          &alpha, &backwards[s * k_endog2], &k_endog,
+                  &forward_variance[0, 0], &k_endog,
+          &beta, &tmp2[0, 0], &k_endog)
+        blas.dgemm("N", "T", &k_endog, &k_endog, &k_endog,
+          &gamma, &tmp2[0, 0], &k_endog,
+                  &backwards[s * k_endog2], &k_endog,
+          &alpha, &backward_variance[0, 0], &k_endog)
+        # forward_variance = (
+        #     forward_variance -
+        #     np.dot(tmp, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        # )
+        # forward_variance = (
+        #     forward_variance -
+        #     np.dot(tmpT.T, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        # )
+        blas.dgemm("T", "T", &k_endog, &k_endog, &k_endog,
+          &gamma, &tmp[0, 0], &k_endog,
+                  &forwards[s * k_endog2], &k_endog,
+          &alpha, &forward_variance[0, 0], &k_endog)
+
+        # Cholesky factors
+        # forward_factors = linalg.cholesky(forward_variance, lower=True)
+        # backward_factors =  linalg.cholesky(backward_variance, lower=True)
+        copy(k_endog2, &forward_variance[0, 0], &forward_factors[0, 0])
+        lapack.dpotrf("L", &k_endog, &forward_factors[0,0], &k_endog, &info)
+        copy(k_endog2, &backward_variance[0, 0], &backward_factors[0, 0])
+        lapack.dpotrf("L", &k_endog, &backward_factors[0,0], &k_endog, &info)
+
+
+    # If we do not want to use the transformed variance, we need to
+    # adjust the constrained matrices, as presented in Lemma 2.3, see above
+    if not transform_variance:
+        if order % 2 == 0:
+            forwards = &forwards2[0,0]
+        else:
+            forwards = &forwards1[0,0]
+
+        # Here, we need to construct T such that:
+        # variance = T * initial_variance * T'
+        # To do that, consider the Cholesky of variance (L) and
+        # input_variance (M) to get:
+        # L L' = T M M' T' = (TM) (TM)'
+        # => L = T M
+        # => L M^{-1} = T
+        # initial_variance_factor = np.linalg.cholesky(initial_variance)
+        # L'
+        lapack.dpotrf("U", &k_endog, &initial_variance[0,0], &k_endog, &info)
+        # transformed_variance_factor = np.linalg.cholesky(variance)
+        # M'
+        copy(k_endog2, &forward_variance[0, 0], &tmp[0, 0])
+        lapack.dpotrf("U", &k_endog, &tmp[0,0], &k_endog, &info)
+        # dpotri("L", &k_endog, &tmp[0,0], &k_endog, &info)
+
+        # We need to zero out the lower triangle of L', because ?trtrs only
+        # knows that M' is upper triangular
+        for s in range(k_endog - 1):          # column
+            for k in range(s+1, k_endog):     # row
+                initial_variance[k, s] = 0
+
+        # Note that T is lower triangular
+        # L M^{-1} = T
+        # M' T' = L'
+        # transform = np.dot(initial_variance_factor,
+        #                    np.linalg.inv(transformed_variance_factor))
+        lapack.dtrtrs("U", "N", "N", &k_endog, &k_endog, &tmp[0,0], &k_endog,
+                                                           &initial_variance[0, 0], &k_endog, &info)
+        # Now:
+        # initial_variance = T'
+
+        for s in range(order):
+            # forwards[:, s*k_endog:(s+1)*k_endog] = (
+            #     np.dot(
+            #         np.dot(transform, forwards[:, s*k_endog:(s+1)*k_endog]),
+            #         inv_transform
+            #     )
+            # )
+            # TF T^{-1} = x
+            # TF = x T
+            # (TF)' = T' x'
+
+            # Get TF
+            copy(k_endog2, &forwards[s * k_endog2], &tmp2[0, 0])
+            blas.dtrmm("L", "U", "T", "N", &k_endog, &k_endog,
+              &alpha, &initial_variance[0, 0], &k_endog,
+                      &tmp2[0, 0], &k_endog)
+            for k in range(k_endog):
+                copy(k_endog, &tmp2[k, 0], &tmp[0, k], k_endog)
+            # Get x'
+            lapack.dtrtrs("U", "N", "N", &k_endog, &k_endog, &initial_variance[0,0], &k_endog,
+                                                               &tmp[0, 0], &k_endog, &info)
+            # Get x
+            for k in range(k_endog):
+                copy(k_endog, &tmp[k, 0], &forwards[s * k_endog2 + k*k_endog], k_endog)
+
+
+    if order % 2 == 0:
+        return forwards2, forward_variance
+    else:
+        return forwards1, forward_variance
+
+cpdef _dconstrain_sv_less_than_one(np.float64_t [::1,:] unconstrained, int order, int k_endog):
+    """
+    Transform arbitrary matrices to matrices with singular values less than
+    one.
+
+    Corresponds to Lemma 2.2 in Ansley and Kohn (1986). See
+    `constrain_stationary_multivariate` for more details.
+    """
+    # Constants
+    cdef:
+        np.float64_t alpha = 1.0
+        int k_endog2 = k_endog**2
+        int info, i
+    # Local variables
+    cdef:
+        np.npy_intp dim2[2]
+        np.float64_t [::1, :] constrained
+        np.float64_t [::1, :] tmp
+        np.float64_t [::1, :] eye
+
+    dim2[0] = k_endog; dim2[1] = k_endog * order;
+    constrained = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    dim2[0] = k_endog; dim2[1] = k_endog;
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    eye = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+
+    eye = np.asfortranarray(np.eye(k_endog, dtype=float))
+    for i in range(order):
+        copy(k_endog2, &eye[0, 0], &tmp[0, 0])
+        blas.dgemm("N", "T", &k_endog, &k_endog, &k_endog,
+          &alpha, &unconstrained[0, i*k_endog], &k_endog,
+                  &unconstrained[0, i*k_endog], &k_endog,
+          &alpha, &tmp[0, 0], &k_endog)
+        lapack.dpotrf("L", &k_endog, &tmp[0, 0], &k_endog, &info)
+
+        copy(k_endog2, &unconstrained[0, i*k_endog], &constrained[0, i*k_endog])
+        # constrained.append(linalg.solve_triangular(B, A, lower=lower))
+        lapack.dtrtrs("L", "N", "N", &k_endog, &k_endog, &tmp[0, 0], &k_endog,
+                                                           &constrained[0, i*k_endog], &k_endog, &info)
+    return constrained
+
+cdef int _dldl(np.float64_t * A, int n) except *:
+    # See Golub and Van Loan, Algorithm 4.1.2
+    cdef:
+        int info = 0
+        int j, i, k
+        np.npy_intp dim[1]
+        np.float64_t tol = 1e-15
+        np.float64_t [:] v
+
+    dim[0] = n
+    v = np.PyArray_ZEROS(1, dim, np.NPY_FLOAT64, FORTRAN)
+
+    for j in range(n):
+        # Compute v(1:j)
+        v[j] = A[j + j*n]
+
+        # Positive definite element: use Golub and Van Loan algorithm
+        if v[j].real < -tol:
+            info = -j
+            break
+        elif v[j].real > tol:
+            for i in range(j):
+                v[i] = A[j + i*n] * A[i + i*n]
+                v[j] = v[j] - A[j + i*n] * v[i]
+
+            # Store d(j) and compute L(j+1:n,j)
+            A[j + j*n] = v[j]
+            for i in range(j+1, n):
+                for k in range(j):
+                    A[i + j*n] = A[i + j*n] - A[i + k*n] * v[k]
+                A[i + j*n] = A[i + j*n] / v[j]
+        # Positive semi-definite element: zero the appropriate column
+        else:
+            info = 1
+            for i in range(j, n):
+                A[i + j*n]
+
+    return info
+
+cpdef int dldl(np.float64_t [::1, :] A) except *:
+    _dldl(&A[0,0], A.shape[0])
+
+cdef int _dreorder_missing_diagonal(np.float64_t * a, int * missing, int n):
+    """
+    a is a pointer to an n x n diagonal array A
+    missing is a pointer to an n x 1 array
+    n is the dimension of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(n-1,-1,-1):
+        if not missing[i]:
+            a[i + i*n] = a[k + k*n]
+            k = k - 1
+        else:
+            a[i + i*n] = 0
+
+cdef int _dreorder_missing_submatrix(np.float64_t * a, int * missing, int n):
+    """
+    a is a pointer to an n x n array A
+    missing is a pointer to an n x 1 array
+    n is the dimension of A
+    """
+    cdef int i, j, k, nobs
+
+    _dreorder_missing_rows(a, missing, n, n)
+    _dreorder_missing_cols(a, missing, n, n)
+
+cdef int _dreorder_missing_rows(np.float64_t * a, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    missing is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(n-1,-1,-1):
+        if not missing[i]:
+            swap(m, &a[i], &a[k], n, n)
+            k = k - 1
+
+
+cdef int _dreorder_missing_cols(np.float64_t * a, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    missing is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, k, nobs
+
+    nobs = m
+    # Construct the non-missing index
+    for i in range(m):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(m-1,-1,-1):
+        if not missing[i]:
+            swap(n, &a[i*n], &a[k*n])
+            k = k - 1
+
+
+cpdef int dreorder_missing_matrix(np.float64_t [::1, :, :] A, int [::1, :] missing, int reorder_rows, int reorder_cols, int diagonal) except *:
+    cdef int n, m, T, t
+
+    n, m, T = A.shape[0:3]
+
+    if reorder_rows and reorder_cols:
+        if not n == m:
+            raise RuntimeError('Reordering a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                _dreorder_missing_diagonal(&A[0, 0, t], &missing[0, t], n)
+        else:
+            for t in range(T):
+                _dreorder_missing_submatrix(&A[0, 0, t], &missing[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with reordering a submatrix')
+    elif reorder_rows:
+        for t in range(T):
+            _dreorder_missing_rows(&A[0, 0, t], &missing[0, t], n, m)
+    elif reorder_cols:
+        for t in range(T):
+            _dreorder_missing_cols(&A[0, 0, t], &missing[0, t], n, m)
+
+
+cpdef int dreorder_missing_vector(np.float64_t [::1, :] A, int [::1, :] missing) except *:
+    cdef int i, k, t, n, T, nobs
+
+    n, T = A.shape[0:2]
+
+    for t in range(T):
+        _dreorder_missing_rows(&A[0, t], &missing[0, t], n, 1)
+
+
+cdef int _dcopy_missing_diagonal(np.float64_t * a, np.float64_t * b, int * missing, int n):
+    """
+    Copy the non-missing block of diagonal entries
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(nobs):
+        b[i + i*n] = a[i + i*n]
+
+
+cdef int _dcopy_missing_submatrix(np.float64_t * a, np.float64_t * b, int * missing, int n):
+    """
+    Copy the non-missing submatrix
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(nobs, &a[i*n], &b[i*n])
+
+
+cdef int _dcopy_missing_rows(np.float64_t * a, np.float64_t * b, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(m, &a[i], &b[i], n, n)
+
+
+cdef int _dcopy_missing_cols(np.float64_t * a, np.float64_t * b, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, nobs
+
+    nobs = m
+    # Construct the non-missing index
+    for i in range(m):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(n, &a[i*n], &b[i*n])
+
+
+cpdef int dcopy_missing_matrix(np.float64_t [::1, :, :] A, np.float64_t [::1, :, :] B, int [::1, :] missing, int missing_rows, int missing_cols, int diagonal) except *:
+    cdef int n, m, T, t, A_T, A_t = 0, time_varying
+
+    n, m, T = B.shape[0:3]
+    A_T = A.shape[2]
+    time_varying = (A_T == T)
+
+    if missing_rows and missing_cols:
+        if not n == m:
+            raise RuntimeError('Copying a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _dcopy_missing_diagonal(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n)
+        else:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _dcopy_missing_submatrix(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with copying a submatrix')
+    elif missing_rows:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _dcopy_missing_rows(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n, m)
+    elif missing_cols:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _dcopy_missing_cols(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n, m)
+    pass
+
+
+cpdef int dcopy_missing_vector(np.float64_t [::1, :] A, np.float64_t [::1, :] B, int [::1, :] missing) except *:
+    cdef int n, t, T, A_t = 0, A_T
+
+    n, T = B.shape[0:2]
+    A_T = A.shape[1]
+    time_varying = (A_T == T)
+
+    for t in range(T):
+        if time_varying:
+            A_t = t
+        _dcopy_missing_rows(&A[0, A_t], &B[0, t], &missing[0, t], n, 1)
+
+cdef int _dcopy_index_diagonal(np.float64_t * a, np.float64_t * b, int * index, int n):
+    """
+    Copy the non-index block of diagonal entries
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, k, nobs
+
+    # Perform replacement
+    for i in range(n):
+        if index[i]:
+            b[i + i*n] = a[i + i*n]
+
+
+cdef int _dcopy_index_submatrix(np.float64_t * a, np.float64_t * b, int * index, int n):
+    """
+    Copy the non-index submatrix
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    _dcopy_index_rows(a, b, index, n, n)
+    _dcopy_index_cols(a, b, index, n, n)
+
+
+cdef int _dcopy_index_rows(np.float64_t * a, np.float64_t * b, int * index, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i
+
+    # Perform replacement
+    for i in range(n):
+        if index[i]:
+            copy(m, &a[i], &b[i], n, n)
+
+
+cdef int _dcopy_index_cols(np.float64_t * a, np.float64_t * b, int * index, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    # Perform replacement
+    for i in range(m):
+        if index[i]:
+            copy(n, &a[i*n], &b[i*n])
+
+
+cpdef int dcopy_index_matrix(np.float64_t [::1, :, :] A, np.float64_t [::1, :, :] B, int [::1, :] index, int index_rows, int index_cols, int diagonal) except *:
+    cdef int n, m, T, t, A_T, A_t = 0, time_varying
+
+    n, m, T = B.shape[0:3]
+    A_T = A.shape[2]
+    time_varying = (A_T == T)
+
+    if index_rows and index_cols:
+        if not n == m:
+            raise RuntimeError('Copying a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _dcopy_index_diagonal(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n)
+        else:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _dcopy_index_submatrix(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with copying a submatrix')
+    elif index_rows:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _dcopy_index_rows(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n, m)
+    elif index_cols:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _dcopy_index_cols(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n, m)
+
+
+cpdef int dcopy_index_vector(np.float64_t [::1, :] A, np.float64_t [::1, :] B, int [::1, :] index) except *:
+    cdef int n, t, T, A_t = 0, A_T
+
+    n, T = B.shape[0:2]
+    A_T = A.shape[1]
+    time_varying = (A_T == T)
+
+    for t in range(T):
+        if time_varying:
+            A_t = t
+        _dcopy_index_rows(&A[0, A_t], &B[0, t], &index[0, t], n, 1)
+
+cdef int _dselect_cov(int k_states, int k_posdef, int k_states_total,
+                               np.float64_t * tmp,
+                               np.float64_t * selection,
+                               np.float64_t * cov,
+                               np.float64_t * selected_cov):
+    cdef:
+        int i, k_states2 = k_states**2
+        np.float64_t alpha = 1.0
+        np.float64_t beta = 0.0
+
+    # Only need to do something if there is a covariance matrix
+    # (i.e k_posdof == 0)
+    if k_posdef > 0:
+
+        # #### Calculate selected state covariance matrix
+        # $Q_t^* = R_t Q_t R_t'$
+        #
+        # Combine a selection matrix and a covariance matrix to get
+        # a simplified (but possibly singular) "selected" covariance
+        # matrix (see e.g. Durbin and Koopman p. 43)
+
+        # `tmp0` array used here, dimension $(m \times r)$
+
+        # $\\#_0 = 1.0 * R_t Q_t$
+        # $(m \times r) = (m \times r) (r \times r)$
+        blas.dgemm("N", "N", &k_states, &k_posdef, &k_posdef,
+              &alpha, selection, &k_states_total,
+                      cov, &k_posdef,
+              &beta, tmp, &k_states)
+        # $Q_t^* = 1.0 * \\#_0 R_t'$
+        # $(m \times m) = (m \times r) (m \times r)'$
+        blas.dgemm("N", "T", &k_states, &k_states, &k_posdef,
+              &alpha, tmp, &k_states,
+                      selection, &k_states_total,
+              &beta, selected_cov, &k_states)
+    else:
+        for i in range(k_states2):
+            selected_cov[i] = 0
+
+
+cpdef _dcompute_smoothed_state_weights(
+        dKalmanSmoother smoother,
+        dKalmanFilter kfilter,
+        dStatespace model,
+        np.int32_t [:] compute_t,
+        np.int32_t [:] compute_j,
+        np.float64_t scale,
+        int compute_prior_weights=False):
+    cdef:
+        int t, i, j, n_t, n_j, min_j, max_j, p_t, p_j, t0
+        int n = model.nobs
+        int p = model.k_endog
+        int m = model.k_states
+        int pm = p * m
+        int filter_collapsed, compute_K
+        int inc = 1
+        int compute
+        np.int32_t [:] store_t, store_j
+        np.npy_intp dim1[1]
+        np.npy_intp dim2[2]
+        np.npy_intp dim3[3]
+        np.npy_intp dim4[4]
+        np.float64_t alpha = 1.0
+        np.float64_t beta = 0.0
+        np.float64_t gamma = -1.0
+        np.float64_t scalar
+        np.float64_t [::1, :, :] Hi_W, K, prior_weights
+        np.float64_t [::1, :, :, :] weights, state_intercept_weights
+        np.float64_t [::1, :] tmp, F, Fi, FiZ
+        np.float64_t * _Pt
+        np.float64_t * _Z
+        np.float64_t * _H
+        np.float64_t * _FiZ
+        np.float64_t * _K
+
+    n_t = compute_t.size
+    n_j = compute_j.size
+    min_j = compute_j[0]
+    max_j = compute_j[n_j - 1]
+    dim1[0] = n;
+    store_j = np.PyArray_ZEROS(1, dim1, np.NPY_INT32, FORTRAN)
+    for i in range(n_j):
+        j = compute_j[i]
+        store_j[j] = True
+
+    dim1[0] = n;
+    store_t = np.PyArray_ZEROS(1, dim1, np.NPY_INT32, FORTRAN)
+    for i in range(n_t):
+        t = compute_t[i]
+        store_t[t] = True
+
+    # Determine the first index that we need to compute
+    t0 = min(min_j, compute_t[0])
+    # Let double-letters denote indexing that starts from t0
+    nn = n - t0
+
+    # Flags
+    filter_collapsed = kfilter.filter_method & 0x20
+
+    # Create required storage and temporary matrices
+    # Hi_W = np.zeros((p, m, nn), order='F')
+    # K = np.zeros((p, m, nn), order='F')
+    # weights = np.zeros((m, p, nn, nn), order='F') * np.nan
+    # state_intercept_weights = np.zeros((m, m, nn, nn), order='F') * np.nan
+    # tmp = np.zeros((m, m), order='F')
+    # F = np.zeros((p, p), order='F')
+    # Fi = np.zeros((p, p), order='F')
+    # FiZ = np.zeros((p, m), order='F')
+    dim4[0] = m; dim4[1] = p; dim4[2] = nn; dim4[3] = nn;
+    weights = np.PyArray_ZEROS(4, dim4, np.NPY_FLOAT64, FORTRAN) * np.nan
+    dim4[0] = m; dim4[1] = m; dim4[2] = nn; dim4[3] = nn;
+    state_intercept_weights = np.PyArray_ZEROS(4, dim4, np.NPY_FLOAT64, FORTRAN) * np.nan
+    dim3[0] = p; dim3[1] = m; dim3[2] = nn;
+    Hi_W = np.PyArray_ZEROS(3, dim3, np.NPY_FLOAT64, FORTRAN)
+    K = np.PyArray_ZEROS(3, dim3, np.NPY_FLOAT64, FORTRAN)
+    dim3[0] = m; dim3[1] = m; dim3[2] = nn;
+    # Note: the order here is (m, l, t), where the `l` dimension refers to the
+    # element of the initial state vector, and the `m, t` dimensions refer to
+    # the element / time point of the smoothed state vector.
+    prior_weights = np.PyArray_ZEROS(3, dim3, np.NPY_FLOAT64, FORTRAN) * np.nan
+    dim2[0] = p; dim2[1] = p;
+    F = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    Fi = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    dim2[0] = m; dim2[1] = p;
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+    dim2[0] = p; dim2[1] = m;
+    FiZ = np.PyArray_ZEROS(2, dim2, np.NPY_FLOAT64, FORTRAN)
+
+    # First pass to compute required quantities, if necessary
+    for t in range(t0, n):
+        # Recall that double-letters denotes indexes that start from t0
+        # Hi_W[:, :, nn], K[:, :, nn], weights[:, :, nn, nn],
+        # state_intercept_weights[:, :, nn, nn], prior_weights[:, :, nn]
+        tt = t - t0
+
+        p_t = p - model.nmissing[t]
+
+        # Handling of exact diffuse periods is not currently available
+        # Also, we can skip computations for periods that are not needed for
+        # the requested t, j combinations
+        if (t < kfilter.nobs_diffuse
+                or (not store_t[t] and (t < min_j or t > max_j))):
+            # No need to set this when using the dictionary
+            # K[tt] = np.zeros((m, p_t)) * np.nan
+            # Hi_W[tt] is already initialized to NaNs, so can skip:
+            # Hi_W[tt, :] = np.nan
+            continue
+
+        # Move the statespace representation to the time period, but do not
+        # apply the collapse (first zero) or diagonalization (second zero)
+        model.seek(t, 0, 0, True)
+
+        # Get statespace objects
+        if p_t == 0:
+            # No need to set this when using the dictionary
+            # K.append(np.zeros((m, 0)))
+            # Hi_W[tt] is already initialized to NaNs, so can skip:
+            # Hi_W[tt, :] = np.nan
+            continue
+
+        # Get filtered objects
+        compute_K = kfilter.univariate_filter[t] or filter_collapsed
+        if compute_K:
+            # Note: typically would need to multiply both P and F by the
+            # scale, but F is inverted and K = T P Z' F^{-1}, the scale terms
+            # cancel out
+            # F = Z @ P @ Z.T + H
+            # Note: here use Fi as a temporary array for the moment
+            # Z @ P
+            blas.dgemm("N", "N", &model._k_endog, &model._k_states, &model._k_states,
+                                &alpha, model._design, &model._k_endog,
+                                        &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                &beta, &FiZ[0, 0], &model.k_endog)
+            for i in range(model._k_endog): # columns
+                for j in range(model._k_endog): # rows
+                    F[j, i] = model._obs_cov[j + i*model._k_endog]
+            blas.dgemm("N", "T", &model._k_endog, &model._k_endog, &model._k_states,
+                                &alpha, &FiZ[0, 0], &model.k_endog,
+                                        model._design, &model._k_endog,
+                                &alpha, &F[0, 0], &model.k_endog)
+            # Note: pinv is required for the cases in which F is singular
+            # Note: use T to make the array Fortran contiguous
+            Fi = np.linalg.pinv(F[:p_t, :p_t]).T
+            blas.dgemm("N", "N", &model._k_endog, &model._k_states, &model._k_endog,
+                                &alpha, &Fi[0, 0], &model._k_endog,
+                                        model._design, &model._k_endog,
+                                &beta, &FiZ[0, 0], &model.k_endog)
+
+            # P_t Z_t' F_t^{-1}
+            # $(m \times p) = (m \times m) (m \times p)$
+            blas.dgemm("N", "T", &model._k_states, &model._k_endog, &model._k_states,
+                                &alpha, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                        &FiZ[0, 0], &model.k_endog,
+                                &beta, &tmp[0, 0], &kfilter.k_states)
+            # T_t P_t Z_t' F_t^{-1}
+            # $(m \times p) = (m \times m) (m \times p)$
+            blas.dgemm("N", "N", &model._k_states, &model._k_endog, &model._k_states,
+                                &alpha, model._transition, &kfilter.k_states,
+                                        &tmp[0, 0], &kfilter.k_states,
+                                &beta, &K[0, 0, tt], &kfilter.k_states)
+
+            _FiZ = &FiZ[0, 0]
+            _K = &K[0, 0, tt]
+        else:
+            _FiZ = &kfilter.tmp3[0, 0, t]
+            _K = &kfilter.kalman_gain[0, 0, t]
+
+        # Compute required quantites
+        # W_j = H_j (F_j^{-1} Z_j - K_j' N_j L_j)
+        # => H_j^{-1} W_j = F_j^{-1} Z_j - K_j' N_j L_j
+        blas.dcopy(&pm, _FiZ, &inc, &Hi_W[0, 0, tt], &inc)
+
+        scalar = 1. / scale
+        blas.dgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &scalar, &smoother.scaled_smoothed_estimator_cov[0, 0, t + 1], &kfilter.k_states,
+                                    &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                            &beta, kfilter._tmp0, &kfilter.k_states)
+
+        blas.dgemm("T", "N", &model._k_endog, &model._k_states, &model._k_states,
+                            &gamma, _K, &kfilter.k_states,
+                                    kfilter._tmp0, &kfilter.k_states,
+                            &scalar, &Hi_W[0, 0, tt], &model.k_endog)
+
+    # Second pass to compute weights
+    # for t in compute_t:
+    for t in range(n):
+        # Recall that double-letters denotes indexes that start from t0
+        # Hi_W[:, :, nn], K[:, :, nn], weights[:, :, nn, nn],
+        # state_intercept_weights[:, :, nn, nn], prior_weights[:, :, nn]
+        tt = t - t0
+
+        if t < kfilter.nobs_diffuse or not store_t[t]:
+            continue
+
+        # Backwards from j = t-1, t-2, ... min_j
+        # tmp = I - P_t N_{t - 1}
+        # Note: normally would need to multiply Pt by scale and divide N[t+1]
+        # by `scale`, but since they're being multiplied here, the scale terms
+        # cancel out.
+        blas.dgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &gamma, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                    &smoother.scaled_smoothed_estimator_cov[0, 0, t], &kfilter.k_states,
+                            &beta, kfilter._tmp0, &kfilter.k_states)
+        for i in range(m):
+            kfilter.tmp0[i, i] = kfilter.tmp0[i, i] + 1
+
+        # This is the weight of the prior on the smoothed state at
+        # time t == 0
+        if t == 0 and compute_prior_weights:
+            blas.dcopy(&kfilter.k_states2, kfilter._tmp0, &inc, &prior_weights[0, 0, tt], &inc)
+
+        for j in range(t - 1, min_j - 1, -1):
+            # Again, recall that double-letters denotes indexes that start
+            # from t0
+            jj = j - t0
+
+            # Since we are not handling any diffuse observations now, we can
+            # stop as soon as we get to the diffuse periods
+            if j < kfilter.nobs_diffuse:
+                continue
+
+            p_j = p - model.nmissing[j]
+
+            compute_K = kfilter.univariate_filter[t] or filter_collapsed
+            if compute_K:
+                _K = &K[0, 0, jj]
+            else:
+                _K = &kfilter.kalman_gain[0, 0, j]
+
+            # The difference for univariate her would be:
+            # - if j in compute_j, then we have a subloop, i in p_j (but in
+            #   descending order, since we're going backwards here), where
+            #   we need to compute L_{j,i} and update tmp = tmp @ L_{j,i}
+            # - if j not in compute_j, then we only need to update
+            #   tmp = tmp @ L[j] (as in the conventional case), since
+            #   L[j] = \prod_i L_{j, i}
+            if store_j[j]:
+                if p_j > 0:
+                    # weights[:, :p_j, tt, jj] = tmp @ K[jj][:, :p_j]
+                    blas.dgemm("N", "N", &model._k_states, &p_j, &model._k_states,
+                                        &alpha, kfilter._tmp0, &kfilter.k_states,
+                                                _K, &kfilter.k_states,
+                                        &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+                # state_intercept_weights[:, :, tt, jj] = -tmp
+                blas.dcopy(&kfilter.k_states2, kfilter._tmp0, &inc,
+                                                        &state_intercept_weights[0, 0, tt, jj], &inc)
+
+            if j > min_j or (j == 0 and compute_prior_weights):
+                # tmp = tmp @ L
+                blas.dgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &alpha, kfilter._tmp0, &kfilter.k_states,
+                                    &smoother.innovations_transition[0, 0, j], &kfilter.k_states,
+                            &beta, kfilter._tmp00, &kfilter.k_states)
+                blas.dcopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+                # This is the weight of the prior on the smoothed state at
+                # time t > 0
+                if j == 0 and compute_prior_weights:
+                    blas.dcopy(&kfilter.k_states2, kfilter._tmp0, &inc, &prior_weights[0, 0, tt], &inc)
+
+        # For j == t
+        # For the univariate case, some notes:
+        # Note in general about computing weights that we need to define what
+        # we mean by the state at time t. So if we were computing weights for
+        # the predicted state at time t, that would mean we were computing
+        # weights for the expectation of the time t state conditional on all
+        # information dated time t-1 or earlier. So I thnk that j==t refers
+        # to the specific case that j = t and i = p_t, i.e. we have
+        # incorporated all the information from time t. Then j = t but i < p_t
+        # would follow the j < t formula.
+        j = t
+        jj = tt
+        p_j = p - model.nmissing[t]
+        if store_j[j]:
+            if p_j > 0:
+                # weights[:, :p_j, tt, jj] = Pt @ Hi_W[j, :p_j].T
+                blas.dgemm("N", "T", &model._k_states, &p_j, &model._k_states,
+                                    &scale, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                            &Hi_W[0, 0, jj], &model.k_endog,
+                                    &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+            # state_intercept_weights[:, :, tt, jj] = -(Pt @ Lt' @ Nt)
+            # Note: normally would need to multiply Pt by scale and divide Nt
+            # by `scale`, but since they're being multiplied here, the scale terms
+            # cancel out.
+            blas.dgemm("T", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &gamma, &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                                    &smoother.scaled_smoothed_estimator_cov[0, 0, t + 1], &kfilter.k_states,
+                            &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.dgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &alpha, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                    kfilter._tmp00, &kfilter.k_states,
+                            &beta, &state_intercept_weights[0, 0, tt, jj], &kfilter.k_states)
+
+        # Forwards from j = t+1, t+2, ..., max_j
+        # tmp = Pt
+        blas.dcopy(&kfilter.k_states2, &kfilter.predicted_state_cov[0, 0, t], &inc, kfilter._tmp0, &inc)
+        if scale != 1:
+            blas.dscal(&kfilter.k_states2, &scale, kfilter._tmp0, &inc)
+        if max_j > t:
+            # tmp = tmp @ L[t].T
+            blas.dgemm("N", "T", &model._k_states, &model._k_states, &model._k_states,
+                                &alpha, kfilter._tmp0, &kfilter.k_states,
+                                        &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                                &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.dcopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+        for j in range(t + 1, max_j + 1):
+            # Again, recall that double-letters denotes indexes that start
+            # from t0
+            jj = j - t0
+            p_j = p - model.nmissing[j]
+
+            if store_j[j] and p_j > 0:
+                # weights[:, :p_j, tt, jj] = tmp @ Hi_W[j, :p_j].T
+                blas.dgemm("N", "T", &model._k_states, &p_j, &model._k_states,
+                                    &alpha, kfilter._tmp0, &kfilter.k_states,
+                                            &Hi_W[0, 0, jj], &p,
+                                    &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+            # tmp = tmp @ L[j].T
+            blas.dgemm("N", "T", &model._k_states, &model._k_states, &model._k_states,
+                                &alpha, kfilter._tmp0, &kfilter.k_states,
+                                        &smoother.innovations_transition[0, 0, j], &kfilter.k_states,
+                                &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.dcopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+            if store_j[j]:
+                # state_intercept_weights[:, :, tt, jj] = -(tmp @ N_j)
+                scalar = -1 / scale
+                blas.dgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                                &scalar, kfilter._tmp00, &kfilter.k_states,
+                                        &smoother.scaled_smoothed_estimator_cov[0, 0, j + 1], &kfilter.k_states,
+                                &beta, &state_intercept_weights[0, 0, tt, jj], &kfilter.k_states)
+
+    return np.array(weights), np.array(state_intercept_weights), np.array(prior_weights), np.array(Hi_W)
+
+
+cdef bint _cselect1(np.complex64_t * a):
+    return 0
+
+cdef bint _cselect2(np.complex64_t * a, np.complex64_t * b):
+    return 0
+
+cdef int _csolve_discrete_lyapunov(np.complex64_t * a, np.complex64_t * q, int n, int complex_step=False) except *:
+    # Note: some of this code (esp. the Sylvester solving part) cribbed from
+    # https://raw.githubusercontent.com/scipy/scipy/master/scipy/linalg/_solvers.py
+
+    # Solve an equation of the form $A'XA-X=-Q$
+    # a: input / output
+    # q: input / output
+    cdef:
+        int i, j
+        int info
+        int inc = 1
+        int n2 = n**2
+        np.float32_t scale = 0.0
+        np.complex64_t tmp = 0.0
+        np.complex64_t alpha = 1.0
+        np.complex64_t beta = 0.0
+        np.complex64_t delta = -2.0
+        char trans
+    cdef np.npy_intp dim[2]
+    cdef np.complex64_t [::1,:] apI, capI, u, v
+    cdef int [::1,:] ipiv
+    # Dummy selection function, will not actually be referenced since we do not
+    # need to order the eigenvalues in the ?gees call.
+    cdef:
+        int sdim
+        int lwork = 3*n
+        bint bwork
+    cdef np.npy_intp dim1[1]
+    cdef np.complex64_t [::1,:] work
+    cdef np.complex64_t [:] wr
+    cdef np.float32_t [:] wi
+
+    # Initialize arrays
+    dim[0] = n; dim[1] = n;
+    apI = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX64, FORTRAN)
+    capI = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX64, FORTRAN)
+    u = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX64, FORTRAN)
+    v = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX64, FORTRAN)
+    ipiv = np.PyArray_ZEROS(2, dim, np.NPY_INT32, FORTRAN)
+
+    dim1[0] = n;
+    wr = np.PyArray_ZEROS(1, dim1, np.NPY_COMPLEX64, FORTRAN)
+    wi = np.PyArray_ZEROS(1, dim1, np.NPY_FLOAT64, FORTRAN)
+    #vs = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX64, FORTRAN)
+    dim[0] = lwork; dim[1] = lwork;
+    work = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX64, FORTRAN)
+
+    # - Solve for b.conj().transpose() --------
+
+    # Get apI = a + I (stored in apI)
+    # = (a + eye)
+    # For: c = 2*np.dot(np.dot(inv(a + eye), q), aHI_inv)
+    copy(n2, a, &apI[0, 0])
+    # (for loop below adds the identity)
+
+    # Get conj(a) + I (stored in capI)
+    # a^H + I -> capI
+    # For: aHI_inv = inv(aH + eye)
+    copy(n2, a, &capI[0, 0])
+    # (for loop below adds the identity)
+
+    # Get conj(a) - I (stored in a)
+    # a^H - I -> a
+    # For: b = np.dot(aH - eye, aHI_inv)
+    # (for loop below subtracts the identity)
+
+    # Add / subtract identity matrix
+    for i in range(n):
+        apI[i,i] = apI[i,i] + 1 # apI -> a + eye
+        capI[i,i] = capI[i,i] + 1 # aH + eye
+        a[i + i*n] = a[i + i*n] - 1 # a - eye
+
+    # Solve [conj(a) + I] b' = [conj(a) - I] (result stored in a)
+    # For: b = np.dot(aH - eye, aHI_inv)
+    # Where: aHI_inv = inv(aH + eye)
+    # where b = (a^H - eye) (a^H + eye)^{-1}
+    # or b^H = (a + eye)^{-1} (a - eye)
+    # or (a + eye) b^H = (a - eye)
+    lapack.cgetrf(&n, &n, &capI[0,0], &n, &ipiv[0,0], &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU decomposition error.')
+
+    lapack.cgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                               a, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # Now we have b^H; we could take the conjugate transpose to get b, except
+    # that the input to the continuous Lyapunov equation is exactly
+    # b^H, so we already have the quantity we need.
+
+    # - Solve for (-c) --------
+
+    # where c = 2*np.dot(np.dot(inv(a + eye), q), aHI_inv)
+    # = 2*(a + eye)^{-1} q (a^H + eye)^{-1}
+    # and with q Hermitian
+    # consider x = (a + eye)^{-1} q (a^H + eye)^{-1}
+    # this can be done in two linear solving steps:
+    # 1. consider y = q (a^H + eye)^{-1}
+    #    or y (a^H + eye) = q
+    #    or (a^H + eye)^H y^H = q^H
+    #    or (a + eye) y^H = q
+    # 2. Then consider x = (a + eye)^{-1} y
+    #    or (a + eye) x = y
+
+    # Solve [conj(a) + I] tmp' = q (result stored in q)
+    # For: y = q (a^H + eye)^{-1} => (a + eye) y^H = q
+    lapack.cgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                                        q, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # Replace the result (stored in q) with its (conjugate) transpose
+    for j in range(1, n):
+        for i in range(j):
+            tmp = q[i + j*n]
+            q[i + j*n] = q[j + i*n]
+            q[j + i*n] = tmp
+
+    if not complex_step:
+        for i in range(n2):
+            q[i] = q[i] - q[i].imag * 2.0j
+
+    lapack.cgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                                        q, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # q -> -2.0 * q
+    blas.cscal(&n2, &delta, q, &inc)
+
+    # - Solve continuous time Lyapunov --------
+
+    # Now solve the continuous time Lyapunov equation (AX + XA^H = Q), on the
+    # transformed inputs ...
+
+    # ... which requires solving the continuous time Sylvester equation
+    # (AX + XB = Q) where B = A^H
+
+    # Compute the real Schur decomposition of a (unordered)
+    # TODO compute the optimal lwork rather than always using 3*n
+    lapack.cgees("V", "N", <lapack.cselect1 *> &_cselect1, &n,
+                          a, &n,
+                          &sdim,
+                          &wr[0],
+                          &u[0,0], &n,
+                          &work[0,0], &lwork,
+                          &wi[0],
+                          &bwork, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('Schur decomposition solver error.')
+
+    # Get v (so that in the complex step case we can take the conjugate)
+    copy(n2, &u[0, 0], &v[0, 0])
+    # If complex step, take the conjugate
+    if complex_step:
+        for i in range(n):
+            for j in range(n):
+                v[i,j] = v[i,j] - v[i,j].imag * 2.0j
+
+    # Construct f = u^H*q*u (result overwrites q)
+    # In the usual case, v = u
+    # In the complex step case, v = u.conj()
+    blas.cgemm("N", "N", &n, &n, &n,
+                        &alpha, q, &n,
+                                &v[0,0], &n,
+                        &beta, &capI[0,0], &n)
+    blas.cgemm("C", "N", &n, &n, &n,
+                        &alpha, &u[0,0], &n,
+                                &capI[0,0], &n,
+                        &beta, q, &n)
+
+    # DTRYSL Solve op(A)*X + X*op(B) = scale*C which is here:
+    # r*X + X*r = scale*q
+    # results overwrite q
+    copy(n2, a, &apI[0, 0])
+    if complex_step:
+        for i in range(n):
+            for j in range(n):
+                apI[j,i] = apI[j,i] - apI[j,i].imag * 2.0j
+    lapack.ctrsyl("N", "C", &inc, &n, &n,
+                           a, &n,
+                           &apI[0,0], &n,
+                           q, &n,
+                           &scale, &info)
+
+    # Scale q by scale
+    if not scale == 1.0:
+        blas.cscal(&n2, <np.complex64_t*> &scale, q, &inc)
+
+    # Calculate the solution: u * q * v^H (results overwrite q)
+    # In the usual case, v = u
+    # In the complex step case, v = u.conj()
+    blas.cgemm("N", "C", &n, &n, &n,
+                        &alpha, q, &n,
+                                &v[0,0], &n,
+                        &beta, &capI[0,0], &n)
+    blas.cgemm("N", "N", &n, &n, &n,
+                        &alpha, &u[0,0], &n,
+                                &capI[0,0], &n,
+                        &beta, q, &n)
+
+
+cpdef _ccompute_coefficients_from_multivariate_pacf(np.complex64_t [::1,:] partial_autocorrelations,
+                                                             np.complex64_t [::1,:] error_variance,
+                                                             int transform_variance,
+                                                             int order, int k_endog):
+    """
+    Notes
+    -----
+
+    This uses the ?trmm BLAS functions which are not available in
+    Scipy v0.11.0
+    """
+    # Constants
+    cdef:
+        np.complex64_t alpha = 1.0
+        np.complex64_t beta = 0.0
+        np.complex64_t gamma = -1.0
+        int k_endog2 = k_endog**2
+        int k_endog_order = k_endog * order
+        int k_endog_order1 = k_endog * (order+1)
+        int info, s, k
+    # Local variables
+    cdef:
+        np.npy_intp dim2[2]
+        np.complex64_t [::1, :] initial_variance
+        np.complex64_t [::1, :] forward_variance
+        np.complex64_t [::1, :] backward_variance
+        np.complex64_t [::1, :] autocovariances
+        np.complex64_t [::1, :] forwards1
+        np.complex64_t [::1, :] forwards2
+        np.complex64_t [::1, :] backwards1
+        np.complex64_t [::1, :] backwards2
+        np.complex64_t [::1, :] forward_factors
+        np.complex64_t [::1, :] backward_factors
+        np.complex64_t [::1, :] tmp
+        np.complex64_t [::1, :] tmp2
+    # Pointers
+    cdef:
+        np.complex64_t * forwards
+        np.complex64_t * prev_forwards
+        np.complex64_t * backwards
+        np.complex64_t * prev_backwards
+    # ?trmm
+    # cdef ctrmm_t *ctrmm = <ctrmm_t*>Capsule_AsVoidPtr(blas.ctrmm._cpointer)
+
+    # dim2[0] = self.k_endog; dim2[1] = storage;
+    # self.forecast = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+
+    # If we want to keep the provided variance but with the constrained
+    # coefficient matrices, we need to make a copy here, and then after the
+    # main loop we will transform the coefficients to match the passed variance
+    if not transform_variance:
+        initial_variance = np.asfortranarray(error_variance.copy())
+        # Need to make the input variance large enough that the recursions
+        # do not lead to zero-matrices due to roundoff error, which would case
+        # exceptions from the Cholesky decompositions.
+        # Note that this will still not always ensure positive definiteness,
+        # and for k_endog, order large enough an exception may still be raised
+        error_variance = np.asfortranarray(np.eye(k_endog, dtype=np.complex64) * (order + k_endog)**10)
+
+    # Initialize matrices
+    dim2[0] = k_endog; dim2[1] = k_endog;
+    forward_variance = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    backward_variance = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    forward_factors = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    backward_factors = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    tmp2 = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+
+    dim2[0] = k_endog; dim2[1] = k_endog_order;
+    # \phi_{s,k}, s = 1, ..., p
+    #             k = 1, ..., s+1
+    forwards1 = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    forwards2 = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    # \phi_{s,k}^*
+    backwards1 = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    backwards2 = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+
+    dim2[0] = k_endog; dim2[1] = k_endog_order1;
+    autocovariances = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+
+    copy(k_endog2, &error_variance[0, 0], &forward_variance[0, 0])   # \Sigma_s
+    copy(k_endog2, &error_variance[0, 0], &backward_variance[0, 0])  # \Sigma_s^*,  s = 0, ..., p
+    copy(k_endog2, &error_variance[0, 0], &autocovariances[0, 0])  # \Gamma_s
+
+    # error_variance_factor = linalg.cholesky(error_variance, lower=True)
+    copy(k_endog2, &error_variance[0, 0], &forward_factors[0,0])
+    lapack.cpotrf("L", &k_endog, &forward_factors[0,0], &k_endog, &info)
+    copy(k_endog2, &forward_factors[0, 0], &backward_factors[0, 0])
+
+    # We fill in the entries as follows:
+    # [1,1]
+    # [2,2], [2,1]
+    # [3,3], [3,1], [3,2]
+    # ...
+    # [p,p], [p,1], ..., [p,p-1]
+    # the last row, correctly ordered, is then used as the coefficients
+    for s in range(order):  # s = 0, ..., p-1
+        if s % 2 == 0:
+            forwards = &forwards1[0, 0]
+            prev_forwards = &forwards2[0, 0]
+            backwards = &backwards1[0, 0]
+            prev_backwards = &backwards2[0, 0]
+        else:
+            forwards = &forwards2[0, 0]
+            prev_forwards = &forwards1[0, 0]
+            backwards = &backwards2[0, 0]
+            prev_backwards = &backwards1[0, 0]
+
+        # Create the "last" (k = s+1) matrix
+        # Note: this is for k = s+1. However, below we then have to fill
+        # in for k = 1, ..., s in order.
+        # P L*^{-1} = x
+        # x L* = P
+        # L*' x' = P'
+        # forwards[:, s*k_endog:(s+1)*k_endog] = np.dot(
+        #     forward_factors,
+        #     linalg.solve_triangular(
+        #         backward_factors, partial_autocorrelations[:, s*k_endog:(s+1)*k_endog].T,
+        #         lower=True, trans='T').T
+        # )
+        for k in range(k_endog):
+            copy(k_endog, &partial_autocorrelations[k, s*k_endog], &tmp[0, k], k_endog)
+        lapack.ctrtrs("L", "T", "N", &k_endog, &k_endog, &backward_factors[0,0], &k_endog,
+                                                           &tmp[0, 0], &k_endog, &info)
+        # cgemm("N", "T", &k_endog, &k_endog, &k_endog,
+        #   &alpha, &forward_factors[0,0], &k_endog,
+        #           &tmp[0, 0], &k_endog,
+        #   &beta, &forwards[s*k_endog2], &k_endog)
+        blas.ctrmm("R", "L", "T", "N", &k_endog, &k_endog,
+          &alpha, &forward_factors[0,0], &k_endog,
+                  &tmp[0, 0], &k_endog)
+        for k in range(k_endog):
+            copy(k_endog, &tmp[k, 0], &forwards[s*k_endog2 + k*k_endog], k_endog)
+
+        # P' L^{-1} = x
+        # x L = P'
+        # L' x' = P
+        # backwards[:, s*k_endog:(s+1)*k_endog] = np.dot(
+        #     backward_factors,
+        #     linalg.solve_triangular(
+        #         forward_factors, partial_autocorrelations[:, s*k_endog:(s+1)*k_endog],
+        #         lower=True, trans='T').T
+        # )
+        copy(k_endog2, &partial_autocorrelations[0, s*k_endog], &tmp[0, 0])
+        lapack.ctrtrs("L", "T", "N", &k_endog, &k_endog, &forward_factors[0, 0], &k_endog,
+                                                           &tmp[0, 0], &k_endog, &info)
+        # cgemm("N", "T", &k_endog, &k_endog, &k_endog,
+        #   &alpha, &backward_factors[0, 0], &k_endog,
+        #           &tmp[0, 0], &k_endog,
+        #   &beta, &backwards[s * k_endog2], &k_endog)
+        blas.ctrmm("R", "L", "T", "N", &k_endog, &k_endog,
+          &alpha, &backward_factors[0,0], &k_endog,
+                  &tmp[0, 0], &k_endog)
+        for k in range(k_endog):
+            copy(k_endog, &tmp[k, 0], &backwards[s*k_endog2 + k*k_endog], k_endog)
+
+        # Update the variance
+        # Note: if s >= 1, this will be further updated in the for loop
+        # below
+        # Also, this calculation will be re-used in the forward variance
+        # tmp = np.dot(forwards[:, s*k_endog:(s+1)*k_endog], backward_variance)
+        # tmpT = np.dot(backward_variance.T, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        blas.cgemm("T", "T", &k_endog, &k_endog, &k_endog,
+          &alpha, &backward_variance[0, 0], &k_endog,
+                  &forwards[s * k_endog2], &k_endog,
+          &beta, &tmp[0, 0], &k_endog)
+        # autocovariances[:, (s+1)*k_endog:(s+2)*k_endog] = tmp.copy().T
+        copy(k_endog2, &tmp[0, 0], &autocovariances[0, (s+1)*k_endog])
+
+        # Create the remaining k = 1, ..., s matrices,
+        # only has an effect if s >= 1
+        for k in range(s):
+            # forwards[:, k*k_endog:(k+1)*k_endog] = (
+            #     prev_forwards[:, k*k_endog:(k+1)*k_endog] -
+            #     np.dot(
+            #         forwards[:, s*k_endog:(s+1)*k_endog],
+            #         prev_backwards[:, (s-k-1)*k_endog:(s-k)*k_endog]
+            #     )
+            # )
+            copy(k_endog2, &prev_forwards[k * k_endog2], &forwards[k * k_endog2])
+            blas.cgemm("N", "N", &k_endog, &k_endog, &k_endog,
+              &gamma, &forwards[s * k_endog2], &k_endog,
+                      &prev_backwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &forwards[k * k_endog2], &k_endog)
+
+            # backwards[:, k*k_endog:(k+1)*k_endog] = (
+            #     prev_backwards[:, k*k_endog:(k+1)*k_endog] -
+            #     np.dot(
+            #         backwards[:, s*k_endog:(s+1)*k_endog],
+            #         prev_forwards[:, (s-k-1)*k_endog:(s-k)*k_endog]
+            #     )
+            # )
+            copy(k_endog2, &prev_backwards[k * k_endog2], &backwards[k * k_endog2])
+            blas.cgemm("N", "N", &k_endog, &k_endog, &k_endog,
+              &gamma, &backwards[s * k_endog2], &k_endog,
+                      &prev_forwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &backwards[k * k_endog2], &k_endog)
+
+            # autocovariances[:, (s+1)*k_endog:(s+2)*k_endog] += np.dot(
+            #     autocovariances[:, (k+1)*k_endog:(k+2)*k_endog],
+            #     prev_forwards[:, (s-k-1)*k_endog:(s-k)*k_endog].T
+            # )
+            blas.cgemm("N", "T", &k_endog, &k_endog, &k_endog,
+              &alpha, &autocovariances[0, (k+1)*k_endog], &k_endog,
+                      &prev_forwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &autocovariances[0, (s+1)*k_endog], &k_endog)
+
+        # Create forward and backwards variances
+        # backward_variance = (
+        #     backward_variance -
+        #     np.dot(
+        #         np.dot(backwards[:, s*k_endog:(s+1)*k_endog], forward_variance),
+        #         backwards[:, s*k_endog:(s+1)*k_endog].T
+        #     )
+        # )
+        blas.cgemm("N", "N", &k_endog, &k_endog, &k_endog,
+          &alpha, &backwards[s * k_endog2], &k_endog,
+                  &forward_variance[0, 0], &k_endog,
+          &beta, &tmp2[0, 0], &k_endog)
+        blas.cgemm("N", "T", &k_endog, &k_endog, &k_endog,
+          &gamma, &tmp2[0, 0], &k_endog,
+                  &backwards[s * k_endog2], &k_endog,
+          &alpha, &backward_variance[0, 0], &k_endog)
+        # forward_variance = (
+        #     forward_variance -
+        #     np.dot(tmp, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        # )
+        # forward_variance = (
+        #     forward_variance -
+        #     np.dot(tmpT.T, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        # )
+        blas.cgemm("T", "T", &k_endog, &k_endog, &k_endog,
+          &gamma, &tmp[0, 0], &k_endog,
+                  &forwards[s * k_endog2], &k_endog,
+          &alpha, &forward_variance[0, 0], &k_endog)
+
+        # Cholesky factors
+        # forward_factors = linalg.cholesky(forward_variance, lower=True)
+        # backward_factors =  linalg.cholesky(backward_variance, lower=True)
+        copy(k_endog2, &forward_variance[0, 0], &forward_factors[0, 0])
+        lapack.cpotrf("L", &k_endog, &forward_factors[0,0], &k_endog, &info)
+        copy(k_endog2, &backward_variance[0, 0], &backward_factors[0, 0])
+        lapack.cpotrf("L", &k_endog, &backward_factors[0,0], &k_endog, &info)
+
+
+    # If we do not want to use the transformed variance, we need to
+    # adjust the constrained matrices, as presented in Lemma 2.3, see above
+    if not transform_variance:
+        if order % 2 == 0:
+            forwards = &forwards2[0,0]
+        else:
+            forwards = &forwards1[0,0]
+
+        # Here, we need to construct T such that:
+        # variance = T * initial_variance * T'
+        # To do that, consider the Cholesky of variance (L) and
+        # input_variance (M) to get:
+        # L L' = T M M' T' = (TM) (TM)'
+        # => L = T M
+        # => L M^{-1} = T
+        # initial_variance_factor = np.linalg.cholesky(initial_variance)
+        # L'
+        lapack.cpotrf("U", &k_endog, &initial_variance[0,0], &k_endog, &info)
+        # transformed_variance_factor = np.linalg.cholesky(variance)
+        # M'
+        copy(k_endog2, &forward_variance[0, 0], &tmp[0, 0])
+        lapack.cpotrf("U", &k_endog, &tmp[0,0], &k_endog, &info)
+        # cpotri("L", &k_endog, &tmp[0,0], &k_endog, &info)
+
+        # We need to zero out the lower triangle of L', because ?trtrs only
+        # knows that M' is upper triangular
+        for s in range(k_endog - 1):          # column
+            for k in range(s+1, k_endog):     # row
+                initial_variance[k, s] = 0
+
+        # Note that T is lower triangular
+        # L M^{-1} = T
+        # M' T' = L'
+        # transform = np.dot(initial_variance_factor,
+        #                    np.linalg.inv(transformed_variance_factor))
+        lapack.ctrtrs("U", "N", "N", &k_endog, &k_endog, &tmp[0,0], &k_endog,
+                                                           &initial_variance[0, 0], &k_endog, &info)
+        # Now:
+        # initial_variance = T'
+
+        for s in range(order):
+            # forwards[:, s*k_endog:(s+1)*k_endog] = (
+            #     np.dot(
+            #         np.dot(transform, forwards[:, s*k_endog:(s+1)*k_endog]),
+            #         inv_transform
+            #     )
+            # )
+            # TF T^{-1} = x
+            # TF = x T
+            # (TF)' = T' x'
+
+            # Get TF
+            copy(k_endog2, &forwards[s * k_endog2], &tmp2[0, 0])
+            blas.ctrmm("L", "U", "T", "N", &k_endog, &k_endog,
+              &alpha, &initial_variance[0, 0], &k_endog,
+                      &tmp2[0, 0], &k_endog)
+            for k in range(k_endog):
+                copy(k_endog, &tmp2[k, 0], &tmp[0, k], k_endog)
+            # Get x'
+            lapack.ctrtrs("U", "N", "N", &k_endog, &k_endog, &initial_variance[0,0], &k_endog,
+                                                               &tmp[0, 0], &k_endog, &info)
+            # Get x
+            for k in range(k_endog):
+                copy(k_endog, &tmp[k, 0], &forwards[s * k_endog2 + k*k_endog], k_endog)
+
+
+    if order % 2 == 0:
+        return forwards2, forward_variance
+    else:
+        return forwards1, forward_variance
+
+cpdef _cconstrain_sv_less_than_one(np.complex64_t [::1,:] unconstrained, int order, int k_endog):
+    """
+    Transform arbitrary matrices to matrices with singular values less than
+    one.
+
+    Corresponds to Lemma 2.2 in Ansley and Kohn (1986). See
+    `constrain_stationary_multivariate` for more details.
+    """
+    # Constants
+    cdef:
+        np.complex64_t alpha = 1.0
+        int k_endog2 = k_endog**2
+        int info, i
+    # Local variables
+    cdef:
+        np.npy_intp dim2[2]
+        np.complex64_t [::1, :] constrained
+        np.complex64_t [::1, :] tmp
+        np.complex64_t [::1, :] eye
+
+    dim2[0] = k_endog; dim2[1] = k_endog * order;
+    constrained = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    dim2[0] = k_endog; dim2[1] = k_endog;
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    eye = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+
+    eye = np.asfortranarray(np.eye(k_endog, dtype=np.complex64))
+    for i in range(order):
+        copy(k_endog2, &eye[0, 0], &tmp[0, 0])
+        blas.cgemm("N", "T", &k_endog, &k_endog, &k_endog,
+          &alpha, &unconstrained[0, i*k_endog], &k_endog,
+                  &unconstrained[0, i*k_endog], &k_endog,
+          &alpha, &tmp[0, 0], &k_endog)
+        lapack.cpotrf("L", &k_endog, &tmp[0, 0], &k_endog, &info)
+
+        copy(k_endog2, &unconstrained[0, i*k_endog], &constrained[0, i*k_endog])
+        # constrained.append(linalg.solve_triangular(B, A, lower=lower))
+        lapack.ctrtrs("L", "N", "N", &k_endog, &k_endog, &tmp[0, 0], &k_endog,
+                                                           &constrained[0, i*k_endog], &k_endog, &info)
+    return constrained
+
+cdef int _cldl(np.complex64_t * A, int n) except *:
+    # See Golub and Van Loan, Algorithm 4.1.2
+    cdef:
+        int info = 0
+        int j, i, k
+        np.npy_intp dim[1]
+        np.float64_t tol = 1e-15
+        np.complex64_t [:] v
+
+    dim[0] = n
+    v = np.PyArray_ZEROS(1, dim, np.NPY_COMPLEX64, FORTRAN)
+
+    for j in range(n):
+        # Compute v(1:j)
+        v[j] = A[j + j*n]
+
+        # Positive definite element: use Golub and Van Loan algorithm
+        if v[j].real < -tol:
+            info = -j
+            break
+        elif v[j].real > tol:
+            for i in range(j):
+                v[i] = A[j + i*n] * A[i + i*n]
+                v[j] = v[j] - A[j + i*n] * v[i]
+
+            # Store d(j) and compute L(j+1:n,j)
+            A[j + j*n] = v[j]
+            for i in range(j+1, n):
+                for k in range(j):
+                    A[i + j*n] = A[i + j*n] - A[i + k*n] * v[k]
+                A[i + j*n] = A[i + j*n] / v[j]
+        # Positive semi-definite element: zero the appropriate column
+        else:
+            info = 1
+            for i in range(j, n):
+                A[i + j*n]
+
+    return info
+
+cpdef int cldl(np.complex64_t [::1, :] A) except *:
+    _cldl(&A[0,0], A.shape[0])
+
+cdef int _creorder_missing_diagonal(np.complex64_t * a, int * missing, int n):
+    """
+    a is a pointer to an n x n diagonal array A
+    missing is a pointer to an n x 1 array
+    n is the dimension of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(n-1,-1,-1):
+        if not missing[i]:
+            a[i + i*n] = a[k + k*n]
+            k = k - 1
+        else:
+            a[i + i*n] = 0
+
+cdef int _creorder_missing_submatrix(np.complex64_t * a, int * missing, int n):
+    """
+    a is a pointer to an n x n array A
+    missing is a pointer to an n x 1 array
+    n is the dimension of A
+    """
+    cdef int i, j, k, nobs
+
+    _creorder_missing_rows(a, missing, n, n)
+    _creorder_missing_cols(a, missing, n, n)
+
+cdef int _creorder_missing_rows(np.complex64_t * a, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    missing is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(n-1,-1,-1):
+        if not missing[i]:
+            swap(m, &a[i], &a[k], n, n)
+            k = k - 1
+
+
+cdef int _creorder_missing_cols(np.complex64_t * a, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    missing is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, k, nobs
+
+    nobs = m
+    # Construct the non-missing index
+    for i in range(m):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(m-1,-1,-1):
+        if not missing[i]:
+            swap(n, &a[i*n], &a[k*n])
+            k = k - 1
+
+
+cpdef int creorder_missing_matrix(np.complex64_t [::1, :, :] A, int [::1, :] missing, int reorder_rows, int reorder_cols, int diagonal) except *:
+    cdef int n, m, T, t
+
+    n, m, T = A.shape[0:3]
+
+    if reorder_rows and reorder_cols:
+        if not n == m:
+            raise RuntimeError('Reordering a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                _creorder_missing_diagonal(&A[0, 0, t], &missing[0, t], n)
+        else:
+            for t in range(T):
+                _creorder_missing_submatrix(&A[0, 0, t], &missing[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with reordering a submatrix')
+    elif reorder_rows:
+        for t in range(T):
+            _creorder_missing_rows(&A[0, 0, t], &missing[0, t], n, m)
+    elif reorder_cols:
+        for t in range(T):
+            _creorder_missing_cols(&A[0, 0, t], &missing[0, t], n, m)
+
+
+cpdef int creorder_missing_vector(np.complex64_t [::1, :] A, int [::1, :] missing) except *:
+    cdef int i, k, t, n, T, nobs
+
+    n, T = A.shape[0:2]
+
+    for t in range(T):
+        _creorder_missing_rows(&A[0, t], &missing[0, t], n, 1)
+
+
+cdef int _ccopy_missing_diagonal(np.complex64_t * a, np.complex64_t * b, int * missing, int n):
+    """
+    Copy the non-missing block of diagonal entries
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(nobs):
+        b[i + i*n] = a[i + i*n]
+
+
+cdef int _ccopy_missing_submatrix(np.complex64_t * a, np.complex64_t * b, int * missing, int n):
+    """
+    Copy the non-missing submatrix
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(nobs, &a[i*n], &b[i*n])
+
+
+cdef int _ccopy_missing_rows(np.complex64_t * a, np.complex64_t * b, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(m, &a[i], &b[i], n, n)
+
+
+cdef int _ccopy_missing_cols(np.complex64_t * a, np.complex64_t * b, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, nobs
+
+    nobs = m
+    # Construct the non-missing index
+    for i in range(m):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(n, &a[i*n], &b[i*n])
+
+
+cpdef int ccopy_missing_matrix(np.complex64_t [::1, :, :] A, np.complex64_t [::1, :, :] B, int [::1, :] missing, int missing_rows, int missing_cols, int diagonal) except *:
+    cdef int n, m, T, t, A_T, A_t = 0, time_varying
+
+    n, m, T = B.shape[0:3]
+    A_T = A.shape[2]
+    time_varying = (A_T == T)
+
+    if missing_rows and missing_cols:
+        if not n == m:
+            raise RuntimeError('Copying a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _ccopy_missing_diagonal(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n)
+        else:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _ccopy_missing_submatrix(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with copying a submatrix')
+    elif missing_rows:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _ccopy_missing_rows(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n, m)
+    elif missing_cols:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _ccopy_missing_cols(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n, m)
+    pass
+
+
+cpdef int ccopy_missing_vector(np.complex64_t [::1, :] A, np.complex64_t [::1, :] B, int [::1, :] missing) except *:
+    cdef int n, t, T, A_t = 0, A_T
+
+    n, T = B.shape[0:2]
+    A_T = A.shape[1]
+    time_varying = (A_T == T)
+
+    for t in range(T):
+        if time_varying:
+            A_t = t
+        _ccopy_missing_rows(&A[0, A_t], &B[0, t], &missing[0, t], n, 1)
+
+cdef int _ccopy_index_diagonal(np.complex64_t * a, np.complex64_t * b, int * index, int n):
+    """
+    Copy the non-index block of diagonal entries
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, k, nobs
+
+    # Perform replacement
+    for i in range(n):
+        if index[i]:
+            b[i + i*n] = a[i + i*n]
+
+
+cdef int _ccopy_index_submatrix(np.complex64_t * a, np.complex64_t * b, int * index, int n):
+    """
+    Copy the non-index submatrix
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    _ccopy_index_rows(a, b, index, n, n)
+    _ccopy_index_cols(a, b, index, n, n)
+
+
+cdef int _ccopy_index_rows(np.complex64_t * a, np.complex64_t * b, int * index, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i
+
+    # Perform replacement
+    for i in range(n):
+        if index[i]:
+            copy(m, &a[i], &b[i], n, n)
+
+
+cdef int _ccopy_index_cols(np.complex64_t * a, np.complex64_t * b, int * index, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    # Perform replacement
+    for i in range(m):
+        if index[i]:
+            copy(n, &a[i*n], &b[i*n])
+
+
+cpdef int ccopy_index_matrix(np.complex64_t [::1, :, :] A, np.complex64_t [::1, :, :] B, int [::1, :] index, int index_rows, int index_cols, int diagonal) except *:
+    cdef int n, m, T, t, A_T, A_t = 0, time_varying
+
+    n, m, T = B.shape[0:3]
+    A_T = A.shape[2]
+    time_varying = (A_T == T)
+
+    if index_rows and index_cols:
+        if not n == m:
+            raise RuntimeError('Copying a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _ccopy_index_diagonal(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n)
+        else:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _ccopy_index_submatrix(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with copying a submatrix')
+    elif index_rows:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _ccopy_index_rows(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n, m)
+    elif index_cols:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _ccopy_index_cols(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n, m)
+
+
+cpdef int ccopy_index_vector(np.complex64_t [::1, :] A, np.complex64_t [::1, :] B, int [::1, :] index) except *:
+    cdef int n, t, T, A_t = 0, A_T
+
+    n, T = B.shape[0:2]
+    A_T = A.shape[1]
+    time_varying = (A_T == T)
+
+    for t in range(T):
+        if time_varying:
+            A_t = t
+        _ccopy_index_rows(&A[0, A_t], &B[0, t], &index[0, t], n, 1)
+
+cdef int _cselect_cov(int k_states, int k_posdef, int k_states_total,
+                               np.complex64_t * tmp,
+                               np.complex64_t * selection,
+                               np.complex64_t * cov,
+                               np.complex64_t * selected_cov):
+    cdef:
+        int i, k_states2 = k_states**2
+        np.complex64_t alpha = 1.0
+        np.complex64_t beta = 0.0
+
+    # Only need to do something if there is a covariance matrix
+    # (i.e k_posdof == 0)
+    if k_posdef > 0:
+
+        # #### Calculate selected state covariance matrix
+        # $Q_t^* = R_t Q_t R_t'$
+        #
+        # Combine a selection matrix and a covariance matrix to get
+        # a simplified (but possibly singular) "selected" covariance
+        # matrix (see e.g. Durbin and Koopman p. 43)
+
+        # `tmp0` array used here, dimension $(m \times r)$
+
+        # $\\#_0 = 1.0 * R_t Q_t$
+        # $(m \times r) = (m \times r) (r \times r)$
+        blas.cgemm("N", "N", &k_states, &k_posdef, &k_posdef,
+              &alpha, selection, &k_states_total,
+                      cov, &k_posdef,
+              &beta, tmp, &k_states)
+        # $Q_t^* = 1.0 * \\#_0 R_t'$
+        # $(m \times m) = (m \times r) (m \times r)'$
+        blas.cgemm("N", "T", &k_states, &k_states, &k_posdef,
+              &alpha, tmp, &k_states,
+                      selection, &k_states_total,
+              &beta, selected_cov, &k_states)
+    else:
+        for i in range(k_states2):
+            selected_cov[i] = 0
+
+
+cpdef _ccompute_smoothed_state_weights(
+        cKalmanSmoother smoother,
+        cKalmanFilter kfilter,
+        cStatespace model,
+        np.int32_t [:] compute_t,
+        np.int32_t [:] compute_j,
+        np.complex64_t scale,
+        int compute_prior_weights=False):
+    cdef:
+        int t, i, j, n_t, n_j, min_j, max_j, p_t, p_j, t0
+        int n = model.nobs
+        int p = model.k_endog
+        int m = model.k_states
+        int pm = p * m
+        int filter_collapsed, compute_K
+        int inc = 1
+        int compute
+        np.int32_t [:] store_t, store_j
+        np.npy_intp dim1[1]
+        np.npy_intp dim2[2]
+        np.npy_intp dim3[3]
+        np.npy_intp dim4[4]
+        np.complex64_t alpha = 1.0
+        np.complex64_t beta = 0.0
+        np.complex64_t gamma = -1.0
+        np.complex64_t scalar
+        np.complex64_t [::1, :, :] Hi_W, K, prior_weights
+        np.complex64_t [::1, :, :, :] weights, state_intercept_weights
+        np.complex64_t [::1, :] tmp, F, Fi, FiZ
+        np.complex64_t * _Pt
+        np.complex64_t * _Z
+        np.complex64_t * _H
+        np.complex64_t * _FiZ
+        np.complex64_t * _K
+
+    n_t = compute_t.size
+    n_j = compute_j.size
+    min_j = compute_j[0]
+    max_j = compute_j[n_j - 1]
+    dim1[0] = n;
+    store_j = np.PyArray_ZEROS(1, dim1, np.NPY_INT32, FORTRAN)
+    for i in range(n_j):
+        j = compute_j[i]
+        store_j[j] = True
+
+    dim1[0] = n;
+    store_t = np.PyArray_ZEROS(1, dim1, np.NPY_INT32, FORTRAN)
+    for i in range(n_t):
+        t = compute_t[i]
+        store_t[t] = True
+
+    # Determine the first index that we need to compute
+    t0 = min(min_j, compute_t[0])
+    # Let double-letters denote indexing that starts from t0
+    nn = n - t0
+
+    # Flags
+    filter_collapsed = kfilter.filter_method & 0x20
+
+    # Create required storage and temporary matrices
+    # Hi_W = np.zeros((p, m, nn), order='F')
+    # K = np.zeros((p, m, nn), order='F')
+    # weights = np.zeros((m, p, nn, nn), order='F') * np.nan
+    # state_intercept_weights = np.zeros((m, m, nn, nn), order='F') * np.nan
+    # tmp = np.zeros((m, m), order='F')
+    # F = np.zeros((p, p), order='F')
+    # Fi = np.zeros((p, p), order='F')
+    # FiZ = np.zeros((p, m), order='F')
+    dim4[0] = m; dim4[1] = p; dim4[2] = nn; dim4[3] = nn;
+    weights = np.PyArray_ZEROS(4, dim4, np.NPY_COMPLEX64, FORTRAN) * np.nan
+    dim4[0] = m; dim4[1] = m; dim4[2] = nn; dim4[3] = nn;
+    state_intercept_weights = np.PyArray_ZEROS(4, dim4, np.NPY_COMPLEX64, FORTRAN) * np.nan
+    dim3[0] = p; dim3[1] = m; dim3[2] = nn;
+    Hi_W = np.PyArray_ZEROS(3, dim3, np.NPY_COMPLEX64, FORTRAN)
+    K = np.PyArray_ZEROS(3, dim3, np.NPY_COMPLEX64, FORTRAN)
+    dim3[0] = m; dim3[1] = m; dim3[2] = nn;
+    # Note: the order here is (m, l, t), where the `l` dimension refers to the
+    # element of the initial state vector, and the `m, t` dimensions refer to
+    # the element / time point of the smoothed state vector.
+    prior_weights = np.PyArray_ZEROS(3, dim3, np.NPY_COMPLEX64, FORTRAN) * np.nan
+    dim2[0] = p; dim2[1] = p;
+    F = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    Fi = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    dim2[0] = m; dim2[1] = p;
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+    dim2[0] = p; dim2[1] = m;
+    FiZ = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX64, FORTRAN)
+
+    # First pass to compute required quantities, if necessary
+    for t in range(t0, n):
+        # Recall that double-letters denotes indexes that start from t0
+        # Hi_W[:, :, nn], K[:, :, nn], weights[:, :, nn, nn],
+        # state_intercept_weights[:, :, nn, nn], prior_weights[:, :, nn]
+        tt = t - t0
+
+        p_t = p - model.nmissing[t]
+
+        # Handling of exact diffuse periods is not currently available
+        # Also, we can skip computations for periods that are not needed for
+        # the requested t, j combinations
+        if (t < kfilter.nobs_diffuse
+                or (not store_t[t] and (t < min_j or t > max_j))):
+            # No need to set this when using the dictionary
+            # K[tt] = np.zeros((m, p_t)) * np.nan
+            # Hi_W[tt] is already initialized to NaNs, so can skip:
+            # Hi_W[tt, :] = np.nan
+            continue
+
+        # Move the statespace representation to the time period, but do not
+        # apply the collapse (first zero) or diagonalization (second zero)
+        model.seek(t, 0, 0, True)
+
+        # Get statespace objects
+        if p_t == 0:
+            # No need to set this when using the dictionary
+            # K.append(np.zeros((m, 0)))
+            # Hi_W[tt] is already initialized to NaNs, so can skip:
+            # Hi_W[tt, :] = np.nan
+            continue
+
+        # Get filtered objects
+        compute_K = kfilter.univariate_filter[t] or filter_collapsed
+        if compute_K:
+            # Note: typically would need to multiply both P and F by the
+            # scale, but F is inverted and K = T P Z' F^{-1}, the scale terms
+            # cancel out
+            # F = Z @ P @ Z.T + H
+            # Note: here use Fi as a temporary array for the moment
+            # Z @ P
+            blas.cgemm("N", "N", &model._k_endog, &model._k_states, &model._k_states,
+                                &alpha, model._design, &model._k_endog,
+                                        &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                &beta, &FiZ[0, 0], &model.k_endog)
+            for i in range(model._k_endog): # columns
+                for j in range(model._k_endog): # rows
+                    F[j, i] = model._obs_cov[j + i*model._k_endog]
+            blas.cgemm("N", "T", &model._k_endog, &model._k_endog, &model._k_states,
+                                &alpha, &FiZ[0, 0], &model.k_endog,
+                                        model._design, &model._k_endog,
+                                &alpha, &F[0, 0], &model.k_endog)
+            # Note: pinv is required for the cases in which F is singular
+            # Note: use T to make the array Fortran contiguous
+            Fi = np.linalg.pinv(F[:p_t, :p_t]).T
+            blas.cgemm("N", "N", &model._k_endog, &model._k_states, &model._k_endog,
+                                &alpha, &Fi[0, 0], &model._k_endog,
+                                        model._design, &model._k_endog,
+                                &beta, &FiZ[0, 0], &model.k_endog)
+
+            # P_t Z_t' F_t^{-1}
+            # $(m \times p) = (m \times m) (m \times p)$
+            blas.cgemm("N", "T", &model._k_states, &model._k_endog, &model._k_states,
+                                &alpha, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                        &FiZ[0, 0], &model.k_endog,
+                                &beta, &tmp[0, 0], &kfilter.k_states)
+            # T_t P_t Z_t' F_t^{-1}
+            # $(m \times p) = (m \times m) (m \times p)$
+            blas.cgemm("N", "N", &model._k_states, &model._k_endog, &model._k_states,
+                                &alpha, model._transition, &kfilter.k_states,
+                                        &tmp[0, 0], &kfilter.k_states,
+                                &beta, &K[0, 0, tt], &kfilter.k_states)
+
+            _FiZ = &FiZ[0, 0]
+            _K = &K[0, 0, tt]
+        else:
+            _FiZ = &kfilter.tmp3[0, 0, t]
+            _K = &kfilter.kalman_gain[0, 0, t]
+
+        # Compute required quantites
+        # W_j = H_j (F_j^{-1} Z_j - K_j' N_j L_j)
+        # => H_j^{-1} W_j = F_j^{-1} Z_j - K_j' N_j L_j
+        blas.ccopy(&pm, _FiZ, &inc, &Hi_W[0, 0, tt], &inc)
+
+        scalar = 1. / scale
+        blas.cgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &scalar, &smoother.scaled_smoothed_estimator_cov[0, 0, t + 1], &kfilter.k_states,
+                                    &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                            &beta, kfilter._tmp0, &kfilter.k_states)
+
+        blas.cgemm("T", "N", &model._k_endog, &model._k_states, &model._k_states,
+                            &gamma, _K, &kfilter.k_states,
+                                    kfilter._tmp0, &kfilter.k_states,
+                            &scalar, &Hi_W[0, 0, tt], &model.k_endog)
+
+    # Second pass to compute weights
+    # for t in compute_t:
+    for t in range(n):
+        # Recall that double-letters denotes indexes that start from t0
+        # Hi_W[:, :, nn], K[:, :, nn], weights[:, :, nn, nn],
+        # state_intercept_weights[:, :, nn, nn], prior_weights[:, :, nn]
+        tt = t - t0
+
+        if t < kfilter.nobs_diffuse or not store_t[t]:
+            continue
+
+        # Backwards from j = t-1, t-2, ... min_j
+        # tmp = I - P_t N_{t - 1}
+        # Note: normally would need to multiply Pt by scale and divide N[t+1]
+        # by `scale`, but since they're being multiplied here, the scale terms
+        # cancel out.
+        blas.cgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &gamma, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                    &smoother.scaled_smoothed_estimator_cov[0, 0, t], &kfilter.k_states,
+                            &beta, kfilter._tmp0, &kfilter.k_states)
+        for i in range(m):
+            kfilter.tmp0[i, i] = kfilter.tmp0[i, i] + 1
+
+        # This is the weight of the prior on the smoothed state at
+        # time t == 0
+        if t == 0 and compute_prior_weights:
+            blas.ccopy(&kfilter.k_states2, kfilter._tmp0, &inc, &prior_weights[0, 0, tt], &inc)
+
+        for j in range(t - 1, min_j - 1, -1):
+            # Again, recall that double-letters denotes indexes that start
+            # from t0
+            jj = j - t0
+
+            # Since we are not handling any diffuse observations now, we can
+            # stop as soon as we get to the diffuse periods
+            if j < kfilter.nobs_diffuse:
+                continue
+
+            p_j = p - model.nmissing[j]
+
+            compute_K = kfilter.univariate_filter[t] or filter_collapsed
+            if compute_K:
+                _K = &K[0, 0, jj]
+            else:
+                _K = &kfilter.kalman_gain[0, 0, j]
+
+            # The difference for univariate her would be:
+            # - if j in compute_j, then we have a subloop, i in p_j (but in
+            #   descending order, since we're going backwards here), where
+            #   we need to compute L_{j,i} and update tmp = tmp @ L_{j,i}
+            # - if j not in compute_j, then we only need to update
+            #   tmp = tmp @ L[j] (as in the conventional case), since
+            #   L[j] = \prod_i L_{j, i}
+            if store_j[j]:
+                if p_j > 0:
+                    # weights[:, :p_j, tt, jj] = tmp @ K[jj][:, :p_j]
+                    blas.cgemm("N", "N", &model._k_states, &p_j, &model._k_states,
+                                        &alpha, kfilter._tmp0, &kfilter.k_states,
+                                                _K, &kfilter.k_states,
+                                        &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+                # state_intercept_weights[:, :, tt, jj] = -tmp
+                blas.ccopy(&kfilter.k_states2, kfilter._tmp0, &inc,
+                                                        &state_intercept_weights[0, 0, tt, jj], &inc)
+
+            if j > min_j or (j == 0 and compute_prior_weights):
+                # tmp = tmp @ L
+                blas.cgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &alpha, kfilter._tmp0, &kfilter.k_states,
+                                    &smoother.innovations_transition[0, 0, j], &kfilter.k_states,
+                            &beta, kfilter._tmp00, &kfilter.k_states)
+                blas.ccopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+                # This is the weight of the prior on the smoothed state at
+                # time t > 0
+                if j == 0 and compute_prior_weights:
+                    blas.ccopy(&kfilter.k_states2, kfilter._tmp0, &inc, &prior_weights[0, 0, tt], &inc)
+
+        # For j == t
+        # For the univariate case, some notes:
+        # Note in general about computing weights that we need to define what
+        # we mean by the state at time t. So if we were computing weights for
+        # the predicted state at time t, that would mean we were computing
+        # weights for the expectation of the time t state conditional on all
+        # information dated time t-1 or earlier. So I thnk that j==t refers
+        # to the specific case that j = t and i = p_t, i.e. we have
+        # incorporated all the information from time t. Then j = t but i < p_t
+        # would follow the j < t formula.
+        j = t
+        jj = tt
+        p_j = p - model.nmissing[t]
+        if store_j[j]:
+            if p_j > 0:
+                # weights[:, :p_j, tt, jj] = Pt @ Hi_W[j, :p_j].T
+                blas.cgemm("N", "T", &model._k_states, &p_j, &model._k_states,
+                                    &scale, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                            &Hi_W[0, 0, jj], &model.k_endog,
+                                    &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+            # state_intercept_weights[:, :, tt, jj] = -(Pt @ Lt' @ Nt)
+            # Note: normally would need to multiply Pt by scale and divide Nt
+            # by `scale`, but since they're being multiplied here, the scale terms
+            # cancel out.
+            blas.cgemm("T", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &gamma, &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                                    &smoother.scaled_smoothed_estimator_cov[0, 0, t + 1], &kfilter.k_states,
+                            &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.cgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &alpha, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                    kfilter._tmp00, &kfilter.k_states,
+                            &beta, &state_intercept_weights[0, 0, tt, jj], &kfilter.k_states)
+
+        # Forwards from j = t+1, t+2, ..., max_j
+        # tmp = Pt
+        blas.ccopy(&kfilter.k_states2, &kfilter.predicted_state_cov[0, 0, t], &inc, kfilter._tmp0, &inc)
+        if scale != 1:
+            blas.cscal(&kfilter.k_states2, &scale, kfilter._tmp0, &inc)
+        if max_j > t:
+            # tmp = tmp @ L[t].T
+            blas.cgemm("N", "T", &model._k_states, &model._k_states, &model._k_states,
+                                &alpha, kfilter._tmp0, &kfilter.k_states,
+                                        &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                                &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.ccopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+        for j in range(t + 1, max_j + 1):
+            # Again, recall that double-letters denotes indexes that start
+            # from t0
+            jj = j - t0
+            p_j = p - model.nmissing[j]
+
+            if store_j[j] and p_j > 0:
+                # weights[:, :p_j, tt, jj] = tmp @ Hi_W[j, :p_j].T
+                blas.cgemm("N", "T", &model._k_states, &p_j, &model._k_states,
+                                    &alpha, kfilter._tmp0, &kfilter.k_states,
+                                            &Hi_W[0, 0, jj], &p,
+                                    &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+            # tmp = tmp @ L[j].T
+            blas.cgemm("N", "T", &model._k_states, &model._k_states, &model._k_states,
+                                &alpha, kfilter._tmp0, &kfilter.k_states,
+                                        &smoother.innovations_transition[0, 0, j], &kfilter.k_states,
+                                &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.ccopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+            if store_j[j]:
+                # state_intercept_weights[:, :, tt, jj] = -(tmp @ N_j)
+                scalar = -1 / scale
+                blas.cgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                                &scalar, kfilter._tmp00, &kfilter.k_states,
+                                        &smoother.scaled_smoothed_estimator_cov[0, 0, j + 1], &kfilter.k_states,
+                                &beta, &state_intercept_weights[0, 0, tt, jj], &kfilter.k_states)
+
+    return np.array(weights), np.array(state_intercept_weights), np.array(prior_weights), np.array(Hi_W)
+
+
+cdef bint _zselect1(np.complex128_t * a):
+    return 0
+
+cdef bint _zselect2(np.complex128_t * a, np.complex128_t * b):
+    return 0
+
+cdef int _zsolve_discrete_lyapunov(np.complex128_t * a, np.complex128_t * q, int n, int complex_step=False) except *:
+    # Note: some of this code (esp. the Sylvester solving part) cribbed from
+    # https://raw.githubusercontent.com/scipy/scipy/master/scipy/linalg/_solvers.py
+
+    # Solve an equation of the form $A'XA-X=-Q$
+    # a: input / output
+    # q: input / output
+    cdef:
+        int i, j
+        int info
+        int inc = 1
+        int n2 = n**2
+        np.float64_t scale = 0.0
+        np.complex128_t tmp = 0.0
+        np.complex128_t alpha = 1.0
+        np.complex128_t beta = 0.0
+        np.complex128_t delta = -2.0
+        char trans
+    cdef np.npy_intp dim[2]
+    cdef np.complex128_t [::1,:] apI, capI, u, v
+    cdef int [::1,:] ipiv
+    # Dummy selection function, will not actually be referenced since we do not
+    # need to order the eigenvalues in the ?gees call.
+    cdef:
+        int sdim
+        int lwork = 3*n
+        bint bwork
+    cdef np.npy_intp dim1[1]
+    cdef np.complex128_t [::1,:] work
+    cdef np.complex128_t [:] wr
+    cdef np.float64_t [:] wi
+
+    # Initialize arrays
+    dim[0] = n; dim[1] = n;
+    apI = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX128, FORTRAN)
+    capI = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX128, FORTRAN)
+    u = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX128, FORTRAN)
+    v = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX128, FORTRAN)
+    ipiv = np.PyArray_ZEROS(2, dim, np.NPY_INT32, FORTRAN)
+
+    dim1[0] = n;
+    wr = np.PyArray_ZEROS(1, dim1, np.NPY_COMPLEX128, FORTRAN)
+    wi = np.PyArray_ZEROS(1, dim1, np.NPY_FLOAT64, FORTRAN)
+    #vs = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX128, FORTRAN)
+    dim[0] = lwork; dim[1] = lwork;
+    work = np.PyArray_ZEROS(2, dim, np.NPY_COMPLEX128, FORTRAN)
+
+    # - Solve for b.conj().transpose() --------
+
+    # Get apI = a + I (stored in apI)
+    # = (a + eye)
+    # For: c = 2*np.dot(np.dot(inv(a + eye), q), aHI_inv)
+    copy(n2, a, &apI[0, 0])
+    # (for loop below adds the identity)
+
+    # Get conj(a) + I (stored in capI)
+    # a^H + I -> capI
+    # For: aHI_inv = inv(aH + eye)
+    copy(n2, a, &capI[0, 0])
+    # (for loop below adds the identity)
+
+    # Get conj(a) - I (stored in a)
+    # a^H - I -> a
+    # For: b = np.dot(aH - eye, aHI_inv)
+    # (for loop below subtracts the identity)
+
+    # Add / subtract identity matrix
+    for i in range(n):
+        apI[i,i] = apI[i,i] + 1 # apI -> a + eye
+        capI[i,i] = capI[i,i] + 1 # aH + eye
+        a[i + i*n] = a[i + i*n] - 1 # a - eye
+
+    # Solve [conj(a) + I] b' = [conj(a) - I] (result stored in a)
+    # For: b = np.dot(aH - eye, aHI_inv)
+    # Where: aHI_inv = inv(aH + eye)
+    # where b = (a^H - eye) (a^H + eye)^{-1}
+    # or b^H = (a + eye)^{-1} (a - eye)
+    # or (a + eye) b^H = (a - eye)
+    lapack.zgetrf(&n, &n, &capI[0,0], &n, &ipiv[0,0], &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU decomposition error.')
+
+    lapack.zgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                               a, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # Now we have b^H; we could take the conjugate transpose to get b, except
+    # that the input to the continuous Lyapunov equation is exactly
+    # b^H, so we already have the quantity we need.
+
+    # - Solve for (-c) --------
+
+    # where c = 2*np.dot(np.dot(inv(a + eye), q), aHI_inv)
+    # = 2*(a + eye)^{-1} q (a^H + eye)^{-1}
+    # and with q Hermitian
+    # consider x = (a + eye)^{-1} q (a^H + eye)^{-1}
+    # this can be done in two linear solving steps:
+    # 1. consider y = q (a^H + eye)^{-1}
+    #    or y (a^H + eye) = q
+    #    or (a^H + eye)^H y^H = q^H
+    #    or (a + eye) y^H = q
+    # 2. Then consider x = (a + eye)^{-1} y
+    #    or (a + eye) x = y
+
+    # Solve [conj(a) + I] tmp' = q (result stored in q)
+    # For: y = q (a^H + eye)^{-1} => (a + eye) y^H = q
+    lapack.zgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                                        q, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # Replace the result (stored in q) with its (conjugate) transpose
+    for j in range(1, n):
+        for i in range(j):
+            tmp = q[i + j*n]
+            q[i + j*n] = q[j + i*n]
+            q[j + i*n] = tmp
+
+    if not complex_step:
+        for i in range(n2):
+            q[i] = q[i] - q[i].imag * 2.0j
+
+    lapack.zgetrs("N", &n, &n, &capI[0,0], &n, &ipiv[0,0],
+                                        q, &n, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('LU solver error.')
+
+    # q -> -2.0 * q
+    blas.zscal(&n2, &delta, q, &inc)
+
+    # - Solve continuous time Lyapunov --------
+
+    # Now solve the continuous time Lyapunov equation (AX + XA^H = Q), on the
+    # transformed inputs ...
+
+    # ... which requires solving the continuous time Sylvester equation
+    # (AX + XB = Q) where B = A^H
+
+    # Compute the real Schur decomposition of a (unordered)
+    # TODO compute the optimal lwork rather than always using 3*n
+    lapack.zgees("V", "N", <lapack.zselect1 *> &_zselect1, &n,
+                          a, &n,
+                          &sdim,
+                          &wr[0],
+                          &u[0,0], &n,
+                          &work[0,0], &lwork,
+                          &wi[0],
+                          &bwork, &info)
+
+    if not info == 0:
+        raise np.linalg.LinAlgError('Schur decomposition solver error.')
+
+    # Get v (so that in the complex step case we can take the conjugate)
+    copy(n2, &u[0, 0], &v[0, 0])
+    # If complex step, take the conjugate
+    if complex_step:
+        for i in range(n):
+            for j in range(n):
+                v[i,j] = v[i,j] - v[i,j].imag * 2.0j
+
+    # Construct f = u^H*q*u (result overwrites q)
+    # In the usual case, v = u
+    # In the complex step case, v = u.conj()
+    blas.zgemm("N", "N", &n, &n, &n,
+                        &alpha, q, &n,
+                                &v[0,0], &n,
+                        &beta, &capI[0,0], &n)
+    blas.zgemm("C", "N", &n, &n, &n,
+                        &alpha, &u[0,0], &n,
+                                &capI[0,0], &n,
+                        &beta, q, &n)
+
+    # DTRYSL Solve op(A)*X + X*op(B) = scale*C which is here:
+    # r*X + X*r = scale*q
+    # results overwrite q
+    copy(n2, a, &apI[0, 0])
+    if complex_step:
+        for i in range(n):
+            for j in range(n):
+                apI[j,i] = apI[j,i] - apI[j,i].imag * 2.0j
+    lapack.ztrsyl("N", "C", &inc, &n, &n,
+                           a, &n,
+                           &apI[0,0], &n,
+                           q, &n,
+                           &scale, &info)
+
+    # Scale q by scale
+    if not scale == 1.0:
+        blas.zscal(&n2, <np.complex128_t*> &scale, q, &inc)
+
+    # Calculate the solution: u * q * v^H (results overwrite q)
+    # In the usual case, v = u
+    # In the complex step case, v = u.conj()
+    blas.zgemm("N", "C", &n, &n, &n,
+                        &alpha, q, &n,
+                                &v[0,0], &n,
+                        &beta, &capI[0,0], &n)
+    blas.zgemm("N", "N", &n, &n, &n,
+                        &alpha, &u[0,0], &n,
+                                &capI[0,0], &n,
+                        &beta, q, &n)
+
+
+cpdef _zcompute_coefficients_from_multivariate_pacf(np.complex128_t [::1,:] partial_autocorrelations,
+                                                             np.complex128_t [::1,:] error_variance,
+                                                             int transform_variance,
+                                                             int order, int k_endog):
+    """
+    Notes
+    -----
+
+    This uses the ?trmm BLAS functions which are not available in
+    Scipy v0.11.0
+    """
+    # Constants
+    cdef:
+        np.complex128_t alpha = 1.0
+        np.complex128_t beta = 0.0
+        np.complex128_t gamma = -1.0
+        int k_endog2 = k_endog**2
+        int k_endog_order = k_endog * order
+        int k_endog_order1 = k_endog * (order+1)
+        int info, s, k
+    # Local variables
+    cdef:
+        np.npy_intp dim2[2]
+        np.complex128_t [::1, :] initial_variance
+        np.complex128_t [::1, :] forward_variance
+        np.complex128_t [::1, :] backward_variance
+        np.complex128_t [::1, :] autocovariances
+        np.complex128_t [::1, :] forwards1
+        np.complex128_t [::1, :] forwards2
+        np.complex128_t [::1, :] backwards1
+        np.complex128_t [::1, :] backwards2
+        np.complex128_t [::1, :] forward_factors
+        np.complex128_t [::1, :] backward_factors
+        np.complex128_t [::1, :] tmp
+        np.complex128_t [::1, :] tmp2
+    # Pointers
+    cdef:
+        np.complex128_t * forwards
+        np.complex128_t * prev_forwards
+        np.complex128_t * backwards
+        np.complex128_t * prev_backwards
+    # ?trmm
+    # cdef ztrmm_t *ztrmm = <ztrmm_t*>Capsule_AsVoidPtr(blas.ztrmm._cpointer)
+
+    # dim2[0] = self.k_endog; dim2[1] = storage;
+    # self.forecast = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+
+    # If we want to keep the provided variance but with the constrained
+    # coefficient matrices, we need to make a copy here, and then after the
+    # main loop we will transform the coefficients to match the passed variance
+    if not transform_variance:
+        initial_variance = np.asfortranarray(error_variance.copy())
+        # Need to make the input variance large enough that the recursions
+        # do not lead to zero-matrices due to roundoff error, which would case
+        # exceptions from the Cholesky decompositions.
+        # Note that this will still not always ensure positive definiteness,
+        # and for k_endog, order large enough an exception may still be raised
+        error_variance = np.asfortranarray(np.eye(k_endog, dtype=complex) * (order + k_endog)**10)
+
+    # Initialize matrices
+    dim2[0] = k_endog; dim2[1] = k_endog;
+    forward_variance = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    backward_variance = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    forward_factors = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    backward_factors = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    tmp2 = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+
+    dim2[0] = k_endog; dim2[1] = k_endog_order;
+    # \phi_{s,k}, s = 1, ..., p
+    #             k = 1, ..., s+1
+    forwards1 = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    forwards2 = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    # \phi_{s,k}^*
+    backwards1 = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    backwards2 = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+
+    dim2[0] = k_endog; dim2[1] = k_endog_order1;
+    autocovariances = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+
+    copy(k_endog2, &error_variance[0, 0], &forward_variance[0, 0])   # \Sigma_s
+    copy(k_endog2, &error_variance[0, 0], &backward_variance[0, 0])  # \Sigma_s^*,  s = 0, ..., p
+    copy(k_endog2, &error_variance[0, 0], &autocovariances[0, 0])  # \Gamma_s
+
+    # error_variance_factor = linalg.cholesky(error_variance, lower=True)
+    copy(k_endog2, &error_variance[0, 0], &forward_factors[0,0])
+    lapack.zpotrf("L", &k_endog, &forward_factors[0,0], &k_endog, &info)
+    copy(k_endog2, &forward_factors[0, 0], &backward_factors[0, 0])
+
+    # We fill in the entries as follows:
+    # [1,1]
+    # [2,2], [2,1]
+    # [3,3], [3,1], [3,2]
+    # ...
+    # [p,p], [p,1], ..., [p,p-1]
+    # the last row, correctly ordered, is then used as the coefficients
+    for s in range(order):  # s = 0, ..., p-1
+        if s % 2 == 0:
+            forwards = &forwards1[0, 0]
+            prev_forwards = &forwards2[0, 0]
+            backwards = &backwards1[0, 0]
+            prev_backwards = &backwards2[0, 0]
+        else:
+            forwards = &forwards2[0, 0]
+            prev_forwards = &forwards1[0, 0]
+            backwards = &backwards2[0, 0]
+            prev_backwards = &backwards1[0, 0]
+
+        # Create the "last" (k = s+1) matrix
+        # Note: this is for k = s+1. However, below we then have to fill
+        # in for k = 1, ..., s in order.
+        # P L*^{-1} = x
+        # x L* = P
+        # L*' x' = P'
+        # forwards[:, s*k_endog:(s+1)*k_endog] = np.dot(
+        #     forward_factors,
+        #     linalg.solve_triangular(
+        #         backward_factors, partial_autocorrelations[:, s*k_endog:(s+1)*k_endog].T,
+        #         lower=True, trans='T').T
+        # )
+        for k in range(k_endog):
+            copy(k_endog, &partial_autocorrelations[k, s*k_endog], &tmp[0, k], k_endog)
+        lapack.ztrtrs("L", "T", "N", &k_endog, &k_endog, &backward_factors[0,0], &k_endog,
+                                                           &tmp[0, 0], &k_endog, &info)
+        # zgemm("N", "T", &k_endog, &k_endog, &k_endog,
+        #   &alpha, &forward_factors[0,0], &k_endog,
+        #           &tmp[0, 0], &k_endog,
+        #   &beta, &forwards[s*k_endog2], &k_endog)
+        blas.ztrmm("R", "L", "T", "N", &k_endog, &k_endog,
+          &alpha, &forward_factors[0,0], &k_endog,
+                  &tmp[0, 0], &k_endog)
+        for k in range(k_endog):
+            copy(k_endog, &tmp[k, 0], &forwards[s*k_endog2 + k*k_endog], k_endog)
+
+        # P' L^{-1} = x
+        # x L = P'
+        # L' x' = P
+        # backwards[:, s*k_endog:(s+1)*k_endog] = np.dot(
+        #     backward_factors,
+        #     linalg.solve_triangular(
+        #         forward_factors, partial_autocorrelations[:, s*k_endog:(s+1)*k_endog],
+        #         lower=True, trans='T').T
+        # )
+        copy(k_endog2, &partial_autocorrelations[0, s*k_endog], &tmp[0, 0])
+        lapack.ztrtrs("L", "T", "N", &k_endog, &k_endog, &forward_factors[0, 0], &k_endog,
+                                                           &tmp[0, 0], &k_endog, &info)
+        # zgemm("N", "T", &k_endog, &k_endog, &k_endog,
+        #   &alpha, &backward_factors[0, 0], &k_endog,
+        #           &tmp[0, 0], &k_endog,
+        #   &beta, &backwards[s * k_endog2], &k_endog)
+        blas.ztrmm("R", "L", "T", "N", &k_endog, &k_endog,
+          &alpha, &backward_factors[0,0], &k_endog,
+                  &tmp[0, 0], &k_endog)
+        for k in range(k_endog):
+            copy(k_endog, &tmp[k, 0], &backwards[s*k_endog2 + k*k_endog], k_endog)
+
+        # Update the variance
+        # Note: if s >= 1, this will be further updated in the for loop
+        # below
+        # Also, this calculation will be re-used in the forward variance
+        # tmp = np.dot(forwards[:, s*k_endog:(s+1)*k_endog], backward_variance)
+        # tmpT = np.dot(backward_variance.T, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        blas.zgemm("T", "T", &k_endog, &k_endog, &k_endog,
+          &alpha, &backward_variance[0, 0], &k_endog,
+                  &forwards[s * k_endog2], &k_endog,
+          &beta, &tmp[0, 0], &k_endog)
+        # autocovariances[:, (s+1)*k_endog:(s+2)*k_endog] = tmp.copy().T
+        copy(k_endog2, &tmp[0, 0], &autocovariances[0, (s+1)*k_endog])
+
+        # Create the remaining k = 1, ..., s matrices,
+        # only has an effect if s >= 1
+        for k in range(s):
+            # forwards[:, k*k_endog:(k+1)*k_endog] = (
+            #     prev_forwards[:, k*k_endog:(k+1)*k_endog] -
+            #     np.dot(
+            #         forwards[:, s*k_endog:(s+1)*k_endog],
+            #         prev_backwards[:, (s-k-1)*k_endog:(s-k)*k_endog]
+            #     )
+            # )
+            copy(k_endog2, &prev_forwards[k * k_endog2], &forwards[k * k_endog2])
+            blas.zgemm("N", "N", &k_endog, &k_endog, &k_endog,
+              &gamma, &forwards[s * k_endog2], &k_endog,
+                      &prev_backwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &forwards[k * k_endog2], &k_endog)
+
+            # backwards[:, k*k_endog:(k+1)*k_endog] = (
+            #     prev_backwards[:, k*k_endog:(k+1)*k_endog] -
+            #     np.dot(
+            #         backwards[:, s*k_endog:(s+1)*k_endog],
+            #         prev_forwards[:, (s-k-1)*k_endog:(s-k)*k_endog]
+            #     )
+            # )
+            copy(k_endog2, &prev_backwards[k * k_endog2], &backwards[k * k_endog2])
+            blas.zgemm("N", "N", &k_endog, &k_endog, &k_endog,
+              &gamma, &backwards[s * k_endog2], &k_endog,
+                      &prev_forwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &backwards[k * k_endog2], &k_endog)
+
+            # autocovariances[:, (s+1)*k_endog:(s+2)*k_endog] += np.dot(
+            #     autocovariances[:, (k+1)*k_endog:(k+2)*k_endog],
+            #     prev_forwards[:, (s-k-1)*k_endog:(s-k)*k_endog].T
+            # )
+            blas.zgemm("N", "T", &k_endog, &k_endog, &k_endog,
+              &alpha, &autocovariances[0, (k+1)*k_endog], &k_endog,
+                      &prev_forwards[(s - k - 1) * k_endog2], &k_endog,
+              &alpha, &autocovariances[0, (s+1)*k_endog], &k_endog)
+
+        # Create forward and backwards variances
+        # backward_variance = (
+        #     backward_variance -
+        #     np.dot(
+        #         np.dot(backwards[:, s*k_endog:(s+1)*k_endog], forward_variance),
+        #         backwards[:, s*k_endog:(s+1)*k_endog].T
+        #     )
+        # )
+        blas.zgemm("N", "N", &k_endog, &k_endog, &k_endog,
+          &alpha, &backwards[s * k_endog2], &k_endog,
+                  &forward_variance[0, 0], &k_endog,
+          &beta, &tmp2[0, 0], &k_endog)
+        blas.zgemm("N", "T", &k_endog, &k_endog, &k_endog,
+          &gamma, &tmp2[0, 0], &k_endog,
+                  &backwards[s * k_endog2], &k_endog,
+          &alpha, &backward_variance[0, 0], &k_endog)
+        # forward_variance = (
+        #     forward_variance -
+        #     np.dot(tmp, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        # )
+        # forward_variance = (
+        #     forward_variance -
+        #     np.dot(tmpT.T, forwards[:, s*k_endog:(s+1)*k_endog].T)
+        # )
+        blas.zgemm("T", "T", &k_endog, &k_endog, &k_endog,
+          &gamma, &tmp[0, 0], &k_endog,
+                  &forwards[s * k_endog2], &k_endog,
+          &alpha, &forward_variance[0, 0], &k_endog)
+
+        # Cholesky factors
+        # forward_factors = linalg.cholesky(forward_variance, lower=True)
+        # backward_factors =  linalg.cholesky(backward_variance, lower=True)
+        copy(k_endog2, &forward_variance[0, 0], &forward_factors[0, 0])
+        lapack.zpotrf("L", &k_endog, &forward_factors[0,0], &k_endog, &info)
+        copy(k_endog2, &backward_variance[0, 0], &backward_factors[0, 0])
+        lapack.zpotrf("L", &k_endog, &backward_factors[0,0], &k_endog, &info)
+
+
+    # If we do not want to use the transformed variance, we need to
+    # adjust the constrained matrices, as presented in Lemma 2.3, see above
+    if not transform_variance:
+        if order % 2 == 0:
+            forwards = &forwards2[0,0]
+        else:
+            forwards = &forwards1[0,0]
+
+        # Here, we need to construct T such that:
+        # variance = T * initial_variance * T'
+        # To do that, consider the Cholesky of variance (L) and
+        # input_variance (M) to get:
+        # L L' = T M M' T' = (TM) (TM)'
+        # => L = T M
+        # => L M^{-1} = T
+        # initial_variance_factor = np.linalg.cholesky(initial_variance)
+        # L'
+        lapack.zpotrf("U", &k_endog, &initial_variance[0,0], &k_endog, &info)
+        # transformed_variance_factor = np.linalg.cholesky(variance)
+        # M'
+        copy(k_endog2, &forward_variance[0, 0], &tmp[0, 0])
+        lapack.zpotrf("U", &k_endog, &tmp[0,0], &k_endog, &info)
+        # zpotri("L", &k_endog, &tmp[0,0], &k_endog, &info)
+
+        # We need to zero out the lower triangle of L', because ?trtrs only
+        # knows that M' is upper triangular
+        for s in range(k_endog - 1):          # column
+            for k in range(s+1, k_endog):     # row
+                initial_variance[k, s] = 0
+
+        # Note that T is lower triangular
+        # L M^{-1} = T
+        # M' T' = L'
+        # transform = np.dot(initial_variance_factor,
+        #                    np.linalg.inv(transformed_variance_factor))
+        lapack.ztrtrs("U", "N", "N", &k_endog, &k_endog, &tmp[0,0], &k_endog,
+                                                           &initial_variance[0, 0], &k_endog, &info)
+        # Now:
+        # initial_variance = T'
+
+        for s in range(order):
+            # forwards[:, s*k_endog:(s+1)*k_endog] = (
+            #     np.dot(
+            #         np.dot(transform, forwards[:, s*k_endog:(s+1)*k_endog]),
+            #         inv_transform
+            #     )
+            # )
+            # TF T^{-1} = x
+            # TF = x T
+            # (TF)' = T' x'
+
+            # Get TF
+            copy(k_endog2, &forwards[s * k_endog2], &tmp2[0, 0])
+            blas.ztrmm("L", "U", "T", "N", &k_endog, &k_endog,
+              &alpha, &initial_variance[0, 0], &k_endog,
+                      &tmp2[0, 0], &k_endog)
+            for k in range(k_endog):
+                copy(k_endog, &tmp2[k, 0], &tmp[0, k], k_endog)
+            # Get x'
+            lapack.ztrtrs("U", "N", "N", &k_endog, &k_endog, &initial_variance[0,0], &k_endog,
+                                                               &tmp[0, 0], &k_endog, &info)
+            # Get x
+            for k in range(k_endog):
+                copy(k_endog, &tmp[k, 0], &forwards[s * k_endog2 + k*k_endog], k_endog)
+
+
+    if order % 2 == 0:
+        return forwards2, forward_variance
+    else:
+        return forwards1, forward_variance
+
+cpdef _zconstrain_sv_less_than_one(np.complex128_t [::1,:] unconstrained, int order, int k_endog):
+    """
+    Transform arbitrary matrices to matrices with singular values less than
+    one.
+
+    Corresponds to Lemma 2.2 in Ansley and Kohn (1986). See
+    `constrain_stationary_multivariate` for more details.
+    """
+    # Constants
+    cdef:
+        np.complex128_t alpha = 1.0
+        int k_endog2 = k_endog**2
+        int info, i
+    # Local variables
+    cdef:
+        np.npy_intp dim2[2]
+        np.complex128_t [::1, :] constrained
+        np.complex128_t [::1, :] tmp
+        np.complex128_t [::1, :] eye
+
+    dim2[0] = k_endog; dim2[1] = k_endog * order;
+    constrained = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    dim2[0] = k_endog; dim2[1] = k_endog;
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    eye = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+
+    eye = np.asfortranarray(np.eye(k_endog, dtype=complex))
+    for i in range(order):
+        copy(k_endog2, &eye[0, 0], &tmp[0, 0])
+        blas.zgemm("N", "T", &k_endog, &k_endog, &k_endog,
+          &alpha, &unconstrained[0, i*k_endog], &k_endog,
+                  &unconstrained[0, i*k_endog], &k_endog,
+          &alpha, &tmp[0, 0], &k_endog)
+        lapack.zpotrf("L", &k_endog, &tmp[0, 0], &k_endog, &info)
+
+        copy(k_endog2, &unconstrained[0, i*k_endog], &constrained[0, i*k_endog])
+        # constrained.append(linalg.solve_triangular(B, A, lower=lower))
+        lapack.ztrtrs("L", "N", "N", &k_endog, &k_endog, &tmp[0, 0], &k_endog,
+                                                           &constrained[0, i*k_endog], &k_endog, &info)
+    return constrained
+
+cdef int _zldl(np.complex128_t * A, int n) except *:
+    # See Golub and Van Loan, Algorithm 4.1.2
+    cdef:
+        int info = 0
+        int j, i, k
+        np.npy_intp dim[1]
+        np.float64_t tol = 1e-15
+        np.complex128_t [:] v
+
+    dim[0] = n
+    v = np.PyArray_ZEROS(1, dim, np.NPY_COMPLEX128, FORTRAN)
+
+    for j in range(n):
+        # Compute v(1:j)
+        v[j] = A[j + j*n]
+
+        # Positive definite element: use Golub and Van Loan algorithm
+        if v[j].real < -tol:
+            info = -j
+            break
+        elif v[j].real > tol:
+            for i in range(j):
+                v[i] = A[j + i*n] * A[i + i*n]
+                v[j] = v[j] - A[j + i*n] * v[i]
+
+            # Store d(j) and compute L(j+1:n,j)
+            A[j + j*n] = v[j]
+            for i in range(j+1, n):
+                for k in range(j):
+                    A[i + j*n] = A[i + j*n] - A[i + k*n] * v[k]
+                A[i + j*n] = A[i + j*n] / v[j]
+        # Positive semi-definite element: zero the appropriate column
+        else:
+            info = 1
+            for i in range(j, n):
+                A[i + j*n]
+
+    return info
+
+cpdef int zldl(np.complex128_t [::1, :] A) except *:
+    _zldl(&A[0,0], A.shape[0])
+
+cdef int _zreorder_missing_diagonal(np.complex128_t * a, int * missing, int n):
+    """
+    a is a pointer to an n x n diagonal array A
+    missing is a pointer to an n x 1 array
+    n is the dimension of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(n-1,-1,-1):
+        if not missing[i]:
+            a[i + i*n] = a[k + k*n]
+            k = k - 1
+        else:
+            a[i + i*n] = 0
+
+cdef int _zreorder_missing_submatrix(np.complex128_t * a, int * missing, int n):
+    """
+    a is a pointer to an n x n array A
+    missing is a pointer to an n x 1 array
+    n is the dimension of A
+    """
+    cdef int i, j, k, nobs
+
+    _zreorder_missing_rows(a, missing, n, n)
+    _zreorder_missing_cols(a, missing, n, n)
+
+cdef int _zreorder_missing_rows(np.complex128_t * a, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    missing is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(n-1,-1,-1):
+        if not missing[i]:
+            swap(m, &a[i], &a[k], n, n)
+            k = k - 1
+
+
+cdef int _zreorder_missing_cols(np.complex128_t * a, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    missing is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, k, nobs
+
+    nobs = m
+    # Construct the non-missing index
+    for i in range(m):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(m-1,-1,-1):
+        if not missing[i]:
+            swap(n, &a[i*n], &a[k*n])
+            k = k - 1
+
+
+cpdef int zreorder_missing_matrix(np.complex128_t [::1, :, :] A, int [::1, :] missing, int reorder_rows, int reorder_cols, int diagonal) except *:
+    cdef int n, m, T, t
+
+    n, m, T = A.shape[0:3]
+
+    if reorder_rows and reorder_cols:
+        if not n == m:
+            raise RuntimeError('Reordering a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                _zreorder_missing_diagonal(&A[0, 0, t], &missing[0, t], n)
+        else:
+            for t in range(T):
+                _zreorder_missing_submatrix(&A[0, 0, t], &missing[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with reordering a submatrix')
+    elif reorder_rows:
+        for t in range(T):
+            _zreorder_missing_rows(&A[0, 0, t], &missing[0, t], n, m)
+    elif reorder_cols:
+        for t in range(T):
+            _zreorder_missing_cols(&A[0, 0, t], &missing[0, t], n, m)
+
+
+cpdef int zreorder_missing_vector(np.complex128_t [::1, :] A, int [::1, :] missing) except *:
+    cdef int i, k, t, n, T, nobs
+
+    n, T = A.shape[0:2]
+
+    for t in range(T):
+        _zreorder_missing_rows(&A[0, t], &missing[0, t], n, 1)
+
+
+cdef int _zcopy_missing_diagonal(np.complex128_t * a, np.complex128_t * b, int * missing, int n):
+    """
+    Copy the non-missing block of diagonal entries
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    k = nobs-1
+    for i in range(nobs):
+        b[i + i*n] = a[i + i*n]
+
+
+cdef int _zcopy_missing_submatrix(np.complex128_t * a, np.complex128_t * b, int * missing, int n):
+    """
+    Copy the non-missing submatrix
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(nobs, &a[i*n], &b[i*n])
+
+
+cdef int _zcopy_missing_rows(np.complex128_t * a, np.complex128_t * b, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    nobs = n
+    # Construct the non-missing index
+    for i in range(n):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(m, &a[i], &b[i], n, n)
+
+
+cdef int _zcopy_missing_cols(np.complex128_t * a, np.complex128_t * b, int * missing, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    missing is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, nobs
+
+    nobs = m
+    # Construct the non-missing index
+    for i in range(m):
+        nobs = nobs - missing[i]
+
+    # Perform replacement
+    for i in range(nobs):
+        copy(n, &a[i*n], &b[i*n])
+
+
+cpdef int zcopy_missing_matrix(np.complex128_t [::1, :, :] A, np.complex128_t [::1, :, :] B, int [::1, :] missing, int missing_rows, int missing_cols, int diagonal) except *:
+    cdef int n, m, T, t, A_T, A_t = 0, time_varying
+
+    n, m, T = B.shape[0:3]
+    A_T = A.shape[2]
+    time_varying = (A_T == T)
+
+    if missing_rows and missing_cols:
+        if not n == m:
+            raise RuntimeError('Copying a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _zcopy_missing_diagonal(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n)
+        else:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _zcopy_missing_submatrix(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with copying a submatrix')
+    elif missing_rows:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _zcopy_missing_rows(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n, m)
+    elif missing_cols:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _zcopy_missing_cols(&A[0, 0, A_t], &B[0, 0, t], &missing[0, t], n, m)
+    pass
+
+
+cpdef int zcopy_missing_vector(np.complex128_t [::1, :] A, np.complex128_t [::1, :] B, int [::1, :] missing) except *:
+    cdef int n, t, T, A_t = 0, A_T
+
+    n, T = B.shape[0:2]
+    A_T = A.shape[1]
+    time_varying = (A_T == T)
+
+    for t in range(T):
+        if time_varying:
+            A_t = t
+        _zcopy_missing_rows(&A[0, A_t], &B[0, t], &missing[0, t], n, 1)
+
+cdef int _zcopy_index_diagonal(np.complex128_t * a, np.complex128_t * b, int * index, int n):
+    """
+    Copy the non-index block of diagonal entries
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    cdef int i, j, k, nobs
+
+    # Perform replacement
+    for i in range(n):
+        if index[i]:
+            b[i + i*n] = a[i + i*n]
+
+
+cdef int _zcopy_index_submatrix(np.complex128_t * a, np.complex128_t * b, int * index, int n):
+    """
+    Copy the non-index submatrix
+
+    a is a pointer to an n x n diagonal array A (copy from)
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the dimension of A, B
+    """
+    _zcopy_index_rows(a, b, index, n, n)
+    _zcopy_index_cols(a, b, index, n, n)
+
+
+cdef int _zcopy_index_rows(np.complex128_t * a, np.complex128_t * b, int * index, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an n x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i
+
+    # Perform replacement
+    for i in range(n):
+        if index[i]:
+            copy(m, &a[i], &b[i], n, n)
+
+
+cdef int _zcopy_index_cols(np.complex128_t * a, np.complex128_t * b, int * index, int n, int m):
+    """
+    a is a pointer to an n x m array A
+    b is a pointer to an n x n diagonal array B (copy to)
+    index is a pointer to an m x 1 array
+    n is the number of rows of A
+    m is the number of columns of A
+    """
+    cdef int i, j, k, nobs
+
+    # Perform replacement
+    for i in range(m):
+        if index[i]:
+            copy(n, &a[i*n], &b[i*n])
+
+
+cpdef int zcopy_index_matrix(np.complex128_t [::1, :, :] A, np.complex128_t [::1, :, :] B, int [::1, :] index, int index_rows, int index_cols, int diagonal) except *:
+    cdef int n, m, T, t, A_T, A_t = 0, time_varying
+
+    n, m, T = B.shape[0:3]
+    A_T = A.shape[2]
+    time_varying = (A_T == T)
+
+    if index_rows and index_cols:
+        if not n == m:
+            raise RuntimeError('Copying a submatrix requires n = m')
+        if diagonal:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _zcopy_index_diagonal(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n)
+        else:
+            for t in range(T):
+                if time_varying:
+                    A_t = t
+                _zcopy_index_submatrix(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n)
+    elif diagonal:
+        raise RuntimeError('`diagonal` argument only valid with copying a submatrix')
+    elif index_rows:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _zcopy_index_rows(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n, m)
+    elif index_cols:
+        for t in range(T):
+            if time_varying:
+                    A_t = t
+            _zcopy_index_cols(&A[0, 0, A_t], &B[0, 0, t], &index[0, t], n, m)
+
+
+cpdef int zcopy_index_vector(np.complex128_t [::1, :] A, np.complex128_t [::1, :] B, int [::1, :] index) except *:
+    cdef int n, t, T, A_t = 0, A_T
+
+    n, T = B.shape[0:2]
+    A_T = A.shape[1]
+    time_varying = (A_T == T)
+
+    for t in range(T):
+        if time_varying:
+            A_t = t
+        _zcopy_index_rows(&A[0, A_t], &B[0, t], &index[0, t], n, 1)
+
+cdef int _zselect_cov(int k_states, int k_posdef, int k_states_total,
+                               np.complex128_t * tmp,
+                               np.complex128_t * selection,
+                               np.complex128_t * cov,
+                               np.complex128_t * selected_cov):
+    cdef:
+        int i, k_states2 = k_states**2
+        np.complex128_t alpha = 1.0
+        np.complex128_t beta = 0.0
+
+    # Only need to do something if there is a covariance matrix
+    # (i.e k_posdof == 0)
+    if k_posdef > 0:
+
+        # #### Calculate selected state covariance matrix
+        # $Q_t^* = R_t Q_t R_t'$
+        #
+        # Combine a selection matrix and a covariance matrix to get
+        # a simplified (but possibly singular) "selected" covariance
+        # matrix (see e.g. Durbin and Koopman p. 43)
+
+        # `tmp0` array used here, dimension $(m \times r)$
+
+        # $\\#_0 = 1.0 * R_t Q_t$
+        # $(m \times r) = (m \times r) (r \times r)$
+        blas.zgemm("N", "N", &k_states, &k_posdef, &k_posdef,
+              &alpha, selection, &k_states_total,
+                      cov, &k_posdef,
+              &beta, tmp, &k_states)
+        # $Q_t^* = 1.0 * \\#_0 R_t'$
+        # $(m \times m) = (m \times r) (m \times r)'$
+        blas.zgemm("N", "T", &k_states, &k_states, &k_posdef,
+              &alpha, tmp, &k_states,
+                      selection, &k_states_total,
+              &beta, selected_cov, &k_states)
+    else:
+        for i in range(k_states2):
+            selected_cov[i] = 0
+
+
+cpdef _zcompute_smoothed_state_weights(
+        zKalmanSmoother smoother,
+        zKalmanFilter kfilter,
+        zStatespace model,
+        np.int32_t [:] compute_t,
+        np.int32_t [:] compute_j,
+        np.complex128_t scale,
+        int compute_prior_weights=False):
+    cdef:
+        int t, i, j, n_t, n_j, min_j, max_j, p_t, p_j, t0
+        int n = model.nobs
+        int p = model.k_endog
+        int m = model.k_states
+        int pm = p * m
+        int filter_collapsed, compute_K
+        int inc = 1
+        int compute
+        np.int32_t [:] store_t, store_j
+        np.npy_intp dim1[1]
+        np.npy_intp dim2[2]
+        np.npy_intp dim3[3]
+        np.npy_intp dim4[4]
+        np.complex128_t alpha = 1.0
+        np.complex128_t beta = 0.0
+        np.complex128_t gamma = -1.0
+        np.complex128_t scalar
+        np.complex128_t [::1, :, :] Hi_W, K, prior_weights
+        np.complex128_t [::1, :, :, :] weights, state_intercept_weights
+        np.complex128_t [::1, :] tmp, F, Fi, FiZ
+        np.complex128_t * _Pt
+        np.complex128_t * _Z
+        np.complex128_t * _H
+        np.complex128_t * _FiZ
+        np.complex128_t * _K
+
+    n_t = compute_t.size
+    n_j = compute_j.size
+    min_j = compute_j[0]
+    max_j = compute_j[n_j - 1]
+    dim1[0] = n;
+    store_j = np.PyArray_ZEROS(1, dim1, np.NPY_INT32, FORTRAN)
+    for i in range(n_j):
+        j = compute_j[i]
+        store_j[j] = True
+
+    dim1[0] = n;
+    store_t = np.PyArray_ZEROS(1, dim1, np.NPY_INT32, FORTRAN)
+    for i in range(n_t):
+        t = compute_t[i]
+        store_t[t] = True
+
+    # Determine the first index that we need to compute
+    t0 = min(min_j, compute_t[0])
+    # Let double-letters denote indexing that starts from t0
+    nn = n - t0
+
+    # Flags
+    filter_collapsed = kfilter.filter_method & 0x20
+
+    # Create required storage and temporary matrices
+    # Hi_W = np.zeros((p, m, nn), order='F')
+    # K = np.zeros((p, m, nn), order='F')
+    # weights = np.zeros((m, p, nn, nn), order='F') * np.nan
+    # state_intercept_weights = np.zeros((m, m, nn, nn), order='F') * np.nan
+    # tmp = np.zeros((m, m), order='F')
+    # F = np.zeros((p, p), order='F')
+    # Fi = np.zeros((p, p), order='F')
+    # FiZ = np.zeros((p, m), order='F')
+    dim4[0] = m; dim4[1] = p; dim4[2] = nn; dim4[3] = nn;
+    weights = np.PyArray_ZEROS(4, dim4, np.NPY_COMPLEX128, FORTRAN) * np.nan
+    dim4[0] = m; dim4[1] = m; dim4[2] = nn; dim4[3] = nn;
+    state_intercept_weights = np.PyArray_ZEROS(4, dim4, np.NPY_COMPLEX128, FORTRAN) * np.nan
+    dim3[0] = p; dim3[1] = m; dim3[2] = nn;
+    Hi_W = np.PyArray_ZEROS(3, dim3, np.NPY_COMPLEX128, FORTRAN)
+    K = np.PyArray_ZEROS(3, dim3, np.NPY_COMPLEX128, FORTRAN)
+    dim3[0] = m; dim3[1] = m; dim3[2] = nn;
+    # Note: the order here is (m, l, t), where the `l` dimension refers to the
+    # element of the initial state vector, and the `m, t` dimensions refer to
+    # the element / time point of the smoothed state vector.
+    prior_weights = np.PyArray_ZEROS(3, dim3, np.NPY_COMPLEX128, FORTRAN) * np.nan
+    dim2[0] = p; dim2[1] = p;
+    F = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    Fi = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    dim2[0] = m; dim2[1] = p;
+    tmp = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+    dim2[0] = p; dim2[1] = m;
+    FiZ = np.PyArray_ZEROS(2, dim2, np.NPY_COMPLEX128, FORTRAN)
+
+    # First pass to compute required quantities, if necessary
+    for t in range(t0, n):
+        # Recall that double-letters denotes indexes that start from t0
+        # Hi_W[:, :, nn], K[:, :, nn], weights[:, :, nn, nn],
+        # state_intercept_weights[:, :, nn, nn], prior_weights[:, :, nn]
+        tt = t - t0
+
+        p_t = p - model.nmissing[t]
+
+        # Handling of exact diffuse periods is not currently available
+        # Also, we can skip computations for periods that are not needed for
+        # the requested t, j combinations
+        if (t < kfilter.nobs_diffuse
+                or (not store_t[t] and (t < min_j or t > max_j))):
+            # No need to set this when using the dictionary
+            # K[tt] = np.zeros((m, p_t)) * np.nan
+            # Hi_W[tt] is already initialized to NaNs, so can skip:
+            # Hi_W[tt, :] = np.nan
+            continue
+
+        # Move the statespace representation to the time period, but do not
+        # apply the collapse (first zero) or diagonalization (second zero)
+        model.seek(t, 0, 0, True)
+
+        # Get statespace objects
+        if p_t == 0:
+            # No need to set this when using the dictionary
+            # K.append(np.zeros((m, 0)))
+            # Hi_W[tt] is already initialized to NaNs, so can skip:
+            # Hi_W[tt, :] = np.nan
+            continue
+
+        # Get filtered objects
+        compute_K = kfilter.univariate_filter[t] or filter_collapsed
+        if compute_K:
+            # Note: typically would need to multiply both P and F by the
+            # scale, but F is inverted and K = T P Z' F^{-1}, the scale terms
+            # cancel out
+            # F = Z @ P @ Z.T + H
+            # Note: here use Fi as a temporary array for the moment
+            # Z @ P
+            blas.zgemm("N", "N", &model._k_endog, &model._k_states, &model._k_states,
+                                &alpha, model._design, &model._k_endog,
+                                        &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                &beta, &FiZ[0, 0], &model.k_endog)
+            for i in range(model._k_endog): # columns
+                for j in range(model._k_endog): # rows
+                    F[j, i] = model._obs_cov[j + i*model._k_endog]
+            blas.zgemm("N", "T", &model._k_endog, &model._k_endog, &model._k_states,
+                                &alpha, &FiZ[0, 0], &model.k_endog,
+                                        model._design, &model._k_endog,
+                                &alpha, &F[0, 0], &model.k_endog)
+            # Note: pinv is required for the cases in which F is singular
+            # Note: use T to make the array Fortran contiguous
+            Fi = np.linalg.pinv(F[:p_t, :p_t]).T
+            blas.zgemm("N", "N", &model._k_endog, &model._k_states, &model._k_endog,
+                                &alpha, &Fi[0, 0], &model._k_endog,
+                                        model._design, &model._k_endog,
+                                &beta, &FiZ[0, 0], &model.k_endog)
+
+            # P_t Z_t' F_t^{-1}
+            # $(m \times p) = (m \times m) (m \times p)$
+            blas.zgemm("N", "T", &model._k_states, &model._k_endog, &model._k_states,
+                                &alpha, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                        &FiZ[0, 0], &model.k_endog,
+                                &beta, &tmp[0, 0], &kfilter.k_states)
+            # T_t P_t Z_t' F_t^{-1}
+            # $(m \times p) = (m \times m) (m \times p)$
+            blas.zgemm("N", "N", &model._k_states, &model._k_endog, &model._k_states,
+                                &alpha, model._transition, &kfilter.k_states,
+                                        &tmp[0, 0], &kfilter.k_states,
+                                &beta, &K[0, 0, tt], &kfilter.k_states)
+
+            _FiZ = &FiZ[0, 0]
+            _K = &K[0, 0, tt]
+        else:
+            _FiZ = &kfilter.tmp3[0, 0, t]
+            _K = &kfilter.kalman_gain[0, 0, t]
+
+        # Compute required quantites
+        # W_j = H_j (F_j^{-1} Z_j - K_j' N_j L_j)
+        # => H_j^{-1} W_j = F_j^{-1} Z_j - K_j' N_j L_j
+        blas.zcopy(&pm, _FiZ, &inc, &Hi_W[0, 0, tt], &inc)
+
+        scalar = 1. / scale
+        blas.zgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &scalar, &smoother.scaled_smoothed_estimator_cov[0, 0, t + 1], &kfilter.k_states,
+                                    &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                            &beta, kfilter._tmp0, &kfilter.k_states)
+
+        blas.zgemm("T", "N", &model._k_endog, &model._k_states, &model._k_states,
+                            &gamma, _K, &kfilter.k_states,
+                                    kfilter._tmp0, &kfilter.k_states,
+                            &scalar, &Hi_W[0, 0, tt], &model.k_endog)
+
+    # Second pass to compute weights
+    # for t in compute_t:
+    for t in range(n):
+        # Recall that double-letters denotes indexes that start from t0
+        # Hi_W[:, :, nn], K[:, :, nn], weights[:, :, nn, nn],
+        # state_intercept_weights[:, :, nn, nn], prior_weights[:, :, nn]
+        tt = t - t0
+
+        if t < kfilter.nobs_diffuse or not store_t[t]:
+            continue
+
+        # Backwards from j = t-1, t-2, ... min_j
+        # tmp = I - P_t N_{t - 1}
+        # Note: normally would need to multiply Pt by scale and divide N[t+1]
+        # by `scale`, but since they're being multiplied here, the scale terms
+        # cancel out.
+        blas.zgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &gamma, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                    &smoother.scaled_smoothed_estimator_cov[0, 0, t], &kfilter.k_states,
+                            &beta, kfilter._tmp0, &kfilter.k_states)
+        for i in range(m):
+            kfilter.tmp0[i, i] = kfilter.tmp0[i, i] + 1
+
+        # This is the weight of the prior on the smoothed state at
+        # time t == 0
+        if t == 0 and compute_prior_weights:
+            blas.zcopy(&kfilter.k_states2, kfilter._tmp0, &inc, &prior_weights[0, 0, tt], &inc)
+
+        for j in range(t - 1, min_j - 1, -1):
+            # Again, recall that double-letters denotes indexes that start
+            # from t0
+            jj = j - t0
+
+            # Since we are not handling any diffuse observations now, we can
+            # stop as soon as we get to the diffuse periods
+            if j < kfilter.nobs_diffuse:
+                continue
+
+            p_j = p - model.nmissing[j]
+
+            compute_K = kfilter.univariate_filter[t] or filter_collapsed
+            if compute_K:
+                _K = &K[0, 0, jj]
+            else:
+                _K = &kfilter.kalman_gain[0, 0, j]
+
+            # The difference for univariate her would be:
+            # - if j in compute_j, then we have a subloop, i in p_j (but in
+            #   descending order, since we're going backwards here), where
+            #   we need to compute L_{j,i} and update tmp = tmp @ L_{j,i}
+            # - if j not in compute_j, then we only need to update
+            #   tmp = tmp @ L[j] (as in the conventional case), since
+            #   L[j] = \prod_i L_{j, i}
+            if store_j[j]:
+                if p_j > 0:
+                    # weights[:, :p_j, tt, jj] = tmp @ K[jj][:, :p_j]
+                    blas.zgemm("N", "N", &model._k_states, &p_j, &model._k_states,
+                                        &alpha, kfilter._tmp0, &kfilter.k_states,
+                                                _K, &kfilter.k_states,
+                                        &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+                # state_intercept_weights[:, :, tt, jj] = -tmp
+                blas.zcopy(&kfilter.k_states2, kfilter._tmp0, &inc,
+                                                        &state_intercept_weights[0, 0, tt, jj], &inc)
+
+            if j > min_j or (j == 0 and compute_prior_weights):
+                # tmp = tmp @ L
+                blas.zgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &alpha, kfilter._tmp0, &kfilter.k_states,
+                                    &smoother.innovations_transition[0, 0, j], &kfilter.k_states,
+                            &beta, kfilter._tmp00, &kfilter.k_states)
+                blas.zcopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+                # This is the weight of the prior on the smoothed state at
+                # time t > 0
+                if j == 0 and compute_prior_weights:
+                    blas.zcopy(&kfilter.k_states2, kfilter._tmp0, &inc, &prior_weights[0, 0, tt], &inc)
+
+        # For j == t
+        # For the univariate case, some notes:
+        # Note in general about computing weights that we need to define what
+        # we mean by the state at time t. So if we were computing weights for
+        # the predicted state at time t, that would mean we were computing
+        # weights for the expectation of the time t state conditional on all
+        # information dated time t-1 or earlier. So I thnk that j==t refers
+        # to the specific case that j = t and i = p_t, i.e. we have
+        # incorporated all the information from time t. Then j = t but i < p_t
+        # would follow the j < t formula.
+        j = t
+        jj = tt
+        p_j = p - model.nmissing[t]
+        if store_j[j]:
+            if p_j > 0:
+                # weights[:, :p_j, tt, jj] = Pt @ Hi_W[j, :p_j].T
+                blas.zgemm("N", "T", &model._k_states, &p_j, &model._k_states,
+                                    &scale, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                            &Hi_W[0, 0, jj], &model.k_endog,
+                                    &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+            # state_intercept_weights[:, :, tt, jj] = -(Pt @ Lt' @ Nt)
+            # Note: normally would need to multiply Pt by scale and divide Nt
+            # by `scale`, but since they're being multiplied here, the scale terms
+            # cancel out.
+            blas.zgemm("T", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &gamma, &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                                    &smoother.scaled_smoothed_estimator_cov[0, 0, t + 1], &kfilter.k_states,
+                            &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.zgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                            &alpha, &kfilter.predicted_state_cov[0, 0, t], &kfilter.k_states,
+                                    kfilter._tmp00, &kfilter.k_states,
+                            &beta, &state_intercept_weights[0, 0, tt, jj], &kfilter.k_states)
+
+        # Forwards from j = t+1, t+2, ..., max_j
+        # tmp = Pt
+        blas.zcopy(&kfilter.k_states2, &kfilter.predicted_state_cov[0, 0, t], &inc, kfilter._tmp0, &inc)
+        if scale != 1:
+            blas.zscal(&kfilter.k_states2, &scale, kfilter._tmp0, &inc)
+        if max_j > t:
+            # tmp = tmp @ L[t].T
+            blas.zgemm("N", "T", &model._k_states, &model._k_states, &model._k_states,
+                                &alpha, kfilter._tmp0, &kfilter.k_states,
+                                        &smoother.innovations_transition[0, 0, t], &kfilter.k_states,
+                                &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.zcopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+        for j in range(t + 1, max_j + 1):
+            # Again, recall that double-letters denotes indexes that start
+            # from t0
+            jj = j - t0
+            p_j = p - model.nmissing[j]
+
+            if store_j[j] and p_j > 0:
+                # weights[:, :p_j, tt, jj] = tmp @ Hi_W[j, :p_j].T
+                blas.zgemm("N", "T", &model._k_states, &p_j, &model._k_states,
+                                    &alpha, kfilter._tmp0, &kfilter.k_states,
+                                            &Hi_W[0, 0, jj], &p,
+                                    &beta, &weights[0, 0, tt, jj], &kfilter.k_states)
+
+            # tmp = tmp @ L[j].T
+            blas.zgemm("N", "T", &model._k_states, &model._k_states, &model._k_states,
+                                &alpha, kfilter._tmp0, &kfilter.k_states,
+                                        &smoother.innovations_transition[0, 0, j], &kfilter.k_states,
+                                &beta, kfilter._tmp00, &kfilter.k_states)
+            blas.zcopy(&kfilter.k_states2, kfilter._tmp00, &inc,
+                                                        kfilter._tmp0, &inc)
+
+            if store_j[j]:
+                # state_intercept_weights[:, :, tt, jj] = -(tmp @ N_j)
+                scalar = -1 / scale
+                blas.zgemm("N", "N", &model._k_states, &model._k_states, &model._k_states,
+                                &scalar, kfilter._tmp00, &kfilter.k_states,
+                                        &smoother.scaled_smoothed_estimator_cov[0, 0, j + 1], &kfilter.k_states,
+                                &beta, &state_intercept_weights[0, 0, tt, jj], &kfilter.k_states)
+
+    return np.array(weights), np.array(state_intercept_weights), np.array(prior_weights), np.array(Hi_W)

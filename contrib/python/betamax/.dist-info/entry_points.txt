@@ -1,0 +1,2 @@
+[pytest11]
+pytest-betamax = betamax.fixtures.pytest

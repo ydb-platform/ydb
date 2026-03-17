@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package yandex.cloud.gitlab.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/gitlab/v1/maintenance.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/gitlab/v1;gitlab";
+option java_outer_classname = "GI";
+option java_package = "yandex.cloud.api.gitlab.v1";
+
+// Instance represents a GitLab instance with its configuration and state.
+message Instance {
+  enum Status {
+    // Default state.
+    STATUS_UNSPECIFIED = 0;
+
+    // Instance is being created.
+    CREATING = 1;
+
+    // Instance is running normally.
+    RUNNING = 2;
+
+    // Instance is being updated.
+    UPDATING = 3;
+
+    // Instance is in error state.
+    ERROR = 4;
+
+    // Instance is being deleted.
+    DELETING = 5;
+
+    // Backup is being created.
+    BACKUP_CREATING = 6;
+
+    // Backup is being restored.
+    BACKUP_RESTORING = 7;
+
+    // Instance is starting.
+    STARTING = 8;
+
+    // Instance is stopping.
+    STOPPING = 9;
+
+    // Instance is stopped.
+    STOPPED = 10;
+
+    // Background migrations in progress.
+    BACKGROUND_MIGRATIONS = 11;
+
+    // Object storage migrations in progress.
+    OBJECT_STORAGE_MIGRATIONS = 12;
+
+    // Snapshot is being restored.
+    SNAPSHOT_RESTORING = 13;
+  }
+
+  // Unique instance ID.
+  string id = 1;
+
+  // Folder ID where instance resides.
+  string folder_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Last update timestamp.
+  google.protobuf.Timestamp updated_at = 4;
+
+  // Human-readable name.
+  string name = 5;
+
+  // Instance description.
+  string description = 6;
+
+  // Resource labels as key-value pairs.
+  map<string, string> labels = 7;
+
+  // Resource preset ID.
+  string resource_preset_id = 8;
+
+  // Disk size in bytes.
+  int64 disk_size = 9;
+
+  // Current instance status.
+  Status status = 10;
+
+  // Admin username.
+  string admin_login = 11;
+
+  // Admin email.
+  string admin_email = 12;
+
+  // Instance domain.
+  string domain = 13;
+
+  // Subnet ID.
+  string subnet_id = 14;
+
+  // reserved for maintenance_window
+  reserved 15;
+
+  // Planned maintenance operation.
+  MaintenanceOperation planned_operation = 16 [(yandex.cloud.required) = false];
+
+  // How long to keep backups (days).
+  int64 backup_retain_period_days = 17;
+
+  // reserved for backup_window_start
+  reserved 18;
+
+  // Delete untagged resources during maintenance.
+  bool maintenance_delete_untagged = 19;
+
+  // Protect from accidental deletion.
+  bool deletion_protection = 20;
+
+  reserved 21;
+
+  // Approval rules ID.
+  string approval_rules_id = 22 [(yandex.cloud.required) = false, (yandex.cloud.length) = "<=30"];
+
+  // GitLab version of the instance.
+  string gitlab_version = 23;
+}

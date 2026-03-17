@@ -1,0 +1,139 @@
+# (C) Copyright 2005- ECMWF.
+# Ocean model data
+
+constant GRIBEXSection1Problem = 0 ;
+
+template mars_labeling "grib1/mars_labeling.def";
+transient localFlag=1 : hidden ;
+
+constant oceanStream = 1090;
+
+if(marsStream == oceanStream) {
+  unsigned[2] perturbationNumber : dump ;
+}
+
+if(marsStream != oceanStream) {
+  unsigned[1] perturbationNumber : dump ;
+  pad padding_loc4_2(1);
+}
+
+unsigned[1] flagShowingPostAuxiliaryArrayInUse;
+
+unsigned[1] systemNumber : dump ;
+alias system=systemNumber;
+
+unsigned[1] methodNumber : dump ;
+
+#
+# Coordinate structure definition
+#
+unsigned[1] spaceUnitFlag : dump ;
+
+unsigned[1] verticalCoordinateDefinition : dump ;
+
+unsigned[1] horizontalCoordinateDefinition : dump ;
+
+unsigned[1] timeUnitFlag : dump ;
+
+unsigned[1] timeCoordinateDefinition : dump ;
+
+#
+# Position definition:  mixed coordinates
+#
+unsigned[1] mixedCoordinateFieldFlag : dump ;
+
+unsigned[1] coordinate1Flag : dump ;
+
+unsigned[1] averaging1Flag : dump ;
+
+signed[4] coordinate1Start : dump ;
+
+signed[4] coordinate1End  : dump ;
+
+unsigned[1] coordinate2Flag : dump ;
+
+unsigned[1] averaging2Flag : dump ;
+
+signed[4] coordinate2Start : dump ;
+
+signed[4] coordinate2End : dump ;
+
+#
+# Data grid definitions
+#
+unsigned[1] coordinate3Flag : dump ;
+
+unsigned[1] coordinate4Flag : dump ;
+
+signed[4] coordinate4OfFirstGridPoint  : dump;
+
+signed[4] coordinate3OfFirstGridPoint : dump ;
+
+signed[4] coordinate4OfLastGridPoint  : dump;
+
+signed[4] coordinate3OfLastGridPoint : dump ;
+
+signed[4] iIncrement : dump ;
+
+signed[4] jIncrement  : dump;
+
+flags[1] flagForIrregularGridCoordinateList 'grib1/ocean.1.table' : dump;
+
+flags[1] flagForNormalOrStaggeredGrid 'grib1/ocean.1.table' : dump;
+
+#
+# Auxiliary information
+#
+flags[1] flagForAnyFurtherInformation 'grib1/ocean.1.table' : dump;
+
+unsigned[1] numberInHorizontalCoordinates  : dump;
+
+unsigned[2] numberInMixedCoordinateDefinition  : dump;
+
+unsigned[2] numberInTheGridCoordinateList  : dump;
+
+unsigned[2] numberInTheAuxiliaryArray : dump ;
+
+#
+# Horizontal coordinate definition
+#
+unsigned[4] horizontalCoordinateSupplement[numberInHorizontalCoordinates] : dump;
+
+#
+# Mixed coordinate definition
+#
+unsigned[4] mixedCoordinateDefinition[numberInMixedCoordinateDefinition] : dump;
+
+#
+# Grid coordinate list
+#
+if (numberInTheGridCoordinateList>0) {
+  signed[4] gridCoordinate[numberInTheGridCoordinateList] : dump;
+}
+
+#
+# Auxiliary array
+#
+unsigned[4] auxiliary[numberInTheAuxiliaryArray] : dump;
+
+#
+# Post-auxiliary array
+#
+constant postAuxiliaryArrayPresent = 1;
+
+if (flagShowingPostAuxiliaryArrayInUse == postAuxiliaryArrayPresent) {
+  unsigned[4] sizeOfPostAuxiliaryArrayPlusOne : dump;
+  meta sizeOfPostAuxiliaryArray evaluate(sizeOfPostAuxiliaryArrayPlusOne - 1);
+  if (sizeOfPostAuxiliaryArray>0) {
+    unsigned[4] postAuxiliary[sizeOfPostAuxiliaryArray] : dump;
+
+    if (sizeOfPostAuxiliaryArray>3) {
+      meta referenceDate element(postAuxiliary,3);
+    }
+  } else {
+    transient referenceDate=0;
+  }
+}
+alias hdate = dataDate;
+
+template local_use "grib1/mars_labeling.4.def";

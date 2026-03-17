@@ -1,0 +1,16 @@
+--- contrib/python/sympy/py3/sympy/parsing/latex/lark/latex_parser.py	(index)
++++ contrib/python/sympy/py3/sympy/parsing/latex/lark/latex_parser.py	(working tree)
+@@ -40,10 +40,11 @@ class LarkLaTeXParser:
+ 
+     """
+     def __init__(self, print_debug_output=False, transform=True, grammar_file=None, transformer=None):
+-        grammar_dir_path = os.path.join(os.path.dirname(__file__), "grammar/")
++        import importlib.resources
++        grammar_dir_path = importlib.resources.files(__package__) / "grammar"
+ 
+         if grammar_file is None:
+-            with open(os.path.join(grammar_dir_path, "latex.lark"), encoding="utf-8") as f:
++            with (grammar_dir_path / "latex.lark").open(encoding="utf-8") as f:
+                 latex_grammar = f.read()
+         else:
+             with open(grammar_file, encoding="utf-8") as f:

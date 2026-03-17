@@ -1,0 +1,2 @@
+[console_scripts]
+atoparser = atoparser.reader:main

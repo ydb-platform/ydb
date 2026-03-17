@@ -1,0 +1,45 @@
+diff --git a/aiozk/client.py b/aiozk/client.py
+index 04a5ddf..b58442e 100644
+--- a/aiozk/client.py
++++ b/aiozk/client.py
+@@ -1,5 +1,6 @@
+ import asyncio
+ import logging
++import typing
+ 
+ from aiozk import exc, protocol
+ 
+@@ -272,7 +273,7 @@ async def deleteall(self, path):
+             await self.deleteall('/'.join([path, child]))
+         await self.delete(path, force=True)
+ 
+-    async def get(self, path, watch=False):
++    async def get(self, path: str, watch: bool = False) -> typing.Tuple[str, protocol.stat.Stat]:
+         """
+         Get data as bytes and stat of znode.
+ 
+@@ -286,7 +287,6 @@ async def get(self, path, watch=False):
+ 
+         :raises aiozk.exc.NoNode: Can be raised if path does not exist
+         """
+-        # type: (str, bool) -> Tuple[str, protocol.stat.Stat]
+         path = self.normalize_path(path)
+         response = await self.send(protocol.GetDataRequest(path=path, watch=watch))
+ 
+@@ -309,7 +309,7 @@ async def get_data(self, path, watch=False):
+         response = await self.get(path, watch=watch)
+         return response[0]
+ 
+-    async def set(self, path, data, version):
++    async def set(self, path: str, data: str, version: int) -> protocol.SetDataResponse:
+         """
+         Set data to znode. Prefer using .set_data than this method unless you
+         have to control the concurrency.
+@@ -329,7 +329,6 @@ async def set(self, path, data, version):
+         :raises aiozk.exc.BadVersion: Raised if version does not match the
+             actual version of the data. The update failed.
+         """
+-        # type: (str, str, int) -> protocol.SetDataResponse
+         path = self.normalize_path(path)
+         response = await self.send(protocol.SetDataRequest(path=path, data=data, version=version))
+         return response.stat

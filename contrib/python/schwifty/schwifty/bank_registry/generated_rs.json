@@ -1,0 +1,210 @@
+[
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "BATSRS21",
+    "bank_code": "000",
+    "name": "BRITISH AMERICAN TOBACCO A",
+    "short_name": "BRITISH AMERICAN TOBACCO A"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "AIKBRS22XXX",
+    "bank_code": "105",
+    "name": "AGROINDUSTRIJSK\u041e KOMERCIJALNA BANKA AIK BANKA AKCIONARSKO DRU\u0160TVO BEOGRAD",
+    "short_name": "AGROINDUSTRIJSK\u041e KOMERCIJALNA BANKA AIK BANKA AKCIONARSKO DRU\u0160TVO BEOGRAD"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "AAAARSBG",
+    "bank_code": "115",
+    "name": "MOBI BANKA AD",
+    "short_name": "MOBI BANKA AD"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "PIRBRSBGXXX",
+    "bank_code": "125",
+    "name": "PIRAEUS BANK AKCIONARSKO DRU\u0160TVO BEOGRAD",
+    "short_name": "PIRAEUS BANK AKCIONARSKO DRU\u0160TVO BEOGRAD"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "LIKIRSBG",
+    "bank_code": "145",
+    "name": "EXPOBANK AD BEOGRAD",
+    "short_name": "EXPOBANK AD BEOGRAD"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "KRAGRS22XXX",
+    "bank_code": "150",
+    "name": "DIREKTNA BANKA A",
+    "short_name": "DIREKTNA BANKA A"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "CABARS22XXX",
+    "bank_code": "155",
+    "name": "HALKBANK AKCIONARSKO DRU\u0160TVO BEOGRAD",
+    "short_name": "HALKBANK AKCIONARSKO DRU\u0160TVO BEOGRAD"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "DBDBRSBGXXX",
+    "bank_code": "160",
+    "name": "BANCA INTESA AKCIONARSKO DRU\u0160TVO BEOGRAD",
+    "short_name": "BANCA INTESA AKCIONARSKO DRU\u0160TVO BEOGRAD"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "HAABRSBGXXX",
+    "bank_code": "165",
+    "name": "ADDIKO BANK AD BEOGRAD",
+    "short_name": "ADDIKO BANK AD BEOGRAD"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "BACXRSBG",
+    "bank_code": "170",
+    "name": "UNICREDIT BANK SRBIJA",
+    "short_name": "UNICREDIT BANK SRBIJA"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "JUBARSBGXXX",
+    "bank_code": "180",
+    "name": "ALPHA BANK SRBIJA A",
+    "short_name": "ALPHA BANK SRBIJA A"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "JMBNRSBGXXX",
+    "bank_code": "190",
+    "name": "ALTA Banka a",
+    "short_name": "ALTA Banka a"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "PRCBRSBG",
+    "bank_code": "220",
+    "name": "PROCREDIT BANK",
+    "short_name": "PROCREDIT BANK"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "FIDMRSBGXXX",
+    "bank_code": "240",
+    "name": "FINDOMESTIC BANK\u0410 A",
+    "short_name": "FINDOMESTIC BANK\u0410 A"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "ERBKRSBG",
+    "bank_code": "250",
+    "name": "EUROBANK AKCIONARSKO DRU\u0160TVO  BEOGRAD",
+    "short_name": "EUROBANK AKCIONARSKO DRU\u0160TVO  BEOGRAD"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "RZBSRSBGXXX",
+    "bank_code": "265",
+    "name": "RAIFFEISEN BANKA A",
+    "short_name": "RAIFFEISEN BANKA A"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "SABRRSBGXXX",
+    "bank_code": "285",
+    "name": "Na\u0161a AIK Banka a",
+    "short_name": "Na\u0161a AIK Banka a"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "SRBNRSBGXXX",
+    "bank_code": "295",
+    "name": "SRPSKA BANKA A",
+    "short_name": "SRPSKA BANKA A"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "MEBARS22",
+    "bank_code": "330",
+    "name": "CR\u00c9DIT AGRICOLE BANKA SRBIJA",
+    "short_name": "CR\u00c9DIT AGRICOLE BANKA SRBIJA"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "GIBARS22",
+    "bank_code": "340",
+    "name": "ERSTE BANK",
+    "short_name": "ERSTE BANK"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "VBUBRS22",
+    "bank_code": "355",
+    "name": "VOJVO\u0110ANSKA BANKA ",
+    "short_name": "VOJVO\u0110ANSKA BANKA "
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "KMEBRS2Z",
+    "bank_code": "360",
+    "name": "MTS AKCIONARSKO DRU\u0160TVO BEOGRAD",
+    "short_name": "MTS AKCIONARSKO DRU\u0160TVO BEOGRAD"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "JJKMRS21",
+    "bank_code": "365",
+    "name": "JUGOBANKA JUGBANKA",
+    "short_name": "JUGOBANKA JUGBANKA"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "APIBRSBG",
+    "bank_code": "375",
+    "name": "API Bank",
+    "short_name": "API Bank"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "MRBNRSBG",
+    "bank_code": "380",
+    "name": "MIRABANK AD BEOGRAD",
+    "short_name": "MIRABANK AD BEOGRAD"
+  },
+  {
+    "country_code": "RS",
+    "primary": true,
+    "bic": "BKCHRSBGXXX",
+    "bank_code": "385",
+    "name": "BANK OF CHINA SRBIJA AKCIONARSKO DRU\u0160TVO BEOGRAD - NOVI BEOGRAD",
+    "short_name": "BANK OF CHINA SRBIJA AKCIONARSKO DRU\u0160TVO BEOGRAD - NOVI BEOGRAD"
+  }
+]

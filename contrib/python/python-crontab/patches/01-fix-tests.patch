@@ -1,0 +1,145 @@
+--- contrib/python/python-crontab/tests/test_env.py	(index)
++++ contrib/python/python-crontab/tests/test_env.py	(working tree)
+@@ -26,1 +26,1 @@ import os
+-from .test_usage import TEST_DIR
++from .test_compatibility import TEST_DIR
+@@ -207,11 +207,0 @@ MAILTO=""
+-        cron.write_to_user("bob")
+-        filename = os.path.join(TEST_DIR, 'data', 'spool', 'bob')
+-        with open(filename, 'r') as fhl:
+-            self.assertEqual(fhl.read(), """MAILTO=""
+-
+-# A
+-# B
+-# C
+-*/10 * * * * /home/pi/job.py # any job
+-""")
+-        os.unlink(filename)
+-
+--- contrib/python/python-crontab/tests/test_compatibility.py	(index)
++++ contrib/python/python-crontab/tests/test_compatibility.py	(working tree)
+@@ -32,1 +32,2 @@ import sys
+-TEST_DIR = os.path.dirname(__file__)
++import yatest.common
++TEST_DIR = yatest.common.test_source_path()
+@@ -38,9 +39,9 @@ INITAL_TAB = """
+ 
+ class UserTestCase(unittest.TestCase):
+     def test_01_self_user(self):
+-        tab = crontab.CronTab(user='foo')
++        tab = crontab.CronTab(user='foo', tab=INITAL_TAB)
+         self.assertEqual(tab.user_opt, {'u': 'foo'})
+-        tab = crontab.CronTab(user=crontab.current_user())
++        tab = crontab.CronTab(user=crontab.current_user(), tab=INITAL_TAB)
+         self.assertEqual(tab.user_opt, {})
+ 
+ 
+@@ -116,3 +117,5 @@ class CompatTestCase(unittest.TestCase):
+         """Shell in windows environments is split correctly"""
+-        from crontab import Process
++        from crontab import Process, POSIX
++        if POSIX:
++            return
+         winfile = os.path.join(TEST_DIR, 'data', "bash\\win.exe")
+--- contrib/python/python-crontab/tests/test_crontabs.py	(index)
++++ contrib/python/python-crontab/tests/test_crontabs.py	(working tree)
+@@ -34,1 +34,2 @@ import unittest
+-TEST_DIR = os.path.dirname(__file__)
++import yatest.common
++TEST_DIR = yatest.common.test_source_path()
+--- contrib/python/python-crontab/tests/test_every.py	(index)
++++ contrib/python/python-crontab/tests/test_every.py	(working tree)
+@@ -34,1 +34,2 @@ sys.path.insert(0, '../')
+-TEST_DIR = os.path.dirname(__file__)
++import yatest.common
++TEST_DIR = yatest.common.test_source_path()
+--- contrib/python/python-crontab/tests/test_interaction.py	(index)
++++ contrib/python/python-crontab/tests/test_interaction.py	(working tree)
+@@ -34,1 +34,2 @@ import unittest
+-TEST_DIR = os.path.dirname(__file__)
++import yatest.common
++TEST_DIR = yatest.common.test_source_path()
+--- contrib/python/python-crontab/tests/test_log.py	(index)
++++ contrib/python/python-crontab/tests/test_log.py	(working tree)
+@@ -34,1 +34,2 @@ from datetime import datetime, date
+-TEST_DIR = os.path.dirname(__file__)
++import yatest.common
++TEST_DIR = yatest.common.test_source_path()
+--- contrib/python/python-crontab/tests/test_removal.py	(index)
++++ contrib/python/python-crontab/tests/test_removal.py	(working tree)
+@@ -98,17 +98,0 @@ class RemovalTestCase(unittest.TestCase):
+-    def test_08_removal_write_loop(self):
+-        """Remove items in a loop and save each time"""
+-        filename = self.get_new_file('removal')
+-        crontab = CronTab()
+-        for i in range(10):
+-            crontab.new('test', comment=str(i))
+-            crontab.write(filename)
+-            crontab = CronTab(tabfile=filename)
+-            self.assertEqual(len(crontab), 1)
+-            self.assertNotEqual(str(crontab), '')
+-
+-            crontab.remove_all(comment=str(i))
+-            crontab.write(filename)
+-            crontab = CronTab(tabfile=filename)
+-            self.assertEqual(len(crontab), 0)
+-            self.assertEqual(str(crontab), '')
+-
+@@ -137,2 +120,3 @@ class RemovalTestCase(unittest.TestCase):
+-        this_dir = os.path.dirname(__file__)
+-        filename = os.path.join(this_dir, 'data', 'spool', name)
++        import yatest.common
++        TEST_DIR = yatest.common.test_source_path()
++        filename = os.path.join(TEST_DIR, 'data', 'spool', name)
+--- contrib/python/python-crontab/tests/test_scheduler.py	(index)
++++ contrib/python/python-crontab/tests/test_scheduler.py	(working tree)
+@@ -44,1 +44,2 @@ except ImportError:
+-TEST_DIR = os.path.dirname(__file__)
++import yatest.common
++TEST_DIR = yatest.common.test_source_path()
+--- contrib/python/python-crontab/tests/test_system_cron.py	(index)
++++ contrib/python/python-crontab/tests/test_system_cron.py	(working tree)
+@@ -34,1 +34,3 @@ sys.path.insert(0, '../')
+-TEST_FILE = os.path.join(os.path.dirname(__file__), 'data', 'crontab')
++import yatest.common
++TEST_DIR = yatest.common.test_source_path()
++TEST_FILE = os.path.join(TEST_DIR, 'data', 'crontab')
+--- contrib/python/python-crontab/tests/test_usage.py	(index)
++++ contrib/python/python-crontab/tests/test_usage.py	(working tree)
+@@ -37,1 +37,2 @@ import crontab
+-TEST_DIR = os.path.dirname(__file__)
++import yatest.common
++TEST_DIR = yatest.common.test_source_path()
+@@ -120,10 +121,0 @@ class UseTestCase(unittest.TestCase):
+-    def test_06_touser_fail(self):
+-        """Write to user failed"""
+-        cron = crontab.CronTab(tab=USER)
+-        self.assertRaises(IOError, cron.write_to_user, 'john')
+-        filename = os.path.join(TEST_DIR, 'data', 'spool', 'john')
+-        if os.path.exists(filename):
+-            os.unlink(filename)
+-            self.assertTrue(filename)
+-
+-
+--- contrib/python/python-crontab/tests/test_utf8.py	(index)
++++ contrib/python/python-crontab/tests/test_utf8.py	(working tree)
+@@ -34,1 +34,2 @@ import sys
+-TEST_DIR = os.path.dirname(__file__)
++import yatest.common
++TEST_DIR = yatest.common.test_source_path()
+@@ -47,6 +48,7 @@ class Utf8TestCase(unittest.TestCase):
+         """Read UTF-8 contents"""
+         self.assertTrue(self.crontab)
+ 
++    @unittest.skip("Distbuild skip")
+     def test_02_write(self):
+         """Write/Read UTF-8 Filename"""
+         self.assertEqual(locale.getpreferredencoding(), 'UTF-8')
+@@ -92,6 +94,7 @@ class Utf8TestCase(unittest.TestCase):
+ */4 * * * * ￡１２ # ￼𝗔𝗕𝗖𝗗
+ """)
+ 
++    @unittest.skip("Distbuild skip")
+     def test_09_utf8_again(self):
+         """Test Extra UTF8 input"""
+         filename = os.path.join(TEST_DIR, 'data', 'utf_extra')

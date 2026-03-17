@@ -1,0 +1,4 @@
+# Code Table 3.7: Spectral data representation mode
+0 0 Reserved
+1 1 The complex numbers Fnm (see code figure 1 in Code Table 3.6 above) are stored for m³0 as pairs of real numbers Re(Fnm), Im(Fnm) ordered with n increasing from m to N(m), first for m=0 and then for m=1, 2, ... M. (see Note 1)
+255 255 Missing

@@ -1,0 +1,31 @@
+syntax = "proto3";
+package yandex.cloud.billing.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/billing/v1;billing";
+option java_package = "yandex.cloud.api.billing.v1";
+
+
+// Represents a link to an object in other service.
+// This object is being billed in the scope of a billing account.
+message BillableObject {
+
+    // ID of the object in other service.
+    string id = 1;
+
+    // Billable object type. Can be one of the following:
+    // * `cloud`
+    string type = 2;
+}
+
+
+// Represents a binding of the BillableObject to a BillingAccount.
+message BillableObjectBinding {
+
+    // Timestamp when binding was created.
+    google.protobuf.Timestamp effective_time = 1;
+
+    // Object that is bound to billing account.
+    BillableObject billable_object = 2;
+}

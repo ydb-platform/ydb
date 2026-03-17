@@ -1,0 +1,17 @@
+Pop ssl shutdown error if it has occurred
+===================================================================
+--- a/src/interfaces/libpq/fe-secure-openssl.c	(rev 0)
++++ b/src/interfaces/libpq/fe-secure-openssl.c	(working copy)
+@@ -1444,7 +1444,11 @@ pgtls_close(PGconn *conn)
+ 			 * thread callbacks, so set a flag here and check at the end.
+ 			 */
+ 
+-			SSL_shutdown(conn->ssl);
++			if (SSL_shutdown(conn->ssl) < 0) {
++				// Pop an error and ignore it. We might have already printed one
++				// and SSL_shutdown just yields logic warnings as errors.
++				ERR_get_error();
++			}
+ 			SSL_free(conn->ssl);
+ 			conn->ssl = NULL;
+ 			conn->ssl_in_use = false;

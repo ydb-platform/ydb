@@ -33,6 +33,9 @@ IGraphTransformer::TStatus MatchRecognizeWrapper(const TExprNode::TPtr& input, T
         return IGraphTransformer::TStatus::Error;
     }
     const auto source = input->Child(0);
+    if (!EnsureComputable(*source, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
     auto& partitionKeySelector = input->ChildRef(1);
     const auto partitionColumns = input->Child(2);
     if (!EnsureTuple(*partitionColumns, ctx.Expr)) {
@@ -45,7 +48,12 @@ IGraphTransformer::TStatus MatchRecognizeWrapper(const TExprNode::TPtr& input, T
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
     }
-    if (!UpdateLambdaAllArgumentsTypes(partitionKeySelector, { GetSeqItemType(source->GetTypeAnn()) }, ctx.Expr)) {
+    auto itemType = GetSeqItemType(source->GetTypeAnn());
+    if (!itemType) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(source->Pos()), TStringBuilder() << "Unsupported source type: " << *source->GetTypeAnn()));
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(partitionKeySelector, { itemType }, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
     auto partitionKeySelectorType = partitionKeySelector->GetTypeAnn();

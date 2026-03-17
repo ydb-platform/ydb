@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+
+package yandex.cloud.k8s.marketplace.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/marketplace/v1;k8s_marketplace";

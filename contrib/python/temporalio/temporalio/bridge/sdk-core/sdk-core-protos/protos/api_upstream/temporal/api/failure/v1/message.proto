@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package temporal.api.failure.v1;
+
+option go_package = "go.temporal.io/api/failure/v1;failure";
+option java_package = "io.temporal.api.failure.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Failure::V1";
+option csharp_namespace = "Temporalio.Api.Failure.V1";
+
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/enums/v1/nexus.proto";
+import "temporal/api/enums/v1/common.proto";
+
+import "google/protobuf/duration.proto";
+
+message ApplicationFailureInfo {
+    string type = 1;
+    bool non_retryable = 2;
+    temporal.api.common.v1.Payloads details = 3;
+    // next_retry_delay can be used by the client to override the activity
+    // retry interval calculated by the retry policy. Retry attempts will
+    // still be subject to the maximum retries limit and total time limit
+    // defined by the policy.
+    google.protobuf.Duration next_retry_delay = 4;
+    temporal.api.enums.v1.ApplicationErrorCategory category = 5;
+}
+
+message TimeoutFailureInfo {
+    temporal.api.enums.v1.TimeoutType timeout_type = 1;
+    temporal.api.common.v1.Payloads last_heartbeat_details = 2;
+}
+
+message CanceledFailureInfo {
+    temporal.api.common.v1.Payloads details = 1;
+}
+
+message TerminatedFailureInfo {
+}
+
+message ServerFailureInfo {
+    bool non_retryable = 1;
+}
+
+message ResetWorkflowFailureInfo {
+    temporal.api.common.v1.Payloads last_heartbeat_details = 1;
+}
+
+message ActivityFailureInfo {
+    int64 scheduled_event_id = 1;
+    int64 started_event_id = 2;
+    string identity = 3;
+    temporal.api.common.v1.ActivityType activity_type = 4;
+    string activity_id = 5;
+    temporal.api.enums.v1.RetryState retry_state = 6;
+}
+
+message ChildWorkflowExecutionFailureInfo {
+    string namespace = 1;
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+    temporal.api.common.v1.WorkflowType workflow_type = 3;
+    int64 initiated_event_id = 4;
+    int64 started_event_id = 5;
+    temporal.api.enums.v1.RetryState retry_state = 6;
+}
+
+message NexusOperationFailureInfo {
+    // The NexusOperationScheduled event ID.
+    int64 scheduled_event_id = 1;
+    // Endpoint name.
+    string endpoint = 2;
+    // Service name.
+    string service = 3;
+    // Operation name.
+    string operation = 4;
+    // Operation ID - may be empty if the operation completed synchronously.
+    //
+    // Deprecated. Renamed to operation_token.
+    string operation_id = 5 [deprecated = true];
+    // Operation token - may be empty if the operation completed synchronously.
+    string operation_token = 6;
+}
+
+message NexusHandlerFailureInfo {
+    // The Nexus error type as defined in the spec:
+    // https://github.com/nexus-rpc/api/blob/main/SPEC.md#predefined-handler-errors.
+    string type = 1;
+    // Retry behavior, defaults to the retry behavior of the error type as defined in the spec.
+    temporal.api.enums.v1.NexusHandlerErrorRetryBehavior retry_behavior = 2;
+}
+
+message Failure {
+    string message = 1;
+    // The source this Failure originated in, e.g. TypeScriptSDK / JavaSDK
+    // In some SDKs this is used to rehydrate the stack trace into an exception object.
+    string source = 2;
+    string stack_trace = 3;
+    // Alternative way to supply `message` and `stack_trace` and possibly other attributes, used for encryption of
+    // errors originating in user code which might contain sensitive information.
+    // The `encoded_attributes` Payload could represent any serializable object, e.g. JSON object or a `Failure` proto
+    // message.
+    //
+    // SDK authors:
+    // - The SDK should provide a default `encodeFailureAttributes` and `decodeFailureAttributes` implementation that:
+    //   - Uses a JSON object to represent `{ message, stack_trace }`.
+    //   - Overwrites the original message with "Encoded failure" to indicate that more information could be extracted.
+    //   - Overwrites the original stack_trace with an empty string.
+    //   - The resulting JSON object is converted to Payload using the default PayloadConverter and should be processed
+    //     by the user-provided PayloadCodec
+    //
+    // - If there's demand, we could allow overriding the default SDK implementation to encode other opaque Failure attributes.
+    // (-- api-linter: core::0203::optional=disabled --)
+    temporal.api.common.v1.Payload encoded_attributes = 20;
+    Failure cause = 4;
+    oneof failure_info {
+        ApplicationFailureInfo application_failure_info = 5;
+        TimeoutFailureInfo timeout_failure_info = 6;
+        CanceledFailureInfo canceled_failure_info = 7;
+        TerminatedFailureInfo terminated_failure_info = 8;
+        ServerFailureInfo server_failure_info = 9;
+        ResetWorkflowFailureInfo reset_workflow_failure_info = 10;
+        ActivityFailureInfo activity_failure_info = 11;
+        ChildWorkflowExecutionFailureInfo child_workflow_execution_failure_info = 12;
+        NexusOperationFailureInfo nexus_operation_execution_failure_info = 13;
+        NexusHandlerFailureInfo nexus_handler_failure_info = 14;
+    }
+}
+
+message MultiOperationExecutionAborted {}

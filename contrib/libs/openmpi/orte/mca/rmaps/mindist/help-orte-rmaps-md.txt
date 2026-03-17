@@ -1,0 +1,53 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+#
+[multi-apps-and-zero-np]
+Open MPI found multiple applications to be launched, and at least one
+that failed to specify the number of processes to execute.  When
+specifying multiple applications, you must specify how many processes
+of each to launch via the -np argument.
+#
+[orte-rmaps-mindist:no-pci-locality-info]
+No PCI locality information could be found on at least one node. Please, upgrade BIOS to expose NUMA info.
+
+  Node: %s
+
+Open MPI will map the application by default (BYSLOT).
+#
+[orte-rmaps-mindist:several-devices]
+On at least one node, more than one of the specified device was discovered.
+In this scenario, passing the 'auto' option to the rmaps minimum
+distance mapper is ambiguous and therefore not valid.
+Please select the particular device that you would like
+to be mapped nearest via -mca rmaps_dist_device <device> option,
+e.g. --map-by dist -mca rmaps_dist_device mlx4_0.
+
+  Device type: %s
+  #Devices: %d
+  Node: %s
+
+Open MPI will map the application by default (BYSLOT).
+#
+[orte-rmaps-mindist:device-not-found]
+The specified device type cannot be found on at least one node.
+
+  Device: %s
+  Node: %s
+
+Open MPI will map the application by default (BYSLOT).

@@ -1,0 +1,8 @@
+[apache_airflow_provider]
+provider_info = airflow_provider_openmetadata:get_provider_config
+
+[console_scripts]
+metadata = metadata.cmd:metadata
+
+[pytest11]
+pytest_openmetadata = _openmetadata_testutils.pytest_openmetadata.plugin

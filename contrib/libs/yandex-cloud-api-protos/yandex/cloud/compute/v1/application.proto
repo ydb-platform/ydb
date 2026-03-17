@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+message Secret {
+  // ID of the secret.
+  string id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the key.
+  string key = 2 [(required) = true, (length) = "<=256"];
+
+  // Version of the secret.
+  string version_id = 3 [(length) = "<=50"];
+}
+
+message ContainerSolutionSpec {
+  // ID of the product.
+  string product_id = 1 [(required) = true, (length) = "<=50"];
+
+  // A list of the secrets.
+  map<string, Secret> secrets = 2 [(yandex.cloud.size) = "<=100", (map_key).length = "<=100"];
+
+  // A list of the environmets.
+  map<string, string> environment = 3 [(yandex.cloud.size) = "<=100", (map_key).length = "<=100", (length) = "<=10000"];
+}
+
+message BackupSpec {
+  // If true, backup is enabled.
+  bool enabled = 1;
+
+  // A list of policy IDs to apply after resource registration.
+  repeated string initial_policy_ids = 2 [(size) = "<=50", (length) = "1-50"];
+
+  // If true, recovery from backup starts on instance.
+  bool recovery_from_backup = 3;
+
+  // ID of the backup to recover from.
+  string backup_id = 4 [(length) = "<=100"];
+
+  // ID of the instance registration for cloud backup agent installation.
+  string instance_registration_id = 5 [(length) = "<=100"];
+}
+
+message Application {
+  oneof container {
+    // Container specification.
+    ContainerSolutionSpec container_solution = 1;
+  }
+
+  // Backup settings.
+  BackupSpec cloudbackup = 2;
+}

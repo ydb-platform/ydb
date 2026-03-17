@@ -1,0 +1,31 @@
+#Code Table obstat.4.0: List of variable number
+110  P Pressure (Pa)
+  1  Z Geopotential height (m)
+ 57  Z Geopotential height (m)
+  3  U zonal component of wind (m/s)
+  4  V meridional component of wind (m/s)
+ 41  10mU 10 m zonal component of wind (m/s)
+ 42  10mV 10 m meridional component of wind (m/s)
+125 Amb_10mU 10 m zonal ambiguous component of wind (m/s)
+124 Amb_10mV 10 m meridional ambiguous component of wind (m/s)
+111 DD wind direction (DD) degree
+112 FF wind speed (FF) m/s
+  2  T Temperature (K)
+ 39  T2m 2m temperature (K)
+ 59  DewPT Dew point temperature (K)
+119 BT Brightness temperature (K)
+  7 SHU specific humidity (Kg/kg)
+  9 PWC precipitable water content (Kg/m2)
+ 58 RH 2m relative humidity (%)
+123 LWC liquid water content (Kg/m2)
+206 Ozone integrated ozone density (O3) DU
+128 Path_delay Atmospheric path delay
+162 Bending_Angle Bending Angle (Alpha) Radians
+174 Aerosol Aerosol
+181 NO2 Nitrogen dioxide (NO2)
+182 SO2 Sulphur dioxide (SO2)
+183 CO Carbon monoxide (CO)
+184 HCHO Formaldehyde (HCHO)
+185 GO3 GEMS ozone (GO3)
+186 CO2 Carbone dioxide (CO2)
+188 CH4 Methane (CH4)

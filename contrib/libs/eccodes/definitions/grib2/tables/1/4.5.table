@@ -1,0 +1,26 @@
+0 0 Reserved
+1 sfc Ground or water surface
+2 2 Cloud base level
+3 3 Level of cloud tops
+4 4 Level of 0o C isotherm
+5 5 Level of adiabatic condensation lifted from the surface
+6 6 Maximum wind level
+7 sfc Tropopause
+8 sfc Nominal top of the atmosphere
+9 9 Sea bottom
+20 20 Isothermal level (K)
+100 pl Isobaric surface (Pa)
+101 sfc Mean sea level
+102 102 Specific altitude above mean sea level (m)
+103 sfc Specified height level above ground (m)
+104 104 Sigma level (sigma value)
+105 ml Hybrid level
+106 sfc Depth below land surface (m)
+107 pt Isentropic (theta) level (K)
+108 108 Level at specified pressure difference from ground to level (Pa)
+109 pv Potential vorticity surface (K m2 kg-1 s-1)
+110 110 Reserved
+111 111 Eta level
+117 117 Mixed layer depth (m)
+160 160 Depth below sea level (m)
+255 255 Missing

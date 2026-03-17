@@ -1,0 +1,5 @@
+# Hollow grid-point fields used for AROME coupling
+
+include "grib2/local.85.1.def";
+
+unsigned[8]   ICPLSIZE : dump;

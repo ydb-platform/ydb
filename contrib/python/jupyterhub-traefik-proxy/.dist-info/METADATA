@@ -1,0 +1,118 @@
+Metadata-Version: 2.4
+Name: jupyterhub-traefik-proxy
+Version: 2.1.0
+Summary: JupyterHub proxy implementation with traefik
+Home-page: https://jupyterhub-traefik-proxy.readthedocs.io
+Author: Project Jupyter Contributors
+Author-email: jupyter@googlegroups.com
+License: BSD
+Project-URL: Documentation, https://jupyterhub-traefik-proxy.readthedocs.io
+Project-URL: Source, https://github.com/jupyterhub/traefik-proxy/
+Project-URL: Tracker, https://github.com/jupyter/traefik-proxy/issues
+Keywords: jupyter jupyterhub traefik proxy
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: aiohttp
+Requires-Dist: bcrypt
+Requires-Dist: escapism
+Requires-Dist: jupyterhub>=0.9
+Requires-Dist: toml
+Provides-Extra: redis
+Requires-Dist: redis; extra == "redis"
+Provides-Extra: consul
+Requires-Dist: python-consul2; extra == "consul"
+Provides-Extra: etcd
+Requires-Dist: etcdpy; extra == "etcd"
+Provides-Extra: yaml
+Requires-Dist: ruamel.yaml; extra == "yaml"
+Provides-Extra: test
+Requires-Dist: jupyterhub-traefik-proxy[consul,etcd,redis,yaml]; extra == "test"
+Requires-Dist: certipy; extra == "test"
+Requires-Dist: notebook>=4.0; extra == "test"
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: pytest-asyncio<0.23,>=0.17; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Requires-Dist: websockets; extra == "test"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: project-url
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# JupyterHub Traefik Proxy
+
+[![Documentation build status](https://img.shields.io/readthedocs/jupyterhub-traefik-proxy?logo=read-the-docs)](https://jupyterhub-traefik-proxy.readthedocs.org/en/latest/)
+[![GitHub Workflow Status](https://github.com/jupyterhub/traefik-proxy/actions/workflows/test.yml/badge.svg)](https://github.com/jupyterhub/traefik-proxy/actions/workflows/test.yml)
+[![Latest PyPI version](https://img.shields.io/pypi/v/jupyterhub-traefik-proxy?logo=pypi)](https://pypi.python.org/pypi/jupyterhub-traefik-proxy)
+[![GitHub](https://img.shields.io/badge/issue_tracking-github-blue?logo=github)](https://github.com/jupyterhub/traefik-proxy/issues)
+[![Discourse](https://img.shields.io/badge/help_forum-discourse-blue?logo=discourse)](https://discourse.jupyter.org/c/jupyterhub)
+[![Gitter](https://img.shields.io/badge/social_chat-gitter-blue?logo=gitter)](https://gitter.im/jupyterhub/jupyterhub)
+
+When JupyterHub starts a server for a user, it will _dynamically configure a
+proxy server_ so that accessing `jupyterhub.example.com/user/<user>` routes to
+the individual Jupyter server.
+This project enables JupyterHub to dynamically configure the routes of a [traefik](https://traefik.io) proxy server!
+
+There are two main implementations of the [JupyterHub proxy
+API](https://jupyterhub.readthedocs.io/en/stable/reference/proxy.html),
+depending on how traefik stores its routing configuration.
+
+For **smaller**, single-node deployments:
+
+- TraefikFileProviderProxy
+
+For **distributed** setups:
+
+- TraefikRedisProxy
+
+Other implementations are maintained on a best-effort basis due to a lack of well-maintained
+Python clients:
+
+- TraefikEtcdProxy
+- TraefikConsulProxy
+
+## Installation
+
+The [documentation](https://jupyterhub-traefik-proxy.readthedocs.io) contains a
+[complete installation
+guide](https://jupyterhub-traefik-proxy.readthedocs.io/en/latest/install.html)
+with examples for all implementations, including the recommended
+[TraefikRedisProxy](https://jupyterhub-traefik-proxy.readthedocs.io/en/latest/redis.html#example-setup).
+
+## Running tests
+
+You can then run the all the test suite from the _traefik-proxy_ directory with:
+
+```
+$ pytest
+```
+
+Or you can run a specific test file with:
+
+```
+$ pytest tests/<test-file-name>
+```
+
+There are some tests that use _etcdctl_ command line client for etcd. Make sure
+to set environment variable `ETCDCTL_API=3` before running the tests if etcd
+version 3.3 or older is used, so that the v3 API to be used, e.g.:
+
+```
+$ export ETCDCTL_API=3
+```

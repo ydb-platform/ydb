@@ -1,0 +1,116 @@
+Metadata-Version: 2.1
+Name: aiohttp-xmlrpc
+Version: 1.5.0
+Summary: aiohttp XML-RPC server handler and client
+Home-page: UNKNOWN
+Author: Dmitry Orlov <me@mosquito.su>
+License: MIT
+Project-URL: Source, https://github.com/mosquito/aiohttp-xmlrpc
+Platform: all
+Classifier: Environment :: Console
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Requires-Python: >=3.6
+License-File: LICENSE
+Requires-Dist: aiohttp
+Requires-Dist: lxml
+Provides-Extra: develop
+Requires-Dist: pytest ; extra == 'develop'
+Requires-Dist: pytest-cov ; extra == 'develop'
+Requires-Dist: xmltodict ; extra == 'develop'
+
+AIOHTTP XMLRPC
+==============
+
+.. image:: https://coveralls.io/repos/github/mosquito/aiohttp-xmlrpc/badge.svg?branch=master
+   :target: https://coveralls.io/github/mosquito/aiohttp-xmlrpc?branch=master
+
+.. image:: https://github.com/mosquito/aiohttp-xmlrpc/workflows/tox/badge.svg
+    :target: https://github.com/mosquito/aiohttp-xmlrpc/actions
+
+.. image:: https://img.shields.io/pypi/v/aiohttp-xmlrpc.svg
+    :target: https://pypi.python.org/pypi/aiohttp-xmlrpc/
+    :alt: Latest Version
+
+.. image:: https://img.shields.io/pypi/wheel/aiohttp-xmlrpc.svg
+    :target: https://pypi.python.org/pypi/aiohttp-xmlrpc/
+
+.. image:: https://img.shields.io/pypi/pyversions/aiohttp-xmlrpc.svg
+    :target: https://pypi.python.org/pypi/aiohttp-xmlrpc/
+
+.. image:: https://img.shields.io/pypi/l/aiohttp-xmlrpc.svg
+    :target: https://pypi.python.org/pypi/aiohttp-xmlrpc/
+
+
+XML-RPC server and client implementation based on aiohttp. Using lxml and aiohttp.Client.
+
+
+Server example
+---------------
+
+.. code-block:: python
+
+    from aiohttp import web
+    from aiohttp_xmlrpc import handler
+    from aiohttp_xmlrpc.handler import rename
+
+
+    class XMLRPCExample(handler.XMLRPCView):
+
+        @rename("nested.test")
+        def rpc_test(self):
+            return None
+
+        def rpc_args(self, *args):
+            return len(args)
+
+        def rpc_kwargs(self, **kwargs):
+            return len(kwargs)
+
+        def rpc_args_kwargs(self, *args, **kwargs):
+            return len(args) + len(kwargs)
+
+        @rename("nested.exception")
+        def rpc_exception(self):
+            raise Exception("YEEEEEE!!!")
+
+
+    app = web.Application()
+    app.router.add_route('*', '/', XMLRPCExample)
+
+    if __name__ == "__main__":
+        web.run_app(app)
+
+
+
+
+Client example
+--------------
+
+.. code-block:: python
+
+    import asyncio
+    from aiohttp_xmlrpc.client import ServerProxy
+
+
+    loop = asyncio.get_event_loop()
+    client = ServerProxy("http://127.0.0.1:8080/", loop=loop)
+
+    async def main():
+        # 'nested.test' method call
+        print(await client.nested.test())
+
+        # 'args' method call
+        print(await client.args(1, 2, 3))
+
+        client.close()
+
+    if __name__ == "__main__":
+        loop.run_until_complete(main())
+
+

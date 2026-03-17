@@ -1,0 +1,1 @@
+#undef HAVE___MALLOC_HOOK

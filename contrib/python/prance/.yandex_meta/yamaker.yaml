@@ -1,0 +1,10 @@
+requirements:
+  - setuptools
+keep:
+  - tests/OpenAPI-Specification/*
+  - tests/specs/__init__.py
+exclude:
+  # symlinks are not allowed in Arcadia
+  - tests/specs/symlink_test
+disable_dos_to_unix:
+  - tests/specs/utf8bom.yaml

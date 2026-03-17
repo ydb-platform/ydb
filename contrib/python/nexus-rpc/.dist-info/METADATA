@@ -1,0 +1,88 @@
+Metadata-Version: 2.4
+Name: nexus-rpc
+Version: 1.1.0
+Summary: Nexus Python SDK
+Author-email: Temporal Technologies <sdk@temporal.io>
+License-File: LICENSE
+Requires-Python: >=3.9
+Requires-Dist: typing-extensions>=4.12.2
+Description-Content-Type: text/markdown
+
+# Nexus Python SDK
+
+⚠️  **This SDK is currently at an experimental release stage. Backwards-incompatible changes are anticipated until a stable release is announced.** ⚠️
+
+## What is Nexus?
+
+[Nexus](https://github.com/nexus-rpc/) is a synchronous RPC protocol. Arbitrary duration operations are modeled on top of
+a set of pre-defined synchronous RPCs.
+
+A Nexus caller calls a handler. The handler may respond inline (synchronous response) or
+return a token referencing the ongoing operation (asynchronous response). The caller can
+cancel an asynchronous operation, check for its outcome, or fetch its current state. The
+caller can also specify a callback URL, which the handler uses to deliver the result of
+an asynchronous operation when it is ready.
+
+## Installation
+
+```
+uv add nexus-rpc
+```
+or
+```
+pip install nexus-rpc
+```
+
+## Usage
+
+The SDK currently supports two use cases:
+
+1. As an end user, defining Nexus services and operations.
+
+2. Implementing a Nexus handler that can accept and respond to incoming Nexus requests, dispatching to the corresponding user-defined Nexus operation.
+
+The handler in (2) would form part of a server or worker that processes Nexus requests; the SDK does not yet provide reference implementations of these, or of a Nexus client.
+
+### Defining Nexus services and operations
+
+```python
+from dataclasses import dataclass
+
+import nexusrpc
+
+
+@dataclass
+class MyInput:
+    name: str
+
+
+@dataclass
+class MyOutput:
+    message: str
+
+
+@nexusrpc.service
+class MyNexusService:
+    my_sync_operation: nexusrpc.Operation[MyInput, MyOutput]
+
+
+@nexusrpc.handler.service_handler(service=MyNexusService)
+class MyNexusServiceHandler:
+    # You can create an __init__ method accepting what is needed by your operation
+    # handlers to handle requests. You will typically instantiate your service handler class
+    # when starting your Nexus server/worker.
+
+    # This is a Nexus operation that responds synchronously to all requests. That means
+    # that the `start` method returns the final operation result.
+    #
+    # Sync operations are free to make arbitrary network calls.
+    @nexusrpc.handler.sync_operation
+    async def my_sync_operation(
+        self, ctx: nexusrpc.handler.StartOperationContext, input: MyInput
+    ) -> MyOutput:
+        return MyOutput(message=f"Hello {input.name}!")
+```
+
+-----------------------------------------------------------------------------------
+_The nexus-rpc name in PyPi was originally held by an unrelated project. Despite the
+version being at `v1.x` it is currently at an experimental release stage._

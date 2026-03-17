@@ -1,0 +1,10 @@
+{% if src_stats %}
+{% for src_path, stats in src_stats|dictsort %}
+{% if stats.percent_covered < 100 %}
+{% for line in stats.violation_lines %}
+{% set splitLines = line.split("-") %}
+::{{ annotations_type }} file={{ src_path }},line={{ splitLines[0] }}{% if splitLines[1] %},endLine={{ splitLines[1] }}{% endif %},title=Missing Coverage::Line {{ line }} missing coverage
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}

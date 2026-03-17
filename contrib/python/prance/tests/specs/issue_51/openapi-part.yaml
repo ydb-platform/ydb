@@ -1,0 +1,22 @@
+---
+post:
+  summary: summary
+  requestBody:
+    content:
+      application/json:
+        schema:
+          type: string
+  responses:
+    '400':
+      description: description
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              info:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - ł

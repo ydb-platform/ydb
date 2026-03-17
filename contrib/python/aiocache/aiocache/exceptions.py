@@ -1,0 +1,2 @@
+class InvalidCacheType(Exception):
+    pass

@@ -1,0 +1,10 @@
+about_resource: pyrpm.py
+name: pyrpm
+version: ca1c91d03dd7da2504f6205276cfc0eb0d197395
+download_url: https://github.com/mjvm/pyrpm/archive/ca1c91d03dd7da2504f6205276cfc0eb0d197395.zip
+vcs_repository: https://github.com/mjvm/pyrpm.git
+license: bsd-simplified
+license_text: pyrpm.py.LICENSE
+owner: Mário Morgado
+description: PyRPM is a pure python module to extract information from a RPM package.
+notes: heavily modified 

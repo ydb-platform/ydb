@@ -1,0 +1,14 @@
+--- contrib/python/infi.clickhouse-orm/py3/infi/clickhouse_orm/models.py	(99c668935cf5f56c9de5270b3ec2b351521cae65)
++++ contrib/python/infi.clickhouse-orm/py3/infi/clickhouse_orm/models.py	(0f8af15abe019d0f6acd8b57b3256d80625f51fd)
+@@ -224,7 +224,10 @@ class ModelBase(type):
+         # Tuples (poor man's version - convert to array)
+         if db_type.startswith('Tuple'):
+             types = [s.strip() for s in db_type[6 : -1].split(',')]
+-            assert len(set(types)) == 1, 'No support for mixed types in tuples - ' + db_type
++            if len(types[0].split()) != 1:
++                raise NotImplementedError('No support for named tuples - %s' % db_type)
++            if len(set(types)) != 1:
++                raise NotImplementedError('No support for mixed types in tuples - %s' % db_type)
+             inner_field = cls.create_ad_hoc_field(types[0])
+             return orm_fields.ArrayField(inner_field)
+         # FixedString

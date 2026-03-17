@@ -1,0 +1,20 @@
+--- contrib/python/chdb/cpp/src/Common/transformEndianness.h	(index)
++++ contrib/python/chdb/cpp/src/Common/transformEndianness.h	(working tree)
+@@ -6,6 +6,8 @@
+ 
+ #include <city.h>
+ 
++#include <magic_enum.hpp>
++
+ #include <utility>
+ 
+ namespace DB
+@@ -68,7 +70,7 @@ inline void transformEndianness(T & value)
+ }
+ 
+ template <std::endian ToEndian, std::endian FromEndian = std::endian::native, typename T>
+-requires std::is_enum_v<T> || std::is_scoped_enum_v<T>
++requires std::is_enum_v<T> || magic_enum::is_scoped_enum_v<T>
+ inline void transformEndianness(T & x)
+ {
+     using UnderlyingType = std::underlying_type_t<T>;

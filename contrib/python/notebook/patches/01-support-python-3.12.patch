@@ -1,0 +1,10 @@
+--- contrib/python/notebook/notebook/utils.py	(37b70640ced14b7193e54788b552225f8103ffe2)
++++ contrib/python/notebook/notebook/utils.py	(c5b738670a02aaed098bd4dc5ae5efc189c2b6b1)
+@@ -13,6 +13,7 @@ import inspect
+ import os
+ import stat
+ import sys
++import setuptools
+ from distutils.version import LooseVersion
+ 
+ 

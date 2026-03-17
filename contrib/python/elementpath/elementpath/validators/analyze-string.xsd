@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="http://www.w3.org/2005/xpath-functions"
+    xmlns:fn="http://www.w3.org/2005/xpath-functions"
+    elementFormDefault="qualified">
+    
+    <!-- 
+     * This is a schema for the XML representation of JSON used as the target for the
+     * function fn:analyze-string()
+     *
+     * The schema is made available under the terms of the W3C software notice and license
+     * at http://www.w3.org/Consortium/Legal/copyright-software-19980720
+     *
+    -->
+
+    <xs:element name="analyze-string-result" type="fn:analyze-string-result-type"/>
+    <xs:element name="match" type="fn:match-type"/>
+    <xs:element name="non-match" type="xs:string"/>
+    <xs:element name="group" type="fn:group-type"/>
+    
+    <xs:complexType name="analyze-string-result-type" mixed="true">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element ref="fn:match"/>
+            <xs:element ref="fn:non-match"/>
+        </xs:choice>
+    </xs:complexType>
+
+    <xs:complexType name="match-type" mixed="true">
+        <xs:sequence>
+            <xs:element ref="fn:group" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="group-type" mixed="true">
+        <xs:sequence>
+            <xs:element ref="fn:group" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="nr" type="xs:positiveInteger"/>
+    </xs:complexType>
+
+</xs:schema>

@@ -1,0 +1,16 @@
+<p>Some text</p>
+<table class="codehilitetable"><tr><td class="linenos"><pre>1
+2
+3
+4
+5
+6</pre></td><td class="code"><div class="codehilite"><pre><span class="k">def</span> <span class="nf">__init__</span> <span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pattern</span><span class="p">)</span> <span class="p">:</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span> <span class="o">=</span> <span class="n">pattern</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">compiled_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">&quot;^(.*)</span><span class="si">%s</span><span class="s">(.*)$&quot;</span> <span class="o">%</span> <span class="n">pattern</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">getCompiledRegExp</span> <span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="p">:</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_re</span>
+</pre></div>
+</td></tr></table>
+
+<p>More text</p>

@@ -1,0 +1,2 @@
+mark_as_tests:
+  - cytoolz/utils_test.py

@@ -1,0 +1,22 @@
+Metadata-Version: 2.1
+Name: standard-cgi
+Version: 3.13.0
+Summary: Standard library cgi redistribution. "dead battery".
+Author-email: Python Developers <python-deadlib@youknowone.org>
+License: PSF-2.0
+Project-URL: Homepage, https://github.com/youknowone/python-deadlib
+Keywords: stdlib
+Classifier: License :: OSI Approved :: Python Software Foundation License
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Programming Language :: Python :: 3
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+
+Dead battery redistribution
+===========================
+
+Python is moving forward! Python finally started to remove dead batteries.
+For more information, see `PEP 594 <https://peps.python.org/pep-0594/>`_.
+
+If your project depends on a module that has been removed from the standard,
+here is the redistribution of the dead batteries.

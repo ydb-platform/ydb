@@ -1,0 +1,26 @@
+# Code table 4.3 - Type of generating process
+0 0 Analysis
+1 1 Initialization
+2 2 Forecast
+3 3 Bias corrected forecast
+4 4 Ensemble forecast
+5 5 Probability forecast
+6 6 Forecast error
+7 7 Analysis error
+8 8 Observation
+9 9 Climatological
+10 10 Probability-weighted forecast
+11 11 Bias-corrected ensemble forecast
+12 12 Post-processed analysis
+13 13 Post-processed forecast
+14 14 Nowcast
+15 15 Hindcast
+16 16 Physical retrieval
+17 17 Regression analysis
+18 18 Difference between two forecasts
+19 19 First guess
+20 20 Analysis increment
+21 21 Initialization increment for analysis
+# 22-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

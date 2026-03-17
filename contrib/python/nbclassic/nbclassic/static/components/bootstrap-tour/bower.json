@@ -1,0 +1,17 @@
+{
+  "name": "bootstrap-tour",
+  "main": [
+    "./build/js/bootstrap-tour-standalone.js",
+    "./build/css/bootstrap-tour-standalone.css"
+  ],
+  "dependencies": {
+    "bootstrap": ">=2.3.2",
+    "jquery": ">=1.9.0"
+  },
+  "devDependencies": {
+    "html5shiv": "~3.7.2",
+    "jquery": "~2.1.1",
+    "bootstrap": "~3.3.7",
+    "blueimp-md5": "~2.3.0"
+  }
+}

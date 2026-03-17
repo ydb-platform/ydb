@@ -1,0 +1,3 @@
+RECURSE(
+    pystan_model
+)

@@ -1,0 +1,154 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-07-11 17:00+0300\n"
+"PO-Revision-Date: 2026-01-21 10:54+0900\n"
+"Last-Translator: Capella87 <capella87@outlook.com>\n"
+"Language-Team: \n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Poedit 3.8\n"
+
+#: app_settings.py:75
+msgid ""
+"The '{}' setting has been removed. Please refer to '{}' for available "
+"settings."
+msgstr ""
+"설정 '{}' 은(는) 제거되었습니다.  '{}'에서 사용 가능한 설정을 참조해 주세요."
+
+#: jwt_auth.py:75
+msgid "WIll override cookie."
+msgstr "쿠키를 덮어씌웁니다."
+
+#: jwt_auth.py:86
+msgid "No valid refresh token found."
+msgstr "유효한 refresh token을 찾을 수 없었습니다."
+
+#: registration/serializers.py:78
+msgid "Define callback_url in view"
+msgstr "view에 callback_url을 정의하세요"
+
+#: registration/serializers.py:87
+msgid "View is not defined, pass it as a context variable"
+msgstr "View가 정의되지 않았습니다. 컨텍스트 변수에 포함해주세요"
+
+#: registration/serializers.py:92
+msgid "Define adapter_class in view"
+msgstr "view에 adapter_class를 정의하세요"
+
+#: registration/serializers.py:118
+msgid "Define client_class in view"
+msgstr "view에 client_class를 정의하세요"
+
+#: registration/serializers.py:139
+msgid "Failed to exchange code for access token"
+msgstr "코드와 access token 교환에 실패했습니다."
+
+#: registration/serializers.py:150
+msgid "Incorrect input. access_token or code is required."
+msgstr "올바르지 않은 입력입니다. access_token이나 code가 필요합니다."
+
+#: registration/serializers.py:163
+msgid "Incorrect value"
+msgstr "올바르지 않은 값"
+
+#: registration/serializers.py:180 registration/serializers.py:188
+#: registration/serializers.py:243
+msgid "User is already registered with this e-mail address."
+msgstr "이미 이 이메일 주소로 등록된 사용자가 있습니다."
+
+#: registration/serializers.py:252
+msgid "The two password fields didn't match."
+msgstr "두 개의 패스워드 필드가 서로 맞지 않습니다."
+
+#: registration/views.py:52
+msgid "Verification e-mail sent."
+msgstr "확인 이메일을 발송했습니다."
+
+#: registration/views.py:121 registration/views.py:142
+msgid "ok"
+msgstr "ok"
+
+#: serializers.py:33
+msgid "Must include \"email\" and \"password\"."
+msgstr "\"email\"과 \"password\"를 반드시 포함해야 합니다."
+
+#: serializers.py:42
+msgid "Must include \"username\" and \"password\"."
+msgstr "\"username\"과 \"password\"를 반드시 포함해야 합니다."
+
+#: serializers.py:53
+msgid "Must include either \"username\" or \"email\" and \"password\"."
+msgstr ""
+"\"username\"이나 \"email\", 그리고 \"password\"를 반드시 포함해야 합니다."
+
+#: serializers.py:99 serializers.py:124
+msgid "Unable to log in with provided credentials."
+msgstr "주어진 자격 증명으로 로그인이 불가능합니다."
+
+#: serializers.py:106
+msgid "User account is disabled."
+msgstr "사용자 계정이 비활성화 되어 있습니다."
+
+#: serializers.py:115
+msgid "E-mail is not verified."
+msgstr "이메일 주소가 확인되지 않았습니다."
+
+#: serializers.py:287 serializers.py:290
+msgid "Invalid value"
+msgstr "올바르지 않은 값"
+
+#: serializers.py:334
+msgid "Your old password was entered incorrectly. Please enter it again."
+msgstr "이전 패스워드를 잘못 입력하셨습니다. 다시 입력해 주세요."
+
+#: views.py:155
+msgid "You should be logged in to logout. Check whether the token is passed."
+msgstr ""
+"로그인 상태여야 로그아웃할 수 있습니다. 토큰이 전달되었는지 확인해 주세요."
+
+#: views.py:167
+msgid "Successfully logged out."
+msgstr "로그아웃 되었습니다."
+
+#: views.py:191
+msgid "Refresh token was not included in cookie data."
+msgstr "refresh token이 쿠키에 포함되어 있지 않습니다."
+
+#: views.py:197
+msgid "Refresh token was not included in request data."
+msgstr "refresh token이 쿠키에 포함되어 있지 않습니다."
+
+#: views.py:207 views.py:211
+msgid "An error has occurred."
+msgstr "오류가 발생했습니다."
+
+#: views.py:216
+msgid ""
+"Neither cookies or blacklist are enabled, so the token has not been deleted "
+"server side. Please make sure the token is deleted client side."
+msgstr ""
+"쿠키나 블랙리스트가 비활성화 되어 있어, 서버측 토큰은 삭제되지 않았습니다. "
+"클라이언트 측 토큰이 삭제되었는지 확인해 주세요."
+
+#: views.py:268
+msgid "Password reset e-mail has been sent."
+msgstr "패스워드 초기화 이메일이 발송되었습니다."
+
+#: views.py:295
+msgid "Password has been reset with the new password."
+msgstr "새로운 패스워드로 패스워드가 초기화 되었습니다."
+
+#: views.py:318
+msgid "New password has been saved."
+msgstr "새로운 패스워드가 저장되었습니다."

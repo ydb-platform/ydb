@@ -1,0 +1,7 @@
+<div class="btn-list">
+    {% for file in (data if field.multiple else [data]) %}
+        <a class="m-1 py-1 px-2 badge bg-blue-lt lead" href="{{ file.url }}">
+            <i class="fas fa-fw {{ file.content_type | file_icon }}"></i> {{ file.filename }}
+        </a>
+    {% endfor %}
+</div>

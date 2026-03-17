@@ -1,0 +1,13 @@
+{% extends "admin/base_site.html" %}
+
+<!-- LOADING -->
+{% load i18n %}
+
+<!-- TITLE -->
+{% block title %}{% trans "Page not found" %}{% endblock %}
+
+<!-- CONTENT -->
+{% block content %}
+    <h2>{% trans "Page not found" %}</h2>
+    <p>{% trans "We're sorry, but the requested page could not be found." %}</p>
+{% endblock %}

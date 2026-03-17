@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.idp.application.oauth;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/idp/application/oauth;oauth";
+option java_package = "yandex.cloud.api.organizationmanager.v1.idp.application.oauth";
+
+// An OAuth application resource.
+message Application {
+  // ID of the application.
+  string id = 1;
+
+  // Name of the application.
+  // The name is unique within the organization. 3-63 characters long.
+  string name = 2;
+
+  // ID of the organization that the application belongs to.
+  string organization_id = 3;
+
+  // Description of the application. 0-256 characters long.
+  string description = 4;
+
+  // Settings of the group claims
+  GroupClaimsSettings group_claims_settings = 5;
+
+  // Represents current connection to the OAuth client with specified scopes
+  ClientGrant client_grant = 6;
+
+  // Current status of the application.
+  Status status = 7;
+
+  // Resource labels as `` key:value `` pairs.
+  map<string, string> labels = 8;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 9;
+
+  // Modification timestamp.
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+// Represents the status of an application.
+enum Status {
+  // The status is not specified.
+  STATUS_UNSPECIFIED = 0;
+  // The apllication is in the process of being created.
+  CREATING = 1;
+  // The apllication is active and operational.
+  ACTIVE = 2;
+  // The apllication is suspended. I.e. authentication via this application is disabled.
+  SUSPENDED = 3;
+  // The apllication is in the process of being deleted.
+  DELETING = 4;
+}
+
+// Settings of the group claims
+message GroupClaimsSettings {
+  // Represents current distribution type of the groups. I.e. which groups are visible for the application users.
+  GroupDistributionType group_distribution_type = 1;
+}
+
+// Represents distribution type of the groups
+enum GroupDistributionType {
+  // The distribution type is unspecified
+  GROUP_DISTRIBUTION_TYPE_UNSPECIFIED = 0;
+  // No groups are visible for the application users
+  NONE = 1;
+  // Only assigned groups are visible for the application users
+  ASSIGNED_GROUPS = 2;
+  // All groups are visible for the application users
+  ALL_GROUPS = 3;
+}
+
+// Represents connection to the OAuth client with specified scopes
+message ClientGrant {
+
+  // OAuth client id
+  string client_id = 1 [(required) = true, (length) = "<=50"];
+
+  // List of authorized client scopes by the application
+  repeated string authorized_scopes = 2 [(size) = "1-1000", (length) = "<=255"];
+}

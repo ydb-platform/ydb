@@ -1,0 +1,179 @@
+# (C) Copyright 2005- ECMWF.
+# Wave 2D spectra direction and frequency
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber  : dump;
+alias number = perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble : dump ;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+unsigned[1] directionNumber : dump ;
+alias mars.direction = directionNumber;
+alias waveDirectionNumber = directionNumber;
+
+unsigned[1] frequencyNumber : dump ;
+alias mars.frequency = frequencyNumber;
+alias waveFrequencyNumber = frequencyNumber;
+
+unsigned[1] numberOfDirections : dump ;
+alias totalNumberOfDirections = numberOfDirections ;
+alias numberOfWaveDirections = numberOfDirections;
+
+unsigned[1] numberOfFrequencies  : dump;
+alias totalNumberOfFrequencies = numberOfFrequencies ;
+alias numberOfWaveFrequencies = numberOfFrequencies;
+
+unsigned[4] directionScalingFactor  : dump;
+alias integerScalingFactorAppliedToDirections = directionScalingFactor;
+
+unsigned[4] frequencyScalingFactor  : dump;
+alias integerScalingFactorAppliedToFrequencies =  frequencyScalingFactor ;
+
+constant localFlagLatestVersion = 4 : hidden;
+codetable[1] localFlag "grib1/local.13.table" = localFlagLatestVersion;
+
+#!
+#!  Old versions of wave 2D spectra direction and frequency do not
+#!  have the systemNumber and methodNumber, and the flag is set to 0.
+#!
+#if0                             -       IF_EQ   0       flag
+#spareSetToZero                  65      PAD     n/a     36
+#endif0                          -       ENDIF   if0
+if(localFlag == 0)
+{
+  pad padding_loc13_1(36);
+}
+
+#!
+#!  Old versions of wave 2D spectra direction and frequency do not
+#!  have the systemNumber and methodNumber, and the flag is set to 0.
+#!
+#!
+#!
+#if1                             -       IF_EQ   1       flag
+#systemNumber                    065     I2      -       -
+#methodNumber                    067     I2      -       -
+#spareSetToZero1                 069     PAD     n/a     32
+#endif1                          -       ENDIF   if1
+if(localFlag == 1)
+{
+  unsigned[2] systemNumber  : dump;
+  unsigned[2] methodNumber  : dump;
+  alias system = systemNumber;
+  alias method = methodNumber;
+  pad padding_loc13_2(32);
+}
+
+#if2             -   IF_EQ   2   flag
+#systemNumber            065 I2  -   -
+#methodNumber            067 I2  -   -
+#referenceDate           069 I4  -   -
+#climateDateFrom         073 I4  -   -
+#climateDateTo           077 I4  -   -
+#spareSetToZero2         081 PAD n/a 20
+#endif2              -   ENDIF   if2
+if(localFlag == 2)
+{
+  unsigned[2] systemNumber  : dump;
+  unsigned[2] methodNumber  : dump;
+  unsigned[4] referenceDate : dump ;
+  unsigned[4] climateDateFrom : dump ;
+  unsigned[4] climateDateTo : dump ;
+  alias system = systemNumber;
+  alias method = methodNumber;
+  alias refdate = referenceDate;
+  pad padding_loc13_3(20);
+}
+
+#if3             -   IF_EQ   3   flag
+#systemNumber            065 I2  -   -
+#methodNumber            067 I2  -   -
+#referenceDate           069 I4  -   -
+#climateDateFrom         073 I4  -   -
+#climateDateTo           077 I4  -   -
+#legBaseDate             081 I4  -   -
+#legBaseTime             085 I2  -   -
+#legNumber               087 I1  -   -
+#oceanAtmosphereCoupling 088 I1  -   -
+#spareSetToZero3         089 PAD n/a 12
+#endif3          -   ENDIF   if3
+if(localFlag == 3)
+{
+  unsigned[2] systemNumber = 65535 : dump,can_be_missing ;
+  unsigned[2] methodNumber = 65535 : dump,can_be_missing ;
+  unsigned[4] referenceDate : dump ;
+  unsigned[4] climateDateFrom : dump ;
+  unsigned[4] climateDateTo : dump ;
+  unsigned[4] legBaseDate : dump;
+  alias baseDateOfThisLeg = legBaseDate;
+  unsigned[2] legBaseTime : dump;
+  alias baseTimeOfThisLeg = legBaseTime;
+  unsigned[1] legNumber : dump;
+  unsigned[1] oceanAtmosphereCoupling : dump;
+  pad padding_loc13_4(12);
+  alias system = systemNumber;
+  alias method = methodNumber;
+  alias refdate = referenceDate;
+
+  alias mars._leg_number = legNumber;
+}
+
+#if4             -   IF_EQ   4   flag
+#systemNumber             065 I2  -   -
+#methodNumber             067 I2  -   -
+#referenceDate            069 I4  -   -
+#climateDateFrom          073 I4  -   -
+#climateDateTo            077 I4  -   -
+#legBaseDate              081 I4  -   -
+#legBaseTime              085 I2  -   -
+#legNumber                087 I1  -   -
+#oceanAtmosphereCoupling  088 I1  -   -
+#offsetToEndOf4DvarWindow 089 I2  -   -
+#lengthOf4DvarWindow      091 I2  -   -
+#spareSetToZero3          093 PAD n/a 8
+#endif4          -   ENDIF   if4
+if(localFlag == 4)
+{
+   unsigned[2] systemNumber = 65535 : dump,can_be_missing ;
+   unsigned[2] methodNumber = 65535 : dump,can_be_missing ;
+   unsigned[4] referenceDate : dump ;
+   unsigned[4] climateDateFrom : dump ;
+   unsigned[4] climateDateTo : dump ;
+   unsigned[4] legBaseDate : dump;
+   alias baseDateOfThisLeg = legBaseDate;
+   unsigned[2] legBaseTime : dump;
+   alias baseTimeOfThisLeg = legBaseTime;
+   unsigned[1] legNumber : dump;
+   unsigned[1] oceanAtmosphereCoupling : dump;
+
+   # Hours
+   unsigned[2] offsetToEndOf4DvarWindow : dump;
+   alias anoffset=offsetToEndOf4DvarWindow;
+   unsigned[2] lengthOf4DvarWindow : dump;
+
+   alias system = systemNumber;
+   alias method = methodNumber;
+   alias refdate = referenceDate;
+
+   alias mars._leg_number = legNumber;
+
+   pad padding_loc13_5(8);
+}
+
+unsigned[4] scaledDirections[numberOfDirections] : dump;
+unsigned[4] scaledFrequencies[numberOfFrequencies] : dump;
+
+alias scaledValuesOfWaveDirections = scaledDirections : hidden;
+alias scaledValuesOfWaveFrequencies = scaledFrequencies : hidden;
+
+constant GRIBEXSection1Problem = 100 + 4 * numberOfDirections + 4 * numberOfFrequencies - section1Length ;
+
+# ECC-1907
+constant ninety_nine = 99 : hidden;
+if (stream is 'ewla' or stream is 'waef') {
+   alias productDefinitionTemplateNumber = hundred;
+} else {
+   alias productDefinitionTemplateNumber = ninety_nine;
+}

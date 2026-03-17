@@ -1,0 +1,14 @@
+--- contrib/python/grpcio-health-checking/grpc_health/v1/_async.py      (index)
++++ contrib/python/grpcio-health-checking/grpc_health/v1/_async.py      (working tree)
+@@ -18,2 +18,2 @@
+-from grpc_health.v1 import health_pb2 as _health_pb2
+-from grpc_health.v1 import health_pb2_grpc as _health_pb2_grpc
++from src.proto.grpc.health.v1 import health_pb2 as _health_pb2
++from src.proto.grpc.health.v1 import health_pb2_grpc as _health_pb2_grpc
+--- contrib/python/grpcio-health-checking/grpc_health/v1/health.py      (index)
++++ contrib/python/grpcio-health-checking/grpc_health/v1/health.py      (working tree)
+@@ -18,2 +18,2 @@
+-from grpc_health.v1 import health_pb2 as _health_pb2
+-from grpc_health.v1 import health_pb2_grpc as _health_pb2_grpc
++from src.proto.grpc.health.v1 import health_pb2 as _health_pb2
++from src.proto.grpc.health.v1 import health_pb2_grpc as _health_pb2_grpc

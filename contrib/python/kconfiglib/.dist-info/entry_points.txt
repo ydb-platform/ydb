@@ -1,0 +1,15 @@
+[console_scripts]
+alldefconfig = alldefconfig:main
+allmodconfig = allmodconfig:main
+allnoconfig = allnoconfig:main
+allyesconfig = allyesconfig:main
+defconfig = defconfig:main
+genconfig = genconfig:main
+guiconfig = guiconfig:_main
+listnewconfig = listnewconfig:main
+menuconfig = menuconfig:_main
+oldconfig = oldconfig:_main
+olddefconfig = olddefconfig:main
+savedefconfig = savedefconfig:main
+setconfig = setconfig:main
+

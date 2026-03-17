@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.llm.v1alpha;
+
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/llm/v1alpha;llm";
+option java_package = "yandex.cloud.api.ai.llm.v1alpha";
+
+// Defines the options for text generation.
+message GenerationOptions {
+  // Enables streaming of partially generated text.
+  bool partial_results = 1;
+
+  // Affects creativity and randomness of responses. Should be a double number between 0 (inclusive) and 1 (inclusive).
+  // Lower values produce more straightforward responses, while higher values lead to increased creativity and randomness.
+  google.protobuf.DoubleValue temperature = 2;
+
+  // Sets the maximum limit on the total number of tokens used for both the input prompt and the generated response.
+  // Must be greater than zero and not exceed 7400 tokens.
+  google.protobuf.Int64Value max_tokens = 3;
+}
+
+// Represents an alternative generated response, including its score and token count.
+message Alternative {
+  // The generated text response.
+  string text = 1;
+
+  // The score or confidence of the generated text.
+  double score = 2;
+
+  // The number of tokens in the generated response.
+  int64 num_tokens = 3;
+}
+
+// Represents a message within a chat.
+message Message {
+  // Identifies the sender of the message.
+  string role = 1;
+
+  // The text content of the message.
+  string text = 2;
+}
+
+// Represents a token, the basic unit of text, used by the LLM.
+message Token {
+  // An internal token identifier.
+  int64 id = 1;
+
+  // The textual representation of the token.
+  string text = 2;
+
+  // Indicates whether the token is special or not. Special tokens define the model's behavior and are not visible to users.
+  bool special = 3;
+}

@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package yandex.cloud.marketplace.pim.v1.saas;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/marketplace/pim/v1/saas/product_instance.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/marketplace/pim/v1/saas;saas";
+option java_package = "yandex.cloud.api.marketplace.pim.v1.saas";
+
+// A set of methods for managing product instances.
+service ProductInstanceService {
+  // Returns the specified product instance.
+  rpc Get(GetProductInstanceRequest) returns (ProductInstance) {
+    option (google.api.http) = { get: "/marketplace/pim/saas/v1/instances/{product_instance_id}" };
+  };
+
+  // Claims a product instance - activates it and optionally locks to subscription
+  rpc Claim(ClaimProductInstanceRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/marketplace/pim/saas/v1/instances/claim" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "ClaimProductInstanceMetadata"
+      response: "ProductInstance"
+    };
+  }
+}
+
+message GetProductInstanceRequest {
+  // ID of the product instance to return.
+  string product_instance_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ClaimProductInstanceRequest {
+  // Signed JWT token which contains information about product instance and subscription.
+  string token = 1 [(required) = true, (length) = "<=1000"];
+  // ID of the resource to which the product instance will be claimed.
+  string resource_id = 2;
+  // Additional information about the resource.
+  SaasInfo resource_info = 3;
+}
+
+message ClaimProductInstanceMetadata {
+  // ID of the product to which the product instance belongs.
+  string product_id = 1;
+  // ID of the product instance.
+  string product_instance_id = 2;
+  // ID of the subscription.
+  string license_instance_id = 3;
+  // ID of the subscription lock.
+  string lock_id = 4;
+}

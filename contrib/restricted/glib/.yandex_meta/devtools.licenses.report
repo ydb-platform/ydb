@@ -1,0 +1,1676 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+IGNORE_FILES NEWS
+
+KEEP     Public-Domain        0781b6b952c5f6d62494c5f7efb272ff
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * This file is placed in the public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        glib/win_iconv.c [4:4]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     Public-Domain        0df138f87ffc85a6434433c3e38d1b01
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        glib/dirent/dirent.c [3:5]
+        glib/dirent/dirent.h [3:5]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     LicenseRef-scancode-pycrypto 18ac3d25411c22525ffd4041bc6dae64
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    # Distribute and use freely; there are no restrictions...
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-pycrypto
+        Score           : 29.47
+        Match type      : TEXT
+        Links           : http://dev.mysql.com/doc/workbench/en/license-pycrypto.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/pycrypto.LICENSE
+    Files with this license:
+        glib/gchecksum.c [477:483]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     bzip2-1.0.6          239b1c53723cf139252d50409a83df78
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+FILE_INCLUDE COPYING found in files: glib/valgrind.h at line 7
+FILE_INCLUDE glib/valgrind.h found in files: glib/valgrind.h at line 5
+FILE_INCLUDE gmodule/COPYING found in files: glib/valgrind.h at line 7
+FILE_INCLUDE include/glib/valgrind.h found in files: glib/valgrind.h at line 5
+    # Not a license. Just a header describing license scope.
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: bzip2-1.0.6
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/asimonov-im/bzip2/blob/master/LICENSE, https://spdx.org/licenses/bzip2-1.0.6
+    Files with this license:
+        glib/valgrind.h [4:8]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-only        23c2a5e0106b99d75238986559bb5fc6
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+FILE_INCLUDE COPYING found in files: COPYING at line 116, gmodule/COPYING at line 116
+FILE_INCLUDE gmodule/COPYING found in files: COPYING at line 116, gmodule/COPYING at line 116
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        COPYING [1:502]
+        gmodule/COPYING [1:502]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    2b690b184fdbaeda70999fa88978b160
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        glib/deprecated/gcompletion.c [4:15]
+        glib/deprecated/gmain.h [4:15]
+        glib/deprecated/grel.h [4:15]
+        glib/deprecated/gthread-deprecated.c [8:19]
+        glib/deprecated/gthread.h [4:15]
+        glib/garray.h [4:15]
+        glib/gasyncqueueprivate.h [4:15]
+        glib/gcharsetprivate.h [5:16]
+        glib/gconstructor.h [4:15]
+        glib/gdataset.h [4:15]
+        glib/gdatasetprivate.h [5:16]
+        glib/gdate.c [4:15]
+        glib/gdate.h [4:15]
+        glib/ggettext.c [4:15]
+        glib/ghook.c [7:18]
+        glib/ghook.h [4:15]
+        glib/giochannel.c [7:18]
+        glib/giounix.c [7:18]
+        glib/glib-private.c [4:15]
+        glib/glib.h [4:15]
+        glib/glist.h [4:15]
+        glib/gmacros.h [4:15]
+        glib/gmain.c [7:18]
+        glib/gmem.h [4:15]
+        glib/gmessages.c [4:15]
+        glib/gmessages.h [4:15]
+        glib/gnode.c [7:18]
+        glib/gnode.h [4:15]
+        glib/gpoll.c [8:19]
+        glib/gqsort.c [6:17]
+        glib/gqsort.h [4:15]
+        glib/gquark.h [4:15]
+        glib/grand.h [4:15]
+        glib/gscanner.c [7:18]
+        glib/gscanner.h [4:15]
+        glib/gslist.h [4:15]
+        glib/gthread.c [8:19]
+        glib/gtrashstack.c [4:15]
+        glib/gtree.h [4:15]
+        glib/gtypes.h [4:15]
+        glib/gunicodeprivate.h [5:16]
+        glib/guniprop.c [6:17]
+        glib/gutf8.c [6:17]
+        glib/gutils.c [4:15]
+        glib/gversion.c [4:15]
+        glib/gwin32.c [5:16]
+        gmodule/gmodule-dl.c [4:15]
+        gmodule/gmodule-win32.c [7:18]
+        gmodule/gmodule.c [4:15]
+        gmodule/gmodule.h [4:15]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     Public-Domain        3845d6ef049b415f8f54f4d7e362f22e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * The algorithm is due to Ron Rivest.  This code was
+         * written by Colin Plumb in 1993, no copyright is claimed.
+         * This code is in the public domain; do with it what you wish.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        glib/gchecksum.c [206:208]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    46295c1deeff52542eca2ef71d620273
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        glib/libcharset/libcharset.h [4:7]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    48c51ef686b8a7f7cc16da5117f0d26e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/gaction.c [4:15]
+        gio/gaction.h [4:15]
+        gio/gactiongroup.c [4:15]
+        gio/gactiongroup.h [4:15]
+        gio/gactiongroupexporter.c [5:16]
+        gio/gactiongroupexporter.h [5:16]
+        gio/gactionmap.c [4:15]
+        gio/gactionmap.h [4:15]
+        gio/gappinfo.c [5:16]
+        gio/gappinfo.h [5:16]
+        gio/gappinfoprivate.h [5:16]
+        gio/gapplication.c [4:15]
+        gio/gapplication.h [4:15]
+        gio/gapplicationcommandline.h [5:16]
+        gio/gapplicationimpl-dbus.c [4:15]
+        gio/gasynchelper.c [5:16]
+        gio/gasynchelper.h [5:16]
+        gio/gasyncinitable.c [5:16]
+        gio/gasyncinitable.h [5:16]
+        gio/gasyncresult.c [5:16]
+        gio/gasyncresult.h [5:16]
+        gio/gbufferedinputstream.c [6:17]
+        gio/gbufferedinputstream.h [5:16]
+        gio/gbufferedoutputstream.c [5:16]
+        gio/gbufferedoutputstream.h [5:16]
+        gio/gbytesicon.c [5:16]
+        gio/gbytesicon.h [5:16]
+        gio/gcancellable.c [5:16]
+        gio/gcancellable.h [5:16]
+        gio/gcharsetconverter.c [5:16]
+        gio/gcharsetconverter.h [5:16]
+        gio/gcocoanotificationbackend.m [4:15]
+        gio/gcontenttype-win32.c [7:18]
+        gio/gcontenttype.c [7:18]
+        gio/gcontenttype.h [5:16]
+        gio/gcontenttypeprivate.h [5:16]
+        gio/gconverter.c [5:16]
+        gio/gconverter.h [5:16]
+        gio/gconverterinputstream.c [5:16]
+        gio/gconverterinputstream.h [5:16]
+        gio/gconverteroutputstream.c [5:16]
+        gio/gconverteroutputstream.h [5:16]
+        gio/gcredentials.c [5:16]
+        gio/gcredentials.h [5:16]
+        gio/gcredentialsprivate.h [5:16]
+        gio/gdatagrambased.c [5:16]
+        gio/gdatagrambased.h [4:15]
+        gio/gdatainputstream.c [7:18]
+        gio/gdatainputstream.h [5:16]
+        gio/gdataoutputstream.c [5:16]
+        gio/gdataoutputstream.h [5:16]
+        gio/gdbusactiongroup-private.h [5:16]
+        gio/gdbusactiongroup.c [5:16]
+        gio/gdbusactiongroup.h [5:16]
+        gio/gdbusaddress.c [5:16]
+        gio/gdbusaddress.h [5:16]
+        gio/gdbusauth.c [5:16]
+        gio/gdbusauth.h [5:16]
+        gio/gdbusauthmechanism.c [5:16]
+        gio/gdbusauthmechanism.h [5:16]
+        gio/gdbusauthmechanismanon.c [5:16]
+        gio/gdbusauthmechanismanon.h [5:16]
+        gio/gdbusauthmechanismexternal.c [5:16]
+        gio/gdbusauthmechanismexternal.h [5:16]
+        gio/gdbusauthmechanismsha1.c [5:16]
+        gio/gdbusauthmechanismsha1.h [5:16]
+        gio/gdbusauthobserver.c [5:16]
+        gio/gdbusauthobserver.h [5:16]
+        gio/gdbusconnection.c [5:16]
+        gio/gdbusconnection.h [5:16]
+        gio/gdbuserror.c [5:16]
+        gio/gdbuserror.h [5:16]
+        gio/gdbusinterface.c [5:16]
+        gio/gdbusinterface.h [5:16]
+        gio/gdbusinterfaceskeleton.c [5:16]
+        gio/gdbusinterfaceskeleton.h [5:16]
+        gio/gdbusintrospection.c [5:16]
+        gio/gdbusintrospection.h [5:16]
+        gio/gdbusmessage.c [5:16]
+        gio/gdbusmessage.h [5:16]
+        gio/gdbusmethodinvocation.c [5:16]
+        gio/gdbusmethodinvocation.h [5:16]
+        gio/gdbusnameowning.c [5:16]
+        gio/gdbusnameowning.h [5:16]
+        gio/gdbusnamewatching.c [5:16]
+        gio/gdbusnamewatching.h [5:16]
+        gio/gdbusobject.c [5:16]
+        gio/gdbusobject.h [5:16]
+        gio/gdbusobjectmanager.c [5:16]
+        gio/gdbusobjectmanager.h [5:16]
+        gio/gdbusobjectmanagerclient.c [5:16]
+        gio/gdbusobjectmanagerclient.h [5:16]
+        gio/gdbusobjectmanagerserver.c [5:16]
+        gio/gdbusobjectmanagerserver.h [5:16]
+        gio/gdbusobjectproxy.c [5:16]
+        gio/gdbusobjectproxy.h [5:16]
+        gio/gdbusobjectskeleton.c [5:16]
+        gio/gdbusobjectskeleton.h [5:16]
+        gio/gdbusprivate.c [5:16]
+        gio/gdbusprivate.h [5:16]
+        gio/gdbusproxy.c [5:16]
+        gio/gdbusproxy.h [5:16]
+        gio/gdbusserver.c [5:16]
+        gio/gdbusserver.h [5:16]
+        gio/gdbusutils.c [5:16]
+        gio/gdbusutils.h [5:16]
+        gio/gdebugcontroller.c [5:16]
+        gio/gdebugcontroller.h [5:16]
+        gio/gdebugcontrollerdbus.c [5:16]
+        gio/gdebugcontrollerdbus.h [5:16]
+        gio/gdesktopappinfo.c [6:17]
+        gio/gdesktopappinfo.h [5:16]
+        gio/gdocumentportal.c [5:16]
+        gio/gdocumentportal.h [5:16]
+        gio/gdrive.c [5:16]
+        gio/gdrive.h [5:16]
+        gio/gdtlsclientconnection.c [6:17]
+        gio/gdtlsclientconnection.h [6:17]
+        gio/gdtlsconnection.c [6:17]
+        gio/gdtlsconnection.h [6:17]
+        gio/gdtlsserverconnection.c [6:17]
+        gio/gdtlsserverconnection.h [6:17]
+        gio/gdummyfile.c [5:16]
+        gio/gdummyfile.h [5:16]
+        gio/gdummyproxyresolver.c [5:16]
+        gio/gdummyproxyresolver.h [5:16]
+        gio/gdummytlsbackend.c [6:17]
+        gio/gdummytlsbackend.h [5:16]
+        gio/gemblem.c [5:16]
+        gio/gemblem.h [5:16]
+        gio/gemblemedicon.c [7:18]
+        gio/gemblemedicon.h [5:16]
+        gio/gfdonotificationbackend.c [4:15]
+        gio/gfile.c [7:18]
+        gio/gfile.h [5:16]
+        gio/gfileattribute-priv.h [5:16]
+        gio/gfileattribute.c [5:16]
+        gio/gfileattribute.h [5:16]
+        gio/gfiledescriptorbased.c [5:16]
+        gio/gfiledescriptorbased.h [5:16]
+        gio/gfileenumerator.c [5:16]
+        gio/gfileenumerator.h [5:16]
+        gio/gfileicon.c [5:16]
+        gio/gfileicon.h [5:16]
+        gio/gfileinfo-priv.h [6:17]
+        gio/gfileinfo.c [5:16]
+        gio/gfileinfo.h [5:16]
+        gio/gfileinputstream.c [5:16]
+        gio/gfileinputstream.h [5:16]
+        gio/gfileiostream.c [5:16]
+        gio/gfileiostream.h [5:16]
+        gio/gfilemonitor.c [5:16]
+        gio/gfilemonitor.h [5:16]
+        gio/gfilenamecompleter.c [5:16]
+        gio/gfilenamecompleter.h [5:16]
+        gio/gfileoutputstream.c [5:16]
+        gio/gfileoutputstream.h [5:16]
+        gio/gfilterinputstream.c [5:16]
+        gio/gfilterinputstream.h [5:16]
+        gio/gfilteroutputstream.c [5:16]
+        gio/gfilteroutputstream.h [5:16]
+        gio/ghttpproxy.c [6:17]
+        gio/ghttpproxy.h [5:16]
+        gio/gicon.c [5:16]
+        gio/gicon.h [5:16]
+        gio/ginetaddress.c [5:16]
+        gio/ginetaddress.h [5:16]
+        gio/ginetaddressmask.c [5:16]
+        gio/ginetaddressmask.h [5:16]
+        gio/ginetsocketaddress.c [5:16]
+        gio/ginetsocketaddress.h [5:16]
+        gio/ginitable.c [5:16]
+        gio/ginitable.h [5:16]
+        gio/ginputstream.c [5:16]
+        gio/ginputstream.h [5:16]
+        gio/gio.h [5:16]
+        gio/gio_trace.h [5:16]
+        gio/gioerror.c [5:16]
+        gio/gioerror.h [5:16]
+        gio/giomodule-priv.c [5:16]
+        gio/giomodule-priv.h [5:16]
+        gio/giomodule.c [5:16]
+        gio/giomodule.h [5:16]
+        gio/gioprivate.h [5:16]
+        gio/gioscheduler.c [5:16]
+        gio/gioscheduler.h [5:16]
+        gio/giostream.c [6:17]
+        gio/giotypes.h [5:16]
+        gio/giowin32-afunix.h [5:16]
+        gio/giowin32-priv.h [5:16]
+        gio/glistmodel.c [5:16]
+        gio/glistmodel.h [5:16]
+        gio/gliststore.c [5:16]
+        gio/gliststore.h [5:16]
+        gio/gloadableicon.c [5:16]
+        gio/gloadableicon.h [5:16]
+        gio/glocalfile.c [5:16]
+        gio/glocalfile.h [5:16]
+        gio/glocalfileenumerator.c [5:16]
+        gio/glocalfileenumerator.h [5:16]
+        gio/glocalfileinfo.c [7:18]
+        gio/glocalfileinfo.h [5:16]
+        gio/glocalfileinputstream.c [5:16]
+        gio/glocalfileinputstream.h [5:16]
+        gio/glocalfileiostream.c [5:16]
+        gio/glocalfileiostream.h [5:16]
+        gio/glocalfilemonitor.c [5:16]
+        gio/glocalfilemonitor.h [5:16]
+        gio/glocalfileoutputstream.c [5:16]
+        gio/glocalfileoutputstream.h [5:16]
+        gio/glocalvfs.c [5:16]
+        gio/glocalvfs.h [5:16]
+        gio/gmarshal-internal.c [3:14]
+        gio/gmarshal-internal.h [3:14]
+        gio/gmemoryinputstream.c [5:16]
+        gio/gmemoryinputstream.h [5:16]
+        gio/gmemorymonitor.c [5:16]
+        gio/gmemorymonitor.h [5:16]
+        gio/gmemorymonitordbus.c [5:16]
+        gio/gmemorymonitordbus.h [5:16]
+        gio/gmemorymonitorportal.c [5:16]
+        gio/gmemorymonitorportal.h [5:16]
+        gio/gmemorymonitorwin32.c [5:16]
+        gio/gmemoryoutputstream.c [5:16]
+        gio/gmemoryoutputstream.h [5:16]
+        gio/gmount.c [7:18]
+        gio/gmount.h [5:16]
+        gio/gmountoperation.c [5:16]
+        gio/gmountoperation.h [5:16]
+        gio/gmountprivate.h [5:16]
+        gio/gnativesocketaddress.c [5:16]
+        gio/gnativesocketaddress.h [5:16]
+        gio/gnativevolumemonitor.c [5:16]
+        gio/gnativevolumemonitor.h [5:16]
+        gio/gnetworkaddress.c [8:19]
+        gio/gnetworkaddress.h [5:16]
+        gio/gnetworking.c [7:18]
+        gio/gnetworkingprivate.h [5:16]
+        gio/gnetworkmonitor.c [5:16]
+        gio/gnetworkmonitor.h [5:16]
+        gio/gnetworkmonitorbase.c [5:16]
+        gio/gnetworkmonitorbase.h [5:16]
+        gio/gnetworkmonitornetlink.c [5:16]
+        gio/gnetworkmonitornetlink.h [5:16]
+        gio/gnetworkmonitornm.c [5:16]
+        gio/gnetworkmonitornm.h [5:16]
+        gio/gnetworkmonitorportal.c [5:16]
+        gio/gnetworkmonitorportal.h [5:16]
+        gio/gnetworkservice.c [7:18]
+        gio/gnetworkservice.h [5:16]
+        gio/gnotification-private.h [4:15]
+        gio/gnotification.c [4:15]
+        gio/gnotification.h [4:15]
+        gio/gnotificationbackend.c [4:15]
+        gio/gnotificationbackend.h [4:15]
+        gio/gosxappinfo.h [5:16]
+        gio/gosxappinfo.m [5:16]
+        gio/gosxcontenttype.m [5:16]
+        gio/goutputstream.c [5:16]
+        gio/goutputstream.h [5:16]
+        gio/gpollableinputstream.c [5:16]
+        gio/gpollableinputstream.h [5:16]
+        gio/gpollableoutputstream.c [5:16]
+        gio/gpollableoutputstream.h [5:16]
+        gio/gpollableutils.c [5:16]
+        gio/gpollableutils.h [5:16]
+        gio/gpollfilemonitor.c [5:16]
+        gio/gpollfilemonitor.h [5:16]
+        gio/gportalsupport.c [5:16]
+        gio/gportalsupport.h [5:16]
+        gio/gpowerprofilemonitor.c [6:17]
+        gio/gpowerprofilemonitor.h [6:17]
+        gio/gpowerprofilemonitordbus.c [6:17]
+        gio/gpowerprofilemonitordbus.h [6:17]
+        gio/gpowerprofilemonitorportal.c [5:16]
+        gio/gpowerprofilemonitorportal.h [5:16]
+        gio/gpropertyaction.c [4:15]
+        gio/gpropertyaction.h [4:15]
+        gio/gproxy.c [5:16]
+        gio/gproxy.h [7:18]
+        gio/gproxyaddress.c [5:16]
+        gio/gproxyaddress.h [5:16]
+        gio/gproxyaddressenumerator.c [5:16]
+        gio/gproxyaddressenumerator.h [5:16]
+        gio/gproxyresolver.c [5:16]
+        gio/gproxyresolver.h [5:16]
+        gio/gremoteactiongroup.c [4:15]
+        gio/gremoteactiongroup.h [4:15]
+        gio/gresolver.c [8:19]
+        gio/gresolver.h [6:17]
+        gio/gresource.c [5:16]
+        gio/gresource.h [5:16]
+        gio/gresourcefile.c [5:16]
+        gio/gresourcefile.h [5:16]
+        gio/gseekable.c [5:16]
+        gio/gseekable.h [5:16]
+        gio/gsimpleaction.c [4:15]
+        gio/gsimpleaction.h [4:15]
+        gio/gsimpleactiongroup.c [4:15]
+        gio/gsimpleactiongroup.h [4:15]
+        gio/gsimpleasyncresult.c [5:16]
+        gio/gsimpleasyncresult.h [5:16]
+        gio/gsimpleiostream.c [4:15]
+        gio/gsimpleiostream.h [4:15]
+        gio/gsimpleproxyresolver.h [5:16]
+        gio/gsocket.c [8:19]
+        gio/gsocket.h [5:16]
+        gio/gsocketaddress.c [5:16]
+        gio/gsocketaddress.h [5:16]
+        gio/gsocketaddressenumerator.c [5:16]
+        gio/gsocketaddressenumerator.h [5:16]
+        gio/gsocketclient.c [7:18]
+        gio/gsocketclient.h [6:17]
+        gio/gsocketconnectable.c [5:16]
+        gio/gsocketconnectable.h [5:16]
+        gio/gsocketconnection.c [7:18]
+        gio/gsocketconnection.h [5:16]
+        gio/gsocketcontrolmessage.h [5:16]
+        gio/gsocketinputstream.c [6:17]
+        gio/gsocketlistener.c [7:18]
+        gio/gsocketlistener.h [7:18]
+        gio/gsocketoutputstream.c [6:17]
+        gio/gsocketservice.c [6:17]
+        gio/gsocketservice.h [6:17]
+        gio/gsocks4aproxy.c [5:16]
+        gio/gsocks4aproxy.h [5:16]
+        gio/gsocks4proxy.c [5:16]
+        gio/gsocks4proxy.h [5:16]
+        gio/gsocks5proxy.c [6:17]
+        gio/gsocks5proxy.h [6:17]
+        gio/gsrvtarget.c [7:18]
+        gio/gsrvtarget.h [5:16]
+        gio/gsubprocess.h [5:16]
+        gio/gsubprocesslauncher-private.h [5:16]
+        gio/gsubprocesslauncher.h [6:17]
+        gio/gtask.c [5:16]
+        gio/gtask.h [5:16]
+        gio/gtcpconnection.h [5:16]
+        gio/gtcpwrapperconnection.c [5:16]
+        gio/gtcpwrapperconnection.h [4:15]
+        gio/gtestdbus.c [6:17]
+        gio/gtestdbus.h [6:17]
+        gio/gthemedicon.c [5:16]
+        gio/gthemedicon.h [5:16]
+        gio/gthreadedresolver.c [8:19]
+        gio/gthreadedresolver.h [5:16]
+        gio/gthreadedsocketservice.c [6:17]
+        gio/gthreadedsocketservice.h [6:17]
+        gio/gtlsbackend.c [6:17]
+        gio/gtlsbackend.h [6:17]
+        gio/gtlscertificate.c [5:16]
+        gio/gtlscertificate.h [5:16]
+        gio/gtlsclientconnection.c [5:16]
+        gio/gtlsclientconnection.h [5:16]
+        gio/gtlsconnection.c [5:16]
+        gio/gtlsconnection.h [5:16]
+        gio/gtlsdatabase.c [5:16]
+        gio/gtlsdatabase.h [5:16]
+        gio/gtlsfiledatabase.c [5:16]
+        gio/gtlsinteraction.c [5:16]
+        gio/gtlsinteraction.h [5:16]
+        gio/gtlspassword.c [5:16]
+        gio/gtlspassword.h [5:16]
+        gio/gtlsserverconnection.c [5:16]
+        gio/gtlsserverconnection.h [5:16]
+        gio/gtrashportal.c [5:16]
+        gio/gtrashportal.h [5:16]
+        gio/gunionvolumemonitor.c [7:18]
+        gio/gunionvolumemonitor.h [5:16]
+        gio/gunixconnection.h [5:16]
+        gio/gunixcredentialsmessage.h [6:17]
+        gio/gunixfdlist.h [5:16]
+        gio/gunixfdmessage.h [5:16]
+        gio/gunixinputstream.c [5:16]
+        gio/gunixinputstream.h [5:16]
+        gio/gunixmount.c [7:18]
+        gio/gunixmount.h [5:16]
+        gio/gunixmounts.c [7:18]
+        gio/gunixmounts.h [5:16]
+        gio/gunixoutputstream.c [5:16]
+        gio/gunixoutputstream.h [5:16]
+        gio/gunixsocketaddress.c [5:16]
+        gio/gunixsocketaddress.h [5:16]
+        gio/gunixvolume.c [7:18]
+        gio/gunixvolume.h [5:16]
+        gio/gunixvolumemonitor.c [7:18]
+        gio/gunixvolumemonitor.h [5:16]
+        gio/gvfs.c [5:16]
+        gio/gvfs.h [5:16]
+        gio/gvolume.c [5:16]
+        gio/gvolume.h [5:16]
+        gio/gvolumemonitor.c [7:18]
+        gio/gvolumemonitor.h [7:18]
+        gio/gwin32appinfo.c [6:17]
+        gio/gwin32appinfo.h [6:17]
+        gio/gwin32file-sync-stream.h [5:16]
+        gio/gwin32inputstream.c [5:16]
+        gio/gwin32inputstream.h [5:16]
+        gio/gwin32mount.c [6:17]
+        gio/gwin32mount.h [6:17]
+        gio/gwin32outputstream.c [5:16]
+        gio/gwin32outputstream.h [5:16]
+        gio/gwin32packageparser.c [5:16]
+        gio/gwin32packageparser.h [5:16]
+        gio/gwin32registrykey.c [5:16]
+        gio/gwin32registrykey.h [5:16]
+        gio/gwin32sid.c [6:17]
+        gio/gwin32sid.h [6:17]
+        gio/gwin32volumemonitor.c [6:17]
+        gio/gwin32volumemonitor.h [6:17]
+        gio/gzlibcompressor.c [5:16]
+        gio/gzlibcompressor.h [5:16]
+        gio/gzlibdecompressor.c [5:16]
+        gio/gzlibdecompressor.h [5:16]
+        gio/inotify/ginotifyfilemonitor.c [6:17]
+        gio/inotify/ginotifyfilemonitor.h [6:17]
+        gio/thumbnail-verify.c [3:14]
+        gio/thumbnail-verify.h [3:14]
+        gio/win32/gwin32filemonitor.c [6:17]
+        gio/win32/gwin32filemonitor.h [5:16]
+        gio/win32/gwin32fsmonitorutils.c [6:17]
+        gio/win32/gwin32fsmonitorutils.h [6:17]
+        gio/win32/gwinhttpfile.c [6:17]
+        gio/win32/gwinhttpfile.h [6:17]
+        gio/win32/gwinhttpfileinputstream.c [6:17]
+        gio/win32/gwinhttpfileinputstream.h [6:17]
+        gio/win32/gwinhttpfileoutputstream.c [6:17]
+        gio/win32/gwinhttpfileoutputstream.h [6:17]
+        gio/win32/gwinhttpvfs.c [6:17]
+        gio/win32/gwinhttpvfs.h [6:17]
+        glib/ghostutils.c [6:17]
+        glib/ghostutils.h [4:15]
+        glib/glib_trace.h [5:16]
+        gobject/gatomicarray.c [4:15]
+        gobject/gatomicarray.h [4:15]
+        gobject/gbinding.c [5:16]
+        gobject/gbinding.h [5:16]
+        gobject/gbindinggroup.c [6:17]
+        gobject/gbindinggroup.h [6:17]
+        gobject/gboxed.c [4:15]
+        gobject/gboxed.h [4:15]
+        gobject/gclosure.c [5:16]
+        gobject/gclosure.h [5:16]
+        gobject/glib-types.h [4:15]
+        gobject/gmarshal.c [3:14]
+        gobject/gmarshal.h [3:14]
+        gobject/gobject.h [4:15]
+        gobject/gobject_trace.h [5:16]
+        gobject/gparam.c [4:15]
+        gobject/gparam.h [4:15]
+        gobject/gparamspecs.h [4:15]
+        gobject/gsignal.c [4:15]
+        gobject/gsignalgroup.c [6:17]
+        gobject/gsignalgroup.h [6:17]
+        gobject/gsourceclosure.c [4:15]
+        gobject/gsourceclosure.h [4:15]
+        gobject/gtype-private.h [4:15]
+        gobject/gtype.c [4:15]
+        gobject/gtype.h [4:15]
+        gobject/gtypeplugin.c [4:15]
+        gobject/gtypeplugin.h [4:15]
+        gobject/gvalue.c [4:15]
+        gobject/gvalue.h [4:15]
+        gobject/gvaluecollector.h [4:15]
+        gobject/gvaluetransform.c [4:15]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    49b9592d91cb3a60bed7a22819ed50ec
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        glib/glib-typeof.h [4:15]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     LicenseRef-scancode-proprietary-license 4c14d77578b6b8743115fd432c01ddd8
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * pair, and the given @user_data parameter.  The hash table may not
+         * be modified while iterating over it (you can't add/remove
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        glib/ghash.c [2060:2061]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     LicenseRef-scancode-other-permissive 54eb05e0bed223a5f57cefd052de6c5c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    # This software is provided "as is"; redistribution and modification is permitted, provided that the following disclaimer is retained.
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        glib/gbsearcharray.h [4:17]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    55187c1001a162d1b89988a25e7ed585
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+FILE_INCLUDE COPYING found in files: gio/giostream.h at line 11, gio/gsocketcontrolmessage.c at line 10, gio/gsocketinputstream.h at line 11, gio/gsocketoutputstream.h at line 11, gio/gsubprocess.c at line 11, gio/gsubprocesslauncher.c at line 11, gio/gtcpconnection.c at line 10, gio/gtlsfiledatabase.h at line 10, gio/gunixconnection.c at line 10, gio/gunixcredentialsmessage.c at line 11, gio/gunixfdlist.c at line 10, gio/gunixfdmessage.c at line 10
+FILE_INCLUDE gmodule/COPYING found in files: gio/giostream.h at line 11, gio/gsocketcontrolmessage.c at line 10, gio/gsocketinputstream.h at line 11, gio/gsocketoutputstream.h at line 11, gio/gsubprocess.c at line 11, gio/gsubprocesslauncher.c at line 11, gio/gtcpconnection.c at line 10, gio/gtlsfiledatabase.h at line 10, gio/gunixconnection.c at line 10, gio/gunixcredentialsmessage.c at line 11, gio/gunixfdlist.c at line 10, gio/gunixfdmessage.c at line 10
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/giostream.h [6:11]
+        gio/gsocketcontrolmessage.c [5:10]
+        gio/gsocketinputstream.h [6:11]
+        gio/gsocketoutputstream.h [6:11]
+        gio/gsubprocess.c [6:11]
+        gio/gsubprocesslauncher.c [6:11]
+        gio/gtcpconnection.c [5:10]
+        gio/gtlsfiledatabase.h [5:10]
+        gio/gunixconnection.c [5:10]
+        gio/gunixcredentialsmessage.c [6:11]
+        gio/gunixfdlist.c [5:10]
+        gio/gunixfdmessage.c [5:10]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    55d1d3ba2a9dd34a49fb5d17ea07ab68
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           You should have received a copy of the GNU Library General Public
+           License along with this program; if not, see <http://www.gnu.org/licenses/>.  */
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 8.64
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        glib/libcharset/README [41:42]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     AFL-2.0 AND LGPL-2.0-or-later 57b8dc6e41bcb11ced39edcbe1c73197
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: AFL-2.0
+        Score           : 99.24
+        Match type      : NOTICE
+        Links           : http://flashlinux.org.uk/licenses/licenses/AFL-2.0.txt, http://opensource.linux-mirror.org/licenses/afl-2.0.txt, https://spdx.org/licenses/AFL-2.0
+    Files with this license:
+        gio/xdgmime/xdgmime.c [9:25]
+        gio/xdgmime/xdgmime.h [9:25]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 99.24
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gio/xdgmime/xdgmime.c [9:25]
+        gio/xdgmime/xdgmime.h [9:25]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     LicenseRef-scancode-other-copyleft 593735d3234a09e42e2341e4b2853dab
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           write to the Free Software Foundation, Inc., 51 Franklin Street,
+           Fifth Floor, Boston, MA 02110-1301, USA.  */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-copyleft
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-copyleft.LICENSE
+    Files with this license:
+        glib/libcharset/libcharset.h [16:17]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    5abffa39cee537583e0539be125f6eb1
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/ggtknotificationbackend.c [4:15]
+        gio/gportalnotificationbackend.c [4:15]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     bzip2-1.0.6          5d48f7b3f2305b1952c152d8dc456794
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: bzip2-1.0.6
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/asimonov-im/bzip2/blob/master/LICENSE, https://spdx.org/licenses/bzip2-1.0.6
+    Files with this license:
+        glib/valgrind.h [17:46]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    665abf4dc9fde1895791738843672cd7
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/giowin32-private.c [5:16]
+        gio/gwin32file-sync-stream.c [5:16]
+        glib/gbase64.c [6:17]
+        glib/gbase64.h [5:16]
+        glib/gbookmarkfile.c [5:16]
+        glib/gbookmarkfile.h [5:16]
+        glib/gcharset.h [5:16]
+        glib/gchecksum.c [5:16]
+        glib/gchecksum.h [5:16]
+        glib/gconvertprivate.h [5:16]
+        glib/gerror.h [5:16]
+        glib/gfileutils.c [5:16]
+        glib/gfileutils.h [5:16]
+        glib/ghmac.c [5:16]
+        glib/ghmac.h [5:16]
+        glib/gkeyfile.c [10:21]
+        glib/gkeyfile.h [7:18]
+        glib/glib-private.h [4:15]
+        glib/glib-unix.h [4:15]
+        glib/gmain-internal.h [4:15]
+        glib/gmain.h [4:15]
+        glib/gmarkup.c [6:17]
+        glib/gmarkup.h [5:16]
+        glib/goption.c [6:17]
+        glib/goption.h [5:16]
+        glib/gpoll.h [4:15]
+        glib/gregex.c [7:18]
+        glib/gregex.h [7:18]
+        glib/gshell.c [7:18]
+        glib/gshell.h [5:16]
+        glib/gspawn-private.h [7:18]
+        glib/gspawn-win32.c [6:17]
+        glib/gspawn.c [7:18]
+        glib/gspawn.h [5:16]
+        glib/gstdio-private.c [6:17]
+        glib/gstdio.c [5:16]
+        glib/gstdio.h [5:16]
+        glib/gstdioprivate.h [5:16]
+        glib/gthreadprivate.h [7:18]
+        glib/gunibreak.c [5:16]
+        glib/gunicode.h [6:17]
+        glib/gunicollate.c [5:16]
+        glib/gunidecomp.c [6:17]
+        glib/gwin32-private.c [5:16]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     LGPL-2.0-or-later    70c23113baa74bb5d2faaa4ba49d3b7d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * LGPL linking clauses.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gio/gdbus-daemon-generated.h [6:6]
+        gio/xdp-dbus.h [6:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     MIT                  78d12192990756249678126885b1cbbc
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+FILE_INCLUDE AUTHORS found in files: glib/gutils.c at line 2135
+FILE_INCLUDE gmodule/AUTHORS found in files: glib/gutils.c at line 2135
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        glib/gutils.c [2121:2139]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    85547f03dd4f319fa5d5456ec47e280a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * relicenced to LGPL with permissions from the authors.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gio/glocalfileoutputstream.c [99:99]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    89ef23e057e401fdc872f0937235d95b
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        glib/gqsort.c [41:53]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     GPL-2.0-only AND AFL-2.1 8f5f01ae2499616473614d54d3d7e1e5
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         *     from the GPLv2 / AFL 2.1 libdbus sources.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        gio/gdbusconnection.c [37:37]
+    Scancode info:
+        Original SPDX id: AFL-2.1
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://opensource.linux-mirror.org/licenses/afl-2.1.txt, http://www.rosenlaw.com/afl21.htm, https://spdx.org/licenses/AFL-2.1
+    Files with this license:
+        gio/gdbusconnection.c [37:37]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later AND LGPL-2.1-or-later 93fe589a450bad44f79bc8a7555c00b6
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 85.71
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        glib/gdatetime.c [9:20]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 90.38
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        glib/gdatetime.h [5:16]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    9628978fe5846eac83532d56e811b604
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        glib/guri.c [4:16]
+        glib/guri.h [4:16]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     LicenseRef-scancode-proprietary-license 97eec3b34459360baab473a85a57fdc1
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * hash table may not be modified while iterating over it (you can't
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        glib/ghash.c [2112:2112]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LicenseRef-scancode-unknown-license-reference AND LGPL-2.0-or-later 9cd106456df9b0dd60ed3dec7972b980
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        gio/gioenumtypes.c [2:2]
+        gio/gioenumtypes.h [2:2]
+        gobject/glib-enumtypes.c [2:2]
+        gobject/glib-enumtypes.h [2:2]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gio/gioenumtypes.c [2:2]
+        gio/gioenumtypes.h [2:2]
+        gobject/glib-enumtypes.c [2:2]
+        gobject/glib-enumtypes.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    a6bdc3772aa9570f09042ab97514c1e3
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * LGPL linking clauses.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gio/gdbus-daemon-generated.c [6:6]
+        gio/xdp-dbus.c [6:6]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    a7c098497b0339b356a84b7a7516d823
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/gmenuexporter.c [4:15]
+        gio/gmenuexporter.h [4:15]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    aafdaf873dfea3e093f54f279eccac9e
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 93.86
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        glib/guuid.c [5:18]
+        glib/guuid.h [5:18]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     LicenseRef-scancode-proprietary-license ab9ea794b72fe314bb596239e065e30a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * The tree may not be modified while iterating over it (you can't 
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        glib/gtree.c [1109:1109]
+        glib/gtree.c [1148:1148]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     LGPL-2.1-only        aca9d9506eba24c9cd24a12459aeb6b7
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * You should have received a copy of the GNU Lesser General Public
+         * License along with this library; if not, write to the Free
+         * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 15.49
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        glib/deprecated/grel.c [14:16]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    ad8bf7e8afd6bca5fe60dd60c822d81c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/gproxyresolverportal.c [5:17]
+        gio/gproxyresolverportal.h [5:17]
+        gio/gsimpleproxyresolver.c [5:17]
+        gio/gwin32notificationbackend.c [6:18]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     Public-Domain        b0d13e705199c804e74c2d9861b05d7b
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * DIRLIB.H by M. J. Weinstein   Released to public domain 1-Jan-89
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        glib/dirent/dirent.c [9:9]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     LGPL-2.0-or-later    b0d7e9887bea1aa7f059908071379b35
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           You should have received a copy of the GNU Library General Public License
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 9.59
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        glib/libcharset/libcharset.h [14:14]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-3.0-or-later    b154dcf4a570652127c726f124acf73d
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * Released under the terms of the GNU Lesser General Public License
+    Scancode info:
+        Original SPDX id: LGPL-3.0-or-later
+        Score           : 64.71
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, https://spdx.org/licenses/LGPL-3.0-or-later
+    Files with this license:
+        glib/gchecksum.c [819:819]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    b15a4f6a4d95c5dca9026569256ad5f7
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/gioenums.h [5:16]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    b566fa544533a22c916ec3554dea566a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/gapplicationcommandline.c [4:15]
+        gio/gdbusmenumodel.c [4:15]
+        gio/gdbusmenumodel.h [4:15]
+        gio/gmenu.c [4:15]
+        gio/gmenu.h [4:15]
+        gio/gmenumodel.c [4:15]
+        gio/gmenumodel.h [4:15]
+        glib/gatomic.c [4:15]
+        glib/gatomic.h [4:15]
+        glib/glib-init.c [4:15]
+        glib/glib-init.h [4:15]
+        glib/gthread.h [4:15]
+        glib/gtimezone.h [4:15]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     MIT                  b86f92e26fd701d7586fe0fb46cb52a5
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+FILE_INCLUDE AUTHORS found in files: gio/kqueue/dep-list.c at line 17, gio/kqueue/dep-list.h at line 17, gio/kqueue/gkqueuefilemonitor.c at line 17, gio/kqueue/kqueue-helper.c at line 17, gio/kqueue/kqueue-helper.h at line 17, gio/kqueue/kqueue-missing.c at line 17
+FILE_INCLUDE gmodule/AUTHORS found in files: gio/kqueue/dep-list.c at line 17, gio/kqueue/dep-list.h at line 17, gio/kqueue/gkqueuefilemonitor.c at line 17, gio/kqueue/kqueue-helper.c at line 17, gio/kqueue/kqueue-helper.h at line 17, gio/kqueue/kqueue-missing.c at line 17
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        gio/kqueue/dep-list.c [4:20]
+        gio/kqueue/dep-list.h [4:20]
+        gio/kqueue/gkqueuefilemonitor.c [4:20]
+        gio/kqueue/kqueue-helper.c [4:20]
+        gio/kqueue/kqueue-helper.h [4:20]
+        gio/kqueue/kqueue-missing.c [4:20]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     LicenseRef-scancode-generic-exception c00ce3de71cbc82a484ebd82d16a25b7
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * As a special exception to the normal conventions for functions that
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-exception
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-exception.LICENSE
+    Files with this license:
+        gio/ginputstream.c [231:231]
+        gio/ginputstream.c [844:844]
+        gio/goutputstream.c [274:274]
+        gio/goutputstream.c [431:431]
+        gio/goutputstream.c [1242:1242]
+        gio/goutputstream.c [1564:1564]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    c2657930261df619dc78d39ad9d87f5a
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/gcontextspecificgroup.c [4:15]
+        gio/gcontextspecificgroup.h [4:15]
+        gio/gdelayedsettingsbackend.c [4:15]
+        gio/gdelayedsettingsbackend.h [4:15]
+        gio/gio-autocleanups.h [4:15]
+        gio/giounix-private.c [4:15]
+        gio/giounix-private.h [4:15]
+        gio/gkeyfilesettingsbackend.c [5:16]
+        gio/gmemorysettingsbackend.c [4:15]
+        gio/gnetworking.h [5:16]
+        gio/gnextstepsettingsbackend.m [4:15]
+        gio/gnullsettingsbackend.c [4:15]
+        gio/gopenuriportal.c [5:16]
+        gio/gopenuriportal.h [5:16]
+        gio/gpermission.c [4:15]
+        gio/gpermission.h [4:15]
+        gio/gregistrysettingsbackend.c [4:15]
+        gio/gregistrysettingsbackend.h [4:15]
+        gio/gsettings-mapping.c [4:15]
+        gio/gsettings-mapping.h [4:15]
+        gio/gsettings.c [4:15]
+        gio/gsettings.h [4:15]
+        gio/gsettingsbackend.c [5:16]
+        gio/gsettingsbackend.h [5:16]
+        gio/gsettingsbackendinternal.h [5:16]
+        gio/gsettingsschema-internal.h [4:15]
+        gio/gsettingsschema.c [5:16]
+        gio/gsettingsschema.h [5:16]
+        gio/gsimplepermission.c [4:15]
+        gio/gsimplepermission.h [4:15]
+        gio/gvdb/gvdb-format.h [4:15]
+        gio/gvdb/gvdb-reader.c [4:15]
+        gio/gvdb/gvdb-reader.h [4:15]
+        gio/strinfo.c [4:15]
+        glib/deprecated/gallocator.c [2:13]
+        glib/deprecated/gallocator.h [2:13]
+        glib/deprecated/gcache.c [4:15]
+        glib/deprecated/gcache.h [4:15]
+        glib/deprecated/gcompletion.h [4:15]
+        glib/galloca.h [4:15]
+        glib/garcbox.c [5:16]
+        glib/garray.c [4:15]
+        glib/gasyncqueue.c [7:18]
+        glib/gasyncqueue.h [4:15]
+        glib/gbacktrace.c [4:15]
+        glib/gbacktrace.h [4:15]
+        glib/gbitlock.c [5:16]
+        glib/gbitlock.h [5:16]
+        glib/gbytes.c [5:16]
+        glib/gbytes.h [5:16]
+        glib/gcharset.c [5:16]
+        glib/gconvert.c [7:18]
+        glib/gconvert.h [4:15]
+        glib/gdataset.c [7:18]
+        glib/gdir.c [9:20]
+        glib/gdir.h [8:19]
+        glib/genviron.c [4:15]
+        glib/genviron.h [4:15]
+        glib/gerror.c [4:15]
+        glib/ggettext.h [4:15]
+        glib/ghash.c [4:15]
+        glib/ghash.h [4:15]
+        glib/gi18n-lib.h [4:15]
+        glib/gi18n.h [4:15]
+        glib/giochannel.h [4:15]
+        glib/giowin32.c [9:20]
+        glib/glib-autocleanups.h [4:15]
+        glib/glib-unix.c [6:17]
+        glib/glist.c [4:15]
+        glib/gmappedfile.c [6:17]
+        glib/gmappedfile.h [6:17]
+        glib/gmem.c [4:15]
+        glib/gosxutils.m [4:15]
+        glib/gpattern.c [4:15]
+        glib/gpattern.h [4:15]
+        glib/gprimes.c [4:15]
+        glib/gprimes.h [4:15]
+        glib/gprintf.c [4:15]
+        glib/gprintf.h [4:15]
+        glib/gprintfint.h [4:15]
+        glib/gquark.c [7:18]
+        glib/gqueue.c [7:18]
+        glib/gqueue.h [4:15]
+        glib/grand.c [4:15]
+        glib/grcbox.c [5:16]
+        glib/grcbox.h [5:16]
+        glib/grcboxprivate.h [5:16]
+        glib/grefcount.c [5:16]
+        glib/grefcount.h [5:16]
+        glib/grefstring.c [5:16]
+        glib/grefstring.h [5:16]
+        glib/gsequence.c [5:16]
+        glib/gsequence.h [5:16]
+        glib/gslice.c [4:15]
+        glib/gslice.h [4:15]
+        glib/gslist.c [4:15]
+        glib/gstrfuncs.c [4:15]
+        glib/gstrfuncs.h [4:15]
+        glib/gstring.c [4:15]
+        glib/gstring.h [4:15]
+        glib/gstringchunk.c [4:15]
+        glib/gstringchunk.h [4:15]
+        glib/gstrvbuilder.c [5:16]
+        glib/gstrvbuilder.h [5:16]
+        glib/gtestutils.c [5:16]
+        glib/gtestutils.h [5:16]
+        glib/gthread-posix.c [7:18]
+        glib/gthread-win32.c [8:19]
+        glib/gthreadpool.c [7:18]
+        glib/gthreadpool.h [4:15]
+        glib/gtimer.c [4:15]
+        glib/gtimer.h [4:15]
+        glib/gtimezone.c [4:15]
+        glib/gtrace-private.h [4:15]
+        glib/gtrace.c [4:15]
+        glib/gtranslit.c [4:15]
+        glib/gtrashstack.h [4:15]
+        glib/gtree.c [4:15]
+        glib/guriprivate.h [4:15]
+        glib/gutils.h [4:15]
+        glib/gutilsprivate.h [4:15]
+        glib/gvalgrind.h [4:15]
+        glib/gvariant-core.c [5:16]
+        glib/gvariant-core.h [5:16]
+        glib/gvariant-internal.h [5:16]
+        glib/gvariant-parser.c [4:15]
+        glib/gvariant-serialiser.c [5:16]
+        glib/gvariant-serialiser.h [5:16]
+        glib/gvariant.c [5:16]
+        glib/gvariant.h [5:16]
+        glib/gvarianttype.c [5:16]
+        glib/gvarianttype.h [5:16]
+        glib/gvarianttypeinfo.c [5:16]
+        glib/gvarianttypeinfo.h [5:16]
+        glib/gversion.h [4:15]
+        glib/gversionmacros.h [4:15]
+        glib/gwakeup.c [4:15]
+        glib/gwakeup.h [4:15]
+        glib/gwin32.h [4:15]
+        gmodule/gmoduleconf-unix.h [4:15]
+        gmodule/gmoduleconf-win.h [4:15]
+        gobject/gobject-autocleanups.h [4:15]
+        gobject/gtypemodule.c [4:15]
+        gobject/gtypemodule.h [4:15]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    c6b7a85fe6ad1763f8a1a2909e5165d9
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        glib/glib-object.h [4:15]
+        gobject/genums.c [4:15]
+        gobject/genums.h [4:15]
+        gobject/gobject.c [4:15]
+        gobject/gparamspecs.c [5:16]
+        gobject/gsignal.h [4:15]
+        gobject/gvaluearray.c [4:15]
+        gobject/gvaluearray.h [4:15]
+        gobject/gvaluetypes.c [5:16]
+        gobject/gvaluetypes.h [4:15]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    c75b1542e68bb904c75f5217e055802c
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+          /* this code is based on on the strtol(3) code from GNU libc released under
+           * the GNU Lesser General Public License.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        glib/gstrfuncs.c [1059:1060]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    caf02560e87db8ae3ffaf50340106845
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        glib/libcharset/localcharset.c [5:18]
+        glib/libcharset/localcharset.h [5:18]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    d15906f2603b360b76e221b16441c3d9
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/inotify/inotify-helper.c [7:18]
+        gio/inotify/inotify-helper.h [5:16]
+        gio/inotify/inotify-kernel.c [5:16]
+        gio/inotify/inotify-kernel.h [4:15]
+        gio/inotify/inotify-missing.c [7:18]
+        gio/inotify/inotify-missing.h [5:16]
+        gio/inotify/inotify-path.c [8:19]
+        gio/inotify/inotify-path.h [4:15]
+        gio/inotify/inotify-sub.c [7:18]
+        gio/inotify/inotify-sub.h [5:16]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    df5364f41a5da05dba9aabe57dd1fce2
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        glib/libcharset/README [31:39]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    e3e515acd7807fa848f269c72f0d33bc
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gio/gwin32networkmonitor.c [5:18]
+        gio/gwin32networkmonitor.h [5:18]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    e8e8a627df5ee6cafafdb186fc20aa23
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        glib/deprecated/grel.c [4:15]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.1-or-later    ea93709d2fc998c8b98fc3ccd66b6168
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+         * SPDX-License-Identifier: LGPL-2.1-or-later
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        gio/gdebugcontroller.c [18:18]
+        gio/gdebugcontroller.h [18:18]
+        gio/gdebugcontrollerdbus.c [18:18]
+        gio/gdebugcontrollerdbus.h [18:18]
+        gobject/gbindinggroup.c [19:19]
+        gobject/gbindinggroup.h [19:19]
+        gobject/gsignalgroup.c [19:19]
+        gobject/gsignalgroup.h [19:19]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+SKIP     bzip2-1.0.6          f5dd4a722923218971e49556cea14bc5
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+FILE_INCLUDE COPYING found in files: glib/valgrind.h at line 53
+FILE_INCLUDE glib/valgrind.h found in files: glib/valgrind.h at line 51
+FILE_INCLUDE gmodule/COPYING found in files: glib/valgrind.h at line 53
+FILE_INCLUDE include/glib/valgrind.h found in files: glib/valgrind.h at line 51
+    # Just describing scope of the actual license
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: bzip2-1.0.6
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/asimonov-im/bzip2/blob/master/LICENSE, https://spdx.org/licenses/bzip2-1.0.6
+    Files with this license:
+        glib/valgrind.h [50:53]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     AFL-2.0 AND LGPL-2.0-or-later f7bb600d8c3b68317912daebf21b462b
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: AFL-2.0
+        Score           : 99.24
+        Match type      : NOTICE
+        Links           : http://flashlinux.org.uk/licenses/licenses/AFL-2.0.txt, http://opensource.linux-mirror.org/licenses/afl-2.0.txt, https://spdx.org/licenses/AFL-2.0
+    Files with this license:
+        gio/xdgmime/xdgmimealias.c [9:25]
+        gio/xdgmime/xdgmimealias.h [9:25]
+        gio/xdgmime/xdgmimecache.c [8:24]
+        gio/xdgmime/xdgmimecache.h [8:24]
+        gio/xdgmime/xdgmimeglob.c [9:25]
+        gio/xdgmime/xdgmimeglob.h [9:25]
+        gio/xdgmime/xdgmimeicon.c [8:24]
+        gio/xdgmime/xdgmimeicon.h [8:24]
+        gio/xdgmime/xdgmimeint.c [9:25]
+        gio/xdgmime/xdgmimeint.h [9:25]
+        gio/xdgmime/xdgmimemagic.c [9:25]
+        gio/xdgmime/xdgmimemagic.h [9:25]
+        gio/xdgmime/xdgmimeparent.c [9:25]
+        gio/xdgmime/xdgmimeparent.h [9:25]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 99.24
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gio/xdgmime/xdgmimealias.c [9:25]
+        gio/xdgmime/xdgmimealias.h [9:25]
+        gio/xdgmime/xdgmimecache.c [8:24]
+        gio/xdgmime/xdgmimecache.h [8:24]
+        gio/xdgmime/xdgmimeglob.c [9:25]
+        gio/xdgmime/xdgmimeglob.h [9:25]
+        gio/xdgmime/xdgmimeicon.c [8:24]
+        gio/xdgmime/xdgmimeicon.h [8:24]
+        gio/xdgmime/xdgmimeint.c [9:25]
+        gio/xdgmime/xdgmimeint.h [9:25]
+        gio/xdgmime/xdgmimemagic.c [9:25]
+        gio/xdgmime/xdgmimemagic.h [9:25]
+        gio/xdgmime/xdgmimeparent.c [9:25]
+        gio/xdgmime/xdgmimeparent.h [9:25]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    fe91a03ccaf35c2756226c94ae221821
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 52.05
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        glib/libcharset/libcharset.h [9:12]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make
+
+KEEP     LGPL-2.0-or-later    fed024b0642a3aad1967b2fcf83de2ca
+BELONGS dynamic/ya.make include/ya.make static/ya.make
+    License text:
+           * used under the LGPLv2+ with permission from author. (The code has
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 5.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        glib/gspawn.c [1781:1781]
+    Belongs difference:
+        + dynamic/ya.make include/ya.make static/ya.make
+        - ya.make

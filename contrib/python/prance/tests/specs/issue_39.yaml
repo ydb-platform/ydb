@@ -1,0 +1,40 @@
+openapi: 3.0.0
+info:
+  title: Minimal test for refs in sequences
+  version: 0.0.1
+servers:
+  - url: https://localhost/
+paths:
+  /test:
+    get:
+      summary: Test endpoint
+      responses:
+        '200':
+          description: Test indexing into a sequence
+          content:
+            application/json:
+              schema:
+                type: string
+              example:
+                $ref: '#/components/examples/PartlyReused/value/0'
+  /useCase:
+    get:
+      summary: Why this is useful
+      responses:
+        '200':
+          description: Example which uses everything in the list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+              examples:
+                response:
+                  $ref: '#/components/examples/PartlyReused'
+components:
+  examples:
+    PartlyReused:
+      value:
+        - 'some really long or specific string'
+        - 'some other comparably long or specific string'

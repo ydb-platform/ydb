@@ -1,0 +1,22 @@
+# TEMPLATE 4.56, Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for spatio-temporal changing tile parameters
+# Note: This template is deprecated. Template 4.59 should be used instead.
+transient template_is_deprecated = 1 : hidden;
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.tile.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.horizontal.def"
+
+# Note: This template is missing the entry:
+#  Type of ensemble forecast
+# which is present in all other templates with EPS info! Mistake by WMO?
+
+# So we cannot include the eps template due to this missing entry!
+# include "grib2/templates/template.4.eps.def"
+# Have to manually define the keys
+unsigned[1] perturbationNumber  : dump;
+alias number=perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble  : dump;
+alias totalNumber=numberOfForecastsInEnsemble;

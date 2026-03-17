@@ -1,0 +1,9 @@
+# CODE TABLE 11, Flag
+1 0 Grid-point data
+1 1 Spherical harmonic coefficients
+2 0 Simple packing
+2 1 Complex or second-order packing
+3 0 Floating point values are represented
+3 1 Integer values are represented
+4 0 No additional flags at octet 14
+4 1 Octet 14 contains additional flag bits

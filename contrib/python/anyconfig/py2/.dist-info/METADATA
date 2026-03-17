@@ -1,0 +1,59 @@
+Metadata-Version: 2.1
+Name: anyconfig
+Version: 0.9.11
+Summary: Library provides common APIs to load and dump configuration files in various formats
+Home-page: https://github.com/ssato/python-anyconfig
+Author: Satoru SATOH
+Author-email: satoru.satoh@gmail.com
+Maintainer: Satoru SATOH
+Maintainer-email: satoru.satoh@gmail.com
+License: MIT
+Project-URL: CI: Travis, https://travis-ci.org/ssato/python-anyconfig
+Project-URL: Download, https://pypi.python.org/pypi/anyconfig
+Project-URL: Download RPMs, https://copr.fedoraproject.org/coprs/ssato/python-anyconfig/
+Project-URL: Documentation, http://python-anyconfig.readthedocs.org
+Project-URL: Bug Tracker, https://github.com/ssato/python-anyconfig/issues
+Project-URL: Source, https://github.com/ssato/python-anyconfig
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Environment :: Console
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Text Processing :: Markup
+Classifier: Topic :: Utilities
+Classifier: License :: OSI Approved :: MIT License
+Requires-Dist: setuptools
+Provides-Extra: devel
+Requires-Dist: coveralls ; extra == 'devel'
+Requires-Dist: flake8 (<3.5.0) ; extra == 'devel'
+Requires-Dist: mock ; extra == 'devel'
+Requires-Dist: nose ; extra == 'devel'
+Requires-Dist: pylint ; extra == 'devel'
+Requires-Dist: pycodestyle (<2.4.0) ; extra == 'devel'
+Provides-Extra: query
+Requires-Dist: jmespath ; extra == 'query'
+Provides-Extra: schema
+Requires-Dist: jsonschema ; extra == 'schema'
+Provides-Extra: template
+Requires-Dist: Jinja2 ; extra == 'template'
+Provides-Extra: toml
+Requires-Dist: toml ; extra == 'toml'
+Provides-Extra: yaml
+Requires-Dist: pyyaml ; extra == 'yaml'
+
+
+python-anyconfig is a python library provides common APIs to load and dump
+configuration files in various formats with some useful features such as
+contents merge, templates, query, schema validation and generation support.
+
+- Home: https://github.com/ssato/python-anyconfig
+- Author: Satoru SATOH <satoru.satoh@gmail.com>
+- License: MIT
+

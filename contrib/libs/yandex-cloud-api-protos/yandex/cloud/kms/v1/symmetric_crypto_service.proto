@@ -1,0 +1,171 @@
+syntax = "proto3";
+
+package yandex.cloud.kms.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/kms/v1/symmetric_key.proto";
+import "yandex/cloud/validation.proto";
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/kms/v1;kms";
+option java_package = "yandex.cloud.api.kms.v1";
+
+// --- Data plane for KMS symmetric cryptography operations
+
+// Set of methods that perform symmetric encryption and decryption.
+service SymmetricCryptoService {
+
+  // Encrypts given plaintext with the specified key.
+  rpc Encrypt (SymmetricEncryptRequest) returns (SymmetricEncryptResponse) {
+    option (google.api.http) = {post: "/kms/v1/keys/{key_id}:encrypt" body: "*"};
+  }
+
+  // Decrypts the given ciphertext with the specified key.
+  rpc Decrypt (SymmetricDecryptRequest) returns (SymmetricDecryptResponse) {
+    option (google.api.http) = {post: "/kms/v1/keys/{key_id}:decrypt" body: "*"};
+  }
+
+  // Re-encrypts a ciphertext with the specified KMS key.
+  rpc ReEncrypt (SymmetricReEncryptRequest) returns (SymmetricReEncryptResponse) {
+    option (google.api.http) = {post: "/kms/v1/keys/{key_id}:reEncrypt" body: "*"};
+  }
+
+  // Generates a new symmetric data encryption key (not a KMS key) and returns
+  // the generated key as plaintext and as ciphertext encrypted with the specified symmetric KMS key.
+  rpc GenerateDataKey (GenerateDataKeyRequest) returns (GenerateDataKeyResponse) {
+    option (google.api.http) = {post: "/kms/v1/keys/{key_id}:generateDataKey" body: "*"};
+  }
+
+}
+
+message SymmetricEncryptRequest {
+  // ID of the symmetric KMS key to use for encryption.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the key version to encrypt plaintext with.
+  // Defaults to the primary version if not specified.
+  string version_id = 2 [(length) = "<=50"];
+
+  // Additional authenticated data (AAD context), optional.
+  // If specified, this data will be required for decryption with the [SymmetricDecryptRequest].
+  // Should be encoded with base64.
+  bytes aad_context = 3 [(length) = "<=8192"];
+
+  // Plaintext to be encrypted.
+  // Should be encoded with base64.
+  bytes plaintext = 4 [(required) = true, (length) = "<=32768"];
+}
+
+message SymmetricEncryptResponse {
+  // ID of the symmetric KMS key that was used for encryption.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the key version that was used for encryption.
+  string version_id = 2 [(length) = "<=50"];
+
+  // Resulting ciphertext.
+  bytes ciphertext = 3;
+}
+
+message SymmetricDecryptRequest {
+  // ID of the symmetric KMS key to use for decryption.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Additional authenticated data, must be the same as was provided
+  // in the corresponding [SymmetricEncryptRequest].
+  // Should be encoded with base64.
+  bytes aad_context = 2 [(length) = "<=8192"];
+
+  // Ciphertext to be decrypted.
+  // Should be encoded with base64.
+  bytes ciphertext = 3 [(required) = true];
+}
+
+message SymmetricDecryptResponse {
+  // ID of the symmetric KMS key that was used for decryption.
+  string key_id = 1;
+
+  // ID of the key version that was used for decryption.
+  string version_id = 2;
+
+  // Decrypted plaintext.
+  bytes plaintext = 3;
+}
+
+message GenerateDataKeyRequest {
+  // ID of the symmetric KMS key that the generated data key should be encrypted with.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the key version to encrypt the generated data key with.
+  // Defaults to the primary version if not specified.
+  string version_id = 2 [(length) = "<=50"];
+
+  // Additional authenticated data (AAD context), optional.
+  // If specified, this data will be required for decryption with the [SymmetricDecryptRequest].
+  // Should be encoded with base64.
+  bytes aad_context = 3 [(length) = "<=8192"];
+
+  // Encryption algorithm and key length for the generated data key.
+  SymmetricAlgorithm data_key_spec = 4;
+
+  // If `true`, the method won't return the data key as plaintext.
+  // Default value is `false`.
+  bool skip_plaintext = 5;
+}
+
+message GenerateDataKeyResponse {
+  // ID of the symmetric KMS key that was used to encrypt the generated data key.
+  string key_id = 1;
+
+  // ID of the key version that was used for encryption.
+  string version_id = 2;
+
+  // Generated data key as plaintext.
+  // The field is empty, if the [GenerateDataKeyRequest.skip_plaintext] parameter
+  // was set to `true`.
+  bytes data_key_plaintext = 3;
+
+  // The encrypted data key.
+  bytes data_key_ciphertext = 4;
+}
+
+message SymmetricReEncryptRequest {
+  // ID of the new key to be used for encryption.
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the version of the new key to be used for encryption.
+  // Defaults to the primary version if not specified.
+  string version_id = 2 [(length) = "<=50"];
+
+  // Additional authenticated data to be required for decryption.
+  // Should be encoded with base64.
+  bytes aad_context = 3 [(length) = "<=8192"];
+
+  // ID of the key that the ciphertext is currently encrypted with. May be the same as for the new key.
+  string source_key_id = 4 [(required) = true, (length) = "<=50"];
+
+  // Additional authenticated data provided with the initial encryption request.
+  // Should be encoded with base64.
+  bytes source_aad_context = 5 [(length) = "<=8192"];
+
+  // Ciphertext to re-encrypt.
+  // Should be encoded with base64.
+  bytes ciphertext = 6 [(required) = true];
+}
+
+message SymmetricReEncryptResponse {
+  // ID of the key that the ciphertext is encrypted with now.
+  string key_id = 1;
+
+  // ID of key version that was used for encryption.
+  string version_id = 2;
+
+  // ID of the key that the ciphertext was encrypted with previously.
+  string source_key_id = 3;
+
+  // ID of the key version that was used to decrypt the re-encrypted ciphertext.
+  string source_version_id = 4;
+
+  // Resulting re-encrypted ciphertext.
+  bytes ciphertext = 5;
+}

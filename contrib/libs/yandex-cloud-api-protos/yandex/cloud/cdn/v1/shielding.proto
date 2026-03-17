@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package yandex.cloud.cdn.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cdn/v1;cdn";
+option java_package = "yandex.cloud.api.cdn.v1";
+
+// Message representing the details of a shielding server.
+message ShieldingDetails {
+    // Unique identifier for the geographical location of the shielding server.
+    int64 location_id = 1;
+
+    // Name of the data center where the shielding server is located.
+    string data_center = 2;
+
+    // Country where the shielding server's data center is located, useful for understanding geographical distribution.
+    string country = 3;
+
+    // City where the shielding server's data center is situated, providing a more precise location than just the country.
+    string city = 4;
+}

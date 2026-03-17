@@ -1,0 +1,11 @@
+# Local definition 25: 4DVar model errors
+
+unsigned[1] componentIndex  : dump;
+alias mars.number=componentIndex;
+unsigned[1] numberOfComponents  : dump;
+alias totalNumber=numberOfComponents;
+unsigned[1] modelErrorType  : dump;
+
+alias local.componentIndex=componentIndex;
+alias local.numberOfComponents=numberOfComponents;
+alias local.modelErrorType=modelErrorType;

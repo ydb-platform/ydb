@@ -1,0 +1,14 @@
+# author: Sebastien Villaume
+# created: 14 Feb 2014
+#
+
+# base file: contains keywords always present
+include "grib2/local.82.0.def";
+
+# extra keywords specific to local definition 83 (MATCH)
+codetable[1]    matchSort             "grib1/localConcepts/eswi/sort.table"              : dump,long_type;
+codetable[1]    matchTimeRepres       "grib1/localConcepts/eswi/timerepres.table"        : dump,long_type;
+codetable[1]    matchLandType         "grib1/localConcepts/eswi/landtype.table"          : dump,long_type;
+codetable[2]    matchAerosolBinNumber "grib1/localConcepts/eswi/aerosolbinnumber.table"  : dump,long_type;
+unsigned[2]     meanSize : dump;
+

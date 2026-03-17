@@ -1,0 +1,288 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2011-2018 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2011      Los Alamos National Security, LLC.
+#                         All rights reserved.
+# Copyright (c) 2014      Intel, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for Open RTE's orterun.
+#
+[orte-rtc-base:not-all-mapped-alloc]
+Some of the requested hosts are not included in the current allocation for the
+application:
+  %s
+The requested hosts were:
+  %s
+
+Verify that you have mapped the allocated resources properly using the
+--host or --hostfile specification.
+[orte-rtc-base:no-mapped-node]
+There are no allocated resources for the application:
+  %s
+that match the requested mapping:
+  %s: %s
+
+Verify that you have mapped the allocated resources properly for the
+indicated specification.
+[orte-rtc-base:nolocal-no-available-resources]
+There are no available nodes allocated to this job. This could be because
+no nodes were found or all the available nodes were already used.
+
+Note that since the -nolocal option was given no processes can be
+launched on the local node.
+[orte-rtc-base:no-available-resources]
+No nodes are available for this job, either due to a failure to
+allocate nodes to the job, or allocated nodes being marked
+as unavailable (e.g., down, rebooting, or a process attempting
+to be relocated to another node when none are available).
+[orte-rtc-base:all-available-resources-used]
+All nodes which are allocated for this job are already filled.
+#
+[out-of-vpids]
+The system has exhausted its available ranks - the application is attempting
+to spawn too many daemons and will be aborted.
+
+This may be resolved by increasing the number of available ranks by
+re-configuring with the --enable-jumbo-apps option, and then
+re-building the application.
+#
+[rtc:too-many-procs]
+Your job has requested a conflicting number of processes for the
+application:
+
+App: %s
+number of procs:  %d
+
+This is more processes than we can launch under the following
+additional directives and conditions:
+
+%s:   %d
+%s:   %d
+
+Please revise the conflict and try again.
+#
+[too-many-cpus-per-rank]
+Your job has requested more cpus per process(rank) than there
+are cpus in a socket:
+
+  Cpus/rank: %d
+  #cpus/socket: %d
+
+Please correct one or both of these values and try again.
+#
+[failed-map]
+Your job failed to map. Either no mapper was available, or none
+of the available mappers was able to perform the requested
+mapping operation. This can happen if you request a map type
+(e.g., loadbalance) and the corresponding mapper was not built.
+#
+[unrecognized-policy]
+The specified %s policy is not recognized:
+
+  Policy: %s
+
+Please check for a typo or ensure that the option is a supported
+one.
+#
+[redefining-policy]
+Conflicting directives for %s policy are causing the policy
+to be redefined:
+
+  New policy:   %s
+  Prior policy:  %s
+
+Please check that only one policy is defined.
+#
+[rtc:binding-target-not-found]
+A request was made to bind to %s, but an appropriate target could not
+be found on node %s.
+#
+[rtc:binding-overload]
+A request was made to bind to that would result in binding more
+processes than cpus on a resource:
+
+   Bind to:         %s
+   Node:            %s
+   #processes:  %d
+   #cpus:          %d
+
+You can override this protection by adding the "overload-allowed"
+option to your binding directive.
+#
+[rtc:no-topology]
+A mapping directive was given that requires knowledge of
+a remote node's topology. However, no topology info is
+available for the following node:
+
+  Node: %s
+
+The job cannot be executed under this condition. Please either
+remove the directive or investigate the lack of topology info.
+#
+[rtc:no-available-cpus]
+While computing bindings, we found no available cpus on
+the following node:
+
+  Node:  %s
+
+Please check your allocation.
+#
+[rtc:cpubind-not-supported]
+A request was made to bind a process, but at least one node does NOT
+support binding processes to cpus.
+
+  Node:  %s
+#
+[rtc:membind-not-supported]
+WARNING: a request was made to bind a process. While the system
+supports binding the process itself, at least one node does NOT
+support binding memory to the process location.
+
+  Node:  %s
+
+This is a warning only; your job will continue, though performance may
+be degraded.
+#
+[rtc:membind-not-supported-fatal]
+A request was made to bind a process. While the system
+supports binding the process itself, at least one node does NOT
+support binding memory to the process location.
+
+  Node:  %s
+
+The provided memory binding policy requires that we abort the
+job at this time.
+#
+[rtc:no-bindable-objects]
+No bindable objects of the specified type were available
+on at least one node:
+
+  Node:    %s
+  Target:  %s
+#
+[rtc:unknown-binding-level]
+Unknown binding level:
+
+  Target:  %s
+  Cache level:  %u
+#
+[orte-rtc-base:missing-daemon]
+While attempting to build a map of this job, a node
+was detected to be missing a daemon:
+
+  Node:  %s
+
+This usually indicates a mismatch between what the
+allocation provided for the node name versus what was
+actually found on the node.
+#
+[orte-rtc-base:no-objects]
+No objects of the specified type were found on at least one node:
+
+  Type: %s
+  Node: %s
+
+The map cannot be done as specified.
+#
+[topo-file]
+A topology file was given for the compute nodes, but
+we were unable to correctly process it. Common errors
+include incorrectly specifying the path to the file,
+or the file being generated in a way that is incompatible
+with the version of hwloc being used by OMPI.
+
+  File: %s
+
+Please correct the problem and try again.
+#
+[deprecated]
+The following command line options and corresponding MCA parameter have
+been deprecated and replaced as follows:
+
+  Command line options:
+    Deprecated:  %s
+    Replacement: %s
+
+  Equivalent MCA parameter:
+    Deprecated:  %s
+    Replacement: %s
+
+The deprecated forms *will* disappear in a future version of Open MPI.
+Please update to the new syntax.
+#
+[mismatch-binding]
+A request for multiple cpus-per-proc was given, but a conflicting binding
+policy was specified:
+
+  #cpus-per-proc:  %d
+  type of cpus:    %s
+  binding policy given: %s
+
+The correct binding policy for the given type of cpu is:
+
+  correct binding policy:  %s
+
+This is the binding policy we would apply by default for this
+situation, so no binding need be specified. Please correct the
+situation and try again.
+#
+[mapping-too-low]
+A request for multiple cpus-per-proc was given, but a directive
+was also give to map to an object level that has less cpus than
+requested ones:
+
+  #cpus-per-proc:  %d
+  number of cpus:  %d
+  map-by:          %s
+
+Please specify a mapping level that has more cpus, or else let us
+define a default mapping that will allow multiple cpus-per-proc.
+#
+[unrecognized-modifier]
+The mapping request contains an unrecognized modifier:
+
+  Request: %s
+
+Please check your request and try again.
+#
+[invalid-pattern]
+The mapping request contains a pattern that doesn't match
+the required syntax of #:object
+
+  Pattern: %s
+
+Please check your request and try again.
+#
+[orte-rtc-base:oversubscribed]
+The requested number of processes exceeds the allocated
+number of slots:
+
+  #slots:       %d
+  #processes:   %d
+
+This creates an oversubscribed condition that may adversely
+impact performance when combined with the requested binding
+operation. We will continue, but will not bind the processes.
+This warning can be omitted by adding the "overload-allowed"
+qualifier to the binding policy.
+#
+[cannot-launch]
+Although we were able to map your job, we are unable to launch
+it at this time due to required resources being busy. Please
+try again later.
+

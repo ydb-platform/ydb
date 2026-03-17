@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.operationlog.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/operationlog/v1;operationlog";
+option java_package = "yandex.cloud.api.mdb.operationlog.v1";
+
+message HostEntity {
+  string fqdn = 1;
+  string action = 2;
+  google.protobuf.Timestamp started_at = 3;
+}
+
+message ClusterEntity {
+  string cluster_id = 1;
+  string action = 2;
+  google.protobuf.Timestamp started_at = 3;
+  repeated HostEntity hosts = 4;
+}
+
+message OperationLog {
+  repeated ClusterEntity entities = 1;
+}

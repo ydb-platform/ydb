@@ -1,0 +1,10 @@
+exclude:
+  - crx3/*_pb2.py
+  - crx3/*_pb2.pyi
+exclude_from_macros:
+  - crx3/**/*.proto
+  - crx3/**/ya.make
+keep:
+  - crx3/**/ya.make
+requirements:
+  - contrib/python/crx3/crx3/proto

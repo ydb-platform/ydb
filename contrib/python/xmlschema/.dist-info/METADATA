@@ -1,0 +1,204 @@
+Metadata-Version: 2.4
+Name: xmlschema
+Version: 4.3.1
+Summary: An XML Schema validator and decoder
+Author-email: Davide Brunato <brunato@sissa.it>
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/sissaschool/xmlschema
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: Science/Research
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Text Processing :: Markup :: XML
+Requires-Python: >=3.10
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: elementpath<6.0.0,>=5.1.0
+Provides-Extra: codegen
+Requires-Dist: jinja2; extra == "codegen"
+Provides-Extra: dev
+Requires-Dist: coverage; extra == "dev"
+Requires-Dist: flake8; extra == "dev"
+Requires-Dist: lxml; extra == "dev"
+Requires-Dist: lxml-stubs; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: psutil; extra == "dev"
+Requires-Dist: tox; extra == "dev"
+Requires-Dist: xmlschema[docs]; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: jinja2; extra == "docs"
+Requires-Dist: sphinx; extra == "docs"
+Requires-Dist: sphinx_rtd_theme; extra == "docs"
+Dynamic: license-file
+
+*********
+xmlschema
+*********
+
+.. image:: https://img.shields.io/pypi/v/xmlschema.svg
+   :target: https://pypi.python.org/pypi/xmlschema/
+.. image:: https://img.shields.io/pypi/pyversions/xmlschema.svg
+   :target: https://pypi.python.org/pypi/xmlschema/
+.. image:: https://img.shields.io/pypi/implementation/xmlschema.svg
+   :target: https://pypi.python.org/pypi/xmlschema/
+.. image:: https://img.shields.io/badge/License-MIT-blue.svg
+   :alt: MIT License
+   :target: https://lbesson.mit-license.org/
+.. image:: https://img.shields.io/pypi/dm/xmlschema.svg
+   :target: https://pypi.python.org/pypi/xmlschema/
+
+.. xmlschema-introduction-start
+
+The *xmlschema* library is an implementation of `XML Schema <http://www.w3.org/2001/XMLSchema>`_
+for Python.
+
+This library arises from the needs of a solid Python layer for processing XML
+Schema based files for
+`MaX (Materials design at the Exascale) <http://www.max-centre.eu>`_  European project.
+A significant problem is the encoding and the decoding of the XML data files
+produced by different simulation software.
+Another important requirement is the XML data validation, in order to put the
+produced data under control. The lack of a suitable alternative for Python in
+the schema-based decoding of XML data has led to build this library. Obviously
+this library can be useful for other cases related to XML Schema based processing,
+not only for the original scope.
+
+The full `xmlschema documentation is available on "Read the Docs" <http://xmlschema.readthedocs.io/en/latest/>`_.
+
+
+Features
+========
+
+This library includes the following features:
+
+* Full XSD 1.0 and XSD 1.1 support
+* Building of XML schema objects from XSD files
+* Validation of XML instances against XSD schemas
+* Decoding of XML data into Python data and to JSON
+* Encoding of Python data and JSON to XML
+* Data decoding and encoding ruled by converter classes
+* An XPath based API for finding schema's elements and attributes
+* Support of XSD validation modes *strict*/*lax*/*skip*
+* XML attacks protection using an XMLParser that forbids entities
+* Access control on resources addressed by an URL or filesystem path
+* Downloading XSD files from a remote URL and storing them for offline use
+* XML data bindings based on DataElement class
+* Static code generation with Jinja2 templates
+
+
+Installation
+============
+
+You can install the library with *pip* in a Python environment::
+
+    pip install xmlschema
+
+The library uses the Python's ElementTree XML library and requires
+`elementpath <https://github.com/brunato/elementpath>`_ additional package.
+The base schemas of the XSD standards are included in the package for working
+offline and to speed-up the building of schema instances.
+
+.. xmlschema-introduction-end
+
+
+Usage
+=====
+
+Import the library and then create a schema instance using the path of
+the file containing the schema as argument:
+
+.. code-block:: pycon
+
+    >>> import xmlschema
+    >>> my_schema = xmlschema.XMLSchema('tests/test_cases/examples/vehicles/vehicles.xsd')
+
+.. note::
+    For XSD 1.1 schemas use the class `XMLSchema11`, because the default class
+    `XMLSchema` is an alias of the XSD 1.0 validator class `XMLSchema10`.
+
+The schema can be used to validate XML documents:
+
+.. code-block:: pycon
+
+    >>> my_schema.is_valid('tests/test_cases/examples/vehicles/vehicles.xml')
+    True
+    >>> my_schema.is_valid('tests/test_cases/examples/vehicles/vehicles-1_error.xml')
+    False
+    >>> my_schema.validate('tests/test_cases/examples/vehicles/vehicles-1_error.xml')
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+      File "/home/brunato/Development/projects/xmlschema/xmlschema/validators/xsdbase.py", line 393, in validate
+        raise error
+    xmlschema.validators.exceptions.XMLSchemaValidationError: failed validating <Element '{http://example.com/vehicles}cars' at 0x7f8032768458> with XsdGroup(model='sequence').
+
+    Reason: character data between child elements not allowed!
+
+    Schema:
+
+      <xs:sequence xmlns:xs="http://www.w3.org/2001/XMLSchema">
+            <xs:element maxOccurs="unbounded" minOccurs="0" name="car" type="vh:vehicleType" />
+      </xs:sequence>
+
+    Instance:
+
+      <vh:cars xmlns:vh="http://example.com/vehicles">
+        NOT ALLOWED CHARACTER DATA
+        <vh:car make="Porsche" model="911" />
+        <vh:car make="Porsche" model="911" />
+      </vh:cars>
+
+Using a schema you can also decode the XML documents to nested dictionaries, with
+values that match to the data types declared by the schema:
+
+.. code-block:: pycon
+
+    >>> import xmlschema
+    >>> from pprint import pprint
+    >>> xs = xmlschema.XMLSchema('tests/test_cases/examples/collection/collection.xsd')
+    >>> pprint(xs.to_dict('tests/test_cases/examples/collection/collection.xml'))
+    {'@xsi:schemaLocation': 'http://example.com/ns/collection collection.xsd',
+     'object': [{'@available': True,
+                 '@id': 'b0836217462',
+                 'author': {'@id': 'PAR',
+                            'born': '1841-02-25',
+                            'dead': '1919-12-03',
+                            'name': 'Pierre-Auguste Renoir',
+                            'qualification': 'painter'},
+                 'estimation': Decimal('10000.00'),
+                 'position': 1,
+                 'title': 'The Umbrellas',
+                 'year': '1886'},
+                {'@available': True,
+                 '@id': 'b0836217463',
+                 'author': {'@id': 'JM',
+                            'born': '1893-04-20',
+                            'dead': '1983-12-25',
+                            'name': 'Joan Miró',
+                            'qualification': 'painter, sculptor and ceramicist'},
+                 'position': 2,
+                 'title': None,
+                 'year': '1925'}]}
+
+
+Authors
+=======
+Davide Brunato and others who have contributed with code or with sample cases.
+
+License
+=======
+This software is distributed under the terms of the MIT License.
+See the file 'LICENSE' in the root directory of the present
+distribution, or http://opensource.org/licenses/MIT.

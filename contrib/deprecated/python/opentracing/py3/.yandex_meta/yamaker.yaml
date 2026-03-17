@@ -1,0 +1,3 @@
+mark_as_py3_sources:
+  - opentracing/scope_managers/asyncio.py
+  - opentracing/scope_managers/contextvars.py

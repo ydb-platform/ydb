@@ -1,0 +1,129 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 144ad289ab6f8934f1c018e2705c59ea
+BELONGS ya.make
+    License text:
+         * Copyright 2012 the V8 project authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        source/lexbor/core/strtod.c [9:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ea72c193aae75922b9a1e5a0f274717
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2015 Doug Currie
+         * based on dtoa_milo.h
+         * Copyright (C) 2014 Milo Yip
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        source/lexbor/core/dtoa.c [16:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d7f1711fc2cd28a3ef5516bfdf1862e
+BELONGS ya.make
+    License text:
+         * Copyright (C) Dmitry Volyntsev
+         * Copyright (C) NGINX, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        source/lexbor/core/dtoa.c [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5dcd1b73ae81ddee2acdc0095e46bf0e
+BELONGS ya.make
+    License text:
+         * Copyright (C) Dmitry Volyntsev
+         * Copyright (C) NGINX, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        source/lexbor/core/dtoa.c [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 753e8b6ef8257a6a7977bf1e94b5a5ce
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2015 Doug Currie
+         * based on dtoa_milo.h
+         * Copyright (C) 2014 Milo Yip
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        source/lexbor/core/dtoa.c [16:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8e993c479358f2a72be72650db84ead8
+BELONGS ya.make
+    License text:
+           Copyright 2018-2020 Alexander Borisov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9750d029ca5c5ea44f2fd202f68d54d1
+BELONGS ya.make
+    License text:
+         * Copyright (C) Alexander Borisov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        source/lexbor/core/dtoa.c [2:2]
+        source/lexbor/core/strtod.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bf0cbbd7783f14b552e35ae45bb4dd46
+BELONGS ya.make
+    License text:
+           Copyright 2018-2025 Alexander Borisov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [235:235]

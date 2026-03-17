@@ -1,0 +1,148 @@
+Metadata-Version: 2.4
+Name: neo4j
+Version: 6.1.0
+Summary: Neo4j Bolt driver for Python
+Author-email: "Neo4j, Inc." <drivers@neo4j.com>
+License-Expression: Apache-2.0 AND Python-2.0
+Project-URL: Homepage, https://neo4j.com/
+Project-URL: Repository, https://github.com/neo4j/neo4j-python-driver
+Project-URL: Docs (Manual), https://neo4j.com/docs/python-manual/current/
+Project-URL: Docs (API Reference), https://neo4j.com/docs/api/python-driver/current/
+Project-URL: Issue Tracker, https://github.com/neo4j/neo4j-python-driver/issues
+Project-URL: Changelog, https://github.com/neo4j/neo4j-python-driver/wiki
+Project-URL: Forum, https://community.neo4j.com/c/drivers-stacks/python/
+Project-URL: Discord, https://discord.com/invite/neo4j
+Keywords: neo4j,graph,database
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: AsyncIO
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Database
+Classifier: Topic :: Software Development
+Classifier: Typing :: Typed
+Requires-Python: >=3.10
+Description-Content-Type: text/x-rst
+License-File: LICENSE.APACHE2.txt
+License-File: LICENSE.PYTHON.txt
+License-File: LICENSE.txt
+License-File: NOTICE.txt
+Requires-Dist: pytz
+Provides-Extra: numpy
+Requires-Dist: numpy<3.0.0,>=1.21.2; extra == "numpy"
+Provides-Extra: pandas
+Requires-Dist: pandas<3.0.0,>=1.1.0; extra == "pandas"
+Requires-Dist: numpy<3.0.0,>=1.21.2; extra == "pandas"
+Provides-Extra: pyarrow
+Requires-Dist: pyarrow<23.0.0,>=6.0.0; extra == "pyarrow"
+Dynamic: license-file
+
+****************************
+Neo4j Bolt Driver for Python
+****************************
+
+This repository contains the official Neo4j driver for Python.
+
+Driver upgrades within a major version will never contain breaking API changes.
+
+For version compatibility with Neo4j server, please refer to:
+https://neo4j.com/developer/kb/neo4j-supported-versions/
+
++ Python 3.14 supported.
++ Python 3.13 supported.
++ Python 3.12 supported.
++ Python 3.11 supported.
++ Python 3.10 supported.
+
+
+Installation
+============
+
+To install the latest stable version, use:
+
+.. code:: bash
+
+    pip install neo4j
+
+
+.. TODO: 7.0 - remove this note
+
+.. note::
+
+    ``neo4j-driver`` is the old name for this package. It is now deprecated and
+    and will receive no further updates starting with 6.0.0. Make sure to
+    install ``neo4j`` as shown above.
+
+
+Alternative Installation for Better Performance
+-----------------------------------------------
+
+You may want to have a look at the available Rust extensions for this driver
+for better performance. The Rust extensions are not installed by default. For
+more information, see `neo4j-rust-ext`_.
+
+.. _neo4j-rust-ext: https://github.com/neo4j/neo4j-python-driver-rust-ext
+
+
+Quick Example
+=============
+
+.. code-block:: python
+
+    from neo4j import GraphDatabase, RoutingControl
+
+
+    URI = "neo4j://localhost:7687"
+    AUTH = ("neo4j", "password")
+
+
+    def add_friend(driver, name, friend_name):
+        driver.execute_query(
+            "MERGE (a:Person {name: $name}) "
+            "MERGE (friend:Person {name: $friend_name}) "
+            "MERGE (a)-[:KNOWS]->(friend)",
+            name=name, friend_name=friend_name, database_="neo4j",
+        )
+
+
+    def print_friends(driver, name):
+        records, _, _ = driver.execute_query(
+            "MATCH (a:Person)-[:KNOWS]->(friend) WHERE a.name = $name "
+            "RETURN friend.name ORDER BY friend.name",
+            name=name, database_="neo4j", routing_=RoutingControl.READ,
+        )
+        for record in records:
+            print(record["friend.name"])
+
+
+    with GraphDatabase.driver(URI, auth=AUTH) as driver:
+        add_friend(driver, "Arthur", "Guinevere")
+        add_friend(driver, "Arthur", "Lancelot")
+        add_friend(driver, "Arthur", "Merlin")
+        print_friends(driver, "Arthur")
+
+
+Further Information
+===================
+
+* `The Neo4j Operations Manual`_ (docs on how to run a Neo4j server)
+* `The Neo4j Python Driver Manual`_ (good introduction to this driver)
+* `Python Driver API Documentation`_ (full API documentation for this driver)
+* `Neo4j Cypher Cheat Sheet`_ (summary of Cypher syntax - Neo4j's graph query language)
+* `Example Project`_ (small web application using this driver)
+* `GraphAcademy`_ (interactive, free online trainings for Neo4j)
+* `Driver Wiki`_ (includes change logs)
+* `Neo4j Migration Guide`_
+
+.. _`The Neo4j Operations Manual`: https://neo4j.com/docs/operations-manual/current/
+.. _`The Neo4j Python Driver Manual`: https://neo4j.com/docs/python-manual/current/
+.. _`Python Driver API Documentation`: https://neo4j.com/docs/api/python-driver/current/
+.. _`Neo4j Cypher Cheat Sheet`: https://neo4j.com/docs/cypher-cheat-sheet/
+.. _`Example Project`: https://github.com/neo4j-examples/movies-python-bolt
+.. _`GraphAcademy`: https://graphacademy.neo4j.com/categories/python/
+.. _`Driver Wiki`: https://github.com/neo4j/neo4j-python-driver/wiki
+.. _`Neo4j Migration Guide`: https://neo4j.com/docs/migration-guide/current/

@@ -1,0 +1,108 @@
+*******************************************************************************
+Ephemeris / WWW_USER Mon May  5 20:28:46 2008  Pasadena, USA     / Horizons    
+*******************************************************************************
+Target body name: Jupiter (599)                   {source: JUP230}
+Center body name: Earth (399)                     {source: DE405}
+Center-site name: GEOCENTRIC
+*******************************************************************************
+Start time      : A.D. 2008-May-06 00:00:00.0000 UT      
+Stop  time      : A.D. 2008-Jun-05 00:00:00.0000 UT      
+Step-size       : 1440 minutes
+*******************************************************************************
+Target pole/equ : IAU_JUPITER                     {East-longitude -}
+Target radii    : 71492.0 x 71492.0 x 66854.0 km  {Equator, meridian, pole}    
+Center geodetic : .000000000,.000000000,.00000000 {E-lon(deg),Lat(deg),Alt(km)}
+Center cylindric: .000000000,.000000000,.00000000 {E-lon(deg),Dxy(km),Dz(km)}
+Center pole/equ : High-precision EOP model        {East-longitude +}
+Center radii    : 6378.1 x 6378.1 x 6356.8 km     {Equator, meridian, pole}    
+Target primary  : Sun                             {source: DE405+DE406}
+Interfering body: MOON (Req= 1737.400) km         {source: DE405}
+Deflecting body : Sun, EARTH                      {source: DE405}
+Deflecting GMs  : 1.3271E+11, 3.9860E+05 km^3/s^2                              
+Atmos refraction: NO (AIRLESS)
+RA format       : HMS
+Time format     : CAL 
+EOP file        : eop.080505.p080727                                           
+EOP coverage    : DATA-BASED 1962-JAN-20 TO 2008-MAY-05. PREDICTS-> 2008-JUL-26
+Units conversion: 1 AU= 149597870.691 km, c= 299792.458 km/s, 1 day= 86400.0 s 
+Table cut-offs 1: Elevation (-90.0deg=NO ),Airmass (>38.000=NO), Daylight (NO )
+Table cut-offs 2: Solar Elongation (  0.0,180.0=NO )                           
+*******************************************************************************
+ Date__(UT)__HR:MN     R.A._(ICRF/J2000.0)_DEC R.A.__(a-apparent)__DEC Ang-diam
+*******************************************************************************
+$$SOE
+ 2008-May-06 00:00     19 36 03.67 -21 38 32.4 19 36 34.60 -21 37 28.2   41.801
+ 2008-May-07 00:00     19 36 06.14 -21 38 34.8 19 36 37.11 -21 37 30.4   41.931
+ 2008-May-08 00:00     19 36 07.81 -21 38 39.1 19 36 38.82 -21 37 34.5   42.062
+ 2008-May-09 00:00     19 36 08.67 -21 38 45.3 19 36 39.73 -21 37 40.6   42.192
+ 2008-May-10 00:00     19 36 08.73 -21 38 53.3 19 36 39.83 -21 37 48.6   42.322
+ 2008-May-11 00:00     19 36 07.99 -21 39 03.3 19 36 39.12 -21 37 58.5   42.452
+ 2008-May-12 00:00     19 36 06.44 -21 39 15.1 19 36 37.61 -21 38 10.3   42.581
+ 2008-May-13 00:00     19 36 04.09 -21 39 28.9 19 36 35.29 -21 38 24.0   42.710
+ 2008-May-14 00:00     19 36 00.94 -21 39 44.4 19 36 32.17 -21 38 39.5   42.839
+ 2008-May-15 00:00     19 35 57.00 -21 40 01.9 19 36 28.25 -21 38 57.0   42.967
+ 2008-May-16 00:00     19 35 52.26 -21 40 21.2 19 36 23.54 -21 39 16.2   43.094
+ 2008-May-17 00:00     19 35 46.72 -21 40 42.3 19 36 18.03 -21 39 37.3   43.220
+ 2008-May-18 00:00     19 35 40.40 -21 41 05.3 19 36 11.73 -21 40 00.2   43.346
+ 2008-May-19 00:00     19 35 33.28 -21 41 30.0 19 36 04.65 -21 40 25.0   43.472
+ 2008-May-20 00:00     19 35 25.39 -21 41 56.6 19 35 56.79 -21 40 51.5   43.596
+ 2008-May-21 00:00     19 35 16.70 -21 42 25.0 19 35 48.14 -21 41 19.8   43.719
+ 2008-May-22 00:00     19 35 07.24 -21 42 55.1 19 35 38.72 -21 41 49.9   43.842
+ 2008-May-23 00:00     19 34 57.00 -21 43 27.0 19 35 28.52 -21 42 21.8   43.963
+ 2008-May-24 00:00     19 34 45.99 -21 44 00.6 19 35 17.55 -21 42 55.5   44.084
+ 2008-May-25 00:00     19 34 34.21 -21 44 35.9 19 35 05.81 -21 43 30.9   44.203
+ 2008-May-26 00:00     19 34 21.67 -21 45 12.9 19 34 53.31 -21 44 08.0   44.321
+ 2008-May-27 00:00     19 34 08.38 -21 45 51.6 19 34 40.05 -21 44 46.8   44.438
+ 2008-May-28 00:00     19 33 54.33 -21 46 31.9 19 34 26.03 -21 45 27.2   44.554
+ 2008-May-29 00:00     19 33 39.53 -21 47 13.8 19 34 11.26 -21 46 09.3   44.668
+ 2008-May-30 00:00     19 33 24.00 -21 47 57.3 19 33 55.75 -21 46 52.9   44.781
+ 2008-May-31 00:00     19 33 07.73 -21 48 42.4 19 33 39.51 -21 47 38.1   44.892
+ 2008-Jun-01 00:00     19 32 50.74 -21 49 29.0 19 33 22.55 -21 48 24.8   45.001
+ 2008-Jun-02 00:00     19 32 33.03 -21 50 17.1 19 33 04.88 -21 49 13.0   45.109
+ 2008-Jun-03 00:00     19 32 14.62 -21 51 06.7 19 32 46.51 -21 50 02.6   45.215
+ 2008-Jun-04 00:00     19 31 55.52 -21 51 57.6 19 32 27.45 -21 50 53.7   45.320
+ 2008-Jun-05 00:00     19 31 35.73 -21 52 50.0 19 32 07.71 -21 51 46.1   45.422
+$$EOE
+*******************************************************************************
+Column meaning:
+ 
+TIME
+
+  Prior to 1962, times are UT1. Dates thereafter are UTC. Any 'b' symbol in
+the 1st-column denotes a B.C. date. First-column blank (" ") denotes an A.D.
+date. Calendar dates prior to 1582-Oct-15 are in the Julian calendar system.
+Later calendar dates are in the Gregorian system.
+
+  The uniform Coordinate Time scale is used internally. Conversion between
+CT and the selected non-uniform UT output scale has not been determined for
+UTC times after the next July or January 1st.  The last known leap-second
+is used over any future interval.
+
+  NOTE: "n.a." in output means quantity "not available" at the print-time.
+ 
+ R.A._(ICRF/J2000.0)_DEC =
+   J2000.0 astrometric right ascension and declination of target center.
+Corrected for light-time. Units: HMS (HH MM SS.ff) and DMS (DD MM SS.f)
+ 
+ R.A._(a-apparent)__DEC. =
+   Airless apparent right ascension and declination of the target center with
+respect to the Earth true-equator and the meridian containing the Earth true
+equinox of date.  Corrected for light-time, gravitational deflection of light,
+stellar aberration, precession & nutation.
+   Units: HMS (HH MM SS.ff) and DMS (DD MM SS.f)
+ 
+ Ang-diam =
+   The equatorial angular width of the target body full disk, if it were
+fully visible to the observer.  Units: ARCSECONDS
+
+
+ Computations by ...
+     Solar System Dynamics Group, Horizons On-Line Ephemeris System
+     4800 Oak Grove Drive, Jet Propulsion Laboratory
+     Pasadena, CA  91109   USA
+     Information: http://ssd.jpl.nasa.gov/
+     Connect    : telnet://ssd.jpl.nasa.gov:6775  (via browser)
+                  telnet ssd.jpl.nasa.gov 6775    (via command-line)
+     Author     : Jon.Giorgini@jpl.nasa.gov
+
+*******************************************************************************

@@ -1,0 +1,29 @@
+These are simple tests of the ``search`` function
+=================================================
+
+    >>> import re2
+    >>> re2.set_fallback_notification(re2.FALLBACK_EXCEPTION)
+    >>> import warnings
+    >>> warnings.filterwarnings('ignore', category=DeprecationWarning)
+
+    >>> re2.search("((?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.){3}(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])", "hello 28.224.2.1 test").group()
+    '28.224.2.1'
+
+    >>> re2.search("(\d{3})\D?(\d{3})\D?(\d{4})", "800-555-1212").groups()
+    ('800', '555', '1212')
+
+    >>> input = 'a' * 999
+    >>> len(re2.search('(?:a{1000})?a{999}', input).group())
+    999
+
+    >>> with open('tests/cnn_homepage.dat') as tmp:
+    ...     data = tmp.read()
+    >>> re2.search(r'\n#hdr-editions(.*?)\n', data).groups()
+    (' a { text-decoration:none; }',)
+
+Verify some sanity checks
+
+    >>> re2.compile(r'x').search('x', 2000)
+    >>> re2.compile(r'x').search('x', 1, -300)
+
+    >>> re2.set_fallback_notification(re2.FALLBACK_QUIETLY)

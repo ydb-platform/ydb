@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package yandex.cloud.spark.v1;
+
+import "yandex/cloud/spark/v1/job.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/api/operation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/spark/v1;spark";
+option java_package = "yandex.cloud.api.spark.v1";
+
+// A set of methods for managing jobs for Spark cluster.
+service JobService {
+  // Retrieves a list of jobs for Spark cluster.
+  rpc List (ListJobsRequest) returns (ListJobsResponse) {
+  }
+
+  // Creates a job for Spark cluster.
+  rpc Create (CreateJobRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateJobMetadata"
+      response: "Job"
+    };
+  }
+
+  // Returns the specified Spark job.
+  rpc Get (GetJobRequest) returns (Job) {
+  }
+
+  // Returns a log for Spark job.
+  rpc ListLog (ListJobLogRequest) returns (ListJobLogResponse) {
+  }
+
+  // Cancels the specified Spark job.
+  rpc Cancel (CancelJobRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateJobMetadata"
+      response: "Job"
+    };
+  }
+
+}
+
+message GetJobRequest {
+  // ID of the Spark cluster.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the Spark job to return.
+  string job_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message ListJobsRequest {
+  // ID of the cluster to list Spark jobs of.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+  // to get the next page of results in subsequent ListJobs requests.
+  // Acceptable values are 0 to 1000, inclusive. Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. Set `page_token` to the `next_page_token` returned by a previous ListJobs
+  // request to get the next page of results.
+  string page_token = 3 [(length) = "<=200"];
+
+  // String that describes a display filter.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListJobsResponse {
+  // Requested list of Spark jobs.
+  repeated Job jobs = 1;
+
+  // This token allows you to get the next page of results for ListJobs requests,
+  // if the number of results is larger than `page_size` specified in the request.
+  // To get the next page, specify the value of `next_page_token` as a value for
+  // the `page_token` parameter in the next ListClusters request. Subsequent ListClusters
+  // requests will have their own `next_page_token` to continue paging through the results.
+  string next_page_token = 2 [(length) = "<=200"];
+}
+
+message CreateJobRequest {
+  // ID of the cluster to create Spark job in.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Optional. Name of the job.
+  string name = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  oneof job_spec {
+    SparkJob spark_job = 3;
+    PysparkJob pyspark_job = 4;
+    SparkConnectJob spark_connect_job = 5;
+  }
+
+  reserved 6, 7;
+
+  // Service account used to access Cloud resources.
+  string service_account_id = 8 [(length) = "<=50"];
+}
+
+message CreateJobMetadata {
+  // ID of the Spark cluster.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the Spark job.
+  string job_id = 2 [(length) = "<=50"];
+}
+
+message CancelJobRequest {
+  // ID of the Spark cluster.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the Spark job to cancel.
+  string job_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message ListJobLogRequest {
+  // ID of the Spark cluster.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the Spark job to return.
+  string job_id = 2 [(required) = true, (length) = "<=50"];
+
+  // The maximum length of job output per papge that should be returned.
+  // If the number of available output is larger tha `page_size`, the service returns
+  // a `next_page_token` that can be used to get the next page of job output in subsequent ListLog requests.
+  // Acceptable values are 0 to 1048576. Default value: 1048576.
+  int64 page_size = 3 [(value) = "<=1048576"];
+
+  // Page token. Set `page_token` to the `next_page_token` returned by a previous ListLog
+  // request to get the next page of results.
+  string page_token = 4 [(length) = "<=200"];
+}
+
+message ListJobLogResponse {
+  // Requested part of Spark Job log.
+  string content = 1;
+
+  // This token allows you to get the next page of results for ListLog requests,
+  // if the number of results is larger than `page_size` specified in the request.
+  // To get the next page, specify the value of `next_page_token` as a value for
+  // the `page_token` parameter in the next ListLog request. Subsequent ListLog
+  // requests will have their own `next_page_token` to continue paging through the results.
+  string next_page_token = 2 [(length) = "<=200"];
+}

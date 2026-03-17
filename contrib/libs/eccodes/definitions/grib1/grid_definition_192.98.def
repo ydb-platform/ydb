@@ -1,0 +1,23 @@
+# (C) Copyright 2005- ECMWF.
+
+# GRID DEFINITION ocean ECMWF convention
+
+unsigned[2] Ni  : dump;
+alias numberOfPointsAlongFirstAxis = Ni;
+alias Nx = Ni;
+
+unsigned[2] Nj  : dump;
+alias numberOfPointsAlongSecondAxis = Nj;
+alias Nx = Nj;
+
+#  La1 - latitude of first grid point
+signed[3] latitudeOfFirstGridPoint :  no_copy;
+meta geography.latitudeOfFirstGridPointInDegrees scale(latitudeOfFirstGridPoint,oneConstant,grib1divider,truncateDegrees) : dump,no_copy;
+alias La1 = latitudeOfFirstGridPoint :  no_copy;
+
+include "grib1/scanning_mode.def";
+
+meta numberOfDataPoints number_of_points(Ni,Nj,PLPresent,pl) : dump;
+alias numberOfPoints=numberOfDataPoints;
+meta numberOfValues number_of_values(values,bitsPerValue,numberOfDataPoints,bitmapPresent,bitmap,numberOfCodedValues) : dump;
+#alias ls.valuesCount=numberOfValues;

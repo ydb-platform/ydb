@@ -1,0 +1,43 @@
+
+<!--
+     File predefined.ent produced by the XSL script entities.xsl
+     from input data in unicode.xml.
+
+     Copyright 1998 - 2010 W3C.
+
+     Use and distribution of this code are permitted under the terms of the
+     W3C Software Notice and License.
+     http://www.w3.org/Consortium/Legal/2002/copyright-software-20021231.html
+
+     Please report any errors to David Carlisle
+     via the public W3C list www-math@w3.org.
+
+     The numeric character values assigned to each entity
+     (should) match the Unicode assignments in Unicode 5.x.
+
+-->
+
+
+<!-- 
+
+       Public identifier: -//W3C//ENTITIES Predefined XML//EN///XML
+       System identifier: http://www.w3.org/2003/entities/2007/predefined.ent
+
+     The public identifier should always be used verbatim.
+     The system identifier may be changed to suit local requirements.
+
+     Typical invocation:
+
+       <!ENTITY % predefined PUBLIC
+         "-//W3C//ENTITIES Predefined XML//EN///XML"
+         "http://www.w3.org/2003/entities/2007/predefined.ent"
+       >
+       %predefined;
+
+-->
+
+<!ENTITY amp              "&#38;#38;" ><!--AMPERSAND -->
+<!ENTITY apos             "&#x00027;" ><!--APOSTROPHE -->
+<!ENTITY gt               "&#x0003E;" ><!--GREATER-THAN SIGN -->
+<!ENTITY lt               "&#38;#60;" ><!--LESS-THAN SIGN -->
+<!ENTITY quot             "&#x00022;" ><!--QUOTATION MARK -->

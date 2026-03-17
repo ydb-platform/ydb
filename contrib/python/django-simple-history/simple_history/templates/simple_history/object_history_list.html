@@ -1,0 +1,82 @@
+{% load i18n %}
+{% load url from simple_history_compat %}
+{% load admin_urls %}
+{% load getattribute from getattributes %}
+
+<table id="change-history" class="table table-bordered table-striped">
+  <thead>
+    <tr>
+      <th scope="col">{% trans 'Object' %}</th>
+      {% for column in history_list_display %}
+        <th scope="col">{% trans column %}</th>
+      {% endfor %}
+      <th scope="col">{% trans 'Date/time' %}</th>
+      <th scope="col">{% trans 'Comment' %}</th>
+      <th scope="col">{% trans 'Changed by' %}</th>
+      <th scope="col">{% trans 'Change reason' %}</th>
+      <th scope="col">{% trans 'Changes' %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for record in page_obj %}
+      <tr>
+        <td>
+          <a href="{% url opts|admin_urlname:'simple_history' object.pk record.pk %}">
+            {{ record.history_object }}
+          </a>
+        </td>
+        {% for column in history_list_display %}
+          <td>{{ record|getattribute:column }}</td>
+        {% endfor %}
+        <td>{{ record.history_date }}</td>
+        <td>{{ record.get_history_type_display }}</td>
+        <td>
+          {% if record.history_user %}
+            {% url admin_user_view record.history_user_id as admin_user_url %}
+            {% if admin_user_url %}
+              <a href="{{ admin_user_url }}">{{ record.history_user }}</a>
+            {% else %}
+              {{ record.history_user }}
+            {% endif %}
+          {% else %}
+            {% trans "None" %}
+          {% endif %}
+        </td>
+        <td>
+          {{ record.history_change_reason }}
+        </td>
+        <td>
+          {% block history_delta_changes %}
+            {% if record.history_delta_changes %}
+              <ul>
+                {% for change in record.history_delta_changes %}
+                  <li>
+                    <strong>{{ change.field }}:</strong>
+                    {{ change.old }}
+                    {# Add some spacing, and prevent having the arrow point to the edge of the page if `new` is wrapped #}
+                    &nbsp;&rarr;&nbsp;&nbsp;{{ change.new }}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          {% endblock %}
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p class="paginator" style="border-top: 0">
+  {% if pagination_required %}
+    {% for i in page_range %}
+      {% if i == page_obj.paginator.ELLIPSIS %}
+        {{ page_obj.paginator.ELLIPSIS }}
+      {% elif i == page_obj.number %}
+        <span class="this-page">{{ i }}</span>
+      {% else %}
+        <a href="?{{ page_var }}={{ i }}" {% if i == page_obj.paginator.num_pages %} class="end" {% endif %}>{{ i }}</a>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+  {{ page_obj.paginator.count }} {% blocktranslate count counter=page_obj.paginator.count %}entry{% plural %}entries{% endblocktranslate %}
+</p>

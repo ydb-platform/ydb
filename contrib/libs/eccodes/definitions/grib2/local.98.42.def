@@ -1,0 +1,6 @@
+# (C) Copyright 2005- ECMWF.
+
+# Local definition 42 - WMO Lead Centre for Wave Forecast Verification (LC-WFV)
+
+codetable[2] lcwfvSuiteName "grib2/lcwfv_suiteName.table" : dump;
+alias mars.origin = lcwfvSuiteName;

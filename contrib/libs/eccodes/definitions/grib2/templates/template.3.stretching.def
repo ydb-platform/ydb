@@ -1,0 +1,19 @@
+# (C) Copyright 2005- ECMWF.
+
+# Latitude of the pole of stretching
+signed[4] latitudeOfThePoleOfStretching : edition_specific,no_copy;
+
+# Longitude of the pole of stretching
+signed[4] longitudeOfThePoleOfStretching : edition_specific,no_copy;
+
+meta  geography.latitudeOfStretchingPoleInDegrees
+      scale(latitudeOfThePoleOfStretching,oneConstant,grib2divider,truncateDegrees) : dump;
+meta  geography.longitudeOfStretchingPoleInDegrees
+      scale(longitudeOfThePoleOfStretching,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# Stretching factor
+unsigned[4] stretchingFactorScaled : edition_specific,no_copy;
+
+meta geography.stretchingFactor
+     scale(stretchingFactorScaled,oneConstant,grib2divider) : dump;
+

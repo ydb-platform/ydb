@@ -1,0 +1,4 @@
+constant marsStream = "oper";
+alias mars.stream = marsStream;
+constant marsDomain = "g";
+alias mars.domain = marsDomain;

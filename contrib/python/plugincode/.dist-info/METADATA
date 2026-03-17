@@ -1,0 +1,70 @@
+Metadata-Version: 2.1
+Name: plugincode
+Version: 30.0.0
+Summary: plugincode is a library that provides plugin functionality for ScanCode toolkit.
+Home-page: https://github.com/nexB/plugincode
+Author: nexB. Inc. and others
+Author-email: info@aboutcode.org
+License: Apache-2.0
+Keywords: open source,utilities,plugincode,scancode,scancode-toolkit,plugins
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Topic :: Software Development
+Classifier: Topic :: Utilities
+Requires-Python: >=3.6.*
+Description-Content-Type: text/x-rst
+License-File: apache-2.0.LICENSE
+License-File: NOTICE
+License-File: AUTHORS.rst
+License-File: CHANGELOG.rst
+Requires-Dist: click (!=7.0,>=6.7)
+Requires-Dist: commoncode (>=30.2.0)
+Requires-Dist: pluggy (>=0.12.0)
+Provides-Extra: docs
+Requires-Dist: Sphinx (>=3.3.1) ; extra == 'docs'
+Requires-Dist: sphinx-rtd-theme (>=0.5.0) ; extra == 'docs'
+Requires-Dist: doc8 (>=0.8.1) ; extra == 'docs'
+Provides-Extra: testing
+Requires-Dist: pytest (!=7.0.0,>=6) ; extra == 'testing'
+Requires-Dist: pytest-xdist (>=2) ; extra == 'testing'
+Requires-Dist: aboutcode-toolkit (>=6.0.0) ; extra == 'testing'
+Requires-Dist: black ; extra == 'testing'
+
+===========
+PluginCode
+===========
+
+- license: Apache-2.0
+- copyright: copyright (c) nexB. Inc. and others
+- homepage_url: https://github.com/nexB/plugincode
+- keywords: plugins, utilities, scancode-toolkit, plugincode
+
+
+PluginCode is a library that provides plugable functionality with plugins, 
+including Click plugins.
+It is used by ScanCode toolkit and related projects
+
+Visit https://aboutcode.org and https://github.com/nexB/ for support and download.
+
+To set up the development environment::
+
+    source configure
+
+To run unit tests::
+
+    pytest -vvs -n 2
+
+To clean up development environment::
+
+    ./configure --clean
+
+
+

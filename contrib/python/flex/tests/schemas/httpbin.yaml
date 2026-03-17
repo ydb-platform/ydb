@@ -1,0 +1,62 @@
+swagger: '2.0'
+produces: [application/json]
+schemes: [http]
+info: {title: Engagement API, version: 3.0.0}
+paths:
+  /get:
+    get:
+      responses:
+        '200':
+          description: Successful response
+          schema:
+            $ref: "#/definitions/Get"
+    post:
+      responses:
+        405:
+          description: Method Not Allowed
+  /post:
+    post:
+      responses:
+        '200':
+          description: Successful response
+          schema:
+            $ref: "#/definitions/Post"
+definitions:
+  Get:
+    properties:
+      origin:
+        type: string
+        #format: ipv4
+      headers:
+        $ref: "#/definitions/Headers"
+      args:
+        type: object
+      url:
+        type: string
+        #format: uri
+  Headers:
+    properties:
+      Content-Length:
+        type: string
+      Accept-Encoding:
+        type: string
+      Host:
+        type: string
+        #format: uri
+      Accept:
+        type: string
+      UserAgent:
+        type: string
+      Connection:
+        type: string
+  Post:
+    properties:
+      files: {}
+      origin: {}
+      form: {}
+      url: {}
+      args: {}
+      headers: {}
+      json:
+        type: "null"
+      data: {}

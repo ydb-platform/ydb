@@ -1,0 +1,312 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Swagger Petstore
+  license:
+    name: MIT
+servers:
+  - url: http://petstore.swagger.io/v1
+paths:
+  /pets:
+    get:
+      summary: List all pets
+      operationId: listPets
+      tags:
+        - pets
+      parameters:
+        - name: limit
+          in: query
+          description: How many items to return at one time (max 100)
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: A paged array of pets
+          headers:
+            x-next:
+              description: A link to the next page of responses
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+                x-amazon-apigateway-integration:
+                  uri:
+                    Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PythonVersionFunction.Arn}/invocations
+                  passthroughBehavior: when_no_templates
+                  httpMethod: POST
+                  type: aws_proxy
+    post:
+      summary: Create a pet
+      operationId: createPets
+      tags:
+        - pets
+      responses:
+        '201':
+          description: Null response
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+                x-amazon-apigateway-integration:
+                  uri:
+                    Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PythonVersionFunction.Arn}/invocations
+                  passthroughBehavior: when_no_templates
+                  httpMethod: POST
+                  type: aws_proxy
+  /pets/{petId}:
+    get:
+      summary: Info for a specific pet
+      operationId: showPetById
+      tags:
+        - pets
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: The id of the pet to retrieve
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Expected response to a valid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    x-amazon-apigateway-integration:
+      uri:
+        Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PythonVersionFunction.Arn}/invocations
+      passthroughBehavior: when_no_templates
+      httpMethod: POST
+      type: aws_proxy
+components:
+  schemas:
+    Pet:
+      enum:
+        - ca-t
+        - dog*
+      type: string
+    Error:
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+    user-name:
+      properties:
+        first-name:
+          type: string
+        home-address:
+          $ref: "#/components/schemas/home-address"
+    home-address:
+      properties:
+        address-1:
+          type: string
+    team-members:
+      items:
+        type: string
+    all-of-ref:
+      allOf:
+        - $ref: "#/components/schemas/user-name"
+        - $ref: "#/components/schemas/home-address"
+    all-of-obj:
+      allOf:
+        - type: object
+          properties:
+            name:
+              type: string
+        - type: object
+          properties:
+            number:
+              type: string
+    all-of-combine:
+      allOf:
+        - $ref: "#/components/schemas/user-name"
+        - type: object
+          properties:
+            birth-date:
+              type: string
+              format: date
+            size:
+              type: integer
+              minimum: 1
+    any-of-combine:
+      allOf:
+        - $ref: "#/components/schemas/home-address"
+        - $ref: "#/components/schemas/user-name"
+        - type: object
+          properties:
+            age:
+              type: string
+    any-of-combine-in-object:
+      type: object
+      properties:
+        item:
+          allOf:
+            - $ref: "#/components/schemas/home-address"
+            - $ref: "#/components/schemas/user-name"
+            - type: object
+              properties:
+                age:
+                  type: string
+    any-of-combine-in-array:
+      type: array
+      items:
+        allOf:
+          - $ref: "#/components/schemas/home-address"
+          - $ref: "#/components/schemas/user-name"
+          - type: object
+            properties:
+              age:
+                type: string
+    any-of-combine-in-root:
+      allOf:
+        - $ref: "#/components/schemas/home-address"
+        - $ref: "#/components/schemas/user-name"
+        - type: object
+          properties:
+            age:
+              type: string
+            birth-date:
+              type: string
+              format: date-time
+    model-s.Specie-s:
+      type: string
+      enum:
+        - dog
+        - cat
+        - snake
+    model-s.Pe-t:
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        tag:
+          type: string
+        species:
+          $ref: '#/components/schemas/model-s.Specie-s'
+    model-s.Use-r:
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        tag:
+          type: string
+    collection-s.Pet-s:
+      type: array
+      items:
+        $ref: "#/components/schemas/model-s.Pe-t"
+    collection-s.User-s:
+      type: array
+      items:
+        $ref: "#/components/schemas/model-s.Use-r"
+    Id:
+      type: string
+    collection-s.Rule-s:
+      type: array
+      items:
+        type: string
+    collection-s.api-s:
+      type: array
+      items:
+        type: object
+        properties:
+          apiKey:
+            type: string
+            description: To be used as a dataset parameter value
+          apiVersionNumber:
+            type: string
+            description: To be used as a version parameter value
+          apiUrl:
+            type: string
+            format: uri
+            description: "The URL describing the dataset's fields"
+          apiDocumentationUrl:
+            type: string
+            format: uri
+            description: A URL to the API console for each API
+    model-s.Even-t:
+      type: object
+      properties:
+        name:
+          anyOf:
+            - type: string
+            - type: number
+            - type: integer
+            - type: boolean
+            - type: object
+            - type: array
+              items:
+                type: string
+    Result:
+      type: object
+      properties:
+        event:
+          $ref: '#/components/schemas/model-s.Even-t'
+    fo-o.ba-r.Thin-g:
+      properties:
+        attribute-s:
+          type: object
+    fo-o.ba-r.Than-g:
+      properties:
+        attributes:
+          type: array
+          items:
+            type: object
+    fo-o.ba-r.Clon-e:
+      allOf:
+        - $ref: '#/components/schemas/fo-o.ba-r.Thin-g'
+    fo-o.Te-a:
+      properties:
+        flavour-name:
+          type: string
+        id:
+          $ref: '#/components/schemas/Id'
+    Source:
+      properties:
+        country-name:
+          type: string
+    fo-o.Coco-a:
+      properties:
+        quality:
+          type: integer
+    wo-o.bo-o.Chocolat-e:
+      properties:
+        flavour-name:
+          type: string
+        sourc-e:
+          $ref: '#/components/schemas/Source'
+        coco-a:
+          $ref: '#/components/schemas/fo-o.Coco-a'

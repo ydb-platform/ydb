@@ -1,0 +1,57 @@
+{% extends "admin/base_site.html" %}
+
+<!-- LOADING -->
+{% load i18n admin_urls %}
+
+{% block title %}{% trans "Load data" %} {{ block.super }}{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script type="text/javascript" src="{% url 'admin:jsi18n' %}"></script>
+    {{ form.media.js }}
+{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  {{ form.media.css }}
+{% endblock %}
+
+{% block bodyclass %}change-form{% endblock %}
+
+{% block breadcrumbs %}
+    {% if not is_popup %}
+        <ul class="grp-horizontal-list">
+            <li><a href="{% url 'admin:index' %}">{% trans "Home" %}</a></li>
+            <li>{% trans "Load data" %}</li>
+        </ul>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+<form enctype="multipart/form-data" method="post" action=".">
+    {% csrf_token %}
+    <header id="grp-content-title">
+        <h1>{% trans "Load data" %}</h1>
+    </header>
+    <ul class="grp-messagelist" style="padding-bottom:5px">
+    {% if form.errors %}
+        {% if form.errors|length == 1 %}
+            <li class="grp-error">{% trans "Please correct the error below." %}</li>
+        {% else %}
+            <li class="grp-error">{% trans "Please correct the errors below." %}</li>
+        {% endif %}
+        {{ form.non_field_errors }}
+    {% else %}
+        <li class="grp-warning">{% trans 'Existing items with same <strong>primary key</strong> will be overwritten.' %}</li>
+    {% endif %}
+    </ul>
+    {% for fieldset in adminform %}
+        {% include "admin/includes/fieldset.html" %}
+    {% endfor %}
+    <div class="submit-row">
+        <input class="default" type="submit" name="_load" value="{% trans "Load" %}" />
+    </div>
+</form>
+</div>
+{% endblock %}

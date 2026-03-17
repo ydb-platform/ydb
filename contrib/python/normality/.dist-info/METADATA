@@ -1,0 +1,79 @@
+Metadata-Version: 2.4
+Name: normality
+Version: 3.0.2
+Summary: Micro-library to normalize text strings
+Project-URL: Documentation, https://github.com/pudo/normality
+Project-URL: Repository, https://github.com/pudo/normality.git
+Project-URL: Issues, https://github.com/pudo/normality/issues
+Author-email: Friedrich Lindenberg <friedrich@pudo.org>
+License: Copyright (c) 2013-2025, Friedrich Lindenberg, Gregor Aisch
+        
+        Permission is hereby granted, free of charge, to any person obtaining a
+        copy of this software and associated documentation files (the
+        "Software"), to deal in the Software without restriction, including
+        without limitation the rights to use, copy, modify, merge, publish,
+        distribute, sublicense, and/or sell copies of the Software, and to
+        permit persons to whom the Software is furnished to do so, subject to
+        the following conditions:
+        
+        The above copyright notice and this permission notice shall be included
+        in all copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+        OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+        MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+        IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+        CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+        TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+        SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+License-File: LICENSE
+Keywords: normalization,slugs,text,unicode
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.9
+Requires-Dist: banal>=1.0.1
+Requires-Dist: chardet
+Requires-Dist: charset-normalizer>=2.0.0
+Requires-Dist: pyicu>=2.10.0
+Provides-Extra: dev
+Requires-Dist: build; extra == 'dev'
+Requires-Dist: mypy; extra == 'dev'
+Requires-Dist: pytest; extra == 'dev'
+Requires-Dist: types-chardet; extra == 'dev'
+Requires-Dist: wheel; extra == 'dev'
+Provides-Extra: icu
+Description-Content-Type: text/markdown
+
+# normality
+
+[![build](https://github.com/pudo/normality/actions/workflows/build.yml/badge.svg)](https://github.com/pudo/normality/actions/workflows/build.yml)
+
+Normality is a Python micro-package that contains a small set of text normalization functions for easier re-use. These functions accept a snippet of unicode or utf-8 encoded text and remove various classes of characters, such as diacritics, punctuation etc. This is useful as a preparation to further text analysis.
+
+**WARNING**: As of version 3.0, `normality` requires `pyicu` as a mandatory dependency. If you cannot install `pyicu`, consider using `normality < 3.0.0`.
+
+## Example
+
+```python
+# coding: utf-8
+from normality import normalize, slugify, collapse_spaces, ascii_text, latinize_text
+
+text = normalize('Nie wieder "Grüne Süppchen" kochen!')
+assert text == 'nie wieder grune suppchen kochen'
+
+slug = slugify('My first blog post!')
+assert slug == 'my-first-blog-post'
+
+text = 'this \n\n\r\nhas\tlots of \nodd spacing.'
+assert collapse_spaces(text) == 'this has lots of odd spacing.'
+```
+
+## License
+
+``normality`` is open source, licensed under a standard MIT license (included in this repository as ``LICENSE``).

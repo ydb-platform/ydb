@@ -1,0 +1,15 @@
+0 unknown unknown
+1 hist Historical
+2 cont Control
+3 amip Atmospheric Model Intercomparison Project
+4 SSP1-1.9 Shared Socio-economic Pathways 1-1.9
+5 SSP1-2.6 Shared Socio-economic Pathways 1-2.6
+6 SSP2-4.5 Shared Socio-economic Pathways 2-4.5
+7 SSP3-7.0 Shared Socio-economic Pathways 3-7.0
+8 SSP5-8.5 Shared Socio-economic Pathways 5-8.5
+9 Tplus1.5K Warmer world at 1.5 degrees K above pre-industrial temperatures
+10 Tplus2.0K Warmer world at 2.0 degrees K above pre-industrial temperatures
+11 Tplus3.0K Warmer world at 3.0 degrees K above pre-industrial temperatures
+12 Tplus4.0K Warmer world at 4.0 degrees K above pre-industrial temperatures
+13 abrupt4xco2 CO2 abruptly quadrupled and then held constant
+65535 65535 Missing

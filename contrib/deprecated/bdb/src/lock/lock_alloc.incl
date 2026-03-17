@@ -1,0 +1,138 @@
+/*-
+ * See the file LICENSE for redistribution information.
+ *
+ * Copyright (c) 2011, 2012 Oracle and/or its affiliates.  All rights reserved.
+ *
+ * $Id$
+ */
+
+/*
+ * This is a template for allocation in the lock region.  The following
+ * macros must be defined:
+ *
+ * FREE_LIST_HEAD -- the name of the head of the free list.
+ * STRUCT_NAME -- the name of the structure in the free list.
+ * CURRENT_COUNT -- structure element for count of current objects.
+ * MAX_COUNT -- structure element for max of current objects.
+ * STEAL_NAME -- name of stat to track steals.
+ * STEAL_EVENT -- name of event to track steals.
+ */
+#define __lock_alloc() /* for ctags */
+{
+	struct STRUCT_NAME *sh_thing;
+	DB_LOCKPART *end_p, *cur_p, *orig_p;
+	DB_LOCKREGION *region;
+	int begin, locked;
+	u_int32_t i, nobjs;
+
+	region = lt->reginfo.primary;
+
+	orig_p = &lt->part_array[part_id];
+	if (region->part_t_size == 1)
+		goto alloc;
+retry:	MUTEX_UNLOCK(lt->env, orig_p->mtx_part);
+	locked = 0;
+	sh_thing = NULL;
+	end_p = &lt->part_array[region->part_t_size];
+	/*
+	 * Start looking at the next partition and wrap around.  If
+	 * we get back to our partition then raise an error.
+	 */
+	begin = 0;
+	nobjs = 0;
+	cur_p = orig_p + 1;
+again:	for (; sh_thing == NULL && cur_p < end_p; cur_p++) {
+		MUTEX_LOCK(lt->env, cur_p->mtx_part);
+		if ((sh_thing = SH_TAILQ_FIRST(
+		    &cur_p->FREE_LIST_HEAD, STRUCT_NAME)) != NULL)
+			SH_TAILQ_REMOVE(&cur_p->FREE_LIST_HEAD,
+			    sh_thing, links, STRUCT_NAME);
+		MUTEX_UNLOCK(lt->env, cur_p->mtx_part);
+	}
+	if (sh_thing != NULL) {
+		MUTEX_LOCK(lt->env, orig_p->mtx_part);
+		SH_TAILQ_INSERT_HEAD(&orig_p->FREE_LIST_HEAD,
+		    sh_thing, links, STRUCT_NAME);
+		STAT_INC_VERB(env,
+		    lock, STEAL_EVENT, orig_p->part_stat.STEAL_NAME,
+		    cur_p - lt->part_array, part_id);
+		return (0);
+	}
+	if (!begin) {
+		begin = 1;
+		cur_p = lt->part_array;
+		end_p = orig_p;
+		goto again;
+	}
+	/*
+	 * Try to get some more space in the region.
+	 */
+	LOCK_REGION_LOCK(lt->env);
+	MUTEX_LOCK(lt->env, orig_p->mtx_part);
+	locked = 1;
+	nobjs = 0;
+	/* check to see if we raced with someone. */
+	if ((region->stat.MAX_COUNT == 0 ||
+	    region->stat.CURRENT_COUNT < region->stat.MAX_COUNT) &&
+	    SH_TAILQ_FIRST(&orig_p->FREE_LIST_HEAD, STRUCT_NAME) == NULL) {
+		MUTEX_UNLOCK(lt->env, orig_p->mtx_part);
+alloc:		locked = 0;
+		sh_thing = NULL;
+		cur_p = orig_p;
+		end_p = &lt->part_array[region->part_t_size];
+		nobjs = region->stat.CURRENT_COUNT >> 2;
+		/* Just in case. */
+		if (nobjs == 0)
+			nobjs = 1;
+		if (region->stat.MAX_COUNT != 0 &&
+		    region->stat.MAX_COUNT <
+		    region->stat.CURRENT_COUNT + nobjs)
+			nobjs = region->stat.MAX_COUNT -
+			    region->stat.CURRENT_COUNT;
+		/*
+		 * If the max memory is not sized for max objects,
+		 * allocate as much as possible.
+		 */
+		F_SET(&lt->reginfo, REGION_TRACKED);
+		while (__env_alloc(&lt->reginfo,
+		    nobjs * sizeof(struct STRUCT_NAME), &sh_thing) != 0)
+		    	if ((nobjs >>= 1) == 0)
+				break;
+		F_CLR(&lt->reginfo, REGION_TRACKED);
+		region->stat.CURRENT_COUNT += nobjs;
+		if (region->part_t_size != 1) 
+			LOCK_REGION_UNLOCK(lt->env);
+
+		if (nobjs == 0)
+			goto err;
+
+		for (i = 0; i < nobjs; i++) {
+			memset(sh_thing, 0, sizeof (struct STRUCT_NAME));
+			if (&cur_p->free_locks ==
+			    (struct __flock *)&cur_p->FREE_LIST_HEAD)
+				((struct __db_lock *)
+				    sh_thing)->status = DB_LSTAT_FREE;
+			MUTEX_LOCK(lt->env, cur_p->mtx_part);
+			SH_TAILQ_INSERT_HEAD(&cur_p->FREE_LIST_HEAD,
+			    sh_thing, links, STRUCT_NAME);
+			MUTEX_UNLOCK(lt->env, cur_p->mtx_part);
+			if (region->part_t_size != 1 && ++cur_p == end_p)
+				cur_p = lt->part_array;
+			sh_thing++;
+		}
+		if (region->part_t_size != 1) 
+			MUTEX_LOCK(lt->env, orig_p->mtx_part);
+		locked = 1;
+	} else 
+		LOCK_REGION_UNLOCK(lt->env);
+
+	if (SH_TAILQ_FIRST(&orig_p->FREE_LIST_HEAD, STRUCT_NAME) != NULL) 
+		return (0);
+	/* Somone stole all the locks! */
+	if (nobjs > 0)
+		goto retry;
+
+err:	if (region->part_t_size != 1 && locked == 0)
+		MUTEX_LOCK(lt->env, orig_p->mtx_part);
+	return (__lock_nomem(lt->env, "lock entries"));
+}

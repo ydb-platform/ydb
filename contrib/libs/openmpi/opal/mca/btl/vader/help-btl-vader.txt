@@ -1,0 +1,137 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2009 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2006-2014 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2012-2014 Los Alamos National Security, LLC.
+#                         All rights reserved.
+# Copyright (c) 2014      Research Organization for Information Science
+#                         and Technology (RIST). All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI's shared memory support.
+#
+[sys call fail]
+A system call failed during vader shared memory BTL initialization
+that should not have.  It is likely that your MPI job will now either
+abort or experience performance degradation.
+
+  System call: %s
+  Error:       %s (errno %d)
+#
+[no locality]
+WARNING: Missing locality information required for vader shared memory
+BTL initialization. Continuing without shared memory support.
+#
+[knem permission denied]
+WARING: Open MPI failed to open the /dev/knem device due to a
+permissions problem.  Please check with your system administrator to
+get the permissions fixed, or set the btl_vader_single_copy_mechanism
+MCA variable to none to silence this warning and run without knem
+support.
+
+  Local host:            %s
+  /dev/knem permissions: 0%o
+#
+[knem fail open]
+WARNING: Open MPI failed to open the /dev/knem device due to a local
+error. Please check with your system administrator to get the problem
+fixed, or set the btl_vader_single_copy_mechanism MCA variable to none
+to silence this warning and run without knem support.
+
+The vader shared memory BTL will fall back on another single-copy
+mechanism if one is available. This may result in lower performance.
+
+  Local host: %s
+  Errno:      %d (%s)
+#
+[knem get ABI fail]
+WARNING: Open MPI failed to retrieve the ABI version from the
+/dev/knem device due to a local error.  This usually indicates an
+error in your knem installation; please check with your system
+administrator, or set the btl_vader_single_copy_mechanism MCA variable
+to none to silence this warning and run without knem support.
+
+The vader shared memory BTL will fall back on another single-copy
+mechanism if one is available. This may result in lower performance.
+
+  Local host: %s
+  Errno:      %d (%s)
+#
+[knem ABI mismatch]
+WARNING: Open MPI was compiled with support for one version of the
+knem kernel module, but it discovered a different version running in
+/dev/knem. Open MPI needs to be installed with support for the same
+version of knem as is in the running Linux kernel. Please check with
+your system administrator, or set the btl_vader_single_copy_mechanism
+MCA variable to none to silence this warning and run without knem
+support.
+
+The vader shared memory BTL will fall back on another single-copy
+mechanism if one is available. This may result in lower performance.
+
+  Local host:              %s
+  Open MPI's knem version: 0x%x
+  /dev/knem's version:     0x%x
+#
+[knem mmap fail]
+Open MPI failed to map support from the knem Linux kernel module; this
+shouldn't happen. Please check with your system administrator, or set
+the btl_vader_single_copy_mechanism MCA variable to none to silence
+this warning and run without knem support.
+
+The vader shared memory BTL will fall back on another single-copy
+mechanism if one is available. This may result in lower performance.
+
+  Local host:  %s
+  System call: mmap()
+  Errno:       %d (%s)
+#
+[knem init error]
+Open MPI encountered an error during the knem initialization. Please
+check with your system administrator, or set the
+btl_vader_single_copy_mechanism MCA variable to none to silence this
+warning and run without knem support.
+
+The vader shared memory BTL will fall back on another single-copy
+mechanism if one is available. This may result in lower performance.
+
+  Local host:  %s
+  System call: %s
+  Errno:       %d (%s)
+#
+[knem requested but not available]
+WARNING: Linux kernel knem support was requested via the
+btl_vader_single_copy_mechanism MCA parameter, but Knem support was either not
+compiled into this Open MPI installation, or Knem support was unable
+to be activated in this process.
+
+The vader BTL will fall back on another single-copy mechanism if one
+is available. This may result in lower performance.
+
+  Local host: %s
+#
+[cma-permission-denied]
+WARNING: Linux kernel CMA support was requested via the
+btl_vader_single_copy_mechanism MCA variable, but CMA support is
+not available due to restrictive ptrace settings.
+
+The vader shared memory BTL will fall back on another single-copy
+mechanism if one is available. This may result in lower performance.
+
+  Local host: %s
+#
+[xpmem-make-failed]
+WARNING: Could not generate an xpmem segment id for this process'
+address space.
+
+The vader shared memory BTL will fall back on another single-copy
+mechanism if one is available. This may result in lower performance.
+
+  Local host: %s
+  Error code: %d (%s)

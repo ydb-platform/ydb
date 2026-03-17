@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+
+package yandex.cloud.datasphere.v2;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v2;datasphere";

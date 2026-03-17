@@ -1,0 +1,48 @@
+<!-- 
+
+     File isoamsc.ent produced by the dsssl script ent.dsl
+     from input data in unicode.xml.
+
+     Please report any errors to 
+     David Carlisle <davidc@nag.co.uk>.
+
+     The numeric character values assigned to each entity
+     (should) match either official Unicode assignments
+     or assignments in the STIX proposal for characters
+     for Mathematics.
+
+     The STIX assignments are temporary and will change if
+     the proposal or some variant of it is adopted by the
+     Unicode Consortium.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1991
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+-->
+
+<!ENTITY dlcorn     "&#8990;"  ><!--U231E /llcorner O: lower left corner -->
+<!ENTITY drcorn     "&#8991;"  ><!--U231F /lrcorner C: lower right corner -->
+<!ENTITY gtlPar     "&#58006;" ><!--UE296 dbl left parenthesis, greater -->
+<!ENTITY langd      "&#58007;" ><!--UE297 left angle, dot -->
+<!ENTITY lbrke      "&#58009;" ><!--UE299 left bracket, equal -->
+<!ENTITY lbrksld    "&#58013;" ><!--UE29D left bracket, solidus bottom corner -->
+<!ENTITY lbrkslu    "&#58011;" ><!--UE29B left bracket, solidus top corner -->
+<!ENTITY lceil      "&#8968;"  ><!--U2308 /lceil O: left ceiling -->
+<!ENTITY lfloor     "&#8970;"  ><!--U230A /lfloor O: left floor -->
+<!ENTITY lmoust     "&#58004;" ><!--UE294 /lmoustache -->
+<!ENTITY lparlt     "&#58002;" ><!--UE292 O: left parenthesis, lt -->
+<!ENTITY ltrPar     "&#58005;" ><!--UE295 dbl right parenthesis, less -->
+<!ENTITY rangd      "&#58008;" ><!--UE298 right angle, dot -->
+<!ENTITY rbrke      "&#58010;" ><!--UE29A right bracket, equal -->
+<!ENTITY rbrksld    "&#58012;" ><!--UE29C right bracket, solidus bottom corner -->
+<!ENTITY rbrkslu    "&#58014;" ><!--UE29E right bracket, solidus top corner -->
+<!ENTITY rceil      "&#8969;"  ><!--U2309 /rceil C: right ceiling -->
+<!ENTITY rfloor     "&#8971;"  ><!--U230B /rfloor C: right floor -->
+<!ENTITY rmoust     "&#58003;" ><!--UE293 /rmoustache -->
+<!ENTITY rpargt     "&#58001;" ><!--UE291 C: right paren, gt -->
+<!ENTITY ulcorn     "&#8988;"  ><!--U231C /ulcorner O: upper left corner -->
+<!ENTITY urcorn     "&#8989;"  ><!--U231D /urcorner C: upper right corner -->

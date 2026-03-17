@@ -1,0 +1,15 @@
+# EFAS climatology simulation forced with observations
+# Water Balance
+
+# ECC-701
+alias mars.step = endStep;
+
+alias mars.date  = dateOfModelVersion;
+alias mars.time  = dataTime;
+alias mars.hdate = dataDate;
+
+alias mars.origin = inputOriginatingCentre;
+
+# We need this because 'postProcessing' is defined later
+meta efas_model sprintf("%s", postProcessing) : no_copy;
+alias mars.model = efas_model;

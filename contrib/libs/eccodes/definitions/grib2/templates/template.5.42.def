@@ -1,0 +1,25 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.42, Grid point data - CCSDS recommended lossless compression
+
+include "grib2/templates/template.5.packing.def"
+include "grib2/templates/template.5.original_values.def"
+
+unsigned[1] ccsdsFlags : dump;
+alias ccsdsCompressionOptionsMask=ccsdsFlags;
+
+flagbit AEC_DATA_SIGNED_OPTION_MASK(ccsdsFlags,0) = 0;
+
+# AEC_DATA_3BYTE_OPTION_MASK was switched on in order to allow data stored
+# with 17 <=bitsPerValue<= 24 to be stored in 3 rather than 4 bytes.
+# This eliminates discretization errors that were occurring when it was off.
+flagbit AEC_DATA_3BYTE_OPTION_MASK(ccsdsFlags,1) = 1;
+
+flagbit AEC_DATA_MSB_OPTION_MASK(ccsdsFlags,2)        = 1;
+flagbit AEC_DATA_PREPROCESS_OPTION_MASK(ccsdsFlags,3) = 1;
+flagbit AEC_RESTRICTED_OPTION_MASK(ccsdsFlags,4)      = 0;
+flagbit AEC_PAD_RSI_OPTION_MASK(ccsdsFlags,5)         = 0;
+
+unsigned[1] ccsdsBlockSize = 32 : dump;
+unsigned[2] ccsdsRsi = 128 : dump;
+alias referenceSampleInterval=ccsdsRsi;

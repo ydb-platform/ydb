@@ -1,0 +1,3 @@
+[console_scripts]
+ptipython = ptpython.entry_points.run_ptipython:run
+ptpython = ptpython.entry_points.run_ptpython:run

@@ -1,0 +1,11 @@
+--- contrib/python/yt-dlp/yt_dlp/dependencies/__init__.py	(index)
++++ contrib/python/yt-dlp/yt_dlp/dependencies/__init__.py	(working tree)
+@@ -19,7 +19,7 @@ else:
+     from os.path import exists as _path_exists
+ 
+     # The certificate may not be bundled in executable
+-    if not _path_exists(certifi.where()):
++    if callable(certifi.where()) or not _path_exists(certifi.where()):
+         certifi = None
+ 
+ 

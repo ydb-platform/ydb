@@ -1,0 +1,4 @@
+requirements:
+  - aiohttp
+  - tornado
+  - pymongo: contrib/deprecated/python/pymongo

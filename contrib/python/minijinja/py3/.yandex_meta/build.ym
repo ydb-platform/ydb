@@ -1,0 +1,14 @@
+{% extends '//builtin/pypi.ym' %}
+
+{% block pypi_package %}
+minijinja
+{% endblock %}
+
+{% block current_version %}2.16.0{% endblock %}
+
+{% block original_yaml %}
+{% include 'yamaker.yaml' %}
+{% endblock %}
+
+{% block patch_source %}
+{% endblock %}

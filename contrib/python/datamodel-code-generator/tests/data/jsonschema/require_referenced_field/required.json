@@ -1,0 +1,12 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "test",
+    "description": "test",
+    "type": "object",
+    "allOf": [
+      {
+        "$ref": "referenced.json"
+      }
+    ],
+    "required" : ["some_optional_property", "some_optional_typed_property"]
+  }

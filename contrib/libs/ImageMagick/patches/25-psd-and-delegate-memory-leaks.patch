@@ -1,0 +1,29 @@
+--- a/coders/psd.c
++++ b/coders/psd.c
+@@ -1916,8 +1916,11 @@ static MagickBooleanType ReadPSDLayersInternal(Image *image,
+               blob_size = GetBlobSize(image);
+               offset = TellBlob(image);
+               if (blob_size > 0 && (length >= blob_size || length+offset >= blob_size))
+-                  ThrowBinaryException(CorruptImageError,
+-                    "ImproperImageHeader",image->filename);
++                  {
++                    layer_info=DestroyLayerInfo(layer_info,number_layers);
++                    ThrowBinaryException(CorruptImageError,
++                      "ImproperImageHeader",image->filename);
++                  }
+ 
+               if (length > blob_size)
+               {
+@@ -2318,8 +2321,11 @@
+          Skip the rest of the layer and mask information.
+       */
+       MagickSizeType blob_size = GetBlobSize(image);
+-      if (blob_size > 0 && offset+length >= blob_size)
++      if (blob_size > 0 && offset+length >= blob_size) {
++          if (profile != (StringInfo *) NULL)
++            profile=DestroyStringInfo(profile);
+           ThrowReaderException(CorruptImageError,"ImproperImageHeader");
++      }
+       (void) SeekBlob(image,offset+length,SEEK_SET);
+     }
+   /*

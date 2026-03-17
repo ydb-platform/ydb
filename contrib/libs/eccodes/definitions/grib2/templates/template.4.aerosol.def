@@ -1,0 +1,9 @@
+# (C) Copyright 2005- ECMWF.
+
+# Aerosol type - now replaced by constituent type
+# Note: Code tables 4.230 and 4.233 are identical
+codetable[2] constituentType ('4.233.table',masterDir,localDir) : dump;
+meta constituentTypeName codetable_title(constituentType);
+
+alias aerosolType = constituentType;
+alias aerosolTypeName = constituentTypeName;

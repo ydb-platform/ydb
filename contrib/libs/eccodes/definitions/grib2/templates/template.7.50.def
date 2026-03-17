@@ -1,0 +1,36 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.50, Spectral data - simple packing
+
+transient numberOfValues = ( J + 1 ) * ( J + 2 ) : no_copy ;
+transient numberOfPackedValues = numberOfValues - 1 : no_copy;
+
+transient numberOfValues = ( J + 1 ) * ( J + 2 ) : no_copy ;
+transient numberOfPackedValues = numberOfValues - 1 : no_copy;
+
+meta codedValues data_g2simple_packing(
+    section7Length,
+    offsetBeforeData,
+    offsetSection7,
+    unitsFactor,
+    unitsBias,
+    changingPrecision,
+    numberOfPackedValues,
+    bitsPerValue,
+    referenceValue,
+    binaryScaleFactor,
+    decimalScaleFactor,
+    optimizeScaleFactor) : read_only;
+
+meta values data_g2shsimple_packing(
+    codedValues,
+    realPartOf00,
+    numberOfValues,
+    numberOfDataPoints);
+
+meta packingError simple_packing_error(bitsPerValue,binaryScaleFactor,decimalScaleFactor,referenceValue,ieee) : no_copy;
+meta unpackedError simple_packing_error(zero,binaryScaleFactor,decimalScaleFactor,referenceValue,ieee) : no_copy;
+
+alias x.packedValues = values;
+
+template statistics "common/statistics_spectral.def";

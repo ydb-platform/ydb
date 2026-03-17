@@ -1,0 +1,14 @@
+--- contrib/python/Parsley/py2/ometa/vm_builder.py	(index)
++++ contrib/python/Parsley/py2/ometa/vm_builder.py	(working tree)
+@@ -1,4 +1,5 @@
+ import os
++import pkgutil
+ try:
+     from StringIO import StringIO
+ except ImportError:
+@@ -8,1 +11,1 @@ from terml.nodes import Term, coerceToTerm, termMaker as t
+-    Compiler = TreeTransformerGrammar.makeGrammar(open(path).read(),
++    Compiler = TreeTransformerGrammar.makeGrammar(pkgutil.get_data(__package__, 'vm.parsley'),
+@@ -22,1 +32,1 @@ def bytecodeToPython(expr):
+-    Emitter = TreeTransformerGrammar.makeGrammar(open("ometa/vm_emit.parsley").read(),
++    Emitter = TreeTransformerGrammar.makeGrammar(pkgutil.get_data(__package__, 'vm_emit.parsley'),

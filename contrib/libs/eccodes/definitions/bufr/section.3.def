@@ -1,0 +1,132 @@
+# (C) Copyright 2005- ECMWF.
+
+constant defaultSequence=0;
+constant tablesMasterDir="bufr/tables/[masterTableNumber]/wmo/[masterTablesVersionNumber]" : hidden;
+if (masterTablesVersionNumber == 19) {
+  # See SUP-2302: We need this exception for EUMETSAT local tables, because there are conflicting elements in their table version 1 when
+  # used in combination with different WMO tables versions. This is associated with the way BUFRDC manages the tables that
+  # are files with masterTablesVersionNumber and localTablesVersionNumber in the name.
+  # ecCodes doesn't associate a local version number with a particular master table version number.
+
+  # EUMETSAT use a combination of masterTablesVersionNumber and localTablesVersionNumber
+  # to version the tables. This is a problem because they reuse codes in the different versions.
+
+  # They can have version 19-1 ( masterTablesVersionNumber=19, localTablesVersionNumber=1) and also 25-1 and
+  # in the two tables they may reuse an element changing width, reference, scale and meaning.
+
+  # The correct way of doing this would be to have two different tables localTablesVersionNumber=1 and localTablesVersionNumber=2
+  # with a different use of their own descriptors. Local tables should be managed by the owner with different version numbers.
+  # They rely on the fact that the two versions of the tables are used in combination with different master tables.
+  # This is not always true.
+  # Hence this 'if' statement to solve the conflict of tables.
+
+  constant tablesLocalDir="bufr/tables/[masterTableNumber]/local/[masterTablesVersionNumber]-[localTablesVersionNumber]/[bufrHeaderCentre:l]/[bufrHeaderSubCentre]" : hidden;
+} else {
+  constant tablesLocalDir="bufr/tables/[masterTableNumber]/local/[localTablesVersionNumber]/[bufrHeaderCentre:l]/[bufrHeaderSubCentre]" : hidden;
+}
+constant rootTablesDir="bufr/tables" : hidden;
+
+#meta clearTables bufr_clear_tables() = 0 : hidden,no_copy;
+
+#when (changed(tablesMasterDir)) { set clearTables=1;}
+#when (changed(tablesLocalDir)) { set clearTables=1;}
+
+# we should implement some table version dependency
+#constant templatesMasterDir="bufr/templates/[masterTableNumber]/[masterTablesVersionNumber]";
+#constant templatesLocalDir="bufr/templates/local/[masterTableNumber]/[bufrHeaderCentre:l]/[localTablesVersionNumber]";
+constant templatesMasterDir="bufr/templates";
+constant templatesLocalDir="bufr/templates/local";
+
+transient tableNumber=0;
+#codetable[4] codeTablesMaster '[tablesMasterDir]/codetables/[tableNumber].table' : string_type,transient;
+#codetable[4] codeTablesLocal '[tablesLocalDir]/codetables/[tableNumber].table' : string_type,transient;
+
+hash_array sequences (defaultSequence,"sequence.def",tablesMasterDir,tablesLocalDir): long_type,no_copy;
+#smart_table codeFlags ("codeFlag.def",tablesMasterDir,tablesLocalDir,...);
+
+position offsetSection3;
+section_length[3] section3Length = 9 ;
+unsigned[1]     reservedSection3 = 0;
+unsigned[2]     numberOfSubsets : dump;
+alias ls.numberOfSubsets=numberOfSubsets;
+
+if (section2Present && bufrHeaderCentre == 98 && section2Length == 52) {
+    if ( rdbType == 2 || rdbType == 3 || rdbType == 8 || rdbType == 12 || rdbType == 30 ) {
+        transient isSatelliteType=1;
+    } else {
+        transient isSatelliteType=0;
+    }
+    if (isSatelliteType || numberOfSubsets>1) {
+        constant isSatellite=1;
+    } else {
+        constant isSatellite=0;
+    }
+    alias rdb.isSatellite=isSatellite;
+    if (isSatellite) {
+        meta localLongitude1 bits(keyData,40,26,-18000000,100000) : dump,no_copy;
+        meta localLatitude1 bits(keyData,72,25,-9000000,100000) : dump,no_copy;
+        meta localLongitude2 bits(keyMore,0,26,-18000000,100000) : dump,no_copy;
+        meta localLatitude2 bits(keyMore,32,25,-9000000,100000) : dump,no_copy;
+
+        # This rule is taken from BUFRDC. See bufrdc_wmo/buukey.F
+        # See ECC-686
+        # and https://confluence.ecmwf.int/pages/viewpage.action?pageId=24316441
+        if (oldSubtype == 255 || numberOfSubsets > 255 ||
+            ( oldSubtype >= 121 && oldSubtype <= 130 ) ||
+            oldSubtype == 31) {
+            meta ls.localNumberOfObservations bits(keySat,0,16) : dump,long_type,no_copy;
+            meta ls.satelliteID bits(keySat,16,16) : dump,long_type,no_copy;
+        } else {
+            meta ls.localNumberOfObservations bits(keySat,0,8) : dump,long_type,no_copy;
+            meta ls.satelliteID bits(keySat,8,16) : dump,long_type,no_copy;
+        }
+    } else {
+        meta ls.localLatitude bits(keyData,72,25,-9000000,100000) : dump,no_copy;
+        meta ls.localLongitude bits(keyData,40,26,-18000000,100000) : dump,no_copy;
+        meta ident trim(keyMore,1,1): dump, no_copy; # remove whitespaces left and right
+        alias mars.ident = ident : string_type, no_copy;
+    }
+}
+
+flags[1] section3Flags 'bufr/section3_flags.table';
+flagbit observedData(section3Flags,7) : dump,no_copy;
+flagbit compressedData(section3Flags,6) : dump,no_copy;
+position offsetDescriptors;
+
+transient createNewData=1;
+meta numberOfUnexpandedDescriptors   evaluate( (section3Length - 7) / 2 ) : no_copy;
+
+meta unexpandedDescriptorsEncoded raw(totalLength,section3Length,7) : hidden;
+meta unexpandedDescriptors unexpanded_descriptors(unexpandedDescriptorsEncoded,createNewData) :dump,no_copy;
+
+concept bufrTemplate (unknown,"BufrTemplate.def",templatesMasterDir,templatesLocalDir) : no_copy;
+alias BufrTemplate=bufrTemplate;
+
+meta elementsTable bufr_elements_table("element.table",tablesMasterDir,tablesLocalDir) : hidden,no_copy; 
+
+meta expandedCodes      expanded_descriptors(elementsTable,expandedCodes,0,unexpandedDescriptors,sequences) : no_copy; 
+alias expandedDescriptors=expandedCodes;
+#meta expandedReferences expanded_descriptors(elemetsTable,expandedCodes,2);
+#meta expandedWidths     expanded_descriptors(elemetsTable,expandedCodes,3);
+#meta expandedType       expanded_descriptors(elemetsTable,expandedCodes,4);
+
+meta bufrdcExpandedDescriptors bufrdc_expanded_descriptors(expandedCodes) : no_copy;
+
+#smart_table NAME (VALUES,FILE_NAME,MASTER_DIRECTORY,LOCAL_DIRECTORY,WIDTH_OF_CODE_IN_BITS,EXTRA_DIRECTORY,EXTRA_FILE_NAME);
+#Note: The WIDTH_OF_CODE_IN_BITS has to be big enough so 2^width > the highest BUFR descriptor code
+smart_table expandedOriginalCodes (expandedCodes,"element.table",tablesMasterDir,tablesLocalDir,18,rootTablesDir,"operators.table") :no_copy;
+meta expandedAbbreviations        smart_table_column(expandedOriginalCodes,0,1) : string_type,no_copy;
+meta expandedTypes                smart_table_column(expandedOriginalCodes,1,0) : string_type,no_copy;
+meta expandedNames                smart_table_column(expandedOriginalCodes,2,0) : string_type,no_copy;
+meta expandedUnits                smart_table_column(expandedOriginalCodes,3,0) : string_type,no_copy;
+meta expandedOriginalScales       smart_table_column(expandedOriginalCodes,4,0) : long_type,no_copy;
+meta expandedOriginalReferences   smart_table_column(expandedOriginalCodes,5,0) : long_type,no_copy;
+meta expandedOriginalWidths       smart_table_column(expandedOriginalCodes,6,0) : long_type,no_copy;
+meta expandedCrex_units           smart_table_column(expandedOriginalCodes,7,0) : long_type,no_copy;
+meta expandedCrex_scales          smart_table_column(expandedOriginalCodes,8,0) : long_type,no_copy;
+meta expandedCrex_widths          smart_table_column(expandedOriginalCodes,9,0) : long_type,no_copy;
+
+position endDescriptors;
+section_padding section3Padding;
+meta lengthDescriptors evaluate(endDescriptors-offsetDescriptors);
+meta md5Structure md5(offsetDescriptors,lengthDescriptors);

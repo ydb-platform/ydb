@@ -1,0 +1,11 @@
+{
+    "type": "object",
+    "additionalProperties": {
+        "$ref": "#/definitions/a-ref"
+    },
+    "definitions": {
+        "a-ref": {
+            "type": "string"
+        }
+    }
+}

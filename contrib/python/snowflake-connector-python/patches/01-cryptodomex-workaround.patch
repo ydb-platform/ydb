@@ -1,0 +1,19 @@
+--- contrib/python/snowflake-connector-python/snowflake/connector/encryption_util.py	(index)
++++ contrib/python/snowflake-connector-python/snowflake/connector/encryption_util.py	(working tree)
+@@ -12,1 +12,1 @@ import tempfile
+-from Cryptodome.Cipher import AES
++from Crypto.Cipher import AES
+--- contrib/python/snowflake-connector-python/snowflake/connector/file_util.py	(index)
++++ contrib/python/snowflake-connector-python/snowflake/connector/file_util.py	(working tree)
+@@ -13,1 +13,1 @@ from io import BytesIO
+-from Cryptodome.Hash import SHA256
++from Crypto.Hash import SHA256
+--- contrib/python/snowflake-connector-python/snowflake/connector/ocsp_asn1crypto.py	(index)
++++ contrib/python/snowflake-connector-python/snowflake/connector/ocsp_asn1crypto.py	(working tree)
+@@ -27,3 +27,3 @@ from asn1crypto.ocsp import (
+-from Cryptodome.Hash import SHA1, SHA256, SHA384, SHA512
+-from Cryptodome.PublicKey import RSA
+-from Cryptodome.Signature import PKCS1_v1_5
++from Crypto.Hash import SHA1, SHA256, SHA384, SHA512
++from Crypto.PublicKey import RSA
++from Crypto.Signature import PKCS1_v1_5

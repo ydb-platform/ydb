@@ -1,0 +1,6 @@
+--- contrib/python/tinycss2/tests/test_tinycss2.py	(index)
++++ contrib/python/tinycss2/tests/test_tinycss2.py	(working tree)
+@@ -75,1 +75,2 @@ def to_json():
+-    path = Path(__file__).parent / 'css-parsing-tests' / filename
++    import yatest.common as yc
++    path = Path(yc.source_path(__file__)).parent / 'css-parsing-tests' / filename

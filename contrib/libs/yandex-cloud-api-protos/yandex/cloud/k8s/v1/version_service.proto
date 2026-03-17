@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package yandex.cloud.k8s.v1;
+
+import "google/api/annotations.proto";
+
+import "yandex/cloud/k8s/v1/cluster.proto";
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1;k8s";
+option java_package = "yandex.cloud.api.k8s.v1";
+
+// A set of methods for managing Kubernetes versions.
+service VersionService {
+  // Retrieves the list of versions in the specified release channel.
+  rpc List (ListVersionsRequest) returns (ListVersionsResponse) {
+    option (google.api.http) = { get: "/managed-kubernetes/v1/versions" };
+  }
+}
+
+message ListVersionsRequest {
+}
+
+message ListVersionsResponse {
+  // Versions available in the specified release channel.
+  repeated AvailableVersions available_versions = 1;
+}
+
+message AvailableVersions {
+  // Release channel: `RAPID`, `REGULAR` or `STABLE`. For more details see [documentation](/docs/managed-kubernetes/concepts/release-channels-and-updates).
+  ReleaseChannel release_channel = 1;
+
+  // Version of Kubernetes components.
+  repeated string versions = 2;
+}

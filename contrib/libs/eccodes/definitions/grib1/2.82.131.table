@@ -1,0 +1,29 @@
+11 sst_lake SST_LAKE Sea surface temperature (LAKE) K
+49 ecurr ECURR Current east m/s
+50 ncurr NCURR Current north m/s
+66 sd_pr SD_PR Snowdepth in Probe m
+91 iceconc_lake ICECONC_LAKE Ice concentration (LAKE) fraction
+92 iceth_pr ICETH_PR Ice thickness Probe-lake m
+150 t_abc T_ABC Temperature ABC-lake K
+151 t_c T_C Temperature C-lake K
+152 t_d T_D Temperature D-lake K
+153 t_e T_E Temperature E-lake K
+160 ar_abc AR_ABC Area ABC-lake km2
+161 dp_abc DP_ABC Depth ABC-lake m
+162 c C C-lakes amount
+163 d D D-lakes amount
+164 e E E-lakes amount
+170 iceth_abc ICETH_ABC Ice thickness ABC-lake m
+171 iceth_c ICETH_C Ice thickness C-lake m
+172 iceth_d ICETH_D Ice thickness D-lake m
+173 iceth_e ICETH_E Ice thickness E-lake m
+180 sst_t SST_T Sea surface temperature (T) K
+183 iceconc_i ICECONC_I Ice concentration (I) fraction
+196 fl FL Fraction lake fraction
+241 bit_pr BIT_PR Black ice thickness in Probe m
+244 244 None Vallad istjocklek i Probe m
+245 intice_pr INTICE_PR Internal ice concentration in Probe fraction
+246 icefr_pr ICEFR_PR Isfrontlaege i Probe m
+250 heat_pr HEAT_PR Heat in Probe Joule
+251 tke TKE Turbulent Kintetic Energy J/kg
+252 tkediss TKEDISS Dissipation rate Turbulent Kinetic Energy W/kg

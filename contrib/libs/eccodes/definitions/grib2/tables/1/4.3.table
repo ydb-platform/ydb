@@ -1,0 +1,10 @@
+0 0  Analysis
+1 1  Initialization
+2 2  Forecast
+3 3  Bias corrected forecast
+4 4  Ensemble forecast
+5 5  Probability forecast
+6 6  Forecast error
+7 7  Analysis error
+8 8  Observation
+255 255  Missing

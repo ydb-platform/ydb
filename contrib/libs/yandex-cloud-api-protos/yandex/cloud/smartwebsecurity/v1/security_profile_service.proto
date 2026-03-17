@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package yandex.cloud.smartwebsecurity.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/smartwebsecurity/v1/security_profile.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/smartwebsecurity/v1;smartwebsecurity";
+option java_package = "yandex.cloud.api.smartwebsecurity.v1";
+
+// A set of methods for managing SecurityProfile resources.
+service SecurityProfileService {
+
+  // Returns the specified SecurityProfile resource.
+  rpc Get(GetSecurityProfileRequest) returns (SecurityProfile) {
+    option (google.api.http) = {get: "/smartwebsecurity/v1/securityProfiles/{security_profile_id}"};
+  }
+
+  // Retrieves the list of SecurityProfile resources in the specified folder.
+  rpc List(ListSecurityProfilesRequest) returns (ListSecurityProfilesResponse) {
+    option (google.api.http) = {get: "/smartwebsecurity/v1/securityProfiles"};
+  }
+
+  // Creates a security profile in the specified folder using the data specified in the request.
+  rpc Create(CreateSecurityProfileRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/smartwebsecurity/v1/securityProfiles" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateSecurityProfileMetadata"
+      response: "SecurityProfile"
+    };
+  }
+
+  // Updates the specified security profile.
+  rpc Update(UpdateSecurityProfileRequest) returns (operation.Operation) {
+    option (google.api.http) = {patch: "/smartwebsecurity/v1/securityProfiles/{security_profile_id}" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateSecurityProfileMetadata"
+      response: "SecurityProfile"
+    };
+  }
+
+  // Deletes the specified security profile.
+  rpc Delete(DeleteSecurityProfileRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/smartwebsecurity/v1/securityProfiles/{security_profile_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteSecurityProfileMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetSecurityProfileRequest {
+  // ID of the SecurityProfile resource to return.
+  string security_profile_id = 1 [(required) = true];
+}
+
+message ListSecurityProfilesRequest {
+  // ID of the folder that the security profile belongs to.
+  // Currently page_size, page_token, filter and order_by are not supported and List method will return all security profiles in the folder.
+  string folder_id = 1 [(required) = true];
+}
+
+message ListSecurityProfilesResponse {
+  // List of SecurityProfile resources.
+  // Currently next_page_token is not supported and List method will return all security profiles in the folder.
+  repeated SecurityProfile security_profiles = 1;
+}
+
+message CreateSecurityProfileRequest {
+  // ID of the folder to create a security profile in.
+  string folder_id = 1 [(required) = true];
+
+  // Labels as `` key:value `` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 2;
+
+  // Name of the security profile. The name is unique within the folder. 1-50 characters long.
+  string name = 3;
+
+  // Optional description of the security profile.
+  string description = 4;
+
+  // Action to perform if none of rules matched.
+  SecurityProfile.DefaultAction default_action = 5;
+
+  // List of security rules.
+  repeated SecurityRule security_rules = 6;
+
+  // Captcha ID to use with this security profile. Set empty to use default.
+  string captcha_id = 7;
+
+  // Advanced rate limiter profile ID to use with this security profile. Set empty to use default.
+  string advanced_rate_limiter_profile_id = 8;
+
+  // Parameters for request body analyzer.
+  SecurityProfile.AnalyzeRequestBody analyze_request_body = 9;
+}
+
+message CreateSecurityProfileMetadata {
+  // ID of the security profile that is being created.
+  string security_profile_id = 1;
+}
+
+message UpdateSecurityProfileRequest {
+  // ID of the security profile to update.
+  string security_profile_id = 1 [(required) = true];
+
+  // Field mask that specifies which fields of the SecurityProfile resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Labels as `` key:value `` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 3;
+
+  // Name of the security profile. The name is unique within the folder. 1-50 characters long.
+  string name = 4;
+
+  // Optional description of the security profile.
+  string description = 5;
+
+  // Action to perform if none of rules matched.
+  SecurityProfile.DefaultAction default_action = 6;
+
+  // List of security rules.
+  repeated SecurityRule security_rules = 7;
+
+  // Captcha ID to use with this security profile. Set empty to use default.
+  string captcha_id = 8;
+
+  // Advanced rate limiter profile ID to use with this security profile. Set empty to use default.
+  string advanced_rate_limiter_profile_id = 9;
+
+  // Parameters for request body analyzer.
+  SecurityProfile.AnalyzeRequestBody analyze_request_body = 10;
+}
+
+message UpdateSecurityProfileMetadata {
+  // ID of the SecurityProfile resource that is being updated.
+  string security_profile_id = 1;
+}
+
+message DeleteSecurityProfileRequest {
+  // ID of the security profile to delete.
+  string security_profile_id = 1 [(required) = true];
+}
+
+message DeleteSecurityProfileMetadata {
+  // ID of the SecurityProfile resource that is being deleted.
+  string security_profile_id = 1;
+}

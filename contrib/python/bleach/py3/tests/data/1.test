@@ -1,0 +1,3 @@
+>"><script>alert("XSS")</script>&
+--
+&gt;"&gt;&lt;script&gt;alert("XSS")&lt;/script&gt;&amp;

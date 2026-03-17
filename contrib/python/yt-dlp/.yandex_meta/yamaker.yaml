@@ -1,0 +1,5 @@
+requirements:
+  # mutagen is GPL-licensed and thus was excluded from the default requirements.
+  # it is used by embedthumbnail feature so it may not work.
+  - mutagen:
+

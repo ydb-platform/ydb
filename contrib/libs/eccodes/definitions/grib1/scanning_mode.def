@@ -1,0 +1,43 @@
+constant isGridded = true;
+
+# Scanning mode
+flags[1] scanningMode 'grib1/8.table' : edition_specific,no_copy;
+
+# Not flagbit numbers 7 to 0, while wmo is 1 to 8
+flagbit iScansNegatively(scanningMode,7)  : dump;
+flagbit jScansPositively(scanningMode,6)  : dump;
+flagbit jPointsAreConsecutive(scanningMode,5)  : dump;
+constant alternativeRowScanning=0 : dump;
+
+transient iScansPositively = !iScansNegatively : constraint, read_only;
+transient jScansNegatively = !jScansPositively : constraint, read_only;
+
+alias geography.iScansNegatively=iScansNegatively;
+alias geography.jScansPositively=jScansPositively;
+alias geography.jPointsAreConsecutive=jPointsAreConsecutive;
+
+flagbit scanningMode4(scanningMode,4) = 0: read_only;
+flagbit scanningMode5(scanningMode,3) = 0: read_only;
+flagbit scanningMode6(scanningMode,2) = 0: read_only;
+flagbit scanningMode7(scanningMode,1) = 0: read_only;
+flagbit scanningMode8(scanningMode,0) = 0: read_only;
+
+meta swapScanningX change_scanning_direction( values,Ni,Nj,
+                 iScansNegatively,jScansPositively,
+                 xFirst,xLast,x) : edition_specific,hidden,no_copy;
+alias swapScanningLon = swapScanningX;
+
+meta swapScanningY change_scanning_direction( values,Ni,Nj,
+                 iScansNegatively,jScansPositively,
+                 yFirst,yLast,y) : edition_specific,hidden,no_copy;
+alias swapScanningLat = swapScanningY;
+
+transient swapScanningAlternativeRows = 0; # Not available in grib1
+
+if (jPointsAreConsecutive) {
+    alias numberOfRows=Ni;
+    alias numberOfColumns=Nj;
+} else {
+    alias numberOfRows=Nj;
+    alias numberOfColumns=Ni;
+}

@@ -1,0 +1,33 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "additionalProperties": false,
+    "description": "info object (section 5.1.3)",
+    "properties": {
+        "contact": {
+            "format": "email",
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "license": {
+            "type": "string"
+        },
+        "licenseUrl": {
+            "format": "uri",
+            "type": "string"
+        },
+        "termsOfServiceUrl": {
+            "format": "uri",
+            "type": "string"
+        },
+        "title": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "title",
+        "description"
+    ],
+    "type": "object"
+}

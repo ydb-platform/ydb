@@ -1,0 +1,10 @@
+--- a/include/geos/algorithm/LineIntersector.h    (index)
++++ b/include/geos/algorithm/LineIntersector.h    (working tree)
+@@ -81,6 +81,7 @@ public:
+         :
+         precisionModel(initialPrecisionModel),
+         result(0),
++        intPt{},
+         isProperVar(false)
+     {}
+ 

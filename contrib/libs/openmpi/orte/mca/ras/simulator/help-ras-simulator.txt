@@ -1,0 +1,33 @@
+# -*- text -*-
+#
+# Copyright (c) 2012 Cisco Systems, Inc.  All rights reserved.
+#
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+[no hwloc support for topofiles]
+The ras_simulator_topo_files MCA parameter was specified, but this
+Open MPI installation has no "hwloc" support, meaning that topo files
+cannot be used.
+
+Your job will now abort.
+#
+[hwloc API fail]
+An internal hwloc API call failed in the RAS simulator module.  This
+is unusual, and should likely be reported to the Open MPI developers.
+
+Your job will now abort.
+
+  File: %s
+  Line: %d
+  API:  %s
+#
+[hwloc failed to load xml]
+The RAS simulator module failed to load an XML topology file.  This
+usually means that the file is either invalid or does not exist.
+
+  Topo file: %s
+#

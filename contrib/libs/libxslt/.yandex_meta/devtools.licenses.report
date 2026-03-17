@@ -1,0 +1,132 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+IGNORE_FILES NEWS
+
+KEEP     Mit-Veillard-Variant 1d17653acef0ece203567b31819d603d
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: libxslt/trio.h at line 13, libxslt/triodef.h at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mit-veillard-variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-veillard-variant.LICENSE, https://raw.githubusercontent.com/GNOME/libxml2/4c2e7c651f6c2f0d1a74f350cbda95f7df3e7017/hash.c
+    Files with this license:
+        libxslt/trio.h [7:14]
+        libxslt/triodef.h [7:14]
+
+SKIP     Unknown              5b8492d2305940023465527cf5f375e6
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: libxslt/attributes.h at line 6, libxslt/documents.h at line 7, libxslt/extensions.h at line 6, libxslt/extra.h at line 6, libxslt/functions.h at line 5, libxslt/imports.h at line 6, libxslt/keys.h at line 5, libxslt/libxslt.h at line 5, libxslt/namespaces.h at line 6, libxslt/numbersInternals.h at line 5, libxslt/pattern.h at line 7, libxslt/preproc.h at line 6, libxslt/security.h at line 7, libxslt/templates.h at line 6, libxslt/transform.h at line 7, libxslt/variables.h at line 5, libxslt/win32config.h at line 5, libxslt/xslt.h at line 5, libxslt/xsltInternals.h at line 8, libxslt/xsltconfig.h at line 6, libxslt/xsltexports.h at line 5, libxslt/xsltlocale.h at line 6, libxslt/xsltutils.h at line 7
+    License text:
+         * Copy: See Copyright for the status of this software.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        libxslt/attributes.h [6:6]
+        libxslt/documents.h [7:7]
+        libxslt/extensions.h [6:6]
+        libxslt/extra.h [6:6]
+        libxslt/functions.h [5:5]
+        libxslt/imports.h [6:6]
+        libxslt/keys.h [5:5]
+        libxslt/libxslt.h [5:5]
+        libxslt/namespaces.h [6:6]
+        libxslt/numbersInternals.h [5:5]
+        libxslt/pattern.h [7:7]
+        libxslt/preproc.h [6:6]
+        libxslt/security.h [7:7]
+        libxslt/templates.h [6:6]
+        libxslt/transform.h [7:7]
+        libxslt/variables.h [5:5]
+        libxslt/win32config.h [5:5]
+        libxslt/xslt.h [5:5]
+        libxslt/xsltInternals.h [8:8]
+        libxslt/xsltconfig.h [6:6]
+        libxslt/xsltexports.h [5:5]
+        libxslt/xsltlocale.h [6:6]
+        libxslt/xsltutils.h [7:7]
+
+KEEP     X11-XConsortium-Veillard a43e40158f0ba2962fe82e382483cecc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-x11-xconsortium_veillard
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/x11-xconsortium_veillard.LICENSE
+    Files with this license:
+        Copyright [5:24]
+
+SKIP     X11                  c7327fce84448c5a3e1e1982fc605cf7
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: Copyright at line 46
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: X11
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/current/LICENSE5.html, https://spdx.org/licenses/X11
+    Files with this license:
+        Copyright [33:52]
+
+SKIP     Unknown              db4a32b2f76695e476e159b02d538062
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: libxslt/attributes.c at line 7, libxslt/attrvt.c at line 11, libxslt/documents.c at line 4, libxslt/extensions.c at line 7, libxslt/extra.c at line 8, libxslt/functions.c at line 7, libxslt/imports.c at line 7, libxslt/keys.c at line 7, libxslt/namespaces.c at line 7, libxslt/numbers.c at line 7, libxslt/pattern.c at line 7, libxslt/preproc.c at line 13, libxslt/security.c at line 4, libxslt/templates.c at line 7, libxslt/transform.c at line 14, libxslt/variables.c at line 7, libxslt/xslt.c at line 11, libxslt/xsltutils.c at line 7
+    License text:
+         * See Copyright for the status of this software.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        libxslt/attributes.c [7:7]
+        libxslt/attrvt.c [11:11]
+        libxslt/documents.c [4:4]
+        libxslt/extensions.c [7:7]
+        libxslt/extra.c [8:8]
+        libxslt/functions.c [7:7]
+        libxslt/imports.c [7:7]
+        libxslt/keys.c [7:7]
+        libxslt/namespaces.c [7:7]
+        libxslt/numbers.c [7:7]
+        libxslt/pattern.c [7:7]
+        libxslt/preproc.c [13:13]
+        libxslt/security.c [4:4]
+        libxslt/templates.c [7:7]
+        libxslt/transform.c [14:14]
+        libxslt/variables.c [7:7]
+        libxslt/xslt.c [11:11]
+        libxslt/xsltutils.c [7:7]

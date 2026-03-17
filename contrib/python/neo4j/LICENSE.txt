@@ -1,0 +1,6 @@
+Unless stated otherwise, this software is distributed under the terms of the Apache License 2.0.
+See the LICENSE.APACHE2.txt file for the full license text.
+
+Parts of this software is distributed under the terms of the Python Software Foundation License Version 2.
+See the LICENSE.PYTHON.txt file for the full license text.
+The pieces of code covered by the Python Software Foundation License Version 2 are marked as such.

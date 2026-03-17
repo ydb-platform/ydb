@@ -1,0 +1,7 @@
+# CODE TABLE 7, Resolution and Component Flags
+1 0 Direction increments not given
+1 1 Direction increments given
+2 0 Earth assumed spherical with radius = 6367.47 km
+2 1 Earth assumed oblate spheroid with size as determined by IAU in 1965: 6378.160 km, 6356.775 km, f = 1/297.0
+5 0 u and v components resolved relative to easterly and northerly directions
+5 1 u and v components resolved relative to the defined grid 

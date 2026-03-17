@@ -1,0 +1,92 @@
+[
+  {
+    "passwd": "5qflFfSWpOvQ",
+    "mode": "raw",
+    "dgst_len": 20,
+    "iters": 5,
+    "salt": "QIA9x2qmhRVmdRCU",
+    "pwhash": "3eb202f3e4b0e2c078031f724103ea526fe2a065",
+    "maxmem": 16384
+  },
+  {
+    "passwd": "pf1SMoxVb54r",
+    "mode": "raw",
+    "dgst_len": 26,
+    "iters": 4,
+    "salt": "NPBA55CsQp9wsWKy",
+    "pwhash": "b7173ea20f6eb6946d3044542fc75ef5dda0d9c94acf86d834ca",
+    "maxmem": 131072
+  },
+  {
+    "passwd": "bg9Laxjhrk8MUyhM",
+    "mode": "raw",
+    "dgst_len": 18,
+    "iters": 4,
+    "salt": "exKErRXWGdCDRSop",
+    "pwhash": "9c7957beb49f1c5e868d6a04f34d1da821f6",
+    "maxmem": 65536
+  },
+  {
+    "passwd": "n95X5vWQncMXlP",
+    "mode": "raw",
+    "dgst_len": 17,
+    "iters": 3,
+    "salt": "gxSD9VHiGF0oou1k",
+    "pwhash": "b605e0557e9f57455f246e474e93648595",
+    "maxmem": 32768
+  },
+  {
+    "passwd": "5G8iiXVYwI",
+    "mode": "raw",
+    "dgst_len": 29,
+    "iters": 4,
+    "salt": "GcjAUSZ4pLAZsDHL",
+    "pwhash": "5fa4d3b86c8ca981dbc3ea4cbbd015030bda8bd444d4039309e88b23c7",
+    "maxmem": 32768
+  },
+  {
+    "passwd": "cUu3ACKqAHnI54Eh",
+    "mode": "raw",
+    "dgst_len": 23,
+    "iters": 3,
+    "salt": "6H99IAjhJQ2WFgom",
+    "pwhash": "6202e1b58e65a658d1adcc0584fafd6373e565d6fd8348",
+    "maxmem": 32768
+  },
+  {
+    "passwd": "jBB3PBZ8v1H1aga",
+    "mode": "raw",
+    "dgst_len": 20,
+    "iters": 4,
+    "salt": "L3vcnvwJbLJTdvKx",
+    "pwhash": "f3d792b3edbf49441c269c22c2641e724cb21ef0",
+    "maxmem": 16384
+  },
+  {
+    "passwd": "WGA58n0DVW9FT",
+    "mode": "raw",
+    "dgst_len": 18,
+    "iters": 3,
+    "salt": "qN6Q3h3lzJtXcMkH",
+    "pwhash": "ec9dd7f5503cc5b74ab1fc8ac6cad426327f",
+    "maxmem": 65536
+  },
+  {
+    "passwd": "rxB2Op3fo17s6",
+    "mode": "raw",
+    "dgst_len": 27,
+    "iters": 5,
+    "salt": "xw9IrU6uf4E4hBo3",
+    "pwhash": "ffe9c857e686ab40f8758415acd6d3409acfe80d54bac24bcacfa3",
+    "maxmem": 65536
+  },
+  {
+    "passwd": "JyjdXkjHxGiGjg",
+    "mode": "raw",
+    "dgst_len": 30,
+    "iters": 5,
+    "salt": "rN0D8NoVbNBnlEex",
+    "pwhash": "fab6d8b5e1849c99f5261c15ff502b1bb245f8076efa5e01cbbdc1903512",
+    "maxmem": 32768
+  }
+]

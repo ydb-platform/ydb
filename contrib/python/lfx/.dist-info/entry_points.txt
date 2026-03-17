@@ -1,0 +1,2 @@
+[console_scripts]
+lfx = lfx.__main__:main

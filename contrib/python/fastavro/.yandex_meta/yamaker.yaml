@@ -1,0 +1,2 @@
+mark_as_cython_c:
+  - fastavro/*.pyx

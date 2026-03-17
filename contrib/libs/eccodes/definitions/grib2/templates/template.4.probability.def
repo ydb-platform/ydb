@@ -1,0 +1,20 @@
+# (C) Copyright 2005- ECMWF.
+
+unsigned[1] forecastProbabilityNumber : dump;
+
+unsigned[1] totalNumberOfForecastProbabilities : dump;
+
+codetable[1] probabilityType ('4.9.table',masterDir,localDir) : dump;
+meta probabilityTypeName codetable_title(probabilityType): read_only;
+
+signed[1] scaleFactorOfLowerLimit : can_be_missing,dump ;
+signed[4] scaledValueOfLowerLimit : can_be_missing,dump ;
+
+meta lowerLimit from_scale_factor_scaled_value(
+     scaleFactorOfLowerLimit, scaledValueOfLowerLimit): can_be_missing;
+
+signed[1] scaleFactorOfUpperLimit : can_be_missing,dump;
+signed[4] scaledValueOfUpperLimit : can_be_missing,dump;
+
+meta upperLimit from_scale_factor_scaled_value(
+     scaleFactorOfUpperLimit, scaledValueOfUpperLimit): can_be_missing;

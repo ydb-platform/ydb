@@ -1,0 +1,449 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# 
+# Translators:
+msgid ""
+msgstr ""
+"Project-Id-Version: django-filebrowser\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2013-11-30 18:48+0100\n"
+"PO-Revision-Date: 2014-06-24 23:47+0000\n"
+"Last-Translator: slack4u <slack4u@gmail.com>\n"
+"Language-Team: Japanese (Japan) (http://www.transifex.com/projects/p/django-filebrowser/language/ja_JP/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ja_JP\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: actions.py:53
+#, python-format
+msgid "Action applied successfully to '%s'"
+msgstr "\"%s\" にアクションが適用されました。"
+
+#: actions.py:59 forms.py:20
+msgid "Flip horizontal"
+msgstr "左右反転"
+
+#: actions.py:66 forms.py:21
+msgid "Flip vertical"
+msgstr "上下反転"
+
+#: actions.py:73 forms.py:22
+msgid "Rotate 90° CW"
+msgstr "90度回転（時計回り）"
+
+#: actions.py:80 forms.py:23
+msgid "Rotate 90° CCW"
+msgstr "90度回転（反時計回り）"
+
+#: actions.py:87 forms.py:24
+msgid "Rotate 180°"
+msgstr "180度回転"
+
+#: decorators.py:39
+msgid ""
+"Error finding Upload-Folder (site.storage.location + site.directory). Maybe "
+"it does not exist?"
+msgstr "アップロードフォルダ (site.storage.location + site.directory) が見つかりませんでした。フォルダが存在していないかもしれません。"
+
+#: decorators.py:41
+msgid "The requested Folder does not exist."
+msgstr "リクエストされたフォルダは存在しません。"
+
+#: decorators.py:55
+msgid "The requested File does not exist."
+msgstr "リクエストされたファイルは存在しません。"
+
+#: decorators.py:61
+msgid "You do not have permission to access this file!"
+msgstr "このファイルにアクセスする権限がありません。"
+
+#: fields.py:63
+#, python-format
+msgid "Extension %(ext)s is not allowed. Only %(allowed)s is allowed."
+msgstr "拡張子 \"%(ext)s\" は許可されていません。許可されている拡張子は \"%(allowed)s\" です。"
+
+#: forms.py:57 forms.py:82
+msgid "Name"
+msgstr "名前"
+
+#: forms.py:57 forms.py:69 forms.py:82 forms.py:101
+msgid "Only letters, numbers, underscores, spaces and hyphens are allowed."
+msgstr "半角英数字・アンダースコア・スペース・ハイフンのみ使用できます。"
+
+#: forms.py:72 forms.py:104
+msgid "The Folder already exists."
+msgstr "既にフォルダが存在しています。"
+
+#: forms.py:81
+msgid "Actions"
+msgstr "アクション"
+
+#: forms.py:106
+msgid "The File already exists."
+msgstr "既にファイルが存在しています。"
+
+#: settings.py:110 templates/filebrowser/include/tableheader.html:21
+#: templates/filebrowser/include/tableheader.html:22
+msgid "Folder"
+msgstr "フォルダ"
+
+#: settings.py:111
+msgid "Image"
+msgstr "画像"
+
+#: settings.py:112
+msgid "Video"
+msgstr "ビデオ"
+
+#: settings.py:113
+msgid "Document"
+msgstr "ドキュメント"
+
+#: settings.py:114
+msgid "Audio"
+msgstr "オーディオ"
+
+#: sites.py:348 templates/filebrowser/include/breadcrumbs.html:9
+#: templates/filebrowser/include/breadcrumbs.html:11
+msgid "FileBrowser"
+msgstr "FileBrowser"
+
+#: sites.py:369
+#, python-format
+msgid "The Folder %s was successfully created."
+msgstr "フォルダ \"%s\" を作成しました。"
+
+#: sites.py:374
+msgid "Permission denied."
+msgstr "権限がありません。"
+
+#: sites.py:376
+msgid "Error creating folder."
+msgstr "フォルダの作成中にエラーが発生しました。"
+
+#: sites.py:383 sites.py:386 templates/filebrowser/index.html:80
+msgid "New Folder"
+msgstr "新しいフォルダ"
+
+#: sites.py:396
+msgid "Select files to upload"
+msgstr "アップロードするファイルを選択"
+
+#: sites.py:399 templates/filebrowser/index.html:81
+msgid "Upload"
+msgstr "アップロード"
+
+#: sites.py:429 sites.py:432
+msgid "Confirm delete"
+msgstr "削除の確認"
+
+#: sites.py:448
+#, python-format
+msgid "Successfully deleted %s"
+msgstr "\"%s\" を削除しました。"
+
+#: sites.py:485
+msgid "Renaming was successful."
+msgstr "名前を変更しました。"
+
+#: sites.py:494
+msgid "Error."
+msgstr "エラーが発生しました。"
+
+#: widgets.py:17 widgets.py:50
+msgid "Currently"
+msgstr "現在"
+
+#: widgets.py:18 widgets.py:51
+#: templates/filebrowser/include/filelisting.html:131
+msgid "Change"
+msgstr "変更"
+
+#: widgets.py:19 widgets.py:52
+msgid "Clear"
+msgstr "クリア"
+
+#: templates/filebrowser/createdir.html:23
+#: templates/filebrowser/detail.html:48
+msgid "Please correct the following errors."
+msgstr "以下のエラーを修正してください。"
+
+#: templates/filebrowser/createdir.html:36
+#: templates/filebrowser/upload.html:147
+msgid ""
+"The Name will be normalized by converting or stripping all non-standard "
+"characters."
+msgstr "名前に含まれる標準的でない文字は変換されたり削除されて正規化されます。"
+
+#: templates/filebrowser/createdir.html:39
+#: templates/filebrowser/upload.html:150
+msgid ""
+"The Name will be converted to lowercase. Spaces will be replaced with "
+"underscores."
+msgstr "ファイル名は小文字に変換されます。スペースはアンダースコアに置き換えられます。"
+
+#: templates/filebrowser/createdir.html:50
+msgid "Submit"
+msgstr "保存"
+
+#: templates/filebrowser/custom_field.html:26
+#: templates/filebrowser/widgets/clearablefileinput.html:11
+#: templates/filebrowser/widgets/fileinput.html:11
+msgid "File not found"
+msgstr "ファイルが見つかりません"
+
+#: templates/filebrowser/delete_confirm.html:30
+#, python-format
+msgid ""
+"Are you sure you want to delete \"%(escaped_object)s\"? All of the following"
+" items will be deleted:"
+msgstr "\"%(escaped_object)s\" を削除してもよろしいですか？以下の項目すべてが削除されます。"
+
+#: templates/filebrowser/delete_confirm.html:43
+#, python-format
+msgid "... and %(escaped_object)s more Files."
+msgstr "... および \"%(escaped_object)s\" とその他のファイル。"
+
+#: templates/filebrowser/delete_confirm.html:50
+#: templates/filebrowser/upload.html:51
+msgid "Cancel"
+msgstr "キャンセル"
+
+#: templates/filebrowser/delete_confirm.html:51
+msgid "Yes, I'm sure"
+msgstr "OK"
+
+#: templates/filebrowser/detail.html:63
+msgid "Edit"
+msgstr "編集"
+
+#: templates/filebrowser/detail.html:78
+msgid "Folder Information"
+msgstr "フォルダ情報"
+
+#: templates/filebrowser/detail.html:81 templates/filebrowser/detail.html:116
+#: templates/filebrowser/include/tableheader.html:28
+#: templates/filebrowser/include/tableheader.html:29
+msgid "Date"
+msgstr "日付"
+
+#: templates/filebrowser/detail.html:93
+msgid "File Information"
+msgstr "ファイル情報"
+
+#: templates/filebrowser/detail.html:96
+msgid "URL"
+msgstr "URL"
+
+#: templates/filebrowser/detail.html:106
+msgid "Filesize"
+msgstr "ファイルサイズ"
+
+#: templates/filebrowser/detail.html:127
+#: templates/filebrowser/include/tableheader.html:25
+#: templates/filebrowser/include/tableheader.html:26
+msgid "Size"
+msgstr "サイズ"
+
+#: templates/filebrowser/detail.html:140
+msgid "Image Versions"
+msgstr "バージョン別画像"
+
+#: templates/filebrowser/detail.html:144
+#: templates/filebrowser/include/tableheader.html:15
+msgid "Thumbnail"
+msgstr "サムネイル"
+
+#: templates/filebrowser/detail.html:146
+#: templates/filebrowser/include/filelisting.html:101
+msgid "View Image"
+msgstr "画像を表示"
+
+#: templates/filebrowser/detail.html:170
+msgid "Delete"
+msgstr "削除"
+
+#: templates/filebrowser/detail.html:171
+msgid "Save"
+msgstr "保存"
+
+#: templates/filebrowser/detail.html:172
+msgid "Save and continue editing"
+msgstr "保存して編集を続ける"
+
+#: templates/filebrowser/upload.html:42
+msgid "Drop files here to upload"
+msgstr "ここにドラッグ＆ドロップしてファイルをアップロード"
+
+#: templates/filebrowser/upload.html:43
+msgid "Upload a file"
+msgstr "ファイルをアップロード"
+
+#: templates/filebrowser/upload.html:52
+msgid "Failed"
+msgstr "アップロードに失敗"
+
+#: templates/filebrowser/upload.html:66
+msgid "{file} has invalid extension. Only {extensions} are allowed."
+msgstr "{file} は許可されていない拡張子のファイルです。許可されている拡張子は {extensions} です。"
+
+#: templates/filebrowser/upload.html:67
+msgid "{file} is too large, maximum file size is {sizeLimit}."
+msgstr "{file} はファイルサイズが大きすぎます。1ファイルの最大サイズは {sizeLimit} です。"
+
+#: templates/filebrowser/upload.html:68
+msgid "{file} is too small, minimum file size is {minSizeLimit}."
+msgstr "{file} はファイルサイズが小さすぎます。1ファイルの最小サイズは{minSizeLimit} です。"
+
+#: templates/filebrowser/upload.html:69
+msgid "{file} is empty, please select files again without it."
+msgstr "{file} は空ファイルです。もう一度選択しなおしてください。"
+
+#: templates/filebrowser/upload.html:70
+msgid ""
+"The files are being uploaded, if you leave now the upload will be cancelled."
+msgstr "現在ファイルのアップロード中です。他のページへ移動するとアップロードはキャンセルされます。"
+
+#: templates/filebrowser/upload.html:115
+msgid "Please enable Javascript to upload files."
+msgstr "ファイルをアップロードするにはJavaScriptを有効化してください。"
+
+#: templates/filebrowser/upload.html:120
+msgid "Help"
+msgstr "ヘルプ"
+
+#: templates/filebrowser/upload.html:123
+msgid "Allowed"
+msgstr "アップロード可能な拡張子"
+
+#: templates/filebrowser/upload.html:137
+msgid "Max. Filesize"
+msgstr "最大ファイルサイズ"
+
+#: templates/filebrowser/upload.html:144
+#: templates/filebrowser/include/tableheader.html:17
+#: templates/filebrowser/include/tableheader.html:18
+msgid "Filename"
+msgstr "ファイル名"
+
+#: templates/filebrowser/include/breadcrumbs.html:6
+msgid "Home"
+msgstr "ホーム"
+
+#: templates/filebrowser/include/filelisting.html:19
+#: templates/filebrowser/include/filelisting.html:45
+#: templates/filebrowser/include/filelisting.html:70
+msgid "Select"
+msgstr "選択"
+
+#: templates/filebrowser/include/filelisting.html:23
+#: templates/filebrowser/include/filelisting.html:49
+#: templates/filebrowser/include/filelisting.html:74
+msgid "Versions"
+msgstr "バージョン"
+
+#: templates/filebrowser/include/filter.html:5
+msgid "Filter"
+msgstr "フィルタ"
+
+#: templates/filebrowser/include/filter.html:9
+msgid "By Date"
+msgstr "期間"
+
+#: templates/filebrowser/include/filter.html:11
+msgid "Any Date"
+msgstr "全て"
+
+#: templates/filebrowser/include/filter.html:12
+msgid "Today"
+msgstr "今日"
+
+#: templates/filebrowser/include/filter.html:13
+msgid "Past 7 days"
+msgstr "過去7日間"
+
+#: templates/filebrowser/include/filter.html:14
+msgid "This Month"
+msgstr "今月"
+
+#: templates/filebrowser/include/filter.html:15
+msgid "This year"
+msgstr "今年"
+
+#: templates/filebrowser/include/filter.html:21
+msgid "By Type"
+msgstr "タイプ"
+
+#: templates/filebrowser/include/filter.html:23
+msgid "All"
+msgstr "全て"
+
+#: templates/filebrowser/include/paginator.html:6
+msgid "result"
+msgstr "件"
+
+#: templates/filebrowser/include/paginator.html:6
+msgid "results"
+msgstr "件"
+
+#: templates/filebrowser/include/paginator.html:10
+#: templates/filebrowser/include/paginator.html:12
+msgid "total"
+msgstr "件（合計）"
+
+#: templates/filebrowser/include/tableheader.html:12
+#: templates/filebrowser/include/tableheader.html:13
+msgid "Type"
+msgstr "タイプ"
+
+#: templates/filebrowser/include/toolbar.html:6
+msgid "Results"
+msgstr "検索結果"
+
+#: templates/filebrowser/include/toolbar.html:8
+#, python-format
+msgid "%(counter)s result"
+msgid_plural "%(counter)s results"
+msgstr[0] "%(counter)s 件"
+
+#: templates/filebrowser/include/toolbar.html:9
+#, python-format
+msgid "%(full_result_count)s total"
+msgstr "全 %(full_result_count)s 件"
+
+#: templates/filebrowser/include/toolbar.html:16
+msgid "Search"
+msgstr "検索"
+
+#~ msgid "BROWSE"
+#~ msgstr "BROWSE"
+
+#~ msgid "An Error occured"
+#~ msgstr "An Error occured"
+
+#~ msgid "Completed"
+#~ msgstr "Completed"
+
+#~ msgid "Do you want to replace the file"
+#~ msgstr "Do you want to replace the file"
+
+#~ msgid "KB"
+#~ msgstr "KB"
+
+#~ msgid "MB"
+#~ msgstr "MB"
+
+#~ msgid "Clear Queue"
+#~ msgstr "Clear Queue"
+
+#~ msgid "Flip/Rotate"
+#~ msgstr "Flip/Rotate"
+
+#~ msgid "Transposing was successful."
+#~ msgstr "Transposing was successful."
+
+#~ msgid "SELECT FILES"
+#~ msgstr "SELECT FILES"

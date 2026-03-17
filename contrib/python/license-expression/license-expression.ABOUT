@@ -1,0 +1,9 @@
+about_resource: .
+name: license-expression
+
+copyright: Copyright (c) nexB Inc. and others.
+
+license_expression: apache-2.0
+license_file: apache-2.0.LICENSE
+
+homepage_url: https://github.com/aboutcode-org/license-expression

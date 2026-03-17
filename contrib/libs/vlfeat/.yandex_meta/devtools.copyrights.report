@@ -1,0 +1,334 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 017b8b8f33ddd231632999d91b03070d
+BELONGS ya.make
+    License text:
+        @author The VLFeat Team
+        @par Copyright &copy; 2012-14 The VLFeat Authors
+        @par Copyright &copy; 2007-11 Andrea Vedaldi and Brian Fulkerson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/generic.c [19:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c09f167caf8737eb2e04b997c368e00
+BELONGS ya.make
+    License text:
+        Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/random.c [79:80]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 196de4644e740216325d8d80e2f096fd
+BELONGS ya.make
+    License text:
+        Copyright (C) 2013 Milan Sulc
+        Copyright (C) 2012 Daniele Perrone.
+        Copyright (C) 2011-13 Andrea Vedaldi.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/generic.c [364:367]
+        vl/svm.c [9:11]
+        vl/svm.h [9:11]
+        vl/svmdataset.c [8:10]
+        vl/svmdataset.h [8:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1c70ce6bb1bde88a4f0acd2e209258d1
+BELONGS ya.make
+    License text:
+        Copyright (C) 2013-14 Andrea Vedaldi.
+        Copyright (C) 2012 Karel Lenc, Andrea Vedaldi and Michal Perdoch.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/covdet.c [9:11]
+        vl/covdet.h [9:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 40041981956035952740304ffcf1e040
+BELONGS ya.make
+    License text:
+        Copyright (C) 2013 Milan Sulc
+        Copyright (C) 2012 Daniele Perrone.
+        Copyright (C) 2011-13 Andrea Vedaldi.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/generic.c [364:367]
+        vl/svm.c [9:11]
+        vl/svm.h [9:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 426dd5a6dfd75c5ee9b6a5c134536ff0
+BELONGS ya.make
+    License text:
+        Copyright (C) 2014 Andrea Vedaldi.
+        Copyright (C) 2013 David Novotny.
+        Copyright (C) 2007-12 Andrea Vedaldi and Brian Fulkerson.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/float.th [8:11]
+        vl/ikmeans.h [8:10]
+        vl/mathop.c [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 76499aebfe9d5a25500e2164bfc351d6
+BELONGS ya.make
+    License text:
+        Copyright (C) 2013 Milan Sulc
+        Copyright (C) 2012 Daniele Perrone.
+        Copyright (C) 2011-13 Andrea Vedaldi.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/generic.c [364:367]
+        vl/svm.c [9:11]
+        vl/svm.h [9:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 79afd546864b0823d854327d5a28078e
+BELONGS ya.make
+    License text:
+        Copyright (C) 2013-14 Andrea Vedaldi.
+        Copyright (C) 2012 Karel Lenc, Andrea Vedaldi and Michal Perdoch.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/covdet.c [9:11]
+        vl/covdet.h [9:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7ac58938bedf34e8c21153dbdb39d167
+BELONGS ya.make
+    License text:
+        Copyright (C) 2013 Hana Sarbortova and Andrea Vedaldi.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/liop.c [8:9]
+        vl/liop.h [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b027b51890a3e9094e0d72bee00e25dc
+BELONGS ya.make
+    License text:
+        Copyright (C) 2013 David Novotny and Andrea Vedaldi.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/fisher.c [7:8]
+        vl/fisher.h [9:10]
+        vl/gmm.c [8:9]
+        vl/gmm.h [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b1713f3cc0a2057e200b09cc751f3497
+BELONGS ya.make
+    License text:
+        Copyright (C) 2014 Andrea Vedaldi.
+        Copyright (C) 2013 David Novotny.
+        Copyright (C) 2007-12 Andrea Vedaldi and Brian Fulkerson.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/float.th [8:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c937ddb63af810caadedec2fc7b7ae4d
+BELONGS ya.make
+    License text:
+        Copyright (C) 2007-12 Andrea Vedaldi and Brian Fulkerson.
+        Copyright (C) 2013 Andrea Vedaldi and David Novotny.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/kmeans.c [7:9]
+        vl/kmeans.h [8:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL daa30ebe1b05f870ddd6ce915ede5e5f
+BELONGS ya.make
+    License text:
+        Copyright (C) 2007-12 Andrea Vedaldi and Brian Fulkerson.
+        Copyright (C) 2013 Andrea Vedaldi.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/generic.c [7:9]
+        vl/generic.h [7:9]
+        vl/homkermap.c [7:9]
+        vl/lbp.c [7:9]
+        vl/pgm.c [7:9]
+        vl/random.c [7:9]
+        vl/svmdataset.c [8:10]
+        vl/svmdataset.h [8:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL edb4ece4bf76496a36a6cc2228235be4
+BELONGS ya.make
+    License text:
+        Copyright (C) 2007-13 Andrea Vedaldi and Brian Fulkerson.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/mser.c [7:8]
+        vl/rodrigues.c [7:8]
+        vl/rodrigues.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ef61d13e25c861fe3c580613a1ed928f
+BELONGS ya.make
+    License text:
+        @author The VLFeat Team
+        @par Copyright &copy; 2012-14 The VLFeat Authors
+        @par Copyright &copy; 2007-11 Andrea Vedaldi and Brian Fulkerson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/generic.c [19:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f1e40d225ac20790a4b2a3f3fad638c0
+BELONGS ya.make
+    License text:
+        Copyright (C) 2013 David Novotny and Andera Vedaldi.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/vlad.c [8:9]
+        vl/vlad.h [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f6d86be1e58fc29c7b9279b0f2c7701f
+BELONGS ya.make
+    License text:
+        Copyright (C) 2007-12 Andrea Vedaldi and Brian Fulkerson.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vl/aib.c [8:9]
+        vl/aib.h [8:9]
+        vl/array.c [7:8]
+        vl/array.h [7:8]
+        vl/dsift.c [8:9]
+        vl/dsift.h [8:9]
+        vl/float.th [8:11]
+        vl/generic.c [7:9]
+        vl/generic.h [7:9]
+        vl/getopt_long.c [7:8]
+        vl/getopt_long.h [7:8]
+        vl/heap-def.h [7:8]
+        vl/hikmeans.c [8:9]
+        vl/hikmeans.h [7:8]
+        vl/hog.c [7:8]
+        vl/hog.h [7:8]
+        vl/homkermap.c [7:9]
+        vl/homkermap.h [7:8]
+        vl/host.c [8:9]
+        vl/host.h [8:9]
+        vl/ikmeans.c [8:9]
+        vl/ikmeans.h [8:10]
+        vl/ikmeans_elkan.tc [7:8]
+        vl/ikmeans_init.tc [7:8]
+        vl/ikmeans_lloyd.tc [8:9]
+        vl/imopv.c [7:8]
+        vl/imopv.h [7:8]
+        vl/imopv_sse2.c [7:8]
+        vl/imopv_sse2.h [7:8]
+        vl/kdtree.c [7:8]
+        vl/kdtree.h [7:8]
+        vl/kmeans.c [7:9]
+        vl/kmeans.h [8:10]
+        vl/lbp.c [7:9]
+        vl/lbp.h [7:8]
+        vl/mathop.c [7:9]
+        vl/mathop.h [7:8]
+        vl/mathop_avx.c [7:8]
+        vl/mathop_avx.h [7:8]
+        vl/mathop_sse2.c [7:8]
+        vl/mathop_sse2.h [7:8]
+        vl/mser.h [7:8]
+        vl/pgm.c [7:9]
+        vl/pgm.h [7:8]
+        vl/qsort-def.h [7:8]
+        vl/quickshift.c [8:9]
+        vl/quickshift.h [8:9]
+        vl/random.c [7:9]
+        vl/random.h [8:9]
+        vl/scalespace.c [9:10]
+        vl/scalespace.h [9:10]
+        vl/shuffle-def.h [7:8]
+        vl/sift.c [7:8]
+        vl/sift.h [7:8]
+        vl/slic.c [7:8]
+        vl/slic.h [7:8]
+        vl/stringop.c [7:8]
+        vl/stringop.h [7:8]

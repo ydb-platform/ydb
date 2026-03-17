@@ -1,0 +1,37 @@
+--- contrib/python/gevent/py3/gevent/libev/corecext.pyx	(index)
++++ contrib/python/gevent/py3/gevent/libev/corecext.pyx	(working tree)
+@@ -111,8 +111,8 @@ BACKEND_EPOLL = libev.EVBACKEND_EPOLL
+ BACKEND_KQUEUE = libev.EVBACKEND_KQUEUE
+ BACKEND_DEVPOLL = libev.EVBACKEND_DEVPOLL
+ BACKEND_PORT = libev.EVBACKEND_PORT
+-BACKEND_LINUXAIO = libev.EVBACKEND_LINUXAIO
+-BACKEND_IOURING = libev.EVBACKEND_IOURING
++#BACKEND_LINUXAIO = libev.EVBACKEND_LINUXAIO
++#BACKEND_IOURING = libev.EVBACKEND_IOURING
+ 
+ 
+ FORKCHECK = libev.EVFLAG_FORKCHECK
+@@ -146,8 +146,8 @@ _flags = [
+     # IOCP
+     (libev.EVBACKEND_PORT, 'port'),
+     (libev.EVBACKEND_KQUEUE, 'kqueue'),
+-    (libev.EVBACKEND_IOURING, 'linux_iouring'),
+-    (libev.EVBACKEND_LINUXAIO, "linux_aio"),
++    #(libev.EVBACKEND_IOURING, 'linux_iouring'),
++    #(libev.EVBACKEND_LINUXAIO, "linux_aio"),
+     (libev.EVBACKEND_EPOLL, 'epoll'),
+     (libev.EVBACKEND_POLL, 'poll'),
+     (libev.EVBACKEND_SELECT, 'select'),
+--- contrib/python/gevent/py3/gevent/libev/libev.pxd	(index)
++++ contrib/python/gevent/py3/gevent/libev/libev.pxd	(working tree)
+@@ -74,8 +74,8 @@ cdef extern from "libev.h" nogil:
+     int EVBACKEND_DEVPOLL
+     int EVBACKEND_PORT
+     int EVBACKEND_IOCP
+-    int EVBACKEND_IOURING
+-    int EVBACKEND_LINUXAIO
++    #int EVBACKEND_IOURING
++    #int EVBACKEND_LINUXAIO
+     int EVBACKEND_ALL
+     int EVBACKEND_MASK
+ 

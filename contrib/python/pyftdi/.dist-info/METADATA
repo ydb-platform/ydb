@@ -1,0 +1,117 @@
+Metadata-Version: 2.4
+Name: pyftdi
+Version: 0.57.1
+Summary: FTDI device driver (pure Python)
+Home-page: http://github.com/eblot/pyftdi
+Author: Emmanuel Blot
+Author-email: emmanuel.blot@free.fr
+Maintainer: Emmanuel Blot
+Maintainer-email: emmanuel.blot@free.fr
+License: BSD-3-Clause
+Keywords: driver,ftdi,usb,serial,spi,i2c,twi,rs232,gpio,bit-bang
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Other Environment
+Classifier: Natural Language :: English
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Hardware :: Hardware Drivers
+Requires-Python: >=3.9
+Description-Content-Type: text/x-rst
+License-File: pyftdi/doc/license.rst
+Requires-Dist: pyusb!=1.2.0,>=1.0.0
+Requires-Dist: pyserial>=3.0
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: maintainer-email
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+PyFtdi
+======
+
+.. cannot use defs.rst here, as PyPi wants a standalone file.
+.. |I2C| replace:: I\ :sup:`2`\ C
+
+Documentation
+-------------
+
+The latest PyFtdi online documentation is always available from
+`here <https://eblot.github.io/pyftdi>`_.
+
+Beware the online version may be more recent than the PyPI hosted version, as
+intermediate development versions are not published to
+`PyPi <https://pypi.org/project/pyftdi>`_.
+
+PyFtdi documentation can be locally build with Sphinx, see the installation
+instructions.
+
+Source code
+-----------
+
+PyFtdi releases are available from the Python Package Index from
+`PyPi <https://pypi.org/project/pyftdi>`_.
+
+PyFtdi development code is available from
+`GitHub <https://github.com/eblot/pyftdi>`_.
+
+Overview
+--------
+
+PyFtdi aims at providing a user-space driver for popular FTDI devices,
+implemented in pure Python language.
+
+Supported FTDI devices include:
+
+* UART and GPIO bridges
+
+  * FT232R (single port, 3Mbps)
+  * FT230X/FT231X/FT234X (single port, 3Mbps)
+
+* UART and multi-serial protocols (SPI, |I2C|, JTAG) bridges
+
+  * FT2232C/D (dual port, clock up to 6 MHz)
+  * FT232H (single port, clock up to 30 MHz)
+  * FT2232H (dual port, clock up to 30 MHz)
+  * FT4232H (quad port, clock up to 30 MHz)
+  * FT4232HA (quad port, clock up to 30 MHz)
+
+Features
+--------
+
+PyFtdi currently supports the following features:
+
+* UART/Serial USB converter, up to 12Mbps (depending on the FTDI device
+  capability)
+* GPIO/Bitbang support, with 8-bit asynchronous, 8-bit synchronous and
+  8-/16-bit MPSSE variants
+* SPI master, with simultanous GPIO support, up to 12 pins per port,
+  with support for non-byte sized transfer
+* |I2C| master, with simultanous GPIO support, up to 14 pins per port
+* Basic JTAG master capabilities
+* EEPROM support (some parameters cannot yet be modified, only retrieved)
+* Experimental CBUS support on selected devices, 4 pins per port
+
+Supported host OSes
+-------------------
+
+* macOS
+* Linux
+* FreeBSD
+* Windows, although not officially supported
+

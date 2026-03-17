@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.topografix.com/GPX/1/0" version="1.0" xsi:schemaLocation="http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd" creator="gpx.py -- https://github.com/tkrajina/gpxpy">
+<time>2013-05-19T04:21:21Z</time>
+<trk>
+<name/>
+<desc/>
+<trkseg>
+<trkpt lat="45.148820188" lon="14.22317069">
+<ele>140.0</ele>
+<time>2013-05-18T08:23:04Z</time></trkpt>
+<trkpt lat="45.192713358" lon="14.5431474966">
+<time>2013-05-18T09:30:54Z</time></trkpt>
+<trkpt lat="45.2985283474" lon="14.7972063345">
+<time>2013-05-18T09:38:00Z</time></trkpt>
+<trkpt lat="45.4390521921" lon="15.0237993521">
+<time>2013-05-18T09:45:15Z</time></trkpt>
+<trkpt lat="45.6104068252" lon="15.1625017447">
+<time>2013-05-18T09:51:58Z</time></trkpt>
+<trkpt lat="45.8329139495" lon="15.0540117545">
+<time>2013-05-18T09:59:59Z</time></trkpt>
+<trkpt lat="46.0094830454" lon="14.7917131705">
+<time>2013-05-18T10:08:39Z</time></trkpt>
+<trkpt lat="46.1020093403" lon="14.5404009146">
+<time>2013-05-18T10:15:23Z</time></trkpt>
+<trkpt lat="46.148820188" lon="14.22317069">
+<time>2013-05-18T10:23:04Z</time></trkpt>
+<trkpt lat="46.148820188" lon="14.22317069">
+<ele>140.0</ele>
+<time>2013-05-18T09:23:04Z</time></trkpt></trkseg></trk></gpx>

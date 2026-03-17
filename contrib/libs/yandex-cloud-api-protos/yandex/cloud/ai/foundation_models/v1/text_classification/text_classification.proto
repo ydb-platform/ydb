@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.foundation_models.v1.text_classification;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/foundation_models/v1/text_classification;text_classification";
+option java_package = "yandex.cloud.api.ai.foundation_models.v1.text_classification";
+
+
+// A pair of text labels and their corresponding confidence values.
+message ClassificationLabel {
+
+  // A class name label.
+  string label = 1;
+  // The probability of classifying text into a specific class.
+  double confidence = 2;
+}
+
+// Description of a sample for the classification task.
+message ClassificationSample {
+  // Text sample.
+  string text = 1;
+  // Expected label for a given text.
+  string label = 2;
+}

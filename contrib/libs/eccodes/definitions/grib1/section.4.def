@@ -1,0 +1,249 @@
+# GRIB1 SECTION 4, Binary data section
+# Length of section
+position offsetSection4;
+
+# Due to a trick done by GRIBEX to support large GRIBs, we need a special treatment
+# of the message length and of the section4 lenth, so instead of
+# section_length[3] section4Length;
+# we get:
+g1_section4_length[3] section4Length(totalLength);
+
+meta section4Pointer section_pointer(offsetSection4,section4Length,4);
+
+g1_half_byte_codeflag halfByte;
+flags[1] dataFlag "grib1/11.table" = 0 : read_only;
+signed[2] binaryScaleFactor = 0 : read_only,dump;
+ibmfloat referenceValue : read_only,dump;
+
+meta referenceValueError reference_value_error(referenceValue,ibm);
+
+flagbit sphericalHarmonics(dataFlag,7) : dump;
+flagbit complexPacking(dataFlag,6) : dump;
+flagbit integerPointValues(dataFlag,5) : dump;
+flagbit additionalFlagPresent(dataFlag,4) : edition_specific,dump;
+
+# second order packing
+if (complexPacking && sphericalHarmonics==0) {
+    unsigned[1] widthOfFirstOrderValues : dump ;
+    unsigned [2] N1;
+    flags[1] extendedFlag "grib1/11-2.table";
+
+    #  Undocumented use of octet 14 extededFlags
+    #  Taken from d2ordr.F
+    #         R------- only bit 1 is reserved.
+    #         -0------ single datum at each grid point.
+    #         -1------ matrix of values at each grid point.
+    #         --0----- no secondary bit map.
+    #         --1----- secondary bit map present.
+    #         ---0---- second order values have constant width.
+    #         ---1---- second order values have different widths.
+    #         ----0--- no general extended second order packing.
+    #         ----1--- general extended second order packing used.
+    #         -----0-- standard field ordering in section 4.
+    #         -----1-- boustrophedonic ordering in section 4.
+    #         ------00 no spatial differencing used.
+    #         ------01 1st-order spatial differencing used.
+    #         ------10 2nd-order    "         "         " .
+    #         ------11 3rd-order    "         "         " .
+
+    #ksec4(8)
+    flagbit matrixOfValues              (extendedFlag,6) = 0  : dump;
+    #ksec4(9)
+    flagbit secondaryBitmapPresent      (extendedFlag,5) = 0  : dump;
+    #ksec4(10)
+    flagbit secondOrderOfDifferentWidth (extendedFlag,4) = 0  : dump;
+    #ksec4(12)
+    flagbit generalExtended2ordr        (extendedFlag,3) = 0  : dump;
+    #ksec4(13)
+    flagbit boustrophedonicOrdering     (extendedFlag,2) = 0  : dump;
+    #ksec4(14)
+    flagbit twoOrdersOfSPD              (extendedFlag,1) = 0  : dump;
+    #ksec4(15)
+    flagbit plusOneinOrdersOfSPD        (extendedFlag,0) = 0  : dump;
+    meta orderOfSPD evaluate(plusOneinOrdersOfSPD + 2 * twoOrdersOfSPD);
+    alias secondaryBitmap = secondaryBitmapPresent;
+    alias boustrophedonic=boustrophedonicOrdering;
+}  else {
+    transient orderOfSPD=2;
+    transient boustrophedonic=0;
+}
+transient hideThis=0;
+
+concept packingType {
+#set uses the last one
+#get returns the first match
+  "grid_simple"                       = { sphericalHarmonics = 0; complexPacking = 0; additionalFlagPresent = 0;}
+  "grid_ieee"                         = { sphericalHarmonics = 0; complexPacking = 0;
+                                          integerPointValues=1; additionalFlagPresent=1;}
+  "spectral_complex"                  = { sphericalHarmonics = 1; complexPacking = 1;
+                                          additionalFlagPresent = 0; }
+  "spectral_simple"                   = { sphericalHarmonics = 1; complexPacking = 0; additionalFlagPresent = 0;
+                                          representationMode=1;}
+  "spectral_ieee"                     = { sphericalHarmonics = 1; complexPacking = 1;
+                                          additionalFlagPresent = 0;hideThis=1; }
+  "grid_simple_matrix"                = { sphericalHarmonics = 0; complexPacking = 0; additionalFlagPresent = 1;}
+
+  "grid_second_order_row_by_row"        = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=1; 
+                                            matrixOfValues=0; secondaryBitmapPresent=0; generalExtended2ordr=0; }
+  "grid_second_order_constant_width"    = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=0; 
+                                            matrixOfValues=0; secondaryBitmapPresent=1; generalExtended2ordr=0; }
+  "grid_second_order_general_grib1"    = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=1; 
+                                           matrixOfValues=0; secondaryBitmapPresent=1; generalExtended2ordr=0; }
+  "grid_second_order_no_SPD"  = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=1; 
+                                  matrixOfValues=0; secondaryBitmapPresent=0; generalExtended2ordr=1;
+                                  plusOneinOrdersOfSPD=0; twoOrdersOfSPD=0;}
+  "grid_second_order"  = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=1; 
+                           matrixOfValues=0; secondaryBitmapPresent=0; generalExtended2ordr=1;
+                           plusOneinOrdersOfSPD=0; twoOrdersOfSPD=1; boustrophedonic=1;}
+  "grid_second_order"  = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=1; 
+                           matrixOfValues=0; secondaryBitmapPresent=0; generalExtended2ordr=1;
+                           plusOneinOrdersOfSPD=0; twoOrdersOfSPD=1; boustrophedonic=0;}
+  "grid_second_order_no_boustrophedonic"  = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=1; 
+                                      matrixOfValues=0; secondaryBitmapPresent=0; generalExtended2ordr=1;
+                                    plusOneinOrdersOfSPD=0; twoOrdersOfSPD=1; boustrophedonic=0;}
+  "grid_second_order_boustrophedonic" = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=1; 
+                                          matrixOfValues=0; secondaryBitmapPresent=0; generalExtended2ordr=1;
+                                          plusOneinOrdersOfSPD=0; twoOrdersOfSPD=1; boustrophedonic=1;}
+  "grid_second_order_SPD1"  = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=1; 
+                                matrixOfValues=0; secondaryBitmapPresent=0; generalExtended2ordr=1; 
+                                plusOneinOrdersOfSPD=1; twoOrdersOfSPD=0; }
+  "grid_second_order_SPD2"  = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=1; 
+                                matrixOfValues=0; secondaryBitmapPresent=0; generalExtended2ordr=1; 
+                                plusOneinOrdersOfSPD=0; twoOrdersOfSPD=1; }
+  "grid_second_order_SPD3"  = { sphericalHarmonics = 0; complexPacking = 1; secondOrderOfDifferentWidth=1; 
+                                matrixOfValues=0; secondaryBitmapPresent=0; generalExtended2ordr=1; 
+                                plusOneinOrdersOfSPD=1; twoOrdersOfSPD=1; }
+  # The following are not in GRIB edition 1.
+  # They are added here to stop failures when setting packingType. The packing itself is not changed
+  "grid_jpeg"                     = { sphericalHarmonics = 0; complexPacking = 0; additionalFlagPresent = 0;}
+  "grid_png"                      = { sphericalHarmonics = 0; complexPacking = 0; additionalFlagPresent = 0;}
+  "grid_ccsds"                    = { sphericalHarmonics = 0; complexPacking = 0; additionalFlagPresent = 0;}
+  "grid_simple_log_preprocessing" = { sphericalHarmonics = 0; complexPacking = 0; additionalFlagPresent = 0;}
+} : dump;
+
+
+alias ls.packingType=packingType;
+alias typeOfPacking=packingType;
+
+if( binaryScaleFactor == -32767) {
+  unsigned[1] bitsPerValue : dump ;
+  alias numberOfBitsContainingEachPackedValue = bitsPerValue;
+  alias accuracy = bitsPerValue;
+
+  constant dataRepresentationTemplateNumber = 0;
+  constant bitMapIndicator = 0;
+  # For grib 1 -> 2
+  position offsetBeforeData;
+  transient numberOfCodedValues=numberOfPoints;
+  meta values data_dummy_field(
+        section4Length,
+        offsetBeforeData,
+        offsetSection4,
+        unitsFactor,
+        unitsBias,
+        changingPrecision,
+        numberOfCodedValues,
+        bitsPerValue,
+        referenceValue,
+        binaryScaleFactor,
+        decimalScaleFactor,
+        optimizeScaleFactor,
+        halfByte,
+        packingType,
+        grid_ieee,precision,
+        missingValue,
+        numberOfPoints,
+        bitmap
+      ) : dump;
+} else {
+  template dataValues "grib1/data.[packingType:s].def";
+}
+
+position offsetAfterData;
+
+transient dataLength=(offsetAfterData-offsetBeforeData)/8;
+
+if (bitmapPresent==1) {
+  alias numberOfEffectiveValues=numberOfDataPoints;
+} else {
+  alias numberOfEffectiveValues=numberOfCodedValues;
+}
+
+_if (sphericalHarmonics) {
+  alias numberOfEffectiveValues=numberOfValues;
+}
+
+meta changeDecimalPrecision decimal_precision(bitsPerValue,decimalScaleFactor,changingPrecision,values)  : edition_specific;
+meta decimalPrecision decimal_precision(bitsPerValue,decimalScaleFactor,changingPrecision)  : edition_specific;
+alias setDecimalPrecision=changeDecimalPrecision;
+
+meta bitsPerValueAndRepack bits_per_value(values,bitsPerValue)  : edition_specific;
+alias setBitsPerValue=bitsPerValueAndRepack;
+meta setPackingType packing_type(values,packingType) : edition_specific;
+
+meta scaleValuesBy scale_values(values,missingValue) : edition_specific;
+meta offsetValuesBy offset_values(values,missingValue) : edition_specific;
+
+concept gridType {
+#set uses the last one
+#get returns the first match
+  "regular_ll"           = {dataRepresentationType = 0;  sphericalHarmonics = 0; PLPresent=0;}
+  "reduced_ll"           = {dataRepresentationType = 0;  sphericalHarmonics = 0; PLPresent=1; Ni=missing(); }
+  "mercator"             = {dataRepresentationType = 1;  sphericalHarmonics = 0; PLPresent=0; }
+  "lambert"              = {dataRepresentationType = 3;  sphericalHarmonics = 0; PLPresent=0; }
+  "polar_stereographic"  = {dataRepresentationType = 5;  sphericalHarmonics = 0; PLPresent=0; }
+  "UTM"                  = {dataRepresentationType = 6;  sphericalHarmonics = 0; PLPresent=0; }
+  "simple_polyconic"     = {dataRepresentationType = 7;  sphericalHarmonics = 0; PLPresent=0; }
+  "albers"               = {dataRepresentationType = 8;  sphericalHarmonics = 0; PLPresent=0; }
+  "miller"               = {dataRepresentationType = 9;  sphericalHarmonics = 0; PLPresent=0; }
+  "rotated_ll"           = {dataRepresentationType = 10; sphericalHarmonics = 0; PLPresent=0; }
+  "stretched_ll"         = {dataRepresentationType = 20; sphericalHarmonics = 0; PLPresent=0; }
+  "stretched_rotated_ll" = {dataRepresentationType = 30; sphericalHarmonics = 0; PLPresent=0; }
+  "regular_gg"           = {dataRepresentationType = 4;  sphericalHarmonics = 0; PLPresent=0; }
+  "rotated_gg"           = {dataRepresentationType = 14; sphericalHarmonics = 0; PLPresent=0; }
+  "stretched_gg"         = {dataRepresentationType = 24; sphericalHarmonics = 0; PLPresent=0; }
+  "stretched_rotated_gg" = {dataRepresentationType = 34; sphericalHarmonics = 0; PLPresent=0; }
+  "reduced_gg"           = {dataRepresentationType = 4;  sphericalHarmonics = 0;
+                            PLPresent=1; numberOfPointsAlongAParallel = missing();
+                            iDirectionIncrement = missing(); ijDirectionIncrementGiven=0;}
+
+  "reduced_rotated_gg"   = {dataRepresentationType = 14;  sphericalHarmonics = 0;
+                            PLPresent=1; numberOfPointsAlongAParallel = missing();
+                            iDirectionIncrement = missing(); ijDirectionIncrementGiven=0;}
+  "reduced_stretched_gg" = {dataRepresentationType = 24;  sphericalHarmonics = 0;
+                            PLPresent=1; numberOfPointsAlongAParallel = missing();
+                            iDirectionIncrement = missing(); ijDirectionIncrementGiven=0;}
+  "reduced_stretched_rotated_gg" = {dataRepresentationType = 34;  sphericalHarmonics = 0;
+                            PLPresent=1; numberOfPointsAlongAParallel = missing();
+                            iDirectionIncrement = missing(); ijDirectionIncrementGiven=0;}
+
+# For consistency add the prefix regular_
+"regular_rotated_gg"           = { dataRepresentationType = 14; sphericalHarmonics = 0; PLPresent=0; } # = rotated_gg
+"regular_stretched_gg"         = { dataRepresentationType = 24; sphericalHarmonics = 0; PLPresent=0; } # = stretched_gg
+"regular_stretched_rotated_gg" = { dataRepresentationType = 34; sphericalHarmonics = 0; PLPresent=0; } # = stretched_rotated_gg
+
+  "sh"                   = {dataRepresentationType = 50; sphericalHarmonics = 1; PLPresent=0; }
+  "rotated_sh"           = {dataRepresentationType = 60; sphericalHarmonics = 1; PLPresent=0; }
+  "stretched_sh"         = {dataRepresentationType = 70; sphericalHarmonics = 1; PLPresent=0; }
+  "stretched_rotated_sh" = {dataRepresentationType = 80; sphericalHarmonics = 1; PLPresent=0; }
+  "space_view"           = {dataRepresentationType = 90; sphericalHarmonics = 0; PLPresent=0; }
+  "unknown"              = {PLPresent=0;}
+  "unknown_PLPresent"    = {PLPresent=1;}
+} : dump;
+
+alias ls.gridType=gridType;
+alias geography.gridType=gridType;
+alias typeOfGrid=gridType;
+
+meta  projSourceString proj_string(gridType, 0): hidden;
+meta  projTargetString proj_string(gridType, 1): hidden;
+alias projString = projTargetString : hidden;
+
+meta getNumberOfValues size(values) : edition_specific,dump ;
+
+if (complexPacking==0 || sphericalHarmonics==1) {
+  padtoeven padding_sec4_1(offsetSection4,section4Length) ;
+}
+
+meta md5Section4 md5(offsetSection4,section4Length);
+alias md5DataSection = md5Section4;

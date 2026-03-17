@@ -1,0 +1,21 @@
+# Code table 1.0 - GRIB master tables version number
+0 0 Experimental
+1 1 Version implemented on 7 November 2001
+2 2 Version implemented on 4 November 2003
+3 3 Version implemented on 2 November 2005
+4 4 Version implemented on 7 November 2007
+5 5 Version implemented on 4 November 2009
+6 6 Version implemented on 15 September 2010
+7 7 Version implemented on 4 May 2011
+8 8 Version implemented on 2 November 2011
+9 9 Version implemented on 2 May 2012
+10 10 Version implemented on 7 November 2012
+11 11 Version implemented on 8 May 2013
+12 12 Version implemented on 14 November 2013
+13 13 Version implemented on 7 May 2014
+14 14 Version implemented on 5 November 2014
+15 15 Version implemented on 6 May 2015
+16 16 Version implemented on 11 November 2015
+17 17 Pre-operational to be implemented by next amendment
+# 18-254 Future versions
+255 255 Missing

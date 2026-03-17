@@ -1,0 +1,120 @@
+PY3TEST()
+
+PEERDIR(
+    contrib/python/aiofiles
+    contrib/python/cbor2
+    contrib/python/httpx
+    contrib/python/pytest-asyncio
+    contrib/python/requests
+    contrib/python/websockets
+)
+
+DATA(
+    arcadia/contrib/python/falcon/py3
+)
+
+TEST_SRCS(
+    _inspect_fixture.py
+    _util.py
+    _wsgi_test_app.py
+    asgi/__init__.py
+    asgi/_asgi_test_app.py
+    asgi/test_asgi_conductor.py
+    asgi/test_asgi_helpers.py
+    # asgi/test_asgi_servers.py
+    asgi/test_boundedstream_asgi.py
+    asgi/test_buffered_reader.py
+    asgi/test_cythonized_asgi.py
+    asgi/test_example_asgi.py
+    asgi/test_hello_asgi.py
+    asgi/test_lifespan_handlers.py
+    asgi/test_middleware_asgi.py
+    asgi/test_request_asgi.py
+    asgi/test_request_body_asgi.py
+    asgi/test_request_context_asgi.py
+    asgi/test_response_media_asgi.py
+    asgi/test_scheduled_callbacks.py
+    asgi/test_scope.py
+    asgi/test_sse.py
+    asgi/test_sync.py
+    asgi/test_testing_asgi.py
+    asgi/test_ws.py
+    bare_bones.py
+    conftest.py
+    dump_asgi.py
+    dump_wsgi.py
+    test_after_hooks.py
+    test_alias.py
+    test_app_initializers.py
+    test_before_hooks.py
+    test_boundedstream.py
+    test_buffered_reader.py
+    test_cmd_inspect_app.py
+    test_compiled_router.py
+    test_cookies.py
+    test_cors_middleware.py
+    test_custom_router.py
+    test_cython.py
+    test_default_router.py
+    test_deprecations.py
+    # test_deps.py
+    test_error.py
+    test_error_handlers.py
+    test_example.py
+    test_headers.py
+    test_hello.py
+    test_http_custom_method_routing.py
+    test_http_method_routing.py
+    test_httperror.py
+    test_httpstatus.py
+    test_inspect.py
+    test_media_handlers.py
+    test_media_multipart.py
+    test_media_urlencoded.py
+    test_middleware.py
+    test_options.py
+    test_python_version_requirements.py
+    test_query_params.py
+    test_redirects.py
+    test_request_access_route.py
+    test_request_attrs.py
+    test_request_body.py
+    test_request_context.py
+    test_request_forwarded.py
+    test_request_media.py
+    test_response.py
+    test_response_body.py
+    test_response_context.py
+    test_response_media.py
+    test_sink_and_static.py
+    test_sinks.py
+    test_slots.py
+    test_static.py
+    test_testing.py
+    # test_things_example.py
+    test_uri_converters.py
+    test_uri_templates.py
+    test_uri_templates_legacy.py
+    test_utils.py
+    test_validators.py
+    test_wsgi.py
+    test_wsgi_errors.py
+    test_wsgi_interface.py
+    test_wsgi_servers.py
+    test_wsgiref_inputwrapper_with_size.py
+    test_mediatypes.py
+)
+
+PEERDIR(
+    contrib/python/falcon
+    contrib/python/PyYAML
+    contrib/python/mujson
+    contrib/python/msgpack
+    contrib/python/jsonschema
+)
+
+NO_LINT()
+
+FORK_TESTS()
+
+END()

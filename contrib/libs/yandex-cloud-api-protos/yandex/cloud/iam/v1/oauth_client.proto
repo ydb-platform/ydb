@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1;iam";
+option java_package = "yandex.cloud.api.iam.v1";
+
+// An OauthClient resource.
+message OAuthClient {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // OAuth client is being created.
+    CREATING = 1;
+
+    // OAuth client is active.
+    ACTIVE = 2;
+
+    // OAuth client is being deleted.
+    DELETING = 3;
+  }
+
+  // ID of the oauth client.
+  string id = 1;
+
+  // Name for the oauth client.
+  string name = 2;
+
+  // List of redirect uries allowed for the oauth client.
+  repeated string redirect_uris = 3;
+
+  // List of oauth scopes requested by the oauth client.
+  repeated string scopes = 4;
+
+  // ID of the folder oauth client belongs to.
+  string folder_id = 5;
+
+  // Current status of the oauth client.
+  Status status = 6;
+}

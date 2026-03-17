@@ -1,0 +1,108 @@
+--- contrib/python/pycrypto/py2/src/block_template.c	(index)
++++ contrib/python/pycrypto/py2/src/block_template.c	(working tree)
+@@ -172,6 +172,17 @@ ALGnew(PyObject *self, PyObject *args, PyObject *kwdict)
+ 				"Key cannot be the null string");
+ 		return NULL;
+ 	}
++	if (IVlen != 0 && mode == MODE_ECB)
++	{
++		PyErr_Format(PyExc_ValueError, "ECB mode does not use IV");
++		return NULL;
++	}
++	if (IVlen != 0 && mode == MODE_CTR)
++	{
++		PyErr_Format(PyExc_ValueError,
++			"CTR mode needs counter parameter, not IV");
++		return NULL;
++	}
+ 	if (IVlen != BLOCK_SIZE && mode != MODE_ECB && mode != MODE_CTR)
+ 	{
+ 		PyErr_Format(PyExc_ValueError,
+--- contrib/python/pycrypto/py2/src/hash_SHA2.h	(index)
++++ contrib/python/pycrypto/py2/src/hash_SHA2.h	(working tree)
+@@ -68,7 +68,7 @@
+ #define SHR(x, n)   ((x)>>(n))
+ 
+ /* determine fixed size types */
+-#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
++#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) || defined(__GNUC__)
+ #include <stdint.h>
+ typedef uint8_t				U8;
+ typedef uint32_t			U32;
+--- contrib/python/pycrypto/py2/src/hash_SHA2_template.c	(index)
++++ contrib/python/pycrypto/py2/src/hash_SHA2_template.c	(working tree)
+@@ -88,7 +88,7 @@ static void sha_compress(hash_state * hs)
+  * return 1 on success
+  * return 0 if the length overflows
+  */
+-int add_length(hash_state *hs, sha2_word_t inc) {
++static int add_length(hash_state *hs, sha2_word_t inc) {
+     sha2_word_t overflow_detector;
+     overflow_detector = hs->length_lower;
+     hs->length_lower += inc;
+--- contrib/python/pycrypto/py2/src/libtom/tomcrypt_macros.h	(index)
++++ contrib/python/pycrypto/py2/src/libtom/tomcrypt_macros.h	(working tree)
+@@ -260,31 +260,9 @@ static inline unsigned ROR(unsigned word, int i)
+    return word;
+ }
+ 
+-#ifndef LTC_NO_ROLC
+-
+-static inline unsigned ROLc(unsigned word, const int i)
+-{
+-   asm ("roll %2,%0"
+-      :"=r" (word)
+-      :"0" (word),"I" (i));
+-   return word;
+-}
+-
+-static inline unsigned RORc(unsigned word, const int i)
+-{
+-   asm ("rorl %2,%0"
+-      :"=r" (word)
+-      :"0" (word),"I" (i));
+-   return word;
+-}
+-
+-#else
+-
+ #define ROLc ROL
+ #define RORc ROR
+ 
+-#endif
+-
+ #elif !defined(__STRICT_ANSI__) && defined(LTC_PPC32)
+ 
+ static inline unsigned ROL(unsigned word, int i)
+@@ -359,31 +337,9 @@ static inline unsigned long ROR64(unsigned long word, int i)
+    return word;
+ }
+ 
+-#ifndef LTC_NO_ROLC
+-
+-static inline unsigned long ROL64c(unsigned long word, const int i)
+-{
+-   asm("rolq %2,%0"
+-      :"=r" (word)
+-      :"0" (word),"J" (i));
+-   return word;
+-}
+-
+-static inline unsigned long ROR64c(unsigned long word, const int i)
+-{
+-   asm("rorq %2,%0"
+-      :"=r" (word)
+-      :"0" (word),"J" (i));
+-   return word;
+-}
+-
+-#else /* LTC_NO_ROLC */
+-
+ #define ROL64c ROL64
+ #define ROR64c ROR64
+ 
+-#endif
+-
+ #else /* Not x86_64  */
+ 
+ #define ROL64(x, y) \

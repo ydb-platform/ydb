@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package yandex.cloud.trino.v1;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/trino/v1;trino";
+option java_package = "yandex.cloud.api.trino.v1";
+
+message ResourceManagementConfig {
+  // Resource groups configuration.
+  ResourceGroupsConfig resource_groups = 1;
+
+  // Query management confiugration.
+  QueryConfig query = 2;
+}
+
+message QueryConfig {
+  // Query properties.
+  map<string, string> properties = 1;
+}
+
+message ResourceGroupsConfig {
+  // Root resource groups configuration.
+  repeated ResourceGroupConfig root_groups = 1 [(size)=">0"];
+
+  // Selector rules for routing queries to resource groups.
+  repeated SelectorRuleConfig selectors = 2 [(size)=">0"];
+
+  // Period for CPU quota calculations.
+  string cpu_quota_period = 3;
+}
+
+message ResourceGroupConfig {
+  enum SchedulingPolicy {
+    SCHEDULING_POLICY_UNSPECIFIED = 0;
+    // Queued queries processed first-in-first-out, sub-groups take turns starting queries.
+    FAIR = 1;
+    // Queries selected stochastically by priority, sub-groups selected by schedulingWeight.
+    WEIGHTED = 2;
+    // Sub-groups selected by schedulingWeight and concurrency relative to their share.
+    WEIGHTED_FAIR = 3;
+    // Queued queries selected strictly by priority.
+    QUERY_PRIORITY = 4;
+  }
+
+  // Resource group name.
+  string name = 1 [(required) = true];
+
+  // Maximum number of queued queries.
+  int64 max_queued = 2 [(value)=">0"];
+
+  // Number of concurrently running queries after which new queries only run if peer groups are below soft limits.
+  int64 soft_concurrency_limit = 3;
+
+  // Maximum number of queries that can run concurrently.
+  int64 hard_concurrency_limit = 4 [(value)=">0"];
+
+  // Maximum amount of distributed memory this group can use.
+  string soft_memory_limit = 5;
+
+  // Maximum CPU time per period this group can use before applying penalty to running queries (requires hard_cpu_limit).
+  string soft_cpu_limit = 6;
+
+  // Maximum CPU time per period this group can use.
+  string hard_cpu_limit = 7;
+
+  // Policy for selecting queued queries and sub-group eligibility.
+  SchedulingPolicy scheduling_policy = 8;
+
+  // Weight for weighted and weighted_fair scheduling policies.
+  int64 scheduling_weight = 9;
+
+  reserved 10;
+
+  // List of sub-groups.
+  repeated ResourceGroupConfig sub_groups = 11;
+}
+
+message SelectorRuleConfig {
+  // Regex to match against username.
+  string user = 1;
+
+  reserved 2, 3;
+
+  // Regex to match against user groups.
+  string user_group = 4;
+
+  // Regex to match against query source.
+  string source = 5;
+
+  // Type of query to match.
+  QueryType query_type = 6;
+
+  // Tags that must all be present in the query's client tags.
+  repeated string client_tags = 7;
+
+  // Target resource group name.
+  string group = 8 [(required) = true];
+
+  enum QueryType {
+    QUERY_TYPE_UNSPECIFIED = 0;
+    SELECT = 1;
+    EXPLAIN = 2;
+    DESCRIBE = 3;
+    INSERT = 4;
+    UPDATE = 5;
+    MERGE = 6;
+    DELETE = 7;
+    ANALYZE = 8;
+    DATA_DEFINITION = 9;
+    ALTER_TABLE_EXECUTE = 10;
+  }
+}

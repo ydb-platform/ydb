@@ -1,0 +1,16 @@
+{
+  "$id": "_schemas.json",
+  "$schemas": "https://json-schema.org/draft/2019-09/schema#",
+  "$defs": {
+    "Something": {
+      "type": "object"
+    },
+    "Body": {
+      "content": {
+        "application/json": {
+          "$ref": "#/$defs/Something"
+        }
+      }
+    }
+  }
+}

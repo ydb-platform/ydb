@@ -1,0 +1,8 @@
+requirements:
+  - contrib/libs/libcap
+copy:
+  - _prctlmodule.c
+  - securebits.h
+  - test_prctl.py
+mark_as_tests:
+  - test_prctl.py

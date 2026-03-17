@@ -1,0 +1,1550 @@
+Metadata-Version: 2.1
+Name: fiona
+Version: 1.10.1
+Summary: Fiona reads and writes spatial data files
+Author: Sean Gillies
+Maintainer: Fiona contributors
+License: BSD 3-Clause
+Project-URL: Documentation, https://fiona.readthedocs.io/
+Project-URL: Repository, https://github.com/Toblerity/Fiona
+Keywords: gis,vector,feature,data
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering :: GIS
+Requires-Python: >=3.8
+Description-Content-Type: text/x-rst
+License-File: LICENSE.txt
+Requires-Dist: attrs >=19.2.0
+Requires-Dist: certifi
+Requires-Dist: click ~=8.0
+Requires-Dist: click-plugins >=1.0
+Requires-Dist: cligj >=0.5
+Requires-Dist: importlib-metadata ; python_version < "3.10"
+Provides-Extra: all
+Requires-Dist: fiona[calc,s3,test] ; extra == 'all'
+Provides-Extra: calc
+Requires-Dist: pyparsing ; extra == 'calc'
+Requires-Dist: shapely ; extra == 'calc'
+Provides-Extra: s3
+Requires-Dist: boto3 >=1.3.1 ; extra == 's3'
+Provides-Extra: test
+Requires-Dist: aiohttp ; extra == 'test'
+Requires-Dist: fsspec ; extra == 'test'
+Requires-Dist: fiona[s3] ; extra == 'test'
+Requires-Dist: pytest >=7 ; extra == 'test'
+Requires-Dist: pytest-cov ; extra == 'test'
+Requires-Dist: pytz ; extra == 'test'
+
+=====
+Fiona
+=====
+
+.. image:: https://github.com/Toblerity/Fiona/actions/workflows/tests.yml/badge.svg
+   :target: https://github.com/Toblerity/Fiona/actions/workflows/tests.yml
+.. image:: https://github.com/Toblerity/Fiona/actions/workflows/test_gdal_latest.yml/badge.svg
+   :target: https://github.com/Toblerity/Fiona/actions/workflows/test_gdal_latest.yml
+.. image:: https://img.shields.io/pypi/v/fiona
+   :target: https://pypi.org/project/fiona/
+.. image:: https://api.securityscorecards.dev/projects/github.com/Toblerity/Fiona/badge
+   :target: https://securityscorecards.dev/viewer/?uri=github.com/Toblerity/Fiona
+
+Fiona streams simple feature data to and from GIS formats like GeoPackage and
+Shapefile.
+
+Fiona can read and write real-world data using multi-layered GIS formats,
+zipped and in-memory virtual file systems, from files on your hard drive or in
+cloud storage. This project includes Python modules and a command line
+interface (CLI).
+
+Fiona depends on `GDAL <https://gdal.org>`__ but is different from GDAL's own
+`bindings <https://gdal.org/api/python_bindings.html>`__. Fiona is designed to
+be highly productive and to make it easy to write code which is easy to read.
+
+Installation
+============
+
+Fiona has several `extension modules
+<https://docs.python.org/3/extending/extending.html>`__ which link against
+libgdal. This complicates installation. Binary distributions (wheels)
+containing libgdal and its own dependencies are available from the Python
+Package Index and can be installed using pip.
+
+.. code-block:: console
+
+    pip install fiona
+
+These wheels are mainly intended to make installation easy for simple
+applications, not so much for production. They are not tested for compatibility
+with all other binary wheels, conda packages, or QGIS, and omit many of GDAL's
+optional format drivers. If you need, for example, GML support you will need to
+build and install Fiona from a source distribution. It is possible to install
+Fiona from source using pip (version >= 22.3) and the `--no-binary` option. A
+specific GDAL installation can be selected by setting the GDAL_CONFIG
+environment variable.
+
+.. code-block:: console
+
+    pip install -U pip
+    pip install --no-binary fiona fiona
+
+Many users find Anaconda and conda-forge a good way to install Fiona and get
+access to more optional format drivers (like GML).
+
+Fiona 1.10 requires Python 3.8 or higher and GDAL 3.4 or higher.
+
+Python Usage
+============
+
+Features are read from and written to file-like ``Collection`` objects returned
+from the ``fiona.open()`` function. Features are data classes modeled on the
+GeoJSON format. They don't have any spatial methods of their own, so if you
+want to transform them you will need Shapely or something like it. Here is an
+example of using Fiona to read some features from one data file, change their
+geometry attributes using Shapely, and write them to a new data file.
+
+.. code-block:: python
+
+    import fiona
+    from fiona import Feature, Geometry
+    from shapely.geometry import mapping, shape
+
+    # Open a file for reading. We'll call this the source.
+    with fiona.open(
+        "zip+https://github.com/Toblerity/Fiona/files/11151652/coutwildrnp.zip"
+    ) as src:
+
+        # The file we'll write to must be initialized with a coordinate
+        # system, a format driver name, and a record schema. We can get
+        # initial values from the open source's profile property and then
+        # modify them as we need.
+        profile = src.profile
+        profile["schema"]["geometry"] = "Point"
+        profile["driver"] = "GPKG"
+
+        # Open an output file, using the same format driver and coordinate
+        # reference system as the source. The profile mapping fills in the
+        # keyword parameters of fiona.open.
+        with fiona.open("centroids.gpkg", "w", **profile) as dst:
+
+            # Process only the feature records intersecting a box.
+            for feat in src.filter(bbox=(-107.0, 37.0, -105.0, 39.0)):
+
+                # Get the feature's centroid.
+                centroid_shp = shape(feat.geometry).centroid
+                new_geom = Geometry.from_dict(centroid_shp)
+
+                # Write the feature out.
+                dst.write(
+                    Feature(geometry=new_geom, properties=f.properties)
+                )
+
+        # The destination's contents are flushed to disk and the file is
+        # closed when its with block ends. This effectively
+        # executes ``dst.flush(); dst.close()``.
+
+CLI Usage
+=========
+
+Fiona's command line interface, named "fio", is documented at `docs/cli.rst
+<https://github.com/Toblerity/Fiona/blob/main/docs/cli.rst>`__. The CLI has a
+number of different commands. Its ``fio cat`` command streams GeoJSON features
+from any dataset.
+
+.. code-block:: console
+
+    $ fio cat --compact tests/data/coutwildrnp.shp | jq -c '.'
+    {"geometry":{"coordinates":[[[-111.73527526855469,41.995094299316406],...]]}}
+    ...
+
+Documentation
+=============
+
+For more details about this project, please see:
+
+* Fiona `home page <https://github.com/Toblerity/Fiona>`__
+* `Docs and manual <https://fiona.readthedocs.io/>`__
+* `Examples <https://github.com/Toblerity/Fiona/tree/main/examples>`__
+* Main `user discussion group <https://fiona.groups.io/g/main>`__
+* `Developers discussion group <https://fiona.groups.io/g/dev>`__
+
+Changes
+=======
+
+All issue numbers are relative to https://github.com/Toblerity/Fiona/issues.
+
+1.10.1 (2024-09-16)
+-------------------
+
+Bug fixes:
+
+- Logging in the CRS class no longer tries to print representations of objects
+  that may be NULL when searching for authority matches (#1445).
+
+1.10.0 (2024-09-03)
+-------------------
+
+The package version, credits, and citation file have been updated. There have
+been no other changes since 1.10.0rc1. Fiona is the work of 73 contributors,
+including 25 new contributors since 1.9.0.
+
+1.10.0rc1 (2024-08-21)
+----------------------
+
+This is the first release candidate for 1.10.0.
+
+Changes:
+
+- Mutable item access to Feature, Geometry, and Properties instances has been
+  restored (reported in #1430). This usage should be avoided as instances of
+  these classes will be immutable in a future version.
+- The setup.cfg duplicates project configuration in pyproject.toml and has been
+  removed.
+
+1.10b3 (2024-07-29)
+-------------------
+
+Bug fixes:
+
+- The sketchy, semi-private Python opener interfaces of version 1.10b2 have
+  been replaced by ABCs that are exported from fiona.abc (#1415).
+- The truncate VSI plugin callback has been implemented (#1413).
+
+1.10b2 (2024-07-10)
+-------------------
+
+Bug fixes:
+
+- The Pyopener registry and VSI plugin have been rewritten to avoid filename
+  conflicts and to be compatible with multithreading. Now, a new plugin handler
+  is registered for each instance of using an opener (#1408). Before GDAL 3.9.0
+  plugin handlers cannot not be removed and so it may be observed that the size
+  of the Pyopener registry grows during the execution of a program.
+- A CSLConstList ctypedef has been added and is used where appropriate (#1404).
+- Fiona model objects have a informative, printable representation again
+  (#1380).
+
+Packaging:
+
+- PyPI wheels include GDAL 3.9.1 and curl 8.8.0.
+
+1.10b1 (2024-04-16)
+-------------------
+
+Bug fixes:
+
+- Fiona can again set fields with values that are instances of classes derived
+  from date, time, and datetime (#1377).  This was broken by changes in 1.10a2.
+
+1.10a2 (2024-04-05)
+-------------------
+
+Deprecations:
+
+- The FIELD_TYPES, FIELD_TYPES_MAP, and FIELD_TYPES_MAP_REV attributes of
+  fiona.schema are no longer used by the project and will be removed in version
+  2.0 (#1366).
+- The Python style of rio-filter expressions introduced in version 1.0 are
+  deprecated. Only the parenthesized list type of expression will be supported
+  by version 2.0.
+
+New features:
+
+- All supported Fiona field types are now represented by classes in
+  fiona.schema. These classes are mapped in FIELD_TYPES_MAP2 and
+  FIELD_TYPES_MAP2_REV to OGR field type and field subtype pairs (#1366).
+- The filter, map, and reduce CLI commands from the public domain version 1.1.0
+  of fio-planet have been incorporated into Fiona's core set of commands
+  (#1362).  These commands are only available if pyparsing and shapely (each of
+  these are declared in the "calc" set of extra requirements) are installed.
+
+Bug fixes:
+
+- Fiona's python opener VSI plugin prefix has been changed to "vsifiopener" to
+  not conflict with Rasterio (#1368).
+- Add a 16-bit integer type "int16" based on OGR's OSFTInt16 integer sub-type
+  (#1358).
+- Allow a GeoJSON collection's layer name to be set on opening in write mode
+  (#1352).
+- The legacy crs.py module which was shadowed by the new crs.pyx module has
+  been deleted (#1344).
+- Python 3.8 has been added back to the list of supported versions and
+  a dependency on Numpy added in 1.10a1 has been removed.
+- An implementation of the VSI flush callback has been added to _vsiopener.pyx.
+- Openers are now registered only by urlpath. The mode is no longer considered
+  as OGR drivers may use a mix of modes when creating a new dataset.
+
+Other changes:
+
+- Feature builder and field getter/setter instances are reused when reading and
+  writing features (#1366).
+
+1.10a1 (2024-03-01)
+-------------------
+
+Python version:
+
+Fiona 1.10 will require Python version 3.9 or higher.
+
+Deprecations:
+
+The fiona.path module will be removed in version 2.0 and a deprecation warning
+is issued when the module is imported (#1334). Additionally, members of that
+module are no longer exported from the top level module.
+
+New features:
+
+Python openers can now support discovery of auxiliary "sidecar" files like
+.aux.xml, .msk, and .tfw files for GeoTIFFs (#1331). Additionally, filesystem
+objects, such as those from fsspec, can be used as openers. This will become
+the recommended usage, supplanting the use of single file openers.
+
+Bug fixes:
+
+- Use of pkg_resources in test_rio_info.py has been eliminated.
+- gzip, tar, and zip archive URIs containing drive letters were not always
+  parsed properly on Windows, but are now (#1334).
+
+1.9.6 (2024-03-07)
+------------------
+
+- Ensure that geometry types in a schema are translated to a linear type, as
+  geometry instances are (#1313).
+- Fix broken stable API documentation on Read The Docs (#).
+- Remove install requirement of setuptools, a regression introduced in 1.9.5.
+
+1.9.5 (2023-10-11)
+------------------
+
+Bug fixes:
+
+- Expand keys in schema mismatch exception, resolving #1278.
+- Preserve the null properties and geometry of a Feature when serializing
+  (#1276).
+
+Packaging:
+
+- The distribution name is now officially "fiona", not "Fiona". The import
+  name remains "fiona".
+- Builds now require Cython >= 3.0.2 (#1276).
+- PyPI wheels include GDAL 3.6.4, PROJ 9.0.1, and GEOS 3.11.2.
+- PyPI wheels include curl 8.4.0, addressing CVE-2023-38545 and CVE-38546.
+- PyPI wheels are now available for Python 3.12.
+
+1.9.4.post1 (2023-05-23)
+------------------------
+
+Extraneous files were unintentionally packaged in the 1.9.4 wheels. This post1
+release excludes them so that wheel contents are as in version 1.9.3.
+
+1.9.4 (2023-05-16)
+------------------
+
+- The performance of Feature.from_dict() has been improved (#1267).
+- Several sources of meaningless log messages from fiona._geometry about NULL
+  geometries are avoided (#1264).
+- The Parquet driver has been added to the list of supported drivers and will
+  be available if your system's GDAL library links libarrow. Note that fiona
+  wheels on PyPI do not include libarrow as it is rather large.
+- Ensure that fiona._vendor modules are found and included.
+- Bytes type feature properties are now hex encoded when serializing to GeoJSON
+  (#1263).
+- Docstrings for listdir and listlayers have been clarified and harmonized.
+- Nose style test cases have been converted to unittest.TestCase (#1256).
+- The munch package used by fio-filter and fio-calc is now vendored and patched
+  to remove usage of the deprecated pkg_resources module (#1255).
+
+1.9.3 (2023-04-10)
+------------------
+
+- Rasterio CRS objects are compatible with the Collection constructor and are
+  now accepted (#1248).
+- Enable append mode for fio-load (#1237).
+- Reading a GeoJSON with an empty array property can result in a segmentation
+  fault since version 1.9.0. This has been fixed (#1228).
+
+1.9.2 (2023-03-20)
+------------------
+
+- Get command entry points using importlib.metadata (#1220).
+- Instead of warning, transform_geom() raises an exception when some points
+  can't be reprojected unless the caller opts in to partial reprojection. This
+  restores the behavior of version 1.8.22.
+- Add support for open options to all CLI commands that call fiona.open
+  (#1215).
+- Fix a memory leak that can occur when iterating over a dataset using strides
+  (#1205).
+- ZipMemoryFile now supports zipped GDB data (#1203).
+
+1.9.1 (2023-02-09)
+------------------
+
+- Log a warning message when identically named fields are encountered (#1201).
+- Avoid dependence on listdir order in tests (#1193).
+- Prevent empty geometries arrays from appearing in __geo_interface__ (#1197).
+- setuptools added to pyproject.toml. Its pkg_resources module is used by the
+  CLI (#1191).
+
+1.9.0 (2023-01-30)
+------------------
+
+- CITATION.txt has been replaced by a new CITATION.cff file and the credits
+  have been updated.
+- In setup.py the distutils (deprecated) logger is no longer used.
+
+1.9b2 (2023-01-22)
+------------------
+
+- Add Feature.__geo_interface__ property (#1181).
+- Invalid creation options are filtered and ignored (#1180).
+- The readme doc has been shortened and freshened up, with a modern example for
+  version 1.9.0 (#1174).
+- The Geometry class now provides and looks for __geo_interface__ (#1174).
+- The top level fiona module now exports Feature, Geometry, and Properties
+  (#1174).
+- Functions that take Feature or Geometry objects will continue to take dicts
+  or objects that provide __geo_interface__ (#1177). This reverses the
+  deprecation introduced in 1.9a2.
+- Python ignores SIGPIPE by default. By never catching BrokenPipeError via
+  `except Exception` when, for example, piping the output of rio-shapes to
+  the Unix head program, we avoid getting an unhandled BrokenPipeError message
+  when the interpreter shuts down (#2689).
+
+1.9b1 (2022-12-13)
+------------------
+
+New features:
+
+* Add listdir and listlayers method to io.MemoryFile (resolving #754).
+* Add support for TIN and triangle geometries (#1163).
+* Add an allow_unsupported_drivers option to fiona.open() (#1126).
+* Added support for the OGR StringList field type (#1141).
+
+Changes and bug fixes:
+
+* Missing and unused imports have been added or removed.
+* Make sure that errors aren't lost when a collection can't be saved properly
+  (#1169).
+* Ensure that ZipMemoryFile have the proper GDAL name after creation so that we
+  can use listdir() (#1092).
+* The fiona._loading module, which supports DLL loading on Windows,
+  has been moved into __init__.py and is no longer used anywhere else (#1168).
+* Move project metadata to pyproject.toml (#1165).
+* Update drvsupport.py to reflect new format capabilities in GDAL 3.6.0
+  (#1122).
+* Remove debug logging from env and _env modules.
+
+1.9a3 (2022-10-17)
+------------------
+
+Packaging:
+
+* Builds now require Cython >= 0.29.29 because of
+* https://github.com/cython/cython/issues/4609 (see #1143).
+* PyPI wheels now include GDAL 3.5.2, PROJ 9.0.1, and GEOS 3.11.0.
+* PyPI wheels are now available for Python 3.11.
+
+1.9a2 (2022-06-10)
+------------------
+
+Deprecations:
+
+- Fiona's API methods will accept feature and geometry dicts in 1.9.0, but this
+  usage is deprecated. Instances of Feature and Geometry will be required in
+  2.0.
+- The precision keyword argument of fiona.transform.transform_geom is
+  deprecated and will be removed in version 2.0.
+- Deprecated usage has been eliminated in the project. Fiona's tests pass when
+  run with a -Werror::DeprecationWarning filter.
+
+Changes:
+
+- Fiona's FionaDeprecationWarning now sub-classes DeprecationWarning.
+- Some test modules have been re-formatted using black.
+
+New features:
+
+- Fiona Collections now carry a context exit stack into which we can push fiona
+  Envs and MemoryFiles (#1059).
+- Fiona has a new CRS class, like rasterio's, which is compatible with the CRS
+  dicts of previous versions (#714).
+
+1.9a1 (2022-05-19)
+------------------
+
+Deprecations:
+
+- The fiona.drivers() function has been deprecated and will be removed in
+  version 2.0. It should be replaced by fiona.Env().
+- The new fiona.meta module will be renamed to fiona.drivers in version 2.0.
+
+Packaging:
+
+- Source distributions contain no C source files and require Cython to create
+  them from .pyx files (#1096).
+
+Changes:
+
+- Shims for various versions of GDAL have been removed and are replaced by
+  Cython compilation conditions (#1093).
+- Use of CURL_CA_BUNDLE environment variable is replaced by a more specific
+  GDAL/PROJ_CURL_CA_BUNDLE (#1095).
+- Fiona's feature accessors now return instances of fiona.model.Feature instead
+  of Python dicts (#787). The Feature class is compatible with code that
+  expects GeoJSON-like dicts but also provides id, geometry, and properties
+  attributes. The last two of these are instances of fiona.model.Geometry and
+  fiona.model.Properties.
+- GDAL 3.1.0 is the minimum GDAL version.
+- Drop Python 2, and establish Python 3.7 as the minimum version (#1079).
+- Remove six and reduce footprint of fiona.compat (#985).
+
+New features:
+
+- The appropriate format driver can be detected from filename in write mode (#948).
+- Driver metadata including dataset open and dataset and layer creations
+  options are now exposed through methods of the fiona.meta module (#950).
+- CRS WKT format support (#979).
+- Add 'where' SQL clause to set attribute filter (#961, #1097).
+
+Bug fixes:
+
+- Env and Session classes have been updated for parity with rasterio and to
+  resolve a credential refresh bug (#1055).
+
+1.8.22 (2022-10-14)
+-------------------
+
+Builds now require Cython >= 0.29.29 because of
+https://github.com/cython/cython/issues/4609 (#1143).
+
+1.8.21 (2022-02-07)
+-------------------
+
+Changes:
+
+- Driver mode support tests have been made more general and less susceptible to
+  driver quirks involving feature fields and coordinate values (#1060).
+- OSError is raised on attempts to open a dataset in a Python file object in
+  "a" mode (see #1027).
+- Upgrade attrs, cython, etc to open up Python 3.10 support (#1049).
+
+Bug fixes:
+
+- Allow FieldSkipLogFilter to handle exception messages as well as strings
+  (reported in #1035).
+- Clean up VSI files left by MemoryFileBase, resolving #1041.
+- Hard-coded "utf-8" collection encoding added in #423 has been removed
+  (#1057).
+
+1.8.20 (2021-05-31)
+-------------------
+
+Packaging:
+
+- Wheels include GDAL 3.3.0 and GEOS 3.9.1.
+
+Bug fixes:
+
+- Allow use with click 8 and higher (#1015).
+
+1.8.19 (2021-04-07)
+-------------------
+
+Packaging:
+
+- Wheels include GDAL 3.2.1 and PROJ 7.2.1.
+
+Bug fixes:
+
+- In fiona/env.py the GDAL data path is now configured using set_gdal_config
+  instead by setting the GDAL_DATA environment variable (#1007).
+- Spurious iterator reset warnings have been eliminatged (#987).
+
+1.8.18 (2020-11-17)
+-------------------
+
+- The precision option of transform has been fixed for the case of
+  GeometryCollections (#971, #972).
+- Added missing --co (creation) option to fio-load (#390).
+- If the certifi package can be imported, its certificate store location will
+  be passed to GDAL during import of fiona._env unless CURL_CA_BUNDLE is
+  already set.
+- Warn when feature fields named "" are found (#955).
+
+1.8.17 (2020-09-09)
+-------------------
+
+- To fix issue #952 the fio-cat command no longer cuts feature geometries at
+  the anti-meridian by default. A --cut-at-antimeridian option has been added
+  to allow cutting of geometries in a geographic destination coordinate
+  reference system.
+
+1.8.16 (2020-09-04)
+-------------------
+
+- More OGR errors and warnings arising in calls to GDAL C API functions are
+  surfaced (#946).
+- A circular import introduced in some cases in 1.8.15 has been fixed (#945).
+
+1.8.15 (2020-09-03)
+-------------------
+
+- Change shim functions to not return tuples (#942) as a solution for the
+  packaging problem reported in #941.
+- Raise a Python exception when VSIFOpenL fails (#937).
+
+1.8.14 (2020-08-31)
+-------------------
+
+- When creating a new Collection in a MemoryFile with a default (random) name
+  Fiona will attempt to use a format driver-supported file extension (#934).
+  When initializing a MemoryFile with bytes of data formatted for a vector
+  driver that requires a certain file name or extension, the user should
+  continue to pass an appropriate filename and/or extension.
+- Read support for FlatGeobuf has been enabled in the drvsupport module.
+- The MemoryFile implementation has been improved so that it can support multi-part
+  S3 downloads (#906). This is largely a port of code from rasterio.
+- Axis ordering for results of fiona.transform was wrong when CRS were passed
+  in the "EPSG:dddd" form (#919). This has been fixed by (#926).
+- Allow implicit access to the only dataset in a ZipMemoryFile. The path
+  argument of ZipMemoryFile.open() is now optional (#928).
+- Improve support for datetime types: support milliseconds (#744), timezones (#914)
+  and improve warnings if type is not supported by driver (#572).
+- Fix "Failed to commit transaction" TransactionError for FileGDB driver.
+- Load GDAL DLL dependencies on Python 3.8+ / Windows with add_dll_directory() (#851).
+- Do not require optional properties (#848).
+- Ensure that slice does not overflow available data (#884).
+- Resolve issue when "ERROR 4: Unable to open EPSG support file gcs.csv." is raised on
+  importing fiona (#897).
+- Resolve issue resulting in possible mixed up fields names (affecting only DXF, GPX,
+  GPSTrackMacker and DGN driver) (#916).
+- Ensure crs_wkt is passed when writing to MemoryFile (#907).
+
+
+1.8.13.post1 (2020-02-21)
+-------------------------
+
+- This release is being made to improve binary wheel compatibility with shapely
+  1.7.0. There have been no changes to the fiona package code since 1.8.13.
+
+1.8.13 (2019-12-05)
+-------------------
+
+- The Python version specs for argparse and ordereddict in 1.8.12 were wrong
+  and have been corrected (#843).
+
+1.8.12 (2019-12-04)
+-------------------
+
+- Specify Python versions for argparse, enum34, and ordereddict requirements
+  (#842).
+
+1.8.11 (2019-11-07)
+-------------------
+
+- Fix an access violation on Windows (#826).
+
+1.8.10 (2019-11-07)
+-------------------
+
+Deprecations:
+
+- Use of vfs keyword argument with open or listlayers has been previously noted
+  as deprecated, but now triggers a deprecation warning.
+
+Bug fixes:
+
+- fiona.open() can now create new datasets using CRS URNs (#823).
+- listlayers() now accepts file and Path objects, like open() (#825).
+- Use new set_proj_search_path() function to set the PROJ data search path. For
+  GDAL versions before 3.0 this sets the PROJ_LIB environment variable. For
+  GDAL version 3.0 this calls OSRSetPROJSearchPaths(), which overrides
+  PROJ_LIB.
+- Remove old and unused _drivers extension module.
+- Check for header.dxf file instead of pcs.csv when looking for installed GDAL
+  data. The latter is gone with GDAL 3.0 but the former remains (#818).
+
+1.8.9.post2 (2019-10-22)
+------------------------
+
+- The 1.8.9.post1 release introduced a bug affecting builds of the package from
+  a source distribution using GDAL 2.x. This bug has been fixed in commit
+  960568d.
+
+1.8.9.post1 (2019-10-22)
+------------------------
+
+- A change has been made to the package setup script so that the shim module
+  for GDAL 3 is used when building the package from a source distribution.
+  There are no other changes to the package.
+
+1.8.9 (2019-10-21)
+------------------
+
+- A shim module and support for GDAL 3.0 has been added. The package can now be
+  built and used with GDAL 3.0 and PROJ 6.1 or 6.2. Note that the 1.8.9 wheels
+  we will upload to PyPI will contain GDAL 2.4.2 and PROJ 4.9.3 as in the 1.8.8
+  wheels.
+
+1.8.8 (2019-09-25)
+------------------
+
+- The schema of geopackage files with a geometry type code of 3000 could not be
+  reported using Fiona 1.8.7. This bug is fixed.
+
+1.8.7 (2019-09-24)
+------------------
+
+Bug fixes:
+
+- Regression in handling of polygons with M values noted under version 1.8.5
+  below was in fact not fixed then (see new report #789), but is fixed in
+  version 1.8.7.
+- Windows filenames containing "!" are now parsed correctly, fixing issue #742.
+
+Upcoming changes:
+
+- In version 1.9.0, the objects yielded when a Collection is iterated will be
+  mutable mappings but will no longer be instances of Python's dict. Version
+  1.9 is intended to be backwards compatible with 1.8 except where user code
+  tests `isinstance(feature, dict)`. In version 2.0 the new Feature, Geometry,
+  and Properties classes will become immutable mappings. See
+  https://github.com/Toblerity/fiona-rfc/blob/main/rfc/0001-fiona-2-0-changes.md
+  for more discussion of the upcoming changes for version 2.0.
+
+1.8.6 (2019-03-18)
+------------------
+
+- The advertisement for JSON driver enablement in 1.8.5 was false (#176), but
+  in this release they are ready for use.
+
+1.8.5 (2019-03-15)
+------------------
+
+- GDAL seems to work best if GDAL_DATA is set as early as possible. Ideally it
+  is set when building the library or in the environment before importing
+  Fiona, but for wheels we patch GDAL_DATA into os.environ when fiona.env
+  is imported. This resolves #731.
+- A combination of bugs which allowed .cpg files to be overlooked has been
+  fixed (#726).
+- On entering a collection context (Collection.__enter__) a new anonymous GDAL
+  environment is created if needed and entered. This makes `with
+  fiona.open(...) as collection:` roughly equivalent to `with fiona.open(...)
+  as collection, Env():`. This helps prevent bugs when Collections are created
+  and then used later or in different scopes.
+- Missing GDAL support for TopoJSON, GeoJSONSeq, and ESRIJSON has been enabled
+  (#721).
+- A regression in handling of polygons with M values (#724) has been fixed.
+- Per-feature debug logging calls in OGRFeatureBuilder methods have been
+  eliminated to improve feature writing performance (#718).
+- Native support for datasets in Google Cloud Storage identified by "gs"
+  resource names has been added (#709).
+- Support has been added for triangle, polyhedral surface, and TIN geometry
+  types (#679).
+- Notes about using the MemoryFile and ZipMemoryFile classes has been added to
+  the manual (#674).
+
+1.8.4 (2018-12-10)
+------------------
+
+- 3D geometries can now be transformed with a specified precision (#523).
+- A bug producing a spurious DriverSupportError for Shapefiles with a "time"
+  field (#692) has been fixed.
+- Patching of the GDAL_DATA environment variable was accidentally left in place
+  in 1.8.3 and now has been removed.
+
+1.8.3 (2018-11-30)
+------------------
+
+- The RASTERIO_ENV config environment marker this project picked up from
+  Rasterio has been renamed to FIONA_ENV (#665).
+- Options --gdal-data and --proj-data have been added to the fio-env command so
+  that users of Rasterio wheels can get paths to set GDAL_DATA and PROJ_LIB
+  environment variables.
+- The unsuccessful attempt to make GDAL and PROJ support file discovery and
+  configuration automatic within collection's crs and crs_wkt properties has
+  been reverted.  Users must execute such code inside a `with Env()` block or
+  set the GDAL_DATA and PROJ_LIB environment variables needed by GDAL.
+
+1.8.2 (2018-11-19)
+------------------
+
+Bug fixes:
+
+- Raise FionaValueError when an iterator's __next__ is called and the session
+  is found to be missing or inactive instead of passing a null pointer to
+  OGR_L_GetNextFeature (#687).
+
+1.8.1 (2018-11-15)
+------------------
+
+Bug fixes:
+
+- Add checks around OSRGetAuthorityName and OSRGetAuthorityCode calls that will
+  log problems with looking up these items.
+- Opened data sources are now released before we raise exceptions in
+  WritingSession.start (#676). This fixes an issue with locked files on
+  Windows.
+- We now ensure that an Env instance exists when getting the crs or crs_wkt
+  properties of a Collection (#673, #690). Otherwise, required GDAL and PROJ
+  data files included in Fiona wheels can not be found.
+- GDAL and PROJ data search has been refactored to improve testability (#678).
+- In the project's Cython code, void* pointers have been replaced with proper
+  GDAL types (#672).
+- Pervasive warning level log messages about ENCODING creation options (#668)
+  have been eliminated.
+
+1.8.0 (2018-10-31)
+------------------
+
+This is the final 1.8.0 release. Thanks, everyone!
+
+Bug fixes:
+
+- We cpdef Session.stop so that it has a C version that can be called safely
+  from __dealloc__, fixing a PyPy issue (#659, #553).
+
+1.8rc1 (2018-10-26)
+-------------------
+
+There are no changes in 1.8rc1 other than more test standardization and the
+introduction of a temporary test_collection_legacy.py module to support the
+build of fully tested Python 2.7 macosx wheels on Travis-CI.
+
+1.8b2 (2018-10-23)
+------------------
+
+Bug fixes:
+
+- The ensure_env_with_credentials decorator will no longer clobber credentials
+  of the outer environment. This fixes a bug reported to the Rasterio project
+  and which also existed in Fiona.
+- An unused import of the packaging module and the dependency have been 
+  removed (#653).
+- The Env class logged to the 'rasterio' hierarchy instead of 'fiona'. This
+  mistake has been corrected (#646).
+- The Mapping abstract base class is imported from collections.abc when
+  possible (#647).
+
+Refactoring:
+
+- Standardization of the tests on pytest functions and fixtures continues and
+  is nearing completion (#648, #649, #650, #651, #652).
+
+1.8b1 (2018-10-15)
+------------------
+
+Deprecations:
+
+- Collection slicing has been deprecated and will be prohibited in a future
+  version.
+
+Bug fixes:
+
+- Rasterio CRS objects passed to transform module methods will be converted
+  to dicts as needed (#590).
+- Implicitly convert curve geometries to their linear approximations rather
+  than failing (#617).
+- Migrated unittest test cases in test_collection.py and test_layer.py to the
+  use of the standard data_dir and path_coutwildrnp_shp fixtures (#616).
+- Root logger configuration has been removed from all test scripts (#615).
+- An AWS session is created for the CLI context Env only if explicitly
+  requested, matching the behavior of Rasterio's CLI (#635).
+- Dependency on attrs is made explicit.
+- Other dependencies are pinned to known good versions in requirements files.
+- Unused arguments have been removed from the Env constructor (#637).
+
+Refactoring:
+
+- A with_context_env decorator has been added and used to set up the GDAL
+  environment for CLI commands. The command functions themselves are now
+  simplified.
+
+1.8a3 (2018-10-01)
+------------------
+
+Deprecations:
+
+- The ``fiona.drivers()`` context manager is officially deprecated. All
+  users should switch to ``fiona.Env()``, which registers format drivers and
+  manages GDAL configuration in a reversible manner.
+
+Bug fixes:
+
+- The Collection class now filters log messages about skipped fields to
+  a maximum of one warning message per field (#627).
+- The boto3 module is only imported when needed (#507, #629).
+- Compatibility with Click 7.0 is achieved (#633).
+- Use of %r instead of %s in a debug() call prevents UnicodeDecodeErrors
+  (#620).
+
+1.8a2 (2018-07-24)
+------------------
+
+New features:
+
+- 64-bit integers are the now the default for int type fields (#562, #564).
+- 'http', 's3', 'zip+http', and 'zip+s3' URI schemes for datasets are now
+  supported (#425, #426).
+- We've added a ``MemoryFile`` class which supports formatted in-memory
+  feature collections (#501).
+- Added support for GDAL 2.x boolean field sub-type (#531).
+- A new ``fio rm`` command makes it possible to cleanly remove multi-file
+  datasets (#538).
+- The geometry type in a feature collection is more flexible. We can now
+  specify not only a single geometry type, but a sequence of permissible types,
+  or "Any" to permit any geometry type (#539).
+- Support for GDAL 2.2+ null fields has been added (#554).
+- The new ``gdal_open_vector()`` function of our internal API provides much
+  improved error handling (#557).
+
+Bug fixes:
+
+- The bug involving OrderedDict import on Python 2.7 has been fixed (#533).
+- An ``AttributeError`` raised when the ``--bbox`` option of fio-cat is used
+  with more than one input file has been fixed (#543, #544).
+- Obsolete and derelict fiona.tool module has been removed.
+- Revert the change in 0a2bc7c that discards Z in geometry types when a
+  collection's schema is reported (#541).
+- Require six version 1.7 or higher (#550).
+- A regression related to "zip+s3" URIs has been fixed.
+- Debian's GDAL data locations are now searched by default (#583).
+
+1.8a1 (2017-11-06)
+------------------
+
+New features:
+
+- Each call of ``writerecords()`` involves one or more transactions of up to
+  20,000 features each. This improves performance when writing GeoPackage files
+  as the previous transaction size was only 200 features (#476, #491).
+
+Packaging:
+
+- Fiona's Cython source files have been refactored so that there are no longer
+  separate extension modules for GDAL 1.x and GDAL 2.x. Instead there is a base
+  extension module based on GDAL 2.x and shim modules for installations that
+  use GDAL 1.x.
+
+1.7.11.post1 (2018-01-08)
+-------------------------
+
+- This post-release adds missing expat (and thereby GPX format) support to
+  the included GDAL library (still version 2.2.2).
+
+1.7.11 (2017-12-14)
+-------------------
+
+- The ``encoding`` keyword argument for ``fiona.open()``, which is intended
+  to allow a caller to override a data source's own and possibly erroneous
+  encoding, has not been working (#510, #512). The problem is that we weren't
+  always setting GDAL open or config options before opening the data sources.
+  This bug is resolved by a number of commits in the maint-1.7 branch and
+  the fix is demonstrated in tests/test_encoding.py.
+- An ``--encoding`` option has been added to fio-load to enable creation of
+  encoded shapefiles with an accompanying .cpg file (#499, #517).
+
+1.7.10.post1 (2017-10-30)
+-------------------------
+
+- A post-release has been made to fix a problem with macosx wheels uploaded
+  to PyPI.
+
+1.7.10 (2017-10-26)
+-------------------
+
+Bug fixes:
+
+- An extraneous printed line from the ``rio cat --layers`` validator has been
+  removed (#478).
+
+Packaging:
+
+- Official OS X and Manylinux1 wheels (on PyPI) for this release will be
+  compatible with Shapely 1.6.2 and Rasterio 1.0a10 wheels.
+
+1.7.9.post1 (2017-08-21)
+------------------------
+
+This release introduces no changes in the Fiona package. It upgrades GDAL
+from 2.2.0 to 2.2.1 in wheels that we publish to the Python Package Index.
+
+1.7.9 (2017-08-17)
+------------------
+
+Bug fixes:
+
+- Acquire the GIL for GDAL error callback functions to prevent crashes when
+  GDAL errors occur when the GIL has been released by user code.
+- Sync and flush layers when closing even when the number of features is not
+  precisely known (#467).
+
+1.7.8 (2017-06-20)
+------------------
+
+Bug fixes:
+
+- Provide all arguments needed by CPLError based exceptions (#456).
+
+1.7.7 (2017-06-05)
+------------------
+
+Bug fixes:
+
+- Switch logger `warn()` (deprecated) calls to `warning()`.
+- Replace all relative imports and cimports in Cython modules with absolute
+  imports (#450).
+- Avoid setting `PROJ_LIB` to a non-existent directory (#439).
+
+1.7.6 (2017-04-26)
+------------------
+
+Bug fixes:
+
+- Fall back to `share/proj` for PROJ_LIB (#440).
+- Replace every call to `OSRDestroySpatialReference()` with `OSRRelease()`,
+  fixing the GPKG driver crasher reported in #441 (#443).
+- Add a `DriverIOError` derived from `IOError` to use for driver-specific
+  errors such as the GeoJSON driver's refusal to overwrite existing files.
+  Also we now ensure that when this error is raised by `fiona.open()` any
+  created read or write session is deleted, this eliminates spurious 
+  exceptions on teardown of broken `Collection` objects (#437, #444).
+
+1.7.5 (2017-03-20)
+------------------
+
+Bug fixes:
+
+- Opening a data file in read (the default) mode with `fiona.open()` using the
+  the `driver` or `drivers` keyword arguments (to specify certain format 
+  drivers) would sometimes cause a crash on Windows due to improperly
+  terminated lists of strings (#428). The fix: Fiona's buggy `string_list()`
+  has been replaced by GDAL's `CSLAddString()`.
+
+1.7.4 (2017-02-20)
+------------------
+
+Bug fixes:
+
+- OGR's EsriJSON detection fails when certain keys aren't found in the first
+  6000 bytes of data passed to `BytesCollection` (#422). A .json file extension
+  is now explicitly given to the in-memory file behind `BytesCollection` when
+  the `driver='GeoJSON'` keyword argument is given (#423). 
+
+1.7.3 (2017-02-14)
+------------------
+
+Roses are red.
+Tan is a pug.
+Software regression's
+the most embarrassing bug.
+
+Bug fixes:
+
+- Use __stdcall for GDAL error handling callback on Windows as in Rasterio.
+- Turn on latent support for zip:// URLs in rio-cat and rio-info (#421).
+- The 1.7.2 release broke support for zip files with absolute paths (#418).
+  This regression has been fixed with tests to confirm.
+
+1.7.2 (2017-01-27)
+------------------
+
+Future Deprecation:
+
+- `Collection.__next__()` is buggy in that it can lead to duplication of 
+  features when used in combination with `Collection.filter()` or
+  `Collection.__iter__()`. It will be removed in Fiona 2.0. Please check for
+  usage of this deprecated feature by running your tests or programs with
+  `PYTHONWARNINGS="always:::fiona"` or `-W"always:::fiona"` and switch from
+  `next(collection)` to `next(iter(collection))` (#301).
+
+Bug fix:
+
+- Zipped streams of bytes can be accessed by `BytesCollection` (#318).
+
+1.7.1.post1 (2016-12-23)
+------------------------
+- New binary wheels using version 1.2.0 of sgillies/frs-wheel-builds. See
+  https://github.com/sgillies/frs-wheel-builds/blob/master/CHANGES.txt.
+
+1.7.1 (2016-11-16)
+------------------
+
+Bug Fixes:
+
+- Prevent Fiona from stumbling over 'Z', 'M', and 'ZM' geometry types
+  introduced in GDAL 2.1 (#384). Fiona 1.7.1 doesn't add explicit support for
+  these types, they are coerced to geometry types 1-7 ('Point', 'LineString',
+  etc.)
+- Raise an `UnsupportedGeometryTypeError` when a bogus or unsupported 
+  geometry type is encountered in a new collection's schema or elsewhere
+  (#340).
+- Enable `--precision 0` for fio-cat (#370).
+- Prevent datetime exceptions from unnecessarily stopping collection iteration
+  by yielding `None` (#385)
+- Replace log.warn calls with log.warning calls (#379).
+- Print an error message if neither gdal-config or `--gdalversion` indicate
+  a GDAL C API version when running `setup.py` (#364).
+- Let dict-like subclasses through CRS type checks (#367).
+
+1.7.0post2 (2016-06-15)
+-----------------------
+
+Packaging: define extension modules for 'clean' and 'config' targets (#363).
+
+1.7.0post1 (2016-06-15)
+-----------------------
+
+Packaging: No files are copied for the 'clean' setup target (#361, #362).
+
+1.7.0 (2016-06-14)
+------------------
+
+The C extension modules in this library can now be built and used with either
+a 1.x or 2.x release of the GDAL library. Big thanks to René Buffat for
+leading this effort.
+
+Refactoring:
+
+- The `ogrext1.pyx` and `ogrext2.pyx` files now use separate
+  C APIs defined in `ogrext1.pxd` and `ogrex2.pxd`. The other extension
+  modules have been refactored so that they do not depend on either of these
+  modules and use subsets of the GDAL/OGR API compatible with both GDAL 1.x and
+  2.x (#359).
+
+Packaging:
+
+- Source distributions now contain two different sources for the
+  `ogrext` extension module. The `ogrext1.c` file will be used with GDAL 1.x
+  and the `ogrext2.c` file will be used with GDAL 2.x.
+
+1.7b2 (2016-06-13)
+------------------
+
+- New feature: enhancement of the `--layer` option for fio-cat and fio-dump
+  to allow separate layers of one or more multi-layer input files to be
+  selected (#349).
+
+1.7b1 (2016-06-10)
+------------------
+
+- New feature: support for GDAL version 2+ (#259).
+- New feature: a new fio-calc CLI command (#273).
+- New feature: `--layer` options for fio-info (#316) and fio-load (#299).
+- New feature: a `--no-parse` option for fio-collect that lets a careful user
+  avoid extra JSON serialization and deserialization (#306).
+- Bug fix: `+wktext` is now preserved when serializing CRS from WKT to PROJ.4
+  dicts (#352).
+- Bug fix: a small memory leak when opening a collection has been fixed (#337).
+- Bug fix: internal unicode errors now result in a log message and a 
+  `UnicodeError` exception, not a `TypeError` (#356).
+
+1.6.4 (2016-05-06)
+------------------
+- Raise ImportError if the active GDAL library version is >= 2.0 instead of
+  failing unpredictably (#338, #341). Support for GDAL>=2.0 is coming in
+  Fiona 1.7.
+
+1.6.3.post1 (2016-03-27)
+------------------------
+- No changes to the library in this post-release version, but there is a
+  significant change to the distributions on PyPI: to help make Fiona more
+  compatible with Shapely on OS X, the GDAL shared library included in the
+  macosx (only) binary wheels now statically links the GEOS library. See
+  https://github.com/sgillies/frs-wheel-builds/issues/5.
+
+1.6.3 (2015-12-22)
+------------------
+- Daytime has been decreasing in the Northern Hemisphere, but is now
+  increasing again as it should.
+- Non-UTF strings were being passed into OGR functions in some situations
+  and on Windows this would sometimes crash a Python process (#303). Fiona
+  now raises errors derived from UnicodeError when field names or field
+  values can't be encoded.
+
+1.6.2 (2015-09-22)
+------------------
+- Providing only PROJ4 representations in the dataset meta property resulted in
+  loss of CRS information when using the `fiona.open(..., **src.meta) as dst`
+  pattern (#265). This bug has been addressed by adding a crs_wkt item to the`
+  meta property and extending the `fiona.open()` and the collection constructor
+  to look for and prioritize this keyword argument.
+
+1.6.1 (2015-08-12)
+------------------
+- Bug fix: Fiona now deserializes JSON-encoded string properties provided by
+  the OGR GeoJSON driver (#244, #245, #246).
+- Bug fix: proj4 data was not copied properly into binary distributions due to
+  a typo (#254).
+
+Special thanks to WFMU DJ Liz Berg for the awesome playlist that's fueling my
+release sprint. Check it out at https://wfmu.org/playlists/shows/62083. You
+can't unhear Love Coffin.
+
+1.6.0 (2015-07-21)
+------------------
+- Upgrade Cython requirement to 0.22 (#214).
+- New BytesCollection class (#215).
+- Add GDAL's OpenFileGDB driver to registered drivers (#221).
+- Implement CLI commands as plugins (#228).
+- Raise click.abort instead of calling sys.exit, preventing surprising exits
+  (#236).
+
+1.5.1 (2015-03-19)
+------------------
+- Restore test data to sdists by fixing MANIFEST.in (#216).
+
+1.5.0 (2015-02-02)
+------------------
+- Finalize GeoJSON feature sequence options (#174).
+- Fix for reading of datasets that don't support feature counting (#190).
+- New test dataset (#188).
+- Fix for encoding error (#191).
+- Remove confusing warning (#195).
+- Add data files for binary wheels (#196).
+- Add control over drivers enabled when reading datasets (#203).
+- Use cligj for CLI options involving GeoJSON (#204).
+- Fix fio-info --bounds help (#206).
+
+1.4.8 (2014-11-02)
+------------------
+- Add missing crs_wkt property as in Rasterio (#182).
+
+1.4.7 (2014-10-28)
+------------------
+- Fix setting of CRS from EPSG codes (#149).
+
+1.4.6 (2014-10-21)
+------------------
+- Handle 3D coordinates in bounds() #178.
+
+1.4.5 (2014-10-18)
+------------------
+- Add --bbox option to fio-cat (#163).
+- Skip geopackage tests if run from an sdist (#167).
+- Add fio-bounds and fio-distrib.
+- Restore fio-dump to working order.
+
+1.4.4 (2014-10-13)
+------------------
+- Fix accidental requirement on GDAL 1.11 introduced in 1.4.3 (#164).
+
+1.4.3 (2014-10-10)
+------------------
+- Add support for geopackage format (#160).
+- Add -f and --format aliases for --driver in CLI (#162).
+- Add --version option and env command to CLI.
+
+1.4.2 (2014-10-03)
+------------------
+- --dst-crs and --src-crs options for fio cat and collect (#159).
+
+1.4.1 (2014-09-30)
+------------------
+- Fix encoding bug in collection's __getitem__ (#153).
+
+1.4.0 (2014-09-22)
+------------------
+- Add fio cat and fio collect commands (#150).
+- Return of Python 2.6 compatibility (#148).
+- Improved CRS support (#149).
+
+1.3.0 (2014-09-17)
+------------------
+- Add single metadata item accessors to fio inf (#142).
+- Move fio to setuptools entry point (#142).
+- Add fio dump and load commands (#143).
+- Remove fio translate command.
+
+1.2.0 (2014-09-02)
+------------------
+- Always show property width and precision in schema (#123).
+- Write datetime properties of features (#125).
+- Reset spatial filtering in filter() (#129).
+- Accept datetime.date objects as feature properties (#130).
+- Add slicing to collection iterators (#132).
+- Add geometry object masks to collection iterators (#136).
+- Change source layout to match Shapely and Rasterio (#138).
+
+1.1.6 (2014-07-23)
+------------------
+- Implement Collection __getitem__() (#112).
+- Leave GDAL finalization to the DLL's destructor (#113).
+- Add Collection keys(), values(), items(), __contains__() (#114).
+- CRS bug fix (#116).
+- Add fio CLI program.
+  
+1.1.5 (2014-05-21)
+------------------
+- Addition of cpl_errs context manager (#108).
+- Check for NULLs with '==' test instead of 'is' (#109).
+- Open auxiliary files with encoding='utf-8' in setup for Python 3 (#110).
+
+1.1.4 (2014-04-03)
+------------------
+- Convert 'long' in schemas to 'int' (#101).
+- Carefully map Python schema to the possibly munged internal schema (#105).
+- Allow writing of features with geometry: None (#71).
+
+1.1.3 (2014-03-23)
+------------------
+- Always register all GDAL and OGR drivers when entering the DriverManager
+  context (#80, #92).
+- Skip unsupported field types with a warning (#91).
+- Allow OGR config options to be passed to fiona.drivers() (#90, #93).
+- Add a bounds() function (#100).
+- Turn on GPX driver.
+
+1.1.2 (2014-02-14)
+------------------
+- Remove collection slice left in dumpgj (#88).
+
+1.1.1 (2014-02-02)
+------------------
+- Add an interactive file inspector like the one in rasterio.
+- CRS to_string bug fix (#83).
+
+1.1 (2014-01-22)
+----------------
+- Use a context manager to manage drivers (#78), a backwards compatible but
+  big change. Fiona is now compatible with rasterio and plays better with the
+  osgeo package.
+
+1.0.3 (2014-01-21)
+------------------
+- Fix serialization of +init projections (#69).
+
+1.0.2 (2013-09-09)
+------------------
+- Smarter, better test setup (#65, #66, #67).
+- Add type='Feature' to records read from a Collection (#68).
+- Skip geometry validation when using GeoJSON driver (#61).
+- Dumpgj file description reports record properties as a list (as in
+  dict.items()) instead of a dict.
+
+1.0.1 (2013-08-16)
+------------------
+- Allow ordering of written fields and preservation of field order when
+  reading (#57).
+
+1.0 (2013-07-30)
+-----------------
+- Add prop_type() function.
+- Allow UTF-8 encoded paths for Python 2 (#51). For Python 3, paths must
+  always be str, never bytes.
+- Remove encoding from collection.meta, it's a file creation option only.
+- Support for linking GDAL frameworks (#54).
+
+0.16.1 (2013-07-02)
+-------------------
+- Add listlayers, open, prop_width to __init__py:__all__.
+- Reset reading of OGR layer whenever we ask for a collection iterator (#49).
+
+0.16 (2013-06-24)
+-----------------
+- Add support for writing layers to multi-layer files.
+- Add tests to reach 100% Python code coverage.
+
+0.15 (2013-06-06)
+-----------------
+- Get and set numeric field widths (#42).
+- Add support for multi-layer data sources (#17).
+- Add support for zip and tar virtual filesystems (#45).
+- Add listlayers() function.
+- Add GeoJSON to list of supported formats (#47).
+- Allow selection of layers by index or name.
+
+0.14 (2013-05-04)
+-----------------
+- Add option to add JSON-LD in the dumpgj program.
+- Compare values to six.string_types in Collection constructor.
+- Add encoding to Collection.meta.
+- Document dumpgj in README.
+
+0.13 (2013-04-30)
+-----------------
+- Python 2/3 compatibility in a single package. Pythons 2.6, 2.7, 3.3 now supported.
+
+0.12.1 (2013-04-16)
+-------------------
+- Fix messed up linking of README in sdist (#39).
+
+0.12 (2013-04-15)
+-----------------
+- Fix broken installation of extension modules (#35).
+- Log CPL errors at their matching Python log levels.
+- Use upper case for encoding names within OGR, lower case in Python.
+
+0.11 (2013-04-14)
+-----------------
+- Cythonize .pyx files (#34).
+- Work with or around OGR's internal recoding of record data (#35).
+- Fix bug in serialization of int/float PROJ.4 params.
+
+0.10 (2013-03-23)
+-----------------
+- Add function to get the width of str type properties.
+- Handle validation and schema representation of 3D geometry types (#29).
+- Return {'geometry': None} in the case of a NULL geometry (#31).
+
+0.9.1 (2013-03-07)
+------------------
+- Silence the logger in ogrext.so (can be overridden).
+- Allow user specification of record field encoding (like 'Windows-1252' for
+  Natural Earth shapefiles) to help when OGR can't detect it.
+
+0.9 (2013-03-06)
+----------------
+- Accessing file metadata (crs, schema, bounds) on never inspected closed files
+  returns None without exceptions.
+- Add a dict of supported_drivers and their supported modes.
+- Raise ValueError for unsupported drivers and modes.
+- Remove asserts from ogrext.pyx.
+- Add validate_record method to collections.
+- Add helpful coordinate system functions to fiona.crs.
+- Promote use of fiona.open over fiona.collection.
+- Handle Shapefile's mix of LineString/Polygon and multis (#18).
+- Allow users to specify width of shapefile text fields (#20).
+
+0.8 (2012-02-21)
+----------------
+- Replaced .opened attribute with .closed (product of collection() is always
+  opened). Also a __del__() which will close a Collection, but still not to be
+  depended upon.
+- Added writerecords method.
+- Added a record buffer and better counting of records in a collection.
+- Manage one iterator per collection/session.
+- Added a read-only bounds property.
+
+0.7 (2012-01-29)
+----------------
+- Initial timezone-naive support for date, time, and datetime fields. Don't use
+  these field types if you can avoid them. RFC 3339 datetimes in a string field
+  are much better.
+
+0.6.2 (2012-01-10)
+------------------
+- Diagnose and set the driver property of collection in read mode.
+- Fail if collection paths are not to files. Multi-collection workspaces are
+  a (maybe) TODO.
+
+0.6.1 (2012-01-06)
+------------------
+- Handle the case of undefined crs for disk collections.
+
+0.6 (2012-01-05)
+----------------
+- Support for collection coordinate reference systems based on Proj4.
+- Redirect OGR warnings and errors to the Fiona log.
+- Assert that pointers returned from the ograpi functions are not NULL before
+  using.
+
+0.5 (2011-12-19)
+----------------
+- Support for reading and writing collections of any geometry type.
+- Feature and Geometry classes replaced by mappings (dicts).
+- Removal of Workspace class.
+
+0.2 (2011-09-16)
+----------------
+- Rename WorldMill to Fiona.
+
+0.1.1 (2008-12-04)
+------------------
+- Support for features with no geometry.
+
+
+Credits
+=======
+
+Fiona is written by:
+
+- Adam J. Stewart <ajstewart426@gmail.com>
+- Alan D. Snow <alansnow21@gmail.com>
+- Alexandre Detiste <alexandre.detiste@gmail.com>
+- Ariel Nunez <ingenieroariel@gmail.com>
+- Ariki <Ariki@users.noreply.github.com>
+- Bas Couwenberg <sebastic@xs4all.nl>
+- Brandon Liu <bdon@bdon.org>
+- Brendan Ward <bcward@consbio.org>
+- Chad Hawkins <cwh@chadwhawkins.com>
+- Chris Mutel <cmutel@gmail.com>
+- Christoph Gohlke <cjgohlke@gmail.com>
+- Dan "Ducky" Little <theduckylittle@gmail.com>
+- daryl herzmann <akrherz@iastate.edu>
+- Denis <carriere.denis@gmail.com>
+- Denis Rykov <rykovd@gmail.com>
+- dimlev <dimlev@gmail.com>
+- Efrén <chefren@users.noreply.github.com>
+- Egor Fedorov <egor.fedorov@emlid.com>
+- Elliott Sales de Andrade <quantum.analyst@gmail.com>
+- Even Rouault <even.rouault@mines-paris.org>
+- Ewout ter Hoeven <E.M.terHoeven@student.tudelft.nl>
+- Filipe Fernandes <ocefpaf@gmail.com>
+- fredj <frederic.junod@camptocamp.com>
+- Gavin S <gavinswanson@gmail.com>
+- Géraud <galak75@users.noreply.github.com>
+- Hannes Gräuler <hgraeule@uos.de>
+- Hao Lyu <20434183+IncubatorShokuhou@users.noreply.github.com>
+- Herz <gustavo.herzmann@gmail.com>
+- Ian Rose <ian.r.rose@gmail.com>
+- Jacob Wasserman <jwasserman@gmail.com>
+- James McBride <jdmcbr@gmail.com>
+- James Wilshaw <jrw1n15@soton.ac.uk>
+- Jelle van der Waa <jelle@vdwaa.nl>
+- Jesse Crocker <jesse@gaiagps.com>
+- joehuanguf <51337028+joehuanguf@users.noreply.github.com>
+- Johan Van de Wauw <johan.vandewauw@gmail.com>
+- Joris Van den Bossche <jorisvandenbossche@gmail.com>
+- Joshua Arnott <josh@snorfalorpagus.net>
+- Juan Luis Cano Rodríguez <Juanlu001@users.noreply.github.com>
+- Keith Jenkins <kgjenkins@gmail.com>
+- Kelsey Jordahl <kjordahl@enthought.com>
+- Kevin Wurster <wursterk@gmail.com>
+- lgolston <30876419+lgolston@users.noreply.github.com>
+- Loïc Dutrieux <loic.dutrieux@gmail.com>
+- Ludovic Delauné <ludotux@gmail.com>
+- Martijn Visser <mgvisser@gmail.com>
+- Matthew Perry <perrygeo@gmail.com>
+- Micah Cochran <micah@micahcochran.net>
+- Michael Weisman <mweisman@gmail.com>
+- Michele Citterio <michele@citterio.net>
+- Mike Taves <mwtoews@gmail.com>
+- Miro Hrončok <miro@hroncok.cz>
+- Oliver Tonnhofer <olt@bogosoft.com>
+- Patrick Young <patrick.mckendree.young@gmail.com>
+- Phillip Cloud <417981+cpcloud@users.noreply.github.com>
+- pmav99 <pmav99@users.noreply.github.com>
+- qinfeng <guo.qinfeng+github@gmail.com>
+- René Buffat <buffat@gmail.com>
+- Reuben Fletcher-Costin <reuben.fletchercostin@gmail.com>
+- Ryan Grout <rgrout@continuum.io>
+- Ryan Munro <ryan@subc.io>
+- Sandro Mani <manisandro@gmail.com>
+- Sean Gillies <sean.gillies@gmail.com>
+- Sid Kapur <sid-kap@users.noreply.github.com>
+- Simon Norris <snorris@hillcrestgeo.ca>
+- Stefan Brand <StefanBrand@users.noreply.github.com>
+- Stefano Costa <steko@iosa.it>
+- Stephane Poss <stephposs@gmail.com>
+- Tim Tröndle <tim.troendle@usys.ethz.ch>
+- wilsaj <wilson.andrew.j+github@gmail.com>
+- Yann-Sebastien Tremblay-Johnston <underchemist@users.noreply.github.com>
+
+The GeoPandas project (Joris Van den Bossche et al.) has been a major driver
+for new features in 1.8.0.
+
+Fiona would not be possible without the great work of Frank Warmerdam and other
+GDAL/OGR developers.
+
+Some portions of this work were supported by a grant (for Pleiades_) from the
+U.S. National Endowment for the Humanities (https://www.neh.gov).
+
+.. _Pleiades: https://pleiades.stoa.org

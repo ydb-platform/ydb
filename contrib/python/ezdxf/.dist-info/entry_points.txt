@@ -1,0 +1,2 @@
+[console_scripts]
+ezdxf = ezdxf.__main__:main

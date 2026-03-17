@@ -1,0 +1,23 @@
+{% load i18n static %}
+
+<div class="sortedm2m-container">
+
+    <p class="selector-filter">
+        <img src="{% static "sortedm2m/selector-search.gif" %}" alt="" title="{% trans "Type into this box to filter down the list." %}" />
+        <input type="text" placeholder="{% trans "Filter" %}" />
+    </p>
+    <ul class="sortedm2m-items">
+    {% for row in selected %}
+        <li class="sortedm2m-item"><label{{ row.label_for|safe }}>{{ row.rendered_cb }} {{ row.option_label }}</label></li>
+    {% endfor %}
+
+    {% for row in unselected %}
+        <li class="sortedm2m-item"><label{{ row.label_for|safe }}>{{ row.rendered_cb }} {{ row.option_label }}</label></li>
+    {% endfor %}
+    </ul>
+
+    <p class="help">
+        {% trans "Choose items and order by drag & drop." %}
+    </p>
+
+</div>

@@ -1,0 +1,63 @@
+
+<!--
+     File isoamsb.ent produced by the XSL script characters.xsl
+     from input data in unicode.xml.
+
+     Please report any errors to David Carlisle
+     via the public W3C list www-math@w3.org.
+
+     The numeric character values assigned to each entity
+     (should) match the Unicode assignments in Unicode 4.0.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1986
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+
+-->
+
+<!ENTITY amalg            "&#x02A3F;" ><!--/amalg B: amalgamation or coproduct -->
+<!ENTITY Barwed           "&#x02306;" ><!--/doublebarwedge B: log and, dbl bar -->
+<!ENTITY barwed           "&#x02305;" ><!--/barwedge B: logical and, bar above -->
+<!ENTITY Cap              "&#x022D2;" ><!--/Cap /doublecap B: dbl intersection -->
+<!ENTITY coprod           "&#x02210;" ><!--/coprod L: coproduct operator -->
+<!ENTITY Cup              "&#x022D3;" ><!--/Cup /doublecup B: dbl union -->
+<!ENTITY cuvee            "&#x022CE;" ><!--/curlyvee B: curly logical or -->
+<!ENTITY cuwed            "&#x022CF;" ><!--/curlywedge B: curly logical and -->
+<!ENTITY diam             "&#x022C4;" ><!--/diamond B: open diamond -->
+<!ENTITY divonx           "&#x022C7;" ><!--/divideontimes B: division on times -->
+<!ENTITY intcal           "&#x022BA;" ><!--/intercal B: intercal -->
+<!ENTITY lthree           "&#x022CB;" ><!--/leftthreetimes B: -->
+<!ENTITY ltimes           "&#x022C9;" ><!--/ltimes B: times sign, left closed -->
+<!ENTITY minusb           "&#x0229F;" ><!--/boxminus B: minus sign in box -->
+<!ENTITY oast             "&#x0229B;" ><!--/circledast B: asterisk in circle -->
+<!ENTITY ocir             "&#x0229A;" ><!--/circledcirc B: open dot in circle -->
+<!ENTITY odash            "&#x0229D;" ><!--/circleddash B: hyphen in circle -->
+<!ENTITY odot             "&#x02299;" ><!--/odot B: middle dot in circle -->
+<!ENTITY ominus           "&#x02296;" ><!--/ominus B: minus sign in circle -->
+<!ENTITY oplus            "&#x02295;" ><!--/oplus B: plus sign in circle -->
+<!ENTITY osol             "&#x02298;" ><!--/oslash B: solidus in circle -->
+<!ENTITY otimes           "&#x02297;" ><!--/otimes B: multiply sign in circle -->
+<!ENTITY plusb            "&#x0229E;" ><!--/boxplus B: plus sign in box -->
+<!ENTITY plusdo           "&#x02214;" ><!--/dotplus B: plus sign, dot above -->
+<!ENTITY prod             "&#x0220F;" ><!--/prod L: product operator -->
+<!ENTITY rthree           "&#x022CC;" ><!--/rightthreetimes B: -->
+<!ENTITY rtimes           "&#x022CA;" ><!--/rtimes B: times sign, right closed -->
+<!ENTITY sdot             "&#x022C5;" ><!--/cdot B: small middle dot -->
+<!ENTITY sdotb            "&#x022A1;" ><!--/dotsquare /boxdot B: small dot in box -->
+<!ENTITY setmn            "&#x02216;" ><!--/setminus B: reverse solidus -->
+<!ENTITY sqcap            "&#x02293;" ><!--/sqcap B: square intersection -->
+<!ENTITY sqcup            "&#x02294;" ><!--/sqcup B: square union -->
+<!ENTITY ssetmn           "&#x02216;" ><!--/smallsetminus B: sm reverse solidus -->
+<!ENTITY sstarf           "&#x022C6;" ><!--/star B: small star, filled -->
+<!ENTITY sum              "&#x02211;" ><!--/sum L: summation operator -->
+<!ENTITY timesb           "&#x022A0;" ><!--/boxtimes B: multiply sign in box -->
+<!ENTITY top              "&#x022A4;" ><!--/top B: inverted perpendicular -->
+<!ENTITY uplus            "&#x0228E;" ><!--/uplus B: plus sign in union -->
+<!ENTITY wreath           "&#x02240;" ><!--/wr B: wreath product -->
+<!ENTITY xcirc            "&#x025EF;" ><!--/bigcirc B: large circle -->
+<!ENTITY xdtri            "&#x025BD;" ><!--/bigtriangledown B: big dn tri, open -->
+<!ENTITY xutri            "&#x025B3;" ><!--/bigtriangleup B: big up tri, open -->

@@ -1,0 +1,67 @@
+# http://www.hdfgroup.org/HDF5/doc/H5.format.html#Superblock
+constant identifier="HDF5";
+
+ascii[8] signature : dump;
+uint8 versionNumberOfSuperblock : dump;
+
+if (versionNumberOfSuperblock == 0 || versionNumberOfSuperblock == 1)
+{
+    uint8 versionNumOfFilesFreeSpaceStorage : dump;
+    uint8 versionNumOfRootGroupSymbolTableEntry : dump;
+    uint8 reserved1;
+    uint8 versionNumOfSharedHeaderMessageFormat: dump;
+    uint8 sizeOfOffsets : dump;
+    uint8 sizeOfLength : dump;
+    uint8 reserved2;
+    #uint32_little_endian groupLeafAndInternalNodeK : dump;
+    #uint32_little_endian fileConsistencyFlags : dump;
+    
+    #unsigned[4] groupLeafAndInternalNodeK : dump;
+    unsigned[2] groupLeafNodeK : dump;
+    unsigned[2] groupInternalNodeK : dump;
+    unsigned[4] fileConsistencyFlags : dump;
+    
+    if (versionNumberOfSuperblock == 1) {
+        uint16 indexedStorageInternalNodeK : dump;
+        uint16 reserved3;
+    }
+
+    if(sizeOfOffsets == 8) {
+        uint64_little_endian baseAddress : dump;
+        uint64_little_endian addressOfFileFreeSpaceInfo : dump;
+        uint64_little_endian endOfFileAddress : dump;
+        uint64_little_endian driverInformationBlockAddress : dump;
+        uint64_little_endian rootGroupSymbolTableEntry: dump;
+    }
+
+    if(sizeOfOffsets == 4) {
+        uint32_little_endian baseAddress : dump;
+        uint32_little_endian addressOfFileFreeSpaceInfo : dump;
+        uint32_little_endian endOfFileAddress : dump;
+        uint32_little_endian driverInformationBlockAddress : dump;
+        uint32_little_endian rootGroupSymbolTableEntry: dump;
+    }
+}
+
+if (versionNumberOfSuperblock == 2 || versionNumberOfSuperblock == 3)
+{
+    uint8 sizeOfOffsets : dump;
+    uint8 sizeOfLength : dump;
+    uint8 fileConsistencyFlags : dump;
+
+    if(sizeOfOffsets == 8) {
+        uint64_little_endian baseAddress : dump;
+        uint64_little_endian superblockExtensionAddress : dump;
+        uint64_little_endian endOfFileAddress : dump;
+        uint64_little_endian rootGroupObjectHeaderAddress : dump;
+    }
+
+    if(sizeOfOffsets == 4) {
+        uint32_little_endian baseAddress : dump;
+        uint32_little_endian superblockExtensionAddress : dump;
+        uint32_little_endian endOfFileAddress : dump;
+        uint32_little_endian rootGroupObjectHeaderAddress : dump;
+    }
+
+    #ascii[4] superblockChecksum;
+}

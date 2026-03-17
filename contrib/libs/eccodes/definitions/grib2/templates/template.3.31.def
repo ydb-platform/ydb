@@ -1,0 +1,63 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.31, Albers equal area
+include "grib2/templates/template.3.shape_of_the_earth.def"
+
+constant isGridded = true;
+
+# Nx - number of points along the X-axis
+unsigned[4] Nx  : dump;
+alias numberOfPointsAlongTheXAxis=Nx;
+alias geography.Nx=Nx;
+
+# Ny - number of points along the Y-axis
+unsigned[4] Ny  : dump;
+alias numberOfPointsAlongTheYAxis=Ny;
+alias geography.Ny=Ny;
+
+# La1 - latitude of first grid point
+signed[4] latitudeOfFirstGridPoint : edition_specific,dump;
+alias La1  = latitudeOfFirstGridPoint;
+
+# Lo1 - longitude of first grid point
+unsigned[4] longitudeOfFirstGridPoint : edition_specific,dump;
+alias Lo1  = longitudeOfFirstGridPoint;
+
+include "grib2/templates/template.3.resolution_flags.def"
+
+# LaD - Latitude where Dx and Dy are specified
+signed[4] LaD  : dump;
+alias latitudeWhereDxAndDyAreSpecified=LaD ;
+
+# LoV - Longitude of meridian parallel to Y-axis along which latitude increases as the Y-coordinate increases
+unsigned[4] LoV  : dump;
+
+# Dx - X-direction grid length
+unsigned[4] xDirectionGridLength  : dump;
+alias Dx  = xDirectionGridLength;
+
+# Dy - Y-direction grid length
+unsigned[4] yDirectionGridLength  : dump;
+alias Dy =  yDirectionGridLength;
+
+# Projection centre flag
+flags[1] projectionCentreFlag 'grib2/tables/[tablesVersion]/3.5.table' : dump;
+include "grib2/templates/template.3.scanning_mode.def"
+
+# Latin 1 - first latitude from the pole at which the secant cone cuts the sphere
+signed[4] Latin1 :edition_specific;
+meta  geography.Latin1InDegrees scale(Latin1,one,grib2divider,truncateDegrees) : dump;
+
+# Latin 2 - second latitude from the pole at which the secant cone cuts the sphere
+unsigned[4] Latin2  : edition_specific;
+meta  geography.Latin2InDegrees scale(Latin2,one,grib2divider,truncateDegrees) : dump;
+
+# Latitude of the southern pole of projection
+signed[4] latitudeOfTheSouthernPoleOfProjection : edition_specific ;
+alias latitudeOfSouthernPole=latitudeOfTheSouthernPoleOfProjection;
+meta  geography.latitudeOfSouthernPoleInDegrees   scale(latitudeOfTheSouthernPoleOfProjection          ,one,grib2divider,truncateDegrees) : dump;
+
+# Longitude of the southern pole of projection
+unsigned[4] longitudeOfTheSouthernPoleOfProjection :edition_specific;
+alias longitudeOfSouthernPole=longitudeOfTheSouthernPoleOfProjection;
+meta  geography.longitudeOfSouthernPoleInDegrees   scale(longitudeOfTheSouthernPoleOfProjection,oneConstant,grib2divider,truncateDegrees) : dump;

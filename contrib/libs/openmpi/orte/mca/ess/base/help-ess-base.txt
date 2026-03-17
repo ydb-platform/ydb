@@ -1,0 +1,97 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2017-2018 Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for the SDS base.
+#
+[ess-base:execv-error]
+The singleton application was not able to find the executable "orted" in
+your PATH or in the directory where Open MPI/OpenRTE was initially installed,
+and therefore cannot continue.
+
+For reference, we tried the following command:
+
+  %s
+
+and got the error %s.
+
+This could mean that your PATH or executable name is wrong, or that you do not
+have the necessary permissions.  Please ensure that the executable is able to be
+found and executed as it is required for singleton operations.
+[ess-base:cannot-forward]
+The system does not support trapping and forwarding of the
+specified signal:
+
+  signal: %s
+  param:  %s
+
+Please remove that signal from the ess_base_forward_signals MCA parameter.
+[ess-base:unknown-signal]
+The following signal was included in the ess_base_forward_signals
+MCA parameter:
+
+  signal: %s
+  param:  %s
+
+This is not a recognized signal value. Please fix or remove it.
+#
+[slurm-error]
+The application appears to have been direct launched using "srun",
+but OMPI was not built with SLURM's PMI support and therefore cannot
+execute. There are several options for building PMI support under
+SLURM, depending upon the SLURM version you are using:
+
+  version 16.05 or later: you can use SLURM's PMIx support. This
+  requires that you configure and build SLURM --with-pmix.
+
+  Versions earlier than 16.05: you must use either SLURM's PMI-1 or
+  PMI-2 support. SLURM builds PMI-1 by default, or you can manually
+  install PMI-2. You must then build Open MPI using --with-pmi pointing
+  to the SLURM PMI library location.
+
+Please configure as appropriate and try again.
+#
+[slurm-error2]
+The application appears to have been direct launched using "srun",
+but OMPI was not built with SLURM support. This usually happens
+when OMPI was not configured --with-slurm and we weren't able
+to discover a SLURM installation in the usual places.
+
+Please configure as appropriate and try again.
+#
+[alps-error]
+The application appears to have been direct launched using "aprun",
+but OMPI was not built with ALPS PMI support and therefore cannot
+execute. You must build Open MPI using --with-pmi pointing
+to the ALPS PMI library location.
+
+Please configure as appropriate and try again.
+#
+[alps-error2]
+The application appears to have been direct launched using "aprun",
+but OMPI was not built with ALPS support. This usually happens
+when OMPI was not configured --with-alps and we weren't able
+to discover an ALPS installation in the usual places.
+
+Please configure as appropriate and try again.
+#
+[legacy-tool]
+We no longer support non-PMIx-based tools, and require a
+minimum level of PMIx v2.0.
+
+Please update the tool and/or the PMIx version you are using.

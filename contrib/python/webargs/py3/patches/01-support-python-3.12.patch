@@ -1,0 +1,18 @@
+--- contrib/python/webargs/py3/webargs/__init__.py	(index)
++++ contrib/python/webargs/py3/webargs/__init__.py	(working tree)
+@@ -1,4 +1,5 @@
+ # -*- coding: utf-8 -*-
++import setuptools
+ from distutils.version import LooseVersion
+ from marshmallow.utils import missing
+ 
+--- contrib/python/webargs/py3/webargs/compat.py	(index)
++++ contrib/python/webargs/py3/webargs/compat.py	(working tree)
+@@ -1,6 +1,7 @@
+ # -*- coding: utf-8 -*-
+ # flake8: noqa
+ import sys
++import setuptools
+ from distutils.version import LooseVersion
+ 
+ import marshmallow as ma

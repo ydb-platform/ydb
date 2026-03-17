@@ -1,0 +1,23 @@
+name: Publish docs
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Generate docs
+        run: |
+          docker run -v $(pwd)/docs:/out -v $(pwd)/:/protos pseudomuto/protoc-gen-doc --doc_opt=html,index.html $(find temporal/api -type f -name "*.proto")
+      - name: Deploy
+        run: npx vercel deploy docs/ --prod --token=${{ secrets.VERCEL_TOKEN }}

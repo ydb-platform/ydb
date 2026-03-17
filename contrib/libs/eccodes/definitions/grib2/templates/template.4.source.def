@@ -1,0 +1,4 @@
+# (C) Copyright 2005- ECMWF.
+
+# Source, sink or chemical/physical process (Code table 4.238)
+codetable[1] sourceSinkChemicalPhysicalProcess ('4.238.table',masterDir,localDir) = 255 : dump;

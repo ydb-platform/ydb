@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package temporal.api.enums.v1;
+
+option go_package = "go.temporal.io/api/enums/v1;enums";
+option java_package = "io.temporal.api.enums.v1";
+option java_multiple_files = true;
+option java_outer_classname = "FailedCauseProto";
+option ruby_package = "Temporalio::Api::Enums::V1";
+option csharp_namespace = "Temporalio.Api.Enums.V1";
+
+// Workflow tasks can fail for various reasons. Note that some of these reasons can only originate
+// from the server, and some of them can only originate from the SDK/worker.
+enum WorkflowTaskFailedCause {
+    WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED = 0;
+    // Between starting and completing the workflow task (with a workflow completion command), some
+    // new command (like a signal) was processed into workflow history. The outstanding task will be
+    // failed with this reason, and a worker must pick up a new task.
+    WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND = 1;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES = 2;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES = 3;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_START_TIMER_ATTRIBUTES = 4;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES = 5;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_RECORD_MARKER_ATTRIBUTES = 6;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES = 7;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES = 8;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES = 9;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES = 10;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES = 11;
+    WORKFLOW_TASK_FAILED_CAUSE_START_TIMER_DUPLICATE_ID = 12;
+    // The worker wishes to fail the task and have the next one be generated on a normal, not sticky
+    // queue. Generally workers should prefer to use the explicit `ResetStickyTaskQueue` RPC call.
+    WORKFLOW_TASK_FAILED_CAUSE_RESET_STICKY_TASK_QUEUE = 13;
+    WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE = 14;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES = 15;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES = 16;
+    WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND = 17;
+    WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND = 18;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_INPUT_SIZE = 19;
+    WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW = 20;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY = 21;
+    WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID = 22;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES = 23;
+    // The worker encountered a mismatch while replaying history between what was expected, and
+    // what the workflow code actually did.
+    WORKFLOW_TASK_FAILED_CAUSE_NON_DETERMINISTIC_ERROR = 24;
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES = 25;
+
+    // We send the below error codes to users when their requests would violate a size constraint
+    // of their workflow. We do this to ensure that the state of their workflow does not become too
+    // large because that can cause severe performance degradation. You can modify the thresholds for
+    // each of these errors within your dynamic config.
+    //
+    // Spawning a new child workflow would cause this workflow to exceed its limit of pending child
+    // workflows.
+    WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED = 26;
+    // Starting a new activity would cause this workflow to exceed its limit of pending activities
+    // that we track.
+    WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED = 27;
+    // A workflow has a buffer of signals that have not yet reached their destination. We return this
+    // error when sending a new signal would exceed the capacity of this buffer.
+    WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED = 28;
+    // Similarly, we have a buffer of pending requests to cancel other workflows. We return this error
+    // when our capacity for pending cancel requests is already reached.
+    WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED = 29;
+    // Workflow execution update message (update.Acceptance, update.Rejection, or update.Response)
+    // has wrong format, or missing required fields.
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE = 30;
+    // Similar to WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, but for updates.
+    WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE = 31;
+
+    // A workflow task completed with an invalid ScheduleNexusOperation command.
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES = 32;
+    // A workflow task completed requesting to schedule a Nexus Operation exceeding the server configured limit.
+    WORKFLOW_TASK_FAILED_CAUSE_PENDING_NEXUS_OPERATIONS_LIMIT_EXCEEDED = 33;
+    // A workflow task completed with an invalid RequestCancelNexusOperation command.
+    WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES = 34;
+    // A workflow task completed requesting a feature that's disabled on the server (either system wide or - typically -
+    // for the workflow's namespace).
+    // Check the workflow task failure message for more information.
+    WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED = 35;
+    // A workflow task failed because a grpc message was too large.
+    WORKFLOW_TASK_FAILED_CAUSE_GRPC_MESSAGE_TOO_LARGE = 36;
+}
+
+enum StartChildWorkflowExecutionFailedCause {
+    START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED = 0;
+    START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS = 1;
+    START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND = 2;
+}
+
+enum CancelExternalWorkflowExecutionFailedCause {
+    CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED = 0;
+    CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND = 1;
+    CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND = 2;
+}
+
+enum SignalExternalWorkflowExecutionFailedCause {
+    SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED = 0;
+    SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND = 1;
+    SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND = 2;
+    // Signal count limit is per workflow and controlled by server dynamic config "history.maximumSignalsPerExecution"
+    SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_SIGNAL_COUNT_LIMIT_EXCEEDED = 3;
+}
+
+enum ResourceExhaustedCause {
+    RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED = 0;
+    // Caller exceeds request per second limit.
+    RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT = 1;
+    // Caller exceeds max concurrent request limit.
+    RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT = 2;
+    // System overloaded.
+    RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED = 3;
+    // Namespace exceeds persistence rate limit.
+    RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT = 4;
+    // Workflow is busy
+    RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW = 5;
+    // Caller exceeds action per second limit.
+    RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT = 6;
+    // Persistence storage limit exceeded.
+    RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT = 7;
+    // Circuit breaker is open/half-open.
+    RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN = 8;
+    // Namespace exceeds operations rate limit.
+    RESOURCE_EXHAUSTED_CAUSE_OPS_LIMIT = 9;
+}
+
+enum ResourceExhaustedScope {
+    RESOURCE_EXHAUSTED_SCOPE_UNSPECIFIED = 0;
+    // Exhausted resource is a system-level resource.
+    RESOURCE_EXHAUSTED_SCOPE_NAMESPACE = 1;
+    // Exhausted resource is a namespace-level resource.
+    RESOURCE_EXHAUSTED_SCOPE_SYSTEM = 2;
+}
+

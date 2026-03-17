@@ -1,0 +1,12 @@
+# (C) Copyright 2005- ECMWF.
+
+signed[3] latitudeOfStretchingPole : edition_specific,no_copy;
+signed[3] longitudeOfStretchingPole : edition_specific,no_copy;
+
+meta  geography.latitudeOfStretchingPoleInDegrees
+      scale(latitudeOfStretchingPole,oneConstant,grib1divider,truncateDegrees) : dump;
+meta  geography.longitudeOfStretchingPoleInDegrees
+      scale(longitudeOfStretchingPole,oneConstant,grib1divider,truncateDegrees) : dump;
+ibmfloat stretchingFactor : dump;
+alias geography.stretchingFactor=stretchingFactor;
+

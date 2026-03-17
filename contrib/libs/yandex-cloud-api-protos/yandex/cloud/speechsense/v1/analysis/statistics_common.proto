@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1.analysis;
+
+option java_package = "yandex.cloud.api.speechsense.v1.analysis";
+option java_outer_classname = "StatisticsCommonProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1/analysis;speechsense";
+
+message DescriptiveStatistics {
+  // Minimum observed value
+  double min = 1;
+
+  // Maximum observed value
+  double max = 2;
+
+  // Estimated mean of distribution
+  double mean = 3;
+
+  // Estimated standard deviation of distribution
+  double std = 4;
+
+  // List of evaluated quantiles
+  repeated Quantile quantiles = 5;
+}
+
+message Quantile {
+  // Quantile level in range (0, 1)
+  double level = 1;
+
+  // Quantile value
+  double value = 2;
+}
+
+message AudioSegmentBoundaries {
+  // Audio segment start time
+  int64 start_time_ms = 1;
+
+  // Audio segment end time
+  int64 end_time_ms = 2;
+
+  // Duration in seconds
+  int64 duration_seconds = 3;
+}

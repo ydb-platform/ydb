@@ -1,0 +1,93 @@
+**************************
+Building NetCDF with CMake
+**************************
+
+This document describes how to use CMake to configure and build the
+NetCDF-C libraries across different platforms.
+
+************
+Introduction
+************
+
+We have recently introduced CMake support into the NetCDF trunk. Using
+CMake, it is possible to build the NetCDF libraries natively on
+Windows using Visual Studio. CMake also provides an alternative build
+system to autotools. CMake works on Unix, Linux and Windows system,
+and will generate files for a variety of build systems.
+
+- Operating System: Any/All: Unix Makefiles, CodeBlocks, Eclipse CDT
+- Windows: Borland Makefiles, MSYS Makefiles, MinGW Makefiles, Visual
+- Studio Projects (Versions 6+) Linux: Ninja, KDevelop3 OSX: Xcode
+
+************************************
+Requirements for building with CMake
+************************************
+
+1. NetCDF (4.2.x) with CMake support:
+a) Subversion: svn co
+   http://svn.unidata.ucar.edu/repos/netcdf/trunk netcdf 
+2. CMake 2.8.8+ for your platform of choice. http://www.cmake.org
+
+***********
+Using CMake
+***********
+
+Out-of-source Builds
+********************
+
+The CMake build system discourages 'in-source' builds. Instead, a
+build directory is created and used to contain the output of the build
+process. From the command line, this may be achieved as follows:
+
+developer@dummy-machine:/netcdf$ mkdir build_dir
+developer@dummy-machine:/netcdf$ cd build_dir
+developer@dummy-machine:/netcdf/build_dir$ cmake ..
+
+
+Compiling and Testing the NetCDF Libraries and Utilities
+********************************************************
+
+CMake provides different 'Generators'; these define the build system
+which will be used to build the NetCDF libraries. On Unix/Linux, the
+default generator is 'Unix Makefiles':
+
+developer@dummy-machine:/netcdf/build_dir$ cmake .. 
+developer@dummy-machine:/netcdf/build_dir$ make
+developer@dummy-machine:/netcdf/build_dir$ make test
+
+On windows, the default generator is for Visual Studio based
+builds. CMake is invoked the same way: C:\netcdf\build_dir>cmake ..
+
+The resulting project files can be opened in Visual Studio, or you
+can compile from the command line using CMake as an intermediary:
+
+C:\netcdf\build_dir>cmake --build . 
+
+Note: If you want to use a different generator than the default, you
+would specify it with the '-G' flag.
+
+Common NetCDF/CMake Options
+*********************
+
+- NETCDF_ENABLE_NETCDF_4 (On by Default)
+- NETCDF_ENABLE_DAP (On by Default)
+- BUILD_SHARED_LIBS (Off by Default for Windows, 
+                     On by Default for Unix/Linux) 
+- NETCDF_ENABLE_DLL (Windows Only, Off by Default)
+- CMAKE_PREFIX_PATH (Specify list of 
+
+This is just a partial list of options available. To see a full list
+of options, run 'cmake -L' from the command line, or use a CMake GUI.
+
+To specify an option with CMake, you would use the following syntax:
+
+developer@dummy-machine:/netcdf/build_dir$ cmake .. -D"NETCDF_ENABLE_NETCDF_4=ON" 
+				 -D"BUILD_SHARED_LIBS=ON" -D"USE_HDF5=OFF"
+
+Additional References
+*********************
+
+CMake is a very robust build system.  For additional syntax and
+options, see the CMake website, FAQ and Wiki available at
+<http://www.cmake.org>.
+

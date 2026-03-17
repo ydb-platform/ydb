@@ -1,0 +1,23 @@
+Metadata-Version: 2.4
+Name: python-tds
+Version: 1.17.1
+Summary: Python DBAPI driver for MSSQL using pure Python TDS (Tabular Data Stream) protocol implementation
+Home-page: https://github.com/denisenkom/pytds
+Author: Mikhail Denisenko
+Author-email: denisenkom@gmail.com
+License: MIT
+Classifier: Development Status :: 4 - Beta
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+License-File: LICENSE.txt
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: summary

@@ -1,0 +1,22 @@
+--- contrib/restricted/boost/circular_buffer/include/boost/circular_buffer/details.hpp	(index)
++++ contrib/restricted/boost/circular_buffer/include/boost/circular_buffer/details.hpp	(working tree)
+@@ -259,10 +259,7 @@ struct iterator
+ #endif // #if BOOST_CB_ENABLE_DEBUG
+ 
+     //! Assign operator.
+-#if !defined(BOOST_NO_CXX11_DEFAULTED_FUNCTIONS)
+-    iterator& operator=(const iterator&) = default;
+-#else
+-    iterator& operator=(const iterator& it) {
++    iterator& operator=(const nonconst_self& it) {
+         if (this == &it)
+             return *this;
+ #if BOOST_CB_ENABLE_DEBUG
+@@ -272,7 +269,6 @@ struct iterator
+         m_it = it.m_it;
+         return *this;
+     }
+-#endif
+ 
+ // Random access iterator methods
+ 

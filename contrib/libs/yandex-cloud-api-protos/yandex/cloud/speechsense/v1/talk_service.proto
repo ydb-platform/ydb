@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1;
+
+option java_package = "yandex.cloud.api.speechsense.v1";
+option java_outer_classname = "TalkServiceProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1;speechsense";
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/speechsense/v1/audio.proto";
+import "yandex/cloud/speechsense/v1/text.proto";
+import "yandex/cloud/speechsense/v1/search.proto";
+import "yandex/cloud/speechsense/v1/talk.proto";
+
+service TalkService {
+
+  // rpc for streaming talk documents. First message should contain Talk related metadata,
+  // second - audio metadata, others should contain audio bytes in chunks
+  rpc UploadAsStream(stream StreamTalkRequest) returns (UploadTalkResponse);
+
+  // rpc for uploading talk document as single message
+  rpc Upload(UploadTalkRequest) returns (UploadTalkResponse) {
+  }
+
+  // rpc for uploading text talk document
+  rpc UploadText(UploadTextRequest) returns (UploadTextResponse) {
+  }
+
+  // rpc for streaming document that contains combined talks. First message should contain Talk related metadata,
+  // second - audio metadata, others should contain audio bytes in chunks
+  rpc UploadBadge(stream StreamTalkRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UploadBadgeMetadata"
+      response: "UploadBadgeResponse"
+    };
+  };
+
+  // rpc for searching talks. will return ids only
+  rpc Search(SearchTalkRequest) returns (SearchTalkResponse) {
+    option (google.api.http) = { post: "/speechsense/v1/talks/search" body: "*" };
+  }
+
+  // rpc for bulk get
+  rpc Get(GetTalkRequest) returns (GetTalkResponse) {
+    option (google.api.http) = { post: "/speechsense/v1/talks/get" body: "*" };
+  }
+}
+
+// streaming request to create audio dialog
+message StreamTalkRequest {
+  oneof Event {
+
+    // talk document metadata containing channel id and channel field values
+    TalkMetadata metadata = 1;
+
+    // audio metadata or chunk
+    AudioStreamingRequest audio = 2;
+  }
+}
+
+// request to create audio dialog
+message UploadTalkRequest {
+  // talk_id, blank if initial upload request and present on metadata update
+  string talk_id = 3;
+
+  TalkMetadata metadata = 1;
+
+  // audio payload
+  AudioRequest audio = 2;
+}
+
+message UploadTalkResponse {
+
+  // id of created talk document
+  string talk_id = 1;
+}
+
+// request to create text based dialog
+message UploadTextRequest {
+  // talk_id, blank if initial upload request and present on metadata update
+  string talk_id = 3;
+
+  TalkMetadata metadata = 1;
+
+  TextContent text_content = 2;
+}
+
+message UploadTextResponse {
+  // id of created talk document
+  string talk_id = 1;
+}
+
+message TalkMetadata {
+  // id of connection this talk belongs too
+  string connection_id = 1;
+
+  // channel defined fields
+  map<string, string> fields = 2;
+
+  // per user specific metadata
+  repeated UserMetadata users = 3;
+}
+
+message UserMetadata {
+  string id = 1;
+  UserRole role = 2;
+  map<string, string> fields = 3;
+}
+
+enum UserRole {
+  USER_ROLE_UNSPECIFIED = 0;
+  USER_ROLE_OPERATOR = 1;
+  USER_ROLE_CLIENT = 2;
+  USER_ROLE_BOT = 3;
+}
+
+message SearchTalkRequest {
+
+  // id of organization
+  string organization_id = 1;
+
+  // id of space
+  string space_id = 2;
+
+  // id of connection
+  string connection_id = 3;
+
+  // id of project
+  string project_id = 4;
+
+  // metadata keys filters (user and system)
+  repeated Filter filters = 5;
+
+  // Full-text search query
+  Query query = 6;
+
+  // page size, from 1 to 1000, default 100
+  int64 page_size = 7;
+
+  // next page token, if page is not first
+  string page_token = 8;
+
+  // talks sorting options
+  SortData sort_data = 9;
+
+}
+
+message SearchTalkResponse {
+  // page results entries
+  repeated string talk_ids = 1;
+
+  // total documents matched
+  int64 talks_count = 2;
+
+  // page token for next request
+  string next_page_token = 3;
+}
+
+message GetTalkRequest {
+  // id of organization
+  string organization_id = 1;
+
+  // id of space
+  string space_id = 2;
+
+  // id of connection to search data
+  string connection_id = 3;
+
+  // id of project to search data
+  string project_id = 4;
+
+  // ids of talks to return. Requesting too many talks may result in "message exceeds maximum size" error.
+  // Up to 100 of talks per request is recommended.
+  repeated string talk_ids = 5;
+
+  // All types of analysis will be returned if not set.
+  google.protobuf.FieldMask results_mask = 6;
+}
+
+message GetTalkResponse {
+  repeated Talk talk = 1;
+}
+
+message UploadBadgeMetadata {
+  // id of uploaded badge
+  string badge_id = 1;
+}
+
+message UploadBadgeResponse {
+  // id of uploaded badge
+  string badge_id = 1;
+  // id of created talks related to badge
+  repeated string talk_ids = 2;
+}

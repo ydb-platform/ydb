@@ -1,0 +1,179 @@
+(C) Copyright 2007 Hewlett-Packard Development Company, L.P.
+(C) Copyright IBM Corp. 2001, 2003
+Copyright 2001 Motorola, Cisco, Intel, Nokia, La Monte Yarroll.
+Copyright 2002 Nokia, La Monte Yarroll, Intel. 
+
+This is the lksctp-tools package for Linux Kernel SCTP Reference 
+Implementation.
+
+This package is intended to supplement the Linux Kernel SCTP
+Reference Implementation now available in the Linux kernel source
+tree in versions  2.5.36 and following.  For more information on LKSCTP
+see the below section titled "LKSCTP - Linux Kernel SCTP." 
+
+lksctp-tools
+____________
+
+The lksctp-tools package is intended for two audiences.  
+	1) SCTP application developers
+	2) LKSCTP project developers
+
+For SCTP application developers, this package provides the user-level
+C language header files and a library for accessing SCTP specific
+application programming interfaces not provided by the standard sockets.
+
+For LKSCTP project developers, this package provides the API
+regression and functional tests.  Developers should also check
+lksctp_tests package that provides low level kernel tests.  These
+are available from git.kernel.org.
+
+For either role, this project provides sample code, utilities, and
+tests that one may find useful.  
+
+
+LKSCTP - Linux Kernel SCTP 
+__________________________
+
+The Linux Kernel SCTP Reference Implementation is free software; you
+can redistribute it and/or modify it under the terms of the GNU
+General Public License as published by the Free Software Foundation;
+either version 2, or (at your option) any later version. For more
+information on licensing terms, please see the file COPYING in this
+directory.
+
+SCTP (Stream Control Transmission Protocol) is a message oriented,
+reliable transport protocol, with congestion control, support for
+transparent multi-homing, and multiple ordered streams of messages.
+RFC2960 defines the core protocol. The IETF SIGTRAN Working Group
+developed SCTP.  The primary architects are Randy Stewart and Qiaobing
+Xie.
+
+The Kernel Reference is first and foremost an exposition of
+RFC2960 and related documents. You will find that the comments and
+variable names tie closely back to the RFC and Internet Drafts.
+
+This work was started by a small team of developers at Motorola.
+Throughout this document, "we" refers to that team.  We intend for the
+meaning of "we" to expand to include the whole development community,
+all 27 million programmers on the planet.
+
+The Kernel Reference has loose origins in the SCTP User Space Reference
+by Randy Stewart and Qiaobing Xie.
+
+MANIFEST
+--------
+.
+|-- bin
+|-- doc
+|-- man
+|-- src
+    |-- apps
+    |-- func_tests
+    |-- include
+    |   `-- netinet
+    |-- lib
+    |-- testlib
+    `-- withsctp
+
+You may want to check the following files:
+
+COPYING.lib	Licensing terms of libsctp
+COPYING		Licensing terms of other pieces of the package
+ROADMAP		A tour around the files in the distribution of SCTP-tools.
+INSTALL       	How to install and run this beast.
+ChangeLog	What has changed since the last release?
+
+DESIGN GOALS
+------------
+
+- A primary design goal is to reflect RFC 2960 as closely as
+practical.  We have changed many names from the user space reference to
+follow the draft as closely as possible.  We have also included
+extensive quotes from the draft adjacent to the code which implements
+them.
+
+- The other primary design goal is to integrate Linux kernel data
+structures and idioms as much as possible.  The test framework (in
+directory test/) provides many of the functions which would otherwise
+come from the kernel.  The test frame does use libc features, but the
+state machine code should be libc-free.
+
+- A lesser design goal is to completely describe the actions for each
+state transition in an sctp_command_t (see sctp_command.h).  This
+means that the state functions (sctp_state_fn_t in sctp_sm.h) are NOT
+allowed to modify their endpoint, association, or chunk arguments.
+This is enforced by const modifiers--please respect the compiler
+warnings.  All actions must be described in the last argument to the
+state function.
+
+- A byte order convention for dealing with the SCTP chunk headers: 
+all SCTP chunks, regardless if the chunk is to be sent outbound
+to the network or was received inbound from the network, the header portion
+of the chunk is ALWAYS created and retained in the NETWORK BYTE ORDER.
+
+- An error code handling convention is to return negative values internally.  
+The sk->err field holds a positive valued errno values, so will need our 
+internal values negated.   
+
+- We are moving toward an XP development model.  So far we have
+adopted pair-programming, coding-to-test (functional and unit), design
+through refactoring, and story-based planning.
+
+In order to make XP work, it is very important that we have a complete
+set of tests for the code.  We can not safely refactor major parts of
+the code without a way to find the things we break.  If you decide to
+extend the SCTP Kernel Implementation we ask that you do the following:
+
+	1) Pick an XP story.  Tell linux-sctp@vger.kernel.org
+	2) Write a functional test for that XP story.  The functional
+	   test defines "DONE" for the story.
+	3) Submit the functional test as a Pull Request on GitHub.
+	4) Write unit tests for any new "objects" you define.
+	5) Implement your feature.
+	6) Submit the feature and the unit tests as a separate
+	GitHub Pull Request.
+	
+Look in src/func_tests and in lksctp-tests package for examples of of tests.
+Please do not submit code that fails its own tests or any of the unit tests.
+If it fails a functional test, please document that with the submission.
+
+Another XP requirement is to code only what is you need to make the
+current test work.  Where this means omitting required features, we
+have put in prominent BUG comments describing the omitted
+functionality.
+
+FEATURES
+--------
+This implementation uses a fairly compact cookie which is isolated in
+its own substructure of SCTP_association.  We have been moving toward
+aggregating data elements which need to travel together to minimize
+copying of individual elements in favour of more efficient structure
+copies.
+
+You will find what we believe to be the smallest possible Internet
+simulator in the middle of the function test_kernel.c:simulate_internet().
+The simulator makes a few simplifying assumptions...
+
+MAILING LISTS and WEB SITES
+---------------------------
+https://github.com/sctp/lksctp-tools/
+
+	This is the lksctp project webpage.  The wiki section contains
+	more info about it, including which RFCs it supports.
+
+linux-sctp@vger.kernel.org
+	
+	This is the discussion list for developers.  Join this list if	
+	you are interested in following the day-to-day activities of
+	the SCTP Kernel Reference Implementation development community. 
+	See subscription directions at:  
+		http://vger.kernel.org/vger-lists.html#linux-sctp
+
+http://www.sctp.org
+
+	This is Randy Stewart's SCTP web site.
+
+http://sctp.de
+
+	This is Michael Tuexen's SCTP web site.  Michael has collected
+	dozens of documents related to SCTP.

@@ -1,0 +1,47 @@
+# Операторы:
+#   *  Один аргумент в no
+#   ~  Несколько аргументов (минимум один) в no
+#
+# Параметры:
+#   %global         Команда действует на любом уровне ниже
+#   %logic=...      Кастомная функция обработки правила
+#   %diff_logic=... Кастомная функция построения диффа.
+#                   данная функция работает для подблоков (в отличие от %logic)
+#   %comment=...    Добавить коммент после строки который будет видно с опцией patch --add-comments
+#                   Сделано в основном для того чтобы генерировать специальные команды для наливки
+# -----
+# Physical
+feature ~
+ntp ~
+sflow
+aaa group server tacacs\+ *
+    ~ %global
+ip prefix-list *
+    ~ %global
+ipv6 prefix-list *
+    ~ %global
+route-map ~
+    ~ %global
+interface */(ce|xe|po|eth(-0-)?|vlan1\.)[0-9\/]+$/     %logic=common.permanent %diff_logic=b4com.iface.diff
+    description
+    ip vrf forwarding *
+    ip address *
+    ipv6 address *
+    ipv6 nd *
+    mtu
+    sflow *                       %logic=b4com.iface.sflow
+    lldp-agent
+        ~ %global                 %logic=b4com.iface.lldp
+        !dcbx *
+        !exit
+ip community-list ~
+router bgp *
+    bgp ~
+    no neighbor * send-community extended
+    neighbor * peer-group                       %logic=b4com.bgp.undo_peer_group
+    neighbor ~                                  %logic=b4com.bgp.undo_peer
+    address-family ~
+        max-paths ebgp *
+        neighbor * peer-group                   %logic=b4com.bgp.undo_peer_group
+        neighbor ~                              %logic=b4com.bgp.undo_peer
+        no neighbor * send-community extended

@@ -1,0 +1,222 @@
+Metadata-Version: 2.4
+Name: selectolax
+Version: 0.4.6
+Summary: A fast HTML5 parser with CSS selectors, written in Cython, using Modest and Lexbor engines.
+Home-page: https://github.com/rushter/selectolax
+Author: Artem Golubin
+Author-email: Artem Golubin <me@rushter.com>
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/rushter/selectolax
+Project-URL: Repository, https://github.com/rushter/selectolax
+Project-URL: Documentation, https://selectolax.readthedocs.io/en/latest/parser.html
+Project-URL: Changelog, https://github.com/rushter/selectolax/blob/master/CHANGES.md
+Keywords: selectolax,html,parser,css,fast,lexbor,modest
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: Operating System :: MacOS
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: OS Independent
+Classifier: Operating System :: Unix
+Classifier: Programming Language :: Cython
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Topic :: Internet
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Text Processing
+Classifier: Topic :: Text Processing :: Markup
+Classifier: Topic :: Text Processing :: Markup :: HTML
+Classifier: Typing :: Typed
+Requires-Python: <3.15,>=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Provides-Extra: cython
+Requires-Dist: Cython; extra == "cython"
+Dynamic: author
+Dynamic: home-page
+Dynamic: license-file
+
+![selectolax logo](docs/logo.png)
+
+---
+
+A fast HTML5 parser with CSS selectors, written in Cython,
+using [Modest](https://github.com/lexborisov/Modest/) and [Lexbor](https://github.com/lexbor/lexbor) engines.
+
+---
+
+[![PyPI - Version](https://img.shields.io/pypi/v/selectolax?logo=pypi&label=Pypi&logoColor=fff)](https://pypi.org/project/selectolax)
+[![PyPI Total Downloads](https://static.pepy.tech/badge/selectolax)](https://pepy.tech/projects/selectolax)
+[![CI](https://img.shields.io/github/actions/workflow/status/rushter/selectolax/pythonpackage.yml?branch=master&logo=githubactions&label=CI)](https://github.com/rushter/selectolax/actions/workflows/pythonpackage.yml?query=branch%3Amaster+event%3Apush)
+[![Python Versions](https://img.shields.io/pypi/pyversions/selectolax?logo=python&logoColor=fff&label=Python)](https://pypi.org/project/selectolax)
+[![GitHub License](https://img.shields.io/github/license/rushter/selectolax?logo=github&label=License)](https://github.com/rushter/selectolax/blob/master/LICENSE)
+
+---
+
+## Installation
+
+From PyPI using pip:
+
+```bash
+pip install selectolax
+```
+
+If installation fails due to compilation errors, you may need to install [Cython](https://github.com/cython/cython):
+
+```bash
+pip install selectolax[cython]
+```
+
+This usually happens when you try to install an outdated version of selectolax on a newer version of Python.
+
+Development version from GitHub:
+
+```bash
+git clone --recursive  https://github.com/rushter/selectolax
+cd selectolax
+pip install -r requirements_dev.txt
+python setup.py install
+```
+
+How to compile selectolax while developing:
+
+```bash
+make clean
+make dev
+```
+
+## Basic examples
+
+Here are some basic examples to get you started with selectolax:
+
+Parsing HTML and extracting text:
+
+```python
+In [1]: from selectolax.lexbor import LexborHTMLParser
+   ...:
+   ...: html = """
+   ...: <h1 id="title" data-updated="20201101">Hi there</h1>
+   ...: <div class="post">Lorem Ipsum is simply dummy text of the printing and typesetting industry. </div>
+   ...: <div class="post">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</div>
+   ...: """
+   ...: tree = LexborHTMLParser(html)
+
+In [2]: tree.css_first('h1#title').text()
+Out[2]: 'Hi there'
+
+In [3]: tree.css_first('h1#title').attributes
+Out[3]: {'id': 'title', 'data-updated': '20201101'}
+
+In [4]: [node.text() for node in tree.css('.post')]
+Out[4]:
+['Lorem Ipsum is simply dummy text of the printing and typesetting industry. ',
+ 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.']
+```
+
+### Using advanced CSS selectors
+
+```python
+In [1]: html = "<div><p id=p1><p id=p2><p id=p3><a>link</a><p id=p4><p id=p5>text<p id=p6></div>"
+   ...: selector = "div > :nth-child(2n+1):not(:has(a))"
+
+In [2]: for node in LexborHTMLParser(html).css(selector):
+   ...:     print(node.attributes, node.text(), node.tag)
+   ...:     print(node.parent.tag)
+   ...:     print(node.html)
+   ...:
+{'id': 'p1'}  p
+div
+<p id="p1"></p>
+{'id': 'p5'} text p
+div
+<p id="p5">text</p>
+```
+
+#### Using `lexbor-contains` CSS pseudo-class to match text
+
+```python
+from selectolax.lexbor import LexborHTMLParser
+html = "<div><p>hello </p><p id='main'>lexbor is AwesOme</p></div>"
+parser = LexborHTMLParser(html)
+# Case-insensitive search
+results = parser.css('p:lexbor-contains("awesome" i)')
+# Case-sensitive search
+results = parser.css('p:lexbor-contains("AwesOme")')
+assert len(results) == 1
+assert results[0].text() == "lexbor is AwesOme"
+```
+
+* [More examples](https://selectolax.readthedocs.io/en/latest/examples.html)
+
+### Available backends
+
+Selectolax supports two backends: `Modest` and `Lexbor`. By default, all examples use the `Lexbor` backend.
+Most of the features between backends are almost identical, but there are some differences.
+
+As of 2024, the preferred backend is `Lexbor`. The `Modest` backend is still available for compatibility reasons
+and the underlying C library that selectolax uses is not maintained anymore.
+
+To use `lexbor`, just import the parser and use it in the similar way to the `HTMLParser`.
+
+```python
+In [1]: from selectolax.lexbor import LexborHTMLParser
+
+In [2]: html = """
+   ...: <title>Hi there</title>
+   ...: <div id="updated">2021-08-15</div>
+   ...: """
+
+In [3]: parser = LexborHTMLParser(html)
+In [4]: parser.root.css_first("#updated").text()
+Out[4]: '2021-08-15'
+```
+
+## Simple Benchmark
+
+* Extract title, links, scripts and a meta tag from main pages of top 754 domains. See `examples/benchmark.py` for more information.
+
+| Package                       | Time      |
+|-------------------------------|-----------|
+| Beautiful Soup (html.parser)  | 61.02 sec.|
+| lxml / Beautiful Soup (lxml)  | 9.09 sec. |
+| html5_parser                  | 16.10 sec.|
+| selectolax (Modest)           | 2.94 sec. |
+| selectolax (Lexbor)           | 2.39 sec. |
+
+## Links
+
+* [selectolax API reference and examples](https://selectolax.readthedocs.io/en/latest/index.html)
+* [Video introduction to web scraping using selectolax](https://youtu.be/HpRsfpPuUzE)
+* [How to Scrape 7k Products with Python using selectolax and httpx](https://www.youtube.com/watch?v=XpGvq755J2U)
+* [Modest introduction](https://lexborisov.github.io/Modest/)
+* [Modest benchmark](https://lexborisov.github.io/benchmark-html-parsers/)
+* [Python benchmark](https://rushter.com/blog/python-fast-html-parser/)
+* [Another Python benchmark](https://www.peterbe.com/plog/selectolax-or-pyquery)
+* [Universal interface to lxml and selectolax](https://github.com/lorien/domselect)
+
+## License
+
+* Modest engine — [LGPL2.1](https://github.com/lexborisov/Modest/blob/master/LICENSE)
+* lexbor engine — [Apache-2.0 license](https://github.com/lexbor/lexbor?tab=Apache-2.0-1-ov-file#readme)
+* selectolax - [MIT](https://github.com/rushter/selectolax/blob/master/LICENSE)
+
+
+## Contributors
+
+Thanks to all the contributors of selectolax!
+
+<a href="https://github.com/rushter/selectolax/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=rushter/selectolax" />
+</a>

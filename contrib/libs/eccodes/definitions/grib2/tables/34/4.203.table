@@ -1,0 +1,26 @@
+# Code table 4.203 - Cloud type
+0 0 Clear
+1 1 Cumulonimbus
+2 2 Stratus
+3 3 Stratocumulus
+4 4 Cumulus
+5 5 Altostratus
+6 6 Nimbostratus
+7 7 Altocumulus
+8 8 Cirrostratus
+9 9 Cirrocumulus
+10 10 Cirrus
+11 11 Cumulonimbus - ground-based fog beneath the lowest layer
+12 12 Stratus - ground-based fog beneath the lowest layer
+13 13 Stratocumulus - ground-based fog beneath the lowest layer
+14 14 Cumulus - ground-based fog beneath the lowest layer
+15 15 Altostratus - ground-based fog beneath the lowest layer
+16 16 Nimbostratus - ground-based fog beneath the lowest layer
+17 17 Altocumulus - ground-based fog beneath the lowest layer
+18 18 Cirrostratus - ground-based fog beneath the lowest layer
+19 19 Cirrocumulus - ground-based fog beneath the lowest layer
+20 20 Cirrus - ground-based fog beneath the lowest layer
+# 21-190 Reserved
+191 191 Unknown
+# 192-254 Reserved for local use
+255 255 Missing

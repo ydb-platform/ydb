@@ -1,0 +1,11 @@
+--- contrib/python/pandas/py3/pandas/compat/_optional.py	(index)
++++ contrib/python/pandas/py3/pandas/compat/_optional.py	(working tree)
+@@ -153,7 +153,7 @@ def import_optional_dependency(
+                 f"Pandas requires version '{minimum_version}' or newer of '{parent}' "
+                 f"(version '{version}' currently installed)."
+             )
+-            if errors == "warn":
++            if errors == "warn" or parent == "pyarrow":
+                 warnings.warn(
+                     msg,
+                     UserWarning,

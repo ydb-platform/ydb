@@ -1,0 +1,13 @@
+--- a/src/lib/connectx.c
++++ b/src/lib/connectx.c
+@@ -140,8 +140,8 @@ int sctp_connectx2(int fd, struct sockaddr *addrs, int addrcnt,
+ 	return __connectx(fd, addrs, addrs_size, id);
+ }
+ 
+-SYMVER(sctp_connectx3, sctp_connectx@@VERS_3)
+-int sctp_connectx3(int fd, struct sockaddr *addrs, int addrcnt,
++SYMVER(sctp_connectx, sctp_connectx@@VERS_3)
++int sctp_connectx(int fd, struct sockaddr *addrs, int addrcnt,
+ 		      sctp_assoc_t *id)
+ {
+ 	int addrs_size = __connectx_addrsize(addrs, addrcnt);

@@ -1,0 +1,213 @@
+{% macro form_errors(form, hiddens=True) %}
+  {%- if form.errors %}
+    {%- for fieldname, errors in form.errors.items() %}
+      {%- if bootstrap_is_hidden_field(form[fieldname]) and hiddens or
+             not bootstrap_is_hidden_field(form[fieldname]) and hiddens != 'only' %}
+        {%- for error in errors %}
+          <p class="error">{{error}}</p>
+        {%- endfor %}
+      {%- endif %}
+    {%- endfor %}
+  {%- endif %}
+{%- endmacro %}
+
+{% macro _hz_form_wrap(horizontal_columns, form_type, add_group=False, required=False) %}
+{% if form_type == "horizontal" %}
+  {% if add_group %}<div class="form-group{% if required %} required{% endif %}">{% endif %}
+  <div class="col-{{horizontal_columns[0]}}-offset-{{horizontal_columns[1]}}
+              col-{{horizontal_columns[0]}}-{{horizontal_columns[2]}}
+             ">
+{% endif %}
+{{caller()}}
+
+{% if form_type == "horizontal" %}
+  {% if add_group %}</div>{% endif %}
+  </div>
+{% endif %}
+{% endmacro %}
+
+{% macro form_field(field,
+                    form_type="basic",
+                    horizontal_columns=('lg', 2, 10),
+                    button_map={}) %}
+
+{# this is a workaround hack for the more straightforward-code of just passing required=required parameter. older versions of wtforms do not have
+the necessary fix for required=False attributes, but will also not set the required flag in the first place. we skirt the issue using the code below #}
+{% if field.flags.required and not required in kwargs %}
+{% set kwargs = dict(required=True, **kwargs) %}
+{% endif %}
+
+{% if field.widget.input_type == 'checkbox' %}
+  {% call _hz_form_wrap(horizontal_columns, form_type, True, required=required) %}
+    <div class="checkbox">
+      <label>
+        {{field()|safe}} {{field.label.text|safe}}
+      </label>
+    </div>
+  {% endcall %}
+{%- elif field.type == 'RadioField' -%}
+  {# note: A cleaner solution would be rendering depending on the widget,
+     this is just a hack for now, until I can think of something better #}
+  {% call _hz_form_wrap(horizontal_columns, form_type, True, required=required) %}
+    {% for item in field -%}
+      <div class="radio">
+        <label>
+          {{item|safe}} {{item.label.text|safe}}
+        </label>
+      </div>
+    {% endfor %}
+  {% endcall %}
+{%- elif field.type == 'SubmitField' -%}
+  {# deal with jinja scoping issues? #}
+  {% set field_kwargs = kwargs %}
+
+  {# note: same issue as above - should check widget, not field type #}
+  {% call _hz_form_wrap(horizontal_columns, form_type, True, required=required) %}
+    {{field(class='btn btn-%s' % button_map.get(field.name, 'default'),
+            **field_kwargs)}}
+  {% endcall %}
+{%- elif field.type == 'FormField' -%}
+{# note: FormFields are tricky to get right and complex setups requiring
+   these are probably beyond the scope of what this macro tries to do.
+   the code below ensures that things don't break horribly if we run into
+   one, but does not try too hard to get things pretty. #}
+  <fieldset>
+    <legend>{{field.label}}</legend>
+    {%- for subfield in field %}
+      {% if not bootstrap_is_hidden_field(subfield) -%}
+        {{ form_field(subfield,
+                      form_type=form_type,
+                      horizontal_columns=horizontal_columns,
+                      button_map=button_map) }}
+      {%- endif %}
+    {%- endfor %}
+  </fieldset>
+{% else -%}
+  <div class="form-group {% if field.errors %} has-error{% endif -%}
+                         {%- if field.flags.required %} required{% endif -%}
+  ">
+      {%- if form_type == "inline" %}
+        {{field.label(class="sr-only")|safe}}
+        {% if field.type == 'FileField' %}
+          {{field(**kwargs)|safe}}
+        {% else %}
+          {{field(class="form-control", **kwargs)|safe}}
+        {% endif %}
+      {% elif form_type == "horizontal" %}
+        {{field.label(class="control-label " + (
+          " col-%s-%s" % horizontal_columns[0:2]
+        ))|safe}}
+        <div class=" col-{{horizontal_columns[0]}}-{{horizontal_columns[2]}}">
+          {% if field.type == 'FileField' %}
+            {{field(**kwargs)|safe}}
+          {% else %}
+            {{field(class="form-control", **kwargs)|safe}}
+          {% endif %}
+        </div>
+        {%- if field.errors %}
+          {%- for error in field.errors %}
+            {% call _hz_form_wrap(horizontal_columns, form_type, required=required) %}
+              <p class="help-block">{{error}}</p>
+            {% endcall %}
+          {%- endfor %}
+        {%- elif field.description -%}
+          {% call _hz_form_wrap(horizontal_columns, form_type, required=required) %}
+            <p class="help-block">{{field.description|safe}}</p>
+          {% endcall %}
+        {%- endif %}
+      {%- else -%}
+        {{field.label(class="control-label")|safe}}
+        {% if field.type == 'FileField' %}
+          {{field(**kwargs)|safe}}
+        {% else %}
+          {{field(class="form-control", **kwargs)|safe}}
+        {% endif %}
+
+        {%- if field.errors %}
+          {%- for error in field.errors %}
+            <p class="help-block">{{error}}</p>
+          {%- endfor %}
+        {%- elif field.description -%}
+          <p class="help-block">{{field.description|safe}}</p>
+        {%- endif %}
+      {%- endif %}
+  </div>
+{% endif %}
+{% endmacro %}
+
+{# valid form types are "basic", "inline" and "horizontal" #}
+{% macro quick_form(form,
+                    action="",
+                    method="post",
+                    extra_classes=None,
+                    role="form",
+                    form_type="basic",
+                    horizontal_columns=('lg', 2, 10),
+                    enctype=None,
+                    button_map={},
+                    id="",
+                    novalidate=False) %}
+{#-
+action="" is what we want, from http://www.ietf.org/rfc/rfc2396.txt:
+
+4.2. Same-document References
+
+   A URI reference that does not contain a URI is a reference to the
+   current document.  In other words, an empty URI reference within a
+   document is interpreted as a reference to the start of that document,
+   and a reference containing only a fragment identifier is a reference
+   to the identified fragment of that document.  Traversal of such a
+   reference should not result in an additional retrieval action.
+   However, if the URI reference occurs in a context that is always
+   intended to result in a new request, as in the case of HTML's FORM
+   element, then an empty URI reference represents the base URI of the
+   current document and should be replaced by that URI when transformed
+   into a request.
+
+ -#}
+{#- if any file fields are inside the form and enctype is automatic, adjust
+    if file fields are found. could really use the equalto test of jinja2
+    here, but latter is not available until 2.8
+
+    warning: the code below is guaranteed to make you cry =(
+#}
+{%- set _enctype = [] %}
+{%- if enctype is none -%}
+  {%- for field in form %}
+    {%- if field.type == 'FileField' %}
+      {#- for loops come with a fairly watertight scope, so this list-hack is
+          used to be able to set values outside of it #}
+      {%- set _ = _enctype.append('multipart/form-data') -%}
+    {%- endif %}
+  {%- endfor %}
+{%- else %}
+  {% set _ = _enctype.append(enctype) %}
+{%- endif %}
+<form
+  {%- if action != None %} action="{{action}}"{% endif -%}
+  {%- if id %} id="{{id}}"{% endif -%}
+  {%- if method %} method="{{method}}"{% endif %}
+  class="form
+    {%- if extra_classes %} {{extra_classes}}{% endif -%}
+    {%- if form_type == "horizontal" %} form-horizontal
+    {%- elif form_type == "inline" %} form-inline
+    {%- endif -%}
+  "
+  {%- if _enctype[0] %} enctype="{{_enctype[0]}}"{% endif -%}
+  {%- if role %} role="{{role}}"{% endif -%}
+  {%- if novalidate %} novalidate{% endif -%}
+  >
+  {{ form.hidden_tag() }}
+  {{ form_errors(form, hiddens='only') }}
+
+  {%- for field in form %}
+    {% if not bootstrap_is_hidden_field(field) -%}
+      {{ form_field(field,
+                    form_type=form_type,
+                    horizontal_columns=horizontal_columns,
+                    button_map=button_map) }}
+    {%- endif %}
+  {%- endfor %}
+
+</form>
+{%- endmacro %}

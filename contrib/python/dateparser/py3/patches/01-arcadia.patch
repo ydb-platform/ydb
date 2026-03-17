@@ -1,0 +1,9 @@
+--- contrib/python/dateparser/py3/dateparser/timezone_parser.py	(index)
++++ contrib/python/dateparser/py3/dateparser/timezone_parser.py	(working tree)
+@@ -102 +102 @@ def _load_offsets(cache_path, current_hash):
+-        with open(cache_path, mode="rb") as file:
++        with cache_path.open(mode="rb") as file:
+@@ -127 +127,2 @@ def _load_offsets(cache_path, current_hash):
+-CACHE_PATH = Path(__file__).parent.joinpath("data", "dateparser_tz_cache.pkl")
++import importlib.resources
++CACHE_PATH = importlib.resources.files(__package__).joinpath("data", "dateparser_tz_cache.pkl")

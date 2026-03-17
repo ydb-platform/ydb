@@ -1,0 +1,40 @@
+--- contrib/python/cysystemd/cysystemd/_journal.pyx	(index)
++++ contrib/python/cysystemd/cysystemd/_journal.pyx	(working tree)
+@@ -1,6 +1,18 @@
++cdef extern from "<contrib/python/cysystemd/define_syslog_names.h>":
++    pass
++
++
+ from cpython.mem cimport PyMem_Calloc, PyMem_Malloc, PyMem_Free
+ from libc.string cimport memcpy
+-from .sd_journal cimport sd_journal_sendv, prioritynames, CODE, iovec
++from .sd_journal cimport sd_journal_sendv, iovec
++
++
++cdef extern from "<sys/syslog.h>" nogil:
++    ctypedef struct CODE:
++        char *c_name
++        int c_val
++
++    CODE prioritynames[]
+ 
+ 
+ cpdef dict syslog_priorities():
+--- contrib/python/cysystemd/cysystemd/sd_journal.pxd	(index)
++++ contrib/python/cysystemd/cysystemd/sd_journal.pxd	(working tree)
+@@ -83,14 +83,6 @@ cdef extern from "<systemd/sd-journal.h>" nogil:
+     int sd_journal_get_catalog_for_message_id(sd_id128_t id, char **text)
+ 
+ 
+-cdef extern from "<sys/syslog.h>" nogil:
+-    ctypedef struct CODE:
+-        char *c_name
+-        int c_val
+-
+-    CODE prioritynames[]
+-
+-
+ __all__ = (
+     "SD_JOURNAL_APPEND",
+     "SD_JOURNAL_CURRENT_USER",
+

@@ -1,0 +1,121 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2007-2018 Cisco Systems, Inc.  All rights reserved
+# Copyright (c) 2013      NVIDIA Corporation.  All rights reserved.
+# Copyright (c) 2017      Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for Open MPI.
+#
+[mpi_init:startup:internal-failure]
+It looks like %s failed for some reason; your parallel process is
+likely to abort.  There are many reasons that a parallel process can
+fail during %s; some of which are due to configuration or environment
+problems.  This failure appears to be an internal failure; here's some
+additional information (which may only be relevant to an Open MPI
+developer):
+
+  %s
+  --> Returned "%s" (%d) instead of "Success" (0)
+#
+[mpi_init:startup:pml-add-procs-fail]
+MPI_INIT has failed because at least one MPI process is unreachable
+from another.  This *usually* means that an underlying communication
+plugin -- such as a BTL or an MTL -- has either not loaded or not
+allowed itself to be used.  Your MPI job will now abort.
+
+You may wish to try to narrow down the problem;
+
+ * Check the output of ompi_info to see which BTL/MTL plugins are
+   available.
+ * Run your application with MPI_THREAD_SINGLE.
+ * Set the MCA parameter btl_base_verbose to 100 (or mtl_base_verbose,
+   if using MTL-based communications) to see exactly which
+   communication plugins were considered and/or discarded.
+#
+[mpi-param-check-enabled-but-compiled-out]
+WARNING: The MCA parameter mpi_param_check has been set to true, but
+parameter checking has been compiled out of Open MPI.  The
+mpi_param_check value has therefore been ignored.
+#
+[mpi_init: invoked multiple times]
+Open MPI has detected that this process has attempted to initialize
+MPI (via MPI_INIT or MPI_INIT_THREAD) more than once.  This is
+erroneous.
+#
+[mpi_init: already finalized]
+Open MPI has detected that this process has attempted to initialize
+MPI (via MPI_INIT or MPI_INIT_THREAD) after MPI_FINALIZE has been
+called.  This is erroneous.
+#
+[mpi_finalize: not initialized]
+The function MPI_FINALIZE was invoked before MPI was initialized in a
+process on host %s, PID %d.
+
+This indicates an erroneous MPI program; MPI must be initialized
+before it can be finalized.
+#
+[mpi_finalize:invoked_multiple_times]
+The function MPI_FINALIZE was invoked multiple times in a single
+process on host %s, PID %d.
+
+This indicates an erroneous MPI program; MPI_FINALIZE is only allowed
+to be invoked exactly once in a process.
+#
+[sparse groups enabled but compiled out]
+WARNING: The MCA parameter mpi_use_sparse_group_storage has been set
+to true, but sparse group support was not compiled into Open MPI.  The
+mpi_use_sparse_group_storage value has therefore been ignored.
+#
+[heterogeneous-support-unavailable]
+This installation of Open MPI was configured without support for
+heterogeneous architectures, but at least one node in the allocation
+was detected to have a different architecture. The detected node was:
+
+Node: %s
+
+In order to operate in a heterogeneous environment, please reconfigure
+Open MPI with --enable-heterogeneous.
+#
+[no cuda support]
+The user requested CUDA support with the --mca mpi_cuda_support 1 flag
+but the library was not compiled with any support.
+#
+[noconxcpt]
+The user has called an operation involving MPI_Connect and/or MPI_Accept,
+but this environment lacks the necessary infrastructure support for
+that operation. Open MPI relies on the PMIx_Publish/Lookup (or one of
+its predecessors) APIs for this operation.
+
+This typically happens when launching outside of mpirun where the underlying
+resource manager does not provide publish/lookup support. One way of solving
+the problem is to simply use mpirun to start the application.
+#
+[lib-call-fail]
+A library call unexpectedly failed.  This is a terminal error; please
+show this message to an Open MPI wizard:
+
+        Library call: %s
+         Source file: %s
+  Source line number: %d
+
+Aborting...
+#
+[spc: MPI_T disabled]
+There was an error registering software performance counters (SPCs) as
+MPI_T performance variables.  Your job will continue, but SPCs will be
+disabled for MPI_T.

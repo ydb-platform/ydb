@@ -1,0 +1,146 @@
+[package]
+name = "temporal-sdk-core"
+version = "0.1.0"
+authors = ["Spencer Judge <spencer@temporal.io>", "Vitaly Arbuzov <vitaly@temporal.io>"]
+edition = "2024"
+license-file = { workspace = true }
+description = "Library for building new Temporal SDKs"
+homepage = "https://temporal.io/"
+repository = "https://github.com/temporalio/sdk-core"
+keywords = ["temporal", "workflow"]
+categories = ["development-tools"]
+
+[lib]
+
+[features]
+default = ["otel", "prom"]
+otel = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:hyper",
+    "dep:hyper-util", "dep:http-body-util"]
+prom = ["dep:prometheus"]
+tokio-console = ["console-subscriber"]
+ephemeral-server = ["dep:flate2", "dep:reqwest", "dep:tar", "dep:zip"]
+debug-plugin = ["dep:reqwest"]
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+console-subscriber = { version = "0.4", optional = true }
+crossbeam-channel = "0.5"
+crossbeam-queue = "0.3"
+crossbeam-utils = "0.8"
+dashmap = "6.0"
+derive_builder = { workspace = true }
+derive_more = { workspace = true }
+enum_dispatch = "0.3"
+enum-iterator = "2"
+flate2 = { version = "1.0", optional = true }
+futures-util = { version = "0.3", default-features = false }
+futures-channel = { version = "0.3", default-features = false, features = ["std"] }
+gethostname = "1.0.2"
+governor = "0.8"
+http-body-util = { version = "0.1", optional = true }
+hyper = { version = "1.2", optional = true }
+hyper-util = { version = "0.1", features = ["server", "http1", "http2", "tokio"], optional = true }
+itertools = "0.14"
+lru = "0.13"
+mockall = "0.13"
+opentelemetry = { workspace = true, features = ["metrics"], optional = true }
+opentelemetry_sdk = { version = "0.30", features = ["rt-tokio", "metrics", "spec_unstable_metrics_views"], optional = true }
+opentelemetry-otlp = { version = "0.30", features = ["tokio", "metrics", "tls", "http-proto", "grpc-tonic"], optional = true }
+parking_lot = { version = "0.12", features = ["send_guard"] }
+pid = "4.0"
+pin-project = "1.0"
+prometheus = { version = "0.14", optional = true }
+prost = { workspace = true }
+prost-types = { version = "0.6", package = "prost-wkt-types" }
+rand = "0.9"
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls-native-roots"], default-features = false, optional = true }
+ringbuf = "0.4"
+serde = "1.0"
+serde_json = "1.0"
+siphasher = "1.0"
+slotmap = "1.0"
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
+tar = { version = "0.4", optional = true }
+thiserror = { workspace = true }
+tokio = { version = "1.37", features = ["rt", "rt-multi-thread", "parking_lot", "time", "fs", "process"] }
+tokio-util = { version = "0.7", features = ["io", "io-util"] }
+tokio-stream = "0.1"
+tonic = { workspace = true, features = ["tls-ring", "tls-native-roots"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["parking_lot", "env-filter", "registry", "ansi"] }
+url = "2.2"
+uuid = { version = "1.1", features = ["v4"] }
+zip = { version = "2.0", optional = true }
+
+# 1st party local deps
+[dependencies.temporal-sdk-core-api]
+path = "../core-api"
+features = ["otel_impls"]
+
+[dependencies.temporal-sdk-core-protos]
+path = "../sdk-core-protos"
+features = ["history_builders"]
+
+[dependencies.temporal-client]
+path = "../client"
+
+[dependencies.rustfsm]
+path = "../fsm"
+
+[dev-dependencies]
+assert_matches = "1.4"
+bimap = "0.6.1"
+clap = { version = "4.0", features = ["derive"] }
+criterion = { version = "0.6", features = ["async", "async_tokio"] }
+rstest = "0.25"
+temporal-sdk-core-test-utils = { path = "../test-utils" }
+temporal-sdk = { path = "../sdk" }
+tokio = { version = "1.37", features = ["rt", "rt-multi-thread", "parking_lot", "time", "fs", "process", "test-util"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+
+[[test]]
+name = "integ_tests"
+path = "../tests/main.rs"
+# Prevents autodiscovery, and hence these getting run with `cargo test`. Run with
+# `cargo test --test integ_tests`
+test = false
+required-features = ["temporal-sdk-core-protos/serde_serialize"]
+
+[[test]]
+name = "heavy_tests"
+path = "../tests/heavy_tests.rs"
+test = false
+
+[[test]]
+name = "manual_tests"
+path = "../tests/manual_tests.rs"
+test = false
+
+[[test]]
+name = "global_metric_tests"
+path = "../tests/global_metric_tests.rs"
+test = false
+
+[[test]]
+name = "cloud_tests"
+path = "../tests/cloud_tests.rs"
+test = false
+
+[[bench]]
+name = "workflow_replay"
+harness = false
+
+# The integration test runner should compile with the same configuration as the
+# rest of the integration tests so that artifacts are shared and no additional
+# compilation is required when switching between using the runner and running
+# tests directly.
+[[test]]
+name = "integ_runner"
+path = "../tests/runner.rs"
+harness = false
+test = false
+required-features = ["temporal-sdk-core-protos/serde_serialize"]
+
+[lints]
+workspace = true

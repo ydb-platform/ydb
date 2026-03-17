@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+package yandex.cloud.cloudregistry.v1;
+
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/cloudregistry/v1/lifecycle_policy.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cloudregistry/v1;cloudregistry";
+option java_package = "yandex.cloud.api.cloudregistry.v1";
+
+// A set of methods for managing LifecyclePolicy resources.
+service LifecyclePolicyService {
+  // Creates a lifecycle policy in the specified registry.
+  rpc Create(CreateLifecyclePolicyRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/cloud-registry/v1/lifecyclePolicies" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateLifecyclePolicyMetadata"
+      response: "LifecyclePolicy"
+    };
+  }
+
+  // Updates the specified lifecycle policy.
+  rpc Update (UpdateLifecyclePolicyRequest) returns (operation.Operation) {
+    option (google.api.http) = {patch: "/cloud-registry/v1/lifecyclePolicies/{policy_id}" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateLifecyclePolicyMetadata"
+      response: "LifecyclePolicy"
+    };
+  };
+
+  // Deletes the specified lifecycle policy.
+  rpc Delete (DeleteLifecyclePolicyRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/cloud-registry/v1/lifecyclePolicies/{policy_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteLifecyclePolicyMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Returns the specified lifecycle policy.
+  rpc Get (GetLifecyclePolicyRequest) returns (LifecyclePolicy) {
+    option (google.api.http) = {get: "/cloud-registry/v1/lifecyclePolicies/{policy_id}"};
+  }
+
+  // Retrieves the list of lifecycle policies in the specified registry.
+  rpc List (ListLifecyclePolicyRequest) returns (ListLifecyclePolicyResponse) {
+    option (google.api.http) = {get: "/cloud-registry/v1/lifecyclePolicies"};
+  }
+
+  // Changes the state of the specified lifecycle policy.
+  rpc ChangeState(ChangeLifecyclePolicyStateRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {post: "/cloud-registry/v1/lifecyclePolicies/{policy_id}:changeState" body: "*"};
+  }
+}
+
+message CreateLifecyclePolicyRequest {
+  // ID of the registry to create a lifecycle policy in.
+  string registry_id = 1 [(required) = true, (length) = "<=50"];
+  
+  // Name of the lifecycle policy.
+  string name = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  
+  // Description of the lifecycle policy. 0-1024 characters long.
+  string description = 3 [(length) = "<=1024"];
+  
+  // List of lifecycle rules.
+  repeated LifecycleRule rules = 4;
+  
+  // Initial state of the lifecycle policy.
+  LifecyclePolicyState state = 5;
+}
+
+message CreateLifecyclePolicyMetadata {
+  // ID of the lifecycle policy that is being created.
+  string policy_id = 1;
+}
+
+message UpdateLifecyclePolicyRequest {
+  // ID of the lifecycle policy to update.
+  string policy_id = 1 [(required) = true, (length) = "<=50"];
+  
+  // Field mask that specifies which fields of the lifecycle policy are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+  
+  // Name of the lifecycle policy.
+  string name = 3 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  
+  // Description of the lifecycle policy. 0-1024 characters long.
+  string description = 4 [(length) = "<=1024"];
+  
+  // List of lifecycle rules.
+  repeated LifecycleRule rules = 5;
+  
+  // State of the lifecycle policy.
+  LifecyclePolicyState state = 6;
+}
+
+message UpdateLifecyclePolicyMetadata {
+  // ID of the lifecycle policy that is being updated.
+  string policy_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteLifecyclePolicyRequest {
+  // ID of the lifecycle policy to delete.
+  string policy_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteLifecyclePolicyMetadata {
+  // ID of the lifecycle policy that is being deleted.
+  string policy_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GetLifecyclePolicyRequest {
+  // ID of the lifecycle policy to return.
+  string policy_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListLifecyclePolicyRequest {
+  // ID of the registry to list lifecycle policies in.
+  string registry_id = 1 [(length) = "<=50"];
+  
+  // The maximum number of results per page to return.
+  int64 page_size = 2 [(value) = "0-100"];
+  
+  // Page token. To get the next page of results, set page_token to the
+  // ListLifecyclePolicyResponse.next_page_token returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListLifecyclePolicyResponse {
+  // List of lifecycle policy resources.
+  repeated LifecyclePolicy policies = 1;
+  
+  // This token allows you to get the next page of results for list requests.
+  string next_page_token = 2;
+}
+
+message ChangeLifecyclePolicyStateRequest {
+  // ID of the lifecycle policy to change state.
+  string policy_id = 1 [(required) = true, (length) = "<=50"];
+  
+  // Target state of the lifecycle policy.
+  LifecyclePolicyState state = 2 [(required) = true];
+}

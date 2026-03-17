@@ -1,0 +1,139 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause         40a41cb7dfcae875cf1c054dfa0f1280
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: python/convert.c at line 5, python/convert.h at line 5, python/descriptor.c at line 5, python/descriptor.h at line 5, python/descriptor_containers.c at line 5, python/descriptor_containers.h at line 5, python/descriptor_pool.c at line 5, python/descriptor_pool.h at line 5, python/extension_dict.c at line 5, python/extension_dict.h at line 5, python/map.c at line 5, python/map.h at line 5, python/message.c at line 5, python/message.h at line 5, python/protobuf.c at line 5, python/protobuf.h at line 5, python/python_api.h at line 5, python/repeated.c at line 5, python/repeated.h at line 5, python/unknown_fields.c at line 5, python/unknown_fields.h at line 5
+    License text:
+        // Use of this source code is governed by a BSD-style
+        // license that can be found in the LICENSE file or at
+        // https://developers.google.com/open-source/licenses/bsd
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        python/convert.c [4:6]
+        python/convert.h [4:6]
+        python/descriptor.c [4:6]
+        python/descriptor.h [4:6]
+        python/descriptor_containers.c [4:6]
+        python/descriptor_containers.h [4:6]
+        python/descriptor_pool.c [4:6]
+        python/descriptor_pool.h [4:6]
+        python/extension_dict.c [4:6]
+        python/extension_dict.h [4:6]
+        python/map.c [4:6]
+        python/map.h [4:6]
+        python/message.c [4:6]
+        python/message.h [4:6]
+        python/protobuf.c [4:6]
+        python/protobuf.h [4:6]
+        python/python_api.h [4:6]
+        python/repeated.c [4:6]
+        python/repeated.h [4:6]
+        python/unknown_fields.c [4:6]
+        python/unknown_fields.h [4:6]
+
+KEEP     Protobuf-License     77b55cb8215e726b6ae7c1cf484bc45f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-protobuf
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://protobuf.googlecode.com/svn/trunk/COPYING.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/protobuf.LICENSE
+    Files with this license:
+        LICENSE [3:32]
+
+KEEP     BSD-3-Clause         9d3b4b245403c79dbd700a103f575401
+BELONGS ya.make
+    License text:
+        License: BSD-3-Clause
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        .dist-info/METADATA [9:9]
+
+KEEP     BSD-3-Clause         ddd233c062e3807d8437a5fb40fc1f1b
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: google/protobuf/__init__.py at line 5, google/protobuf/descriptor.py at line 5, google/protobuf/descriptor_database.py at line 5, google/protobuf/descriptor_pool.py at line 5, google/protobuf/internal/__init__.py at line 5, google/protobuf/internal/_parameterized.py at line 7, google/protobuf/internal/api_implementation.py at line 5, google/protobuf/internal/builder.py at line 5, google/protobuf/internal/containers.py at line 5, google/protobuf/internal/decoder.py at line 5, google/protobuf/internal/encoder.py at line 5, google/protobuf/internal/enum_type_wrapper.py at line 5, google/protobuf/internal/extension_dict.py at line 5, google/protobuf/internal/field_mask.py at line 5, google/protobuf/internal/message_listener.py at line 5, google/protobuf/internal/python_message.py at line 5, google/protobuf/internal/testing_refleaks.py at line 5, google/protobuf/internal/type_checkers.py at line 5, google/protobuf/internal/well_known_types.py at line 5, google/protobuf/internal/wire_format.py at line 5, google/protobuf/json_format.py at line 5, google/protobuf/message.py at line 5, google/protobuf/message_factory.py at line 5, google/protobuf/proto_builder.py at line 5, google/protobuf/pyext/cpp_message.py at line 5, google/protobuf/reflection.py at line 5, google/protobuf/runtime_version.py at line 5, google/protobuf/service.py at line 5, google/protobuf/service_reflection.py at line 5, google/protobuf/symbol_database.py at line 5, google/protobuf/text_encoding.py at line 5, google/protobuf/text_format.py at line 5, google/protobuf/unknown_fields.py at line 5
+    License text:
+        \# Use of this source code is governed by a BSD-style
+        \# license that can be found in the LICENSE file or at
+        \# https://developers.google.com/open-source/licenses/bsd
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        google/protobuf/__init__.py [4:6]
+        google/protobuf/descriptor.py [4:6]
+        google/protobuf/descriptor_database.py [4:6]
+        google/protobuf/descriptor_pool.py [4:6]
+        google/protobuf/internal/__init__.py [4:6]
+        google/protobuf/internal/_parameterized.py [6:8]
+        google/protobuf/internal/api_implementation.py [4:6]
+        google/protobuf/internal/builder.py [4:6]
+        google/protobuf/internal/containers.py [4:6]
+        google/protobuf/internal/decoder.py [4:6]
+        google/protobuf/internal/encoder.py [4:6]
+        google/protobuf/internal/enum_type_wrapper.py [4:6]
+        google/protobuf/internal/extension_dict.py [4:6]
+        google/protobuf/internal/field_mask.py [4:6]
+        google/protobuf/internal/message_listener.py [4:6]
+        google/protobuf/internal/python_message.py [4:6]
+        google/protobuf/internal/testing_refleaks.py [4:6]
+        google/protobuf/internal/type_checkers.py [4:6]
+        google/protobuf/internal/well_known_types.py [4:6]
+        google/protobuf/internal/wire_format.py [4:6]
+        google/protobuf/json_format.py [4:6]
+        google/protobuf/message.py [4:6]
+        google/protobuf/message_factory.py [4:6]
+        google/protobuf/proto_builder.py [4:6]
+        google/protobuf/pyext/cpp_message.py [4:6]
+        google/protobuf/reflection.py [4:6]
+        google/protobuf/runtime_version.py [4:6]
+        google/protobuf/service.py [4:6]
+        google/protobuf/service_reflection.py [4:6]
+        google/protobuf/symbol_database.py [4:6]
+        google/protobuf/text_encoding.py [4:6]
+        google/protobuf/text_format.py [4:6]
+        google/protobuf/unknown_fields.py [4:6]

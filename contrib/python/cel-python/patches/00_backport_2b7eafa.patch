@@ -1,0 +1,423 @@
+# Temporary fix for similar issue to https://github.com/cloud-custodian/cel-python/issues/80
+# Resolution is between releases of cel-python
+# Reproduces in Protovalidate lib(python) on proto message
+#
+# message SayHelloResponse {
+#   string greeting = 1 [
+#     (buf.validate.field).required = true,
+#     (buf.validate.field).string.max_len = 32
+#   ];
+# }
+#
+# Remove after update to new version
+--- contrib/python/cel-python/celpy/__init__.py	(index)
++++ contrib/python/cel-python/celpy/__init__.py	(working tree)
+@@ -140,7 +140,7 @@ class Runner:
+         ast: lark.Tree,
+         functions: Optional[Dict[str, CELFunction]] = None,
+     ) -> None:
+-        self.logger = logging.getLogger(self.__class__.__name__)
++        self.logger = logging.getLogger(f"celpy.{self.__class__.__name__}")
+         self.environment = environment
+         self.ast = ast
+         self.functions = functions
+@@ -183,7 +183,7 @@ class CompiledRunner(Runner):
+     """
+     Python compiled expression evaluator. Uses Python byte code and :py:func:`eval`.
+
+-    Given an AST, this evauates the AST in the context of a specific activation.
++    Given an AST, this evaluates the AST in the context of a specific activation.
+
+     Transform the AST into Python, uses :py:func:`compile` to create a code object.
+     Uses :py:func:`eval` to evaluate.
+@@ -273,10 +273,10 @@ class Environment:
+         :param runner_class: the class of Runner to use, either InterpretedRunner or CompiledRunner
+         """
+         sys.setrecursionlimit(2500)
+-        self.logger = logging.getLogger(self.__class__.__name__)
++        self.logger = logging.getLogger(f"celpy.{self.__class__.__name__}")
+         self.package: Optional[str] = package
+         self.annotations: Dict[str, Annotation] = annotations or {}
+-        self.logger.info("Type Annotations %r", self.annotations)
++        self.logger.debug("Type Annotations %r", self.annotations)
+         self.runner_class: Type[Runner] = runner_class or InterpretedRunner
+         self.cel_parser = CELParser()
+         self.runnable: Runner
+@@ -295,7 +295,7 @@ class Environment:
+         self, expr: lark.Tree, functions: Optional[Dict[str, CELFunction]] = None
+     ) -> Runner:
+         """Transforms the AST into an executable runner."""
+-        self.logger.info("Package %r", self.package)
++        self.logger.debug("Package %r", self.package)
+         runner_class = self.runner_class
+         self.runnable = runner_class(self, expr, functions)
+         return self.runnable
+--- contrib/python/cel-python/celpy/__main__.py	(index)
++++ contrib/python/cel-python/celpy/__main__.py	(working tree)
+@@ -87,11 +87,18 @@ import ast
+ import cmd
+ import json
+ import logging
++import logging.config
+ import os
++from pathlib import Path
+ import re
+ import sys
+ from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+
++try:
++    import tomllib
++except ImportError:  # pragma: no cover
++    import tomli as tomllib  # type: ignore [no-redef]
++
+ from celpy import Environment, Runner, celtypes
+ from celpy.adapter import CELJSONDecoder, CELJSONEncoder
+ from celpy.celparser import CELParseError
+@@ -291,7 +298,7 @@ def get_options(argv: Optional[List[str]] = None) -> argparse.Namespace:
+ class CEL_REPL(cmd.Cmd):
+     prompt = "CEL> "
+     intro = "Enter an expression to have it evaluated."
+-    logger = logging.getLogger("REPL")
++    logger = logging.getLogger("celpy.repl")
+
+     def cel_eval(self, text: str) -> celtypes.Value:
+         try:
+@@ -501,8 +508,31 @@ def main(argv: Optional[List[str]] = None) -> int:
+     return summary
+
+
++CONFIG_PATHS = (dir_path / "celpy.toml" for dir_path in (Path.cwd(), Path.home()))
++
++DEFAULT_CONFIG_TOML = """
++[logging]
++  version = 1
++  formatters.minimal.format = "%(message)s"
++  formatters.console.format = "%(levelname)s:%(name)s:%(message)s"
++  formatters.details.format = "%(levelname)s:%(name)s:%(module)s:%(lineno)d:%(message)s"
++  root.level = "WARNING"
++  root.handlers = ["console"]
++
++[logging.handlers.console]
++    class = "logging.StreamHandler"
++    formatter = "console"
++"""
++
++
+ if __name__ == "__main__":  # pragma: no cover
+-    logging.basicConfig(level=logging.WARNING)
+-    exit = main(sys.argv[1:])
++    config_paths = list(p for p in CONFIG_PATHS if p.exists())
++    config_toml = config_paths[0].read_text() if config_paths else DEFAULT_CONFIG_TOML
++    log_config = tomllib.loads(config_toml)
++    if "logging" in log_config:
++        logging.config.dictConfig(log_config["logging"])
++
++    exit_status = main(sys.argv[1:])
++
+     logging.shutdown()
+-    sys.exit(exit)
++    sys.exit(exit_status)
+--- contrib/python/cel-python/celpy/c7nlib.py	(index)
++++ contrib/python/cel-python/celpy/c7nlib.py	(working tree)
+@@ -296,7 +296,7 @@ from celpy import InterpretedRunner, celtypes
+ from celpy.adapter import json_to_cel
+ from celpy.evaluation import Annotation, Context, Evaluator
+
+-logger = logging.getLogger(__name__)
++logger = logging.getLogger(f"celpy.{__name__}")
+
+
+ class C7NContext:
+@@ -444,7 +444,7 @@ class IPv4Network(ipaddress.IPv4Network):
+                 )
+             except AttributeError:
+                 raise TypeError(
+-                    f"Unable to test subnet containment " f"between {a} and {b}"
++                    f"Unable to test subnet containment between {a} and {b}"
+                 )
+
+         def supernet_of(self, other):  # type: ignore[no-untyped-def]
+--- contrib/python/cel-python/celpy/celtypes.py	(index)
++++ contrib/python/cel-python/celpy/celtypes.py	(working tree)
+@@ -214,7 +214,7 @@ from pendulum import timezone
+ import pendulum.tz.exceptions
+
+
+-logger = logging.getLogger("celtypes")
++logger = logging.getLogger(f"celpy.{__name__}")
+
+
+ Value = Union[
+--- contrib/python/cel-python/celpy/evaluation.py	(index)
++++ contrib/python/cel-python/celpy/evaluation.py	(working tree)
+@@ -34,11 +34,18 @@ are caught and transformed into :exc:`CELEvalError` objects.
+ The :py:class:`Resut` type hint is a union of the various values that are encountered
+ during evaluation. It's a union of the :py:class:`celpy.celtypes.CELTypes` type and the
+ :exc:`CELEvalError` exception.
++
++..  important:: Debugging
++
++    If the os environment variable ``CEL_TRACE`` is set, then detailed tracing of methods is made available.
++    To see the trace, set the logging level for ``celpy.Evaluator`` to ``logging.DEBUG``.
++
+ """
+
+ import collections
+ import logging
+ import operator
++import os
+ import re
+ import sys
+ from functools import reduce, wraps
+@@ -67,14 +74,32 @@ import lark.visitors
+ import celpy.celtypes
+ from celpy.celparser import tree_dump
+
+-_USE_RE2 = True
++_USE_RE2 = False  # Used by the test suite.
+ try:
+     import re2
++
++    _USE_RE2 = True  # Used by the test suite.
++
++    def function_matches(text: str, pattern: str) -> "Result":
++        try:
++            m = re2.search(pattern, text)
++        except re2.error as ex:
++            return CELEvalError("match error", ex.__class__, ex.args)
++
++        return celpy.celtypes.BoolType(m is not None)
++
+ except ImportError:  # pragma: no cover
+-    _USE_RE2 = False
+
+-# A CEL type annotation. Used in an environment to describe objects as well as functions.
+-# This is a list of types, plus Callable for conversion functions.
++    def function_matches(text: str, pattern: str) -> "Result":
++        try:
++            m = re.search(pattern, text)
++        except re.error as ex:
++            return CELEvalError("match error", ex.__class__, ex.args)
++
++        return celpy.celtypes.BoolType(m is not None)
++
++
++# This annotation describes a union of types, functions, and function types.
+ Annotation = Union[
+     celpy.celtypes.CELType,
+     Callable[
+@@ -83,7 +108,7 @@ Annotation = Union[
+     Type[celpy.celtypes.FunctionType],  # Concrete class for annotations
+ ]
+
+-logger = logging.getLogger("evaluation")
++logger = logging.getLogger(f"celpy.{__name__}")
+
+
+ class CELSyntaxError(Exception):
+@@ -200,9 +225,9 @@ class CELEvalError(Exception):
+         return self
+
+
+-# The interim results extends celtypes to include itermediate CELEvalError exception objects.
++# The interim results extend ``celtypes`` to include itermediate ``CELEvalError`` exception objects.
+ # These can be deferred as part of commutative logical_and and logical_or operations.
+-# It includes the responses to type() queries, also.
++# It includes the responses to ``type()`` queries, also.
+ Result = Union[
+     celpy.celtypes.Value,
+     CELEvalError,
+@@ -334,27 +359,6 @@ def operator_in(item: Result, container: Result) -> Result:
+     return result
+
+
+-def _function_matches_re(text: str, pattern: str) -> Result:
+-    try:
+-        m = re.search(pattern, text)
+-    except re.error as ex:
+-        return CELEvalError("match error", ex.__class__, ex.args)
+-
+-    return celpy.celtypes.BoolType(m is not None)
+-
+-
+-def _function_matches_re2(text: str, pattern: str) -> Result:
+-    try:
+-        m = re2.search(pattern, text)
+-    except re2.error as ex:
+-        return CELEvalError("match error", ex.__class__, ex.args)
+-
+-    return celpy.celtypes.BoolType(m is not None)
+-
+-
+-function_matches = _function_matches_re2 if _USE_RE2 else _function_matches_re
+-
+-
+ def function_size(container: Result) -> Result:
+     """
+     The size() function applied to a Value. Delegate to Python's :py:func:`len`.
+@@ -668,7 +672,7 @@ class NameContainer(Dict[str, Referent]):
+
+         member_dot(member_dot(primary(IDENT), IDENT), IDENT)
+
+-    This makes the ``member_dot` processing left associative.
++    This makes the ``member_dot`` processing left associative.
+
+     The ``primary(IDENT)`` resolves to a CEL object of some kind.
+     Once the ``primary(IDENT)`` has been resolved, it establishes a context
+@@ -705,7 +709,7 @@ class NameContainer(Dict[str, Referent]):
+
+     ident_pat = re.compile(IDENT)
+     extended_name_path = re.compile(f"^\\.?{IDENT}(?:\\.{IDENT})*$")
+-    logger = logging.getLogger("NameContainer")
++    logger = logging.getLogger("celpy.NameContainer")
+
+     def __init__(
+         self,
+@@ -737,7 +741,7 @@ class NameContainer(Dict[str, Referent]):
+         :param names: A dictionary of {"name1.name1....": Referent, ...} items.
+         """
+         for name, refers_to in names.items():
+-            self.logger.info("load_annotations %r : %r", name, refers_to)
++            self.logger.debug("load_annotations %r : %r", name, refers_to)
+             if not self.extended_name_path.match(name):
+                 raise ValueError(f"Invalid name {name}")
+
+@@ -755,7 +759,7 @@ class NameContainer(Dict[str, Referent]):
+     def load_values(self, values: Context) -> None:
+         """Update annotations with actual values."""
+         for name, refers_to in values.items():
+-            self.logger.info("load_values %r : %r", name, refers_to)
++            self.logger.debug("load_values %r : %r", name, refers_to)
+             if not self.extended_name_path.match(name):
+                 raise ValueError(f"Invalid name {name}")
+
+@@ -876,7 +880,7 @@ class NameContainer(Dict[str, Referent]):
+         :return: Name resolution as a Rereferent, often a value, but maybe a package or an
+             annotation.
+         """
+-        self.logger.info(
++        self.logger.debug(
+             "resolve_name(%r.%r) in %s, parent=%s",
+             package,
+             name,
+@@ -1007,8 +1011,8 @@ class Activation:
+         :param vars: Variables and their values, loaded to update the NameContainer.
+         :param parent: A parent activation in the case of macro evaluations.
+         """
+-        logger.info(
+-            "Activation(annotations=%r, package=%r, vars=%r, " "parent=%s)",
++        logger.debug(
++            "Activation(annotations=%r, package=%r, vars=%r, parent=%s)",
+             annotations,
+             package,
+             vars,
+@@ -1112,18 +1116,22 @@ def trace(
+ ) -> Callable[["Evaluator", lark.Tree], Any]:
+     """
+     Decorator to create consistent evaluation trace logging.
+-    This only works for a class with a ``level`` attribute.
+-    This is generally applied to the methods matching rule names.
++    This is generally applied to the methods matching parse rule names.
++
++    This only works for a class with a ``level`` attribute, like :py:class:`Evaluator`.
+     """
+
+     @wraps(method)
+     def concrete_method(self: "Evaluator", tree: lark.Tree) -> Any:
+-        self.logger.info("%s%r", self.level * "| ", tree)
++        self.logger.debug("%s%r", self.level * "| ", tree)
+         result = method(self, tree)
+-        self.logger.info("%s%s -> %r", self.level * "| ", tree.data, result)
++        self.logger.debug("%s%s -> %r", self.level * "| ", tree.data, result)
+         return result
+
+-    return concrete_method
++    if os.environ.get("CEL_TRACE"):
++        return concrete_method
++    else:
++        return method
+
+
+ class Evaluator(lark.visitors.Interpreter[Result]):
+@@ -1189,7 +1197,7 @@ class Evaluator(lark.visitors.Interpreter[Result]):
+
+     """
+
+-    logger = logging.getLogger("Evaluator")
++    logger = logging.getLogger("celpy.Evaluator")
+
+     def __init__(
+         self,
+@@ -1219,8 +1227,8 @@ class Evaluator(lark.visitors.Interpreter[Result]):
+             self.functions = base_functions
+
+         self.level = 0
+-        self.logger.info("activation: %r", self.activation)
+-        self.logger.info("functions: %r", self.functions)
++        self.logger.debug("activation: %r", self.activation)
++        self.logger.debug("functions: %r", self.functions)
+
+     def sub_evaluator(self, ast: lark.Tree) -> "Evaluator":
+         """
+@@ -1241,7 +1249,7 @@ class Evaluator(lark.visitors.Interpreter[Result]):
+         """
+         self.activation = self.base_activation.clone()
+         self.activation.identifiers.load_values(values)
+-        self.logger.info("Activation: %r", self.activation)
++        self.logger.debug("Activation: %r", self.activation)
+         return self
+
+     def ident_value(self, name: str, root_scope: bool = False) -> Result_Function:
+@@ -1968,18 +1976,18 @@ class Evaluator(lark.visitors.Interpreter[Result]):
+         property_name = property_name_token.value
+         result: Result
+         if isinstance(member, CELEvalError):
+-            result = member
++            result = cast(Result, member)
+         elif isinstance(member, NameContainer):
+             # Navigation through names provided as external run-time bindings.
+             # The dict is the value of a Referent that was part of a namespace path.
+             if property_name in member:
+-                result = member[property_name].value
++                result = cast(Result, member[property_name].value)
+             else:
+                 err = f"No {property_name!r} in bindings {sorted(member.keys())}"
+                 result = CELEvalError(err, KeyError, None, tree=tree)
+         # TODO: Not sure this is needed...
+         elif isinstance(member, celpy.celtypes.MessageType):
+-            self.logger.info("member_dot(%r, %r)", member, property_name)
++            self.logger.debug("member_dot(%r, %r)", member, property_name)
+             result = member.get(property_name)
+         # TODO: Future Expansion, handle Protobuf message package...
+         # elif isinstance(member, celpy.celtypes.PackageType):
+@@ -2209,7 +2217,7 @@ class Evaluator(lark.visitors.Interpreter[Result]):
+             protobuf_class = cast(celpy.celtypes.FunctionType, member)
+             # NOTE: protobuf MessageType conversions are the responsibility of the target type.
+             # We can't -- easily -- generalize this.
+-            self.logger.info("Creating %s(%r)", protobuf_class, fieldinits)
++            self.logger.debug("Creating %s(%r)", protobuf_class, fieldinits)
+             try:
+                 value = protobuf_class(cast(celpy.celtypes.Value, fieldinits))
+             except (TypeError, ValueError) as ex:  # pragma: no cover
+@@ -2409,8 +2417,8 @@ class Evaluator(lark.visitors.Interpreter[Result]):
+             else:
+                 raise CELUnsupportedError(
+                     f"{tree.data} {tree.children}: type not implemented",
+-                    line=value_token.line,
+-                    column=value_token.column,
++                    line=value_token.line or tree.meta.line,
++                    column=value_token.column or tree.meta.column,
+                 )
+         except ValueError as ex:
+             result = CELEvalError(ex.args[0], ex.__class__, ex.args, tree=tree)
+--- contrib/python/cel-python/celpy/celparser.py	(index)
++++ contrib/python/cel-python/celpy/celparser.py	(working tree)
+@@ -95,6 +95,8 @@ class CELParser:
+                 g_regex_flags=re.M,
+                 lexer_callbacks={"IDENT": self.ambiguous_literals},
+                 propagate_positions=True,
++                maybe_placeholders=False,
++                priority="invert",
+             )
+
+     @staticmethod

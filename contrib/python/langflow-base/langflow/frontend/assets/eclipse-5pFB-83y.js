@@ -1,0 +1,1 @@
+import{a8 as c}from"./index-Cp3b7MWQ.js";const e=[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 2a7 7 0 1 0 10 10",key:"1yuj32"}]],o=c("eclipse",e);export{e as __iconNode,o as default};

@@ -1,0 +1,16 @@
+--- contrib/python/Markdown/py3/markdown/extensions/admonition.py       (index)
++++ contrib/python/Markdown/py3/markdown/extensions/admonition.py       (working tree)
+@@ -134,6 +134,13 @@ class AdmonitionProcessor(BlockProcessor):
+                 p.text = title
+                 p.set('class', self.CLASSNAME_TITLE)
+         else:
++            if sibling is None:
++                raise Exception(
++                    (
++                        "NoteBlock parsing failed. "
++                        "Please check your note block starts with new paragraph: {}"
++                    ).format(block)
++                )
+             # Sibling is a list item, but we need to wrap it's content should be wrapped in <p>
+             if sibling.tag in ('li', 'dd') and sibling.text:
+                 text = sibling.text

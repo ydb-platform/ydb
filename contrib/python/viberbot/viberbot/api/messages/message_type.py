@@ -1,0 +1,11 @@
+class MessageType(object):
+	RICH_MEDIA = 'rich_media'
+	STICKER = 'sticker'
+	URL = 'url'
+	LOCATION = 'location'
+	CONTACT = 'contact'
+	FILE = 'file'
+	TEXT = 'text'
+	PICTURE = 'picture'
+	VIDEO = 'video'
+	KEYBOARD = 'keyboard'

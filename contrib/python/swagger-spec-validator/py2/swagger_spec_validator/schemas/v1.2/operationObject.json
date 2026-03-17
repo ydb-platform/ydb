@@ -1,0 +1,106 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "allOf": [
+        {
+            "$ref": "dataTypeBase.json#"
+        },
+        {
+            "properties": {
+                "authorizations": {
+                    "additionalProperties": {
+                        "items": {
+                            "$ref": "authorizationObject.json#/definitions/oauth2Scope"
+                        },
+                        "type": "array"
+                    },
+                    "type": "object"
+                },
+                "consumes": {
+                    "$ref": "#/definitions/mimeTypeArray"
+                },
+                "deprecated": {
+                    "enum": [
+                        "true",
+                        "false"
+                    ]
+                },
+                "method": {
+                    "enum": [
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "OPTIONS",
+                        "HEAD"
+                    ]
+                },
+                "nickname": {
+                    "pattern": "^[a-zA-Z0-9_]+$",
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "parameters": {
+                    "items": {
+                        "$ref": "parameterObject.json#"
+                    },
+                    "type": "array"
+                },
+                "produces": {
+                    "$ref": "#/definitions/mimeTypeArray"
+                },
+                "responseMessages": {
+                    "items": {
+                        "$ref": "#/definitions/responseMessageObject"
+                    },
+                    "type": "array"
+                },
+                "summary": {
+                    "maxLength": 120,
+                    "type": "string"
+                }
+            },
+            "required": [
+                "method",
+                "nickname",
+                "parameters"
+            ]
+        }
+    ],
+    "definitions": {
+        "mimeTypeArray": {
+            "items": {
+                "format": "mime-type",
+                "type": "string"
+            },
+            "type": "array"
+        },
+        "responseMessageObject": {
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/rfc2616section10"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "responseModel": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "code",
+                "message"
+            ],
+            "type": "object"
+        },
+        "rfc2616section10": {
+            "exclusiveMaximum": true,
+            "maximum": 600,
+            "minimum": 100,
+            "type": "integer"
+        }
+    },
+    "type": "object"
+}

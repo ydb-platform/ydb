@@ -1,0 +1,346 @@
+[
+  {
+    "primary": true,
+    "name": "HALIFAX (A TRADING NAME OF BANK OF SCOTLAND PLC)",
+    "short_name": "HALIFAX",
+    "bank_code": "HLFX",
+    "bic": "HLFXGB21N85",
+    "country_code": "GB"
+  },
+  {
+    "country_code": "GB",
+    "bic": "ABBYGB2LXXX",
+    "bank_code": "ABBY",
+    "name": "SANTANDER UK PLC",
+    "short_name": "SANTANDER UK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "BARCGB22XXX",
+    "bank_code": "BARC",
+    "name": "BARCLAYS BANK PLC",
+    "short_name": "BARCLAYS BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "BOFAGB22VAM",
+    "bank_code": "BOFA",
+    "name": "BANK OF AMERICA, N.A. LONDON",
+    "short_name": "BANK OF AMERICA",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "COUTGB22XXX",
+    "bank_code": "COUT",
+    "name": "COUTTS & COMPANY",
+    "short_name": "COUTTS & COMPANY",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "MIDLGB22XXX",
+    "bank_code": "MIDL",
+    "name": "HSBC BANK PLC",
+    "short_name": "HSBC BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "PNBPGB2L",
+    "bank_code": "PNBP",
+    "name": "WELLS FARGO BANK, N.A., LONDON BRANCH",
+    "short_name": "WELLS FARGO BANK",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "PRTCGB21",
+    "bank_code": "PRTC",
+    "name": "PREPAY TECHNOLOGIES LIMITED",
+    "short_name": "PREPAY TECHNOLOGIES LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "LOYDGB2L",
+    "bank_code": "BOFS",
+    "name": "LLOYDS BANK PLC",
+    "short_name": "LLOYDS BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "DEUTGB2LXXX",
+    "bank_code": "DEUT",
+    "name": "DEUTSCHE BANK AG",
+    "short_name": "DEUTSCHE BANK AG",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "COBAGB2XXXX",
+    "bank_code": "COBA",
+    "name": "COMMERZBANK AG",
+    "short_name": "COMMERZBANK AG",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "TCCLGB31XXX",
+    "bank_code": "TCCL",
+    "name": "THE CURRENCY CLOUD LIMITED",
+    "short_name": "THE CURRENCY CLOUD LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "PAYRGB21",
+    "bank_code": "PAYR",
+    "name": "PAYRNET LIMITED",
+    "short_name": "PAYRNET LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "SVBKGB2L",
+    "bank_code": "SVBK",
+    "name": "SILICON VALLEY BANK",
+    "short_name": "SILICON VALLEY BANK",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "RBOSGB2LXXX",
+    "bank_code": "RBOS",
+    "name": "THE ROYAL BANK OF SCOTLAND PUBLIC LIMITED COMPANY",
+    "short_name": "THE ROYAL BANK OF SCOTLAND PUBLIC LIMITED COMPANY",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "PAEDGB21XXX",
+    "bank_code": "PAED",
+    "name": "PAYSEND PLC",
+    "short_name": "PAYSEND PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "HBUKGB4B",
+    "bank_code": "HBUK",
+    "name": "HSBC UK BANK PLC",
+    "short_name": "HSBC UK BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "LOYDGB2L",
+    "bank_code": "LOYD",
+    "name": "LLOYDS BANK PLC",
+    "short_name": "LLOYDS BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "REVOGB21XXX",
+    "bank_code": "REVO",
+    "name": "REVOLUT LTD",
+    "short_name": "REVOLUT LTD",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "CLJUGB21XXX",
+    "bank_code": "CLJU",
+    "name": "Clear Junction Limited",
+    "short_name": "Clear Junction Limited",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "PRTCGB21XXX",
+    "bank_code": "PRTC",
+    "name": "PREPAY TECHNOLOGIES LIMITED",
+    "short_name": "PREPAY TECHNOLOGIES LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "FTSBGB2L",
+    "bank_code": "FTSB",
+    "name": "ABN AMRO BANK N.V. UK BRANCH (FORMELY KNOWN AS FORTIS BANK (NEDERLAND) N.V. LONDON)",
+    "short_name": "ABN AMRO BANK ",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "BOFAGB22",
+    "bank_code": "BOFA",
+    "name": "BANK OF AMERICA, N.A. LONDON",
+    "short_name": "BANK OF AMERICA",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "CITIGB2L",
+    "bank_code": "CITI",
+    "name": "CITIBANK N.A.",
+    "short_name": "CITIBANK N.A.",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "BUKBGB22",
+    "bank_code": "BUKB",
+    "name": "BARCLAYS BANK UK PLC",
+    "short_name": "BARCLAYS BANK UK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "NWBKGB2LXXX",
+    "bank_code": "NWBK",
+    "name": "NATIONAL WESTMINSTER BANK PUBLIC LIMITED COMPANY",
+    "short_name": "NATIONAL WESTMINSTER BANK PUBLIC LIMITED COMPANY",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "REVOGB21",
+    "bank_code": "REVO",
+    "name": "REVOLUT LTD",
+    "short_name": "REVOLUT LTD",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "DEUTDEFFXXX",
+    "bank_code": "DEUT",
+    "name": "DEUTSCHE BANK AKTIENGESELLSCHAFT",
+    "short_name": "DEUTSCHE BANK AKTIENGESELLSCHAFT",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "MYMBGB2LXXX",
+    "bank_code": "MYMB",
+    "name": "METRO BANK PLC",
+    "short_name": "METRO BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "BOFAGB22XXX",
+    "bank_code": "BOFA",
+    "name": "BANK OF AMERICA, N.A. LONDON",
+    "short_name": "BANK OF AMERICA",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "BUKBGB22XXX",
+    "bank_code": "BUKB",
+    "name": "BARCLAYS BANK UK PLC",
+    "short_name": "BARCLAYS BANK UK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "BARCGB22",
+    "bank_code": "BARC",
+    "name": "BARCLAYS BANK PLC",
+    "short_name": "BARCLAYS BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "RAPHGB41XXX",
+    "bank_code": "RAPH",
+    "name": "R RAPHAELS AND SONS PLC",
+    "short_name": "R RAPHAELS AND SONS PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "HBUKGB4BXXX",
+    "bank_code": "HBUK",
+    "name": "HSBC UK BANK PLC",
+    "short_name": "HSBC UK BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "EPMTGB2LXXX",
+    "bank_code": "EPMT",
+    "name": "EPAYMENTS SYSTEMS LIMITED",
+    "short_name": "EPAYMENTS SYSTEMS LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "CHASGB2LXXX",
+    "bank_code": "CHAS",
+    "name": "JPMORGAN CHASE BANK, N.A",
+    "short_name": "JPMORGAN CHASE BANK, N.A",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "MYMBGB2L",
+    "bank_code": "MYMB",
+    "name": "METRO BANK PLC",
+    "short_name": "METRO BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "CLYDGB2S",
+    "bank_code": "CLYD",
+    "name": "CLYDESDALE BANK PLC",
+    "short_name": "CLYDESDALE BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "CPBKGB21CAR",
+    "bank_code": "CPBK",
+    "name": "THE CO-OPERATIVE BANK PLC",
+    "short_name": "THE CO-OPERATIVE BANK PLC",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "SRLGGB3L",
+    "bank_code": "SRLG",
+    "name": "STARLING BANK LIMITED",
+    "short_name": "STARLING BANK LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "TRWIGB22",
+    "bank_code": "TRWI",
+    "name": "TRANSFERWISE LIMITED",
+    "short_name": "TRANSFERWISE LIMITED",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "SAPYGB2L",
+    "bank_code": "SAPY",
+    "name": "BANKING CIRCLE S.A. UK Branch",
+    "short_name": "BANKING CIRCLE",
+    "primary": true
+  },
+  {
+    "country_code": "GB",
+    "bic": "VEBAGB2LXXX",
+    "bank_code": "VEBA",
+    "name": "NOVEBA LIMITED",
+    "short_name": "NOVEBA",
+    "primary": true
+  }
+]

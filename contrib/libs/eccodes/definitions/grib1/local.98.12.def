@@ -1,0 +1,68 @@
+# (C) Copyright 2005- ECMWF.
+# Seasonal forecast monthly mean data for lagged systems
+
+constant GRIBEXSection1Problem = 120 - section1Length ;
+
+# used in local definition 13
+transient localFlag=1 : hidden;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[2] perturbationNumber : dump ;
+
+unsigned[2] systemNumber : dump ;
+
+unsigned[2] methodNumber : dump ;
+
+unsigned[4] verifyingMonth : dump ;
+
+meta endOfInterval g1end_of_interval_monthly(verifyingMonth);
+
+meta yearOfEndOfOverallTimeInterval   vector(endOfInterval,0);
+meta monthOfEndOfOverallTimeInterval   vector(endOfInterval,1);
+meta dayOfEndOfOverallTimeInterval   vector(endOfInterval,2);
+meta hourOfEndOfOverallTimeInterval   vector(endOfInterval,3);
+meta minuteOfEndOfOverallTimeInterval   vector(endOfInterval,4);
+meta secondOfEndOfOverallTimeInterval   vector(endOfInterval,5);
+
+transient hourOfEndOfOverallTimeInterval=23 : no_copy;
+transient minuteOfEndOfOverallTimeInterval=59 : no_copy;
+transient secondOfEndOfOverallTimeInterval=59 : no_copy;
+
+transient indicatorOfUnitForTimeRange=3;
+transient lengthOfTimeRange=1;
+unsigned[1] averagingPeriod : dump ;
+
+transient typeOfStatisticalProcessing=0;
+transient indicatorOfUnitForTimeIncrement = 1;
+transient timeIncrement=averagingPeriod;
+
+unsigned[2] forecastMonth : dump ;
+remove forecastTime;
+transient forecastTime=forecastMonth - 1;
+#remove typeOfTimeIncrement;
+transient typeOfTimeIncrement = 3;
+
+# Old GRIBS do not have forecast forecastMonth set. It is computed from verifyingMonth
+meta marsForecastMonth g1forecastmonth(verifyingMonth,dataDate,day,hour,forecastMonth,zero) : read_only;
+
+alias origin = centre;
+alias number = perturbationNumber;
+alias system = systemNumber;
+alias method = methodNumber;
+
+# ECC-679
+unsigned[2] numberOfForecastsInEnsemble : dump ;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+unsigned[4] indexingDate: dump; # MARS archiving date (YYYYMMDD)
+unsigned[2] indexingTime: dump; # MARS archiving time (HHMM)
+transient indexingTimeHH = indexingTime/100 : hidden;
+transient indexingTimeMM = indexingTime - 100 * indexingTimeHH : hidden;
+meta indexingTimeHHMM sprintf("%.2d%.2d",indexingTimeHH,indexingTimeMM);
+
+alias mars.date = indexingDate;
+alias mars.time = indexingTimeHHMM;
+
+# spareSetToZero
+pad padding_loc12_1(50);

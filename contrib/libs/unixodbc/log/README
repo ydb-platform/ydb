@@ -1,0 +1,26 @@
+***************************************************************
+* This code is LGPL. You CAN make commercial solutions using  *
+* LGPL software.                                              *
+*                                                             *
+* Peter Harvey 21.FEB.99 pharvey@codebydesign.com             *
+***************************************************************
+
++-------------------------------------------------------------+
+| unixODBC                                                    |
+| LOG lib (liblog.so)                                         |
++-------------------------------------------------------------+
+
+This library provides some usefull functions
+for managing log/debug messages.
+
+
++-------------------------------------------------------------+
+| Peter Harvey                                                |
+| http://www.genix.net/unixODBC                               |
+| pharvey@codebydesign.com                                    |
+| 10.APR.99                                                   |
++-------------------------------------------------------------+
+
+
+
+

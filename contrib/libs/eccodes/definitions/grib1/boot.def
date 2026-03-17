@@ -1,0 +1,85 @@
+# (C) Copyright 2005- ECMWF.
+#
+# This software is licensed under the terms of the Apache Licence Version 2.0
+# which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+#
+# In applying this licence, ECMWF does not waive the privileges and immunities granted to it by
+# virtue of its status as an intergovernmental organisation nor does it submit to any jurisdiction.
+#
+
+constant ieeeFloats   = 0 : hidden, edition_specific;
+transient eps=0;
+constant false=0 : hidden;
+constant true=1 : hidden;
+constant two=1 : hidden;
+constant three=1 : hidden;
+constant eight=8 : hidden;
+constant eleven=11 : hidden;
+constant epsPoint=1 : hidden;
+constant epsContinuous=11 : hidden;
+constant epsStatisticsPoint=2 : hidden;
+constant epsStatisticsContinous=12 : hidden;
+
+meta headersOnly headers_only();
+
+#template      section_0 "grib1/section.0.def";
+
+meta gts_header gts_header() : no_copy,hidden,read_only;
+meta gts_TTAAii gts_header(20,6) : no_copy,hidden,read_only;
+meta gts_CCCC gts_header(27,4) : no_copy,hidden,read_only;
+meta gts_ddhh00 gts_header(32,6) : no_copy,hidden,read_only;
+
+ascii[4] identifier  = "GRIB" : read_only,hidden;
+
+constant offsetSection0=0;
+constant section0Length=8;
+meta section0Pointer section_pointer(offsetSection0,section0Length,0);
+
+# Due to a trick done by GRIBEX to support large GRIBs, we need a special treatment
+# of the message length and of the section4 length, so instead of
+# section_length[3] totalLength;
+# we get:
+g1_message_length[3] totalLength(section4Length);
+position startOfHeaders;
+unsigned[1] editionNumber = 1 : edition_specific,dump;
+
+alias ls.edition = editionNumber;
+
+template      section_1 "grib1/section.1.def";
+
+# Note flagbit numbers 7 to 0, while wmo is 1 to 8
+flagbit gridDescriptionSectionPresent(section1Flags,7) = 1;
+meta GDSPresent gds_is_present(gridDescriptionSectionPresent,gridDefinition,bitmapPresent,values): dump;
+#alias GDSPresent = gridDescriptionSectionPresent;
+
+flagbit bitmapPresent(section1Flags,6) :dump;
+alias bitmapSectionPresent=bitmapPresent;
+alias geography.bitmapPresent=bitmapPresent;
+alias missingValuesPresent=bitmapPresent : read_only;
+transient angleSubdivisions=1000;  # milli degrees
+
+if(gridDescriptionSectionPresent){
+  template section_2 "grib1/section.2.def";
+} else {
+  template predefined_grid "grib1/predefined_grid.def";
+}
+
+# Used to mark end of headers. Can be accessed with grib_get_offset()
+position   endOfHeadersMarker;
+
+meta lengthOfHeaders evaluate( endOfHeadersMarker-startOfHeaders);
+meta md5Headers md5(startOfHeaders,lengthOfHeaders);
+
+if (!headersOnly) {
+  transient  missingValue   = 9999 : dump;
+
+  if(bitmapPresent) {
+    template   section_3 "grib1/section.3.def";
+  } else {
+    constant   tableReference = 0;
+  }
+
+  template     section_4 "grib1/section.4.def";
+
+  template     section_5 "grib1/section.5.def";
+}

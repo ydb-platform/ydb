@@ -1,0 +1,469 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mongodb.v1.config;
+
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mongodb/v1/config;mongodb";
+option java_package = "yandex.cloud.api.mdb.mongodb.v1.config";
+
+
+// Configuration of a mongod daemon. Supported options are a limited subset of all
+// options described in [MongoDB documentation](https://docs.mongodb.com/v7.0/reference/configuration-options/).
+message MongodConfig {
+    message Storage {
+        // Configuration of WiredTiger storage engine.
+        message WiredTiger {
+            message EngineConfig {
+                // The maximum size of the internal cache that WiredTiger will use for all data.
+                google.protobuf.DoubleValue cache_size_gb = 1;
+
+                // The maximum size of the internal cache that WiredTiger will use for all data in percents.
+                google.protobuf.DoubleValue cache_size = 2;
+            }
+
+            message CollectionConfig {
+                enum Compressor {
+                    // Unspecified compression type.
+                    COMPRESSOR_UNSPECIFIED = 0;
+
+                    // No compression.
+                    NONE = 1;
+
+                    // The [Snappy](https://docs.mongodb.com/v7.0/reference/glossary/#std-term-snappy) compression.
+                    SNAPPY = 2;
+
+                    // The [zlib](https://docs.mongodb.com/v7.0/reference/glossary/#std-term-zlib) compression.
+                    ZLIB = 3;
+
+                    // The [zstd](https://docs.mongodb.com/v7.0/reference/glossary/#std-term-zstd) compression.
+                    ZSTD = 4;
+                }
+
+                // Default type of compression to use for collection data.
+                Compressor block_compressor = 1;
+            }
+
+            message IndexConfig {
+                // Enables or disables [prefix compression](https://www.mongodb.com/docs/manual/reference/glossary/#std-term-prefix-compression)
+                google.protobuf.BoolValue prefix_compression = 1;
+            }
+
+            // Engine configuration for WiredTiger.
+            EngineConfig engine_config = 1;
+
+            // Collection configuration for WiredTiger.
+            CollectionConfig collection_config = 2;
+
+            //Index configuration for WiredTiger
+            IndexConfig index_config = 3;
+        }
+
+        message Journal {
+            // Commit interval between journal operations, in milliseconds.
+            // Default: 100.
+            google.protobuf.Int64Value commit_interval = 2 [(value) = "1-500"];
+        }
+
+        // Configuration of the WiredTiger storage engine.
+        WiredTiger wired_tiger = 1;
+
+        // Configuration of the MongoDB [journal](https://docs.mongodb.com/v7.0/reference/glossary/#std-term-journal).
+        Journal journal = 2;
+    }
+
+    message OperationProfiling {
+        enum Mode {
+            // Mode unspecified.
+            MODE_UNSPECIFIED = 0;
+
+            // The profiler is off and does not collect any data.
+            OFF = 1;
+
+            // The profiler collects data for operations that take longer than the value of [slow_op_threshold].
+            SLOW_OP = 2;
+
+            // The profiler collects data for all operations.
+            ALL = 3;
+        }
+
+        // Mode which specifies operations that should be profiled.
+        Mode mode = 1;
+
+        // The slow operation time threshold, in milliseconds. Operations that run
+        // for longer than this threshold are considered slow, and are processed by the profiler
+        // running in the SLOW_OP mode.
+        google.protobuf.Int64Value slow_op_threshold = 2 [(value) = ">0"];
+
+        // The fraction of slow operations that should be profiled or logged.
+        // operationProfiling.slowOpSampleRate accepts values between 0 and 1, inclusive.
+        google.protobuf.DoubleValue slow_op_sample_rate = 3 [(value) = "0-1"];
+    }
+
+    message Network {
+        message Compression {
+            enum Compressor {
+                // Unspecified compression type.
+                COMPRESSOR_UNSPECIFIED = 0;
+
+                // The [Snappy](https://docs.mongodb.com/v4.2/reference/glossary/#term-snappy) compression.
+                SNAPPY = 1;
+
+                // The [zlib](https://docs.mongodb.com/v4.2/reference/glossary/#term-zlib) compression.
+                ZLIB = 2;
+
+                // The [zstd](https://docs.mongodb.com/v4.2/reference/glossary/#term-zstd) compression.
+                ZSTD = 3;
+
+                //No compression
+                DISABLED = 4;
+            }
+            // Specifies the default compressor(s) to use for communication between this mongod or mongos instance and:
+            // - other members of the deployment if the instance is part of a replica set or a sharded cluster
+            // - mongosh
+            // - drivers that support the OP_COMPRESSED message format.
+            // MongoDB supports the following compressors:
+            repeated Compressor compressors = 1 [(size) = "1-3"];
+        }
+
+        // The maximum number of simultaneous connections that mongod will accept.
+        google.protobuf.Int64Value max_incoming_connections = 1 [(value) = "10-32768"];
+
+        // Compression settings
+        Compression compression = 2;
+    }
+
+    message Security {
+        message KMIP {
+            // KMIP server name
+            string server_name = 1;
+            // KMIP server port
+            google.protobuf.Int64Value port = 2;
+            // KMIP Server CA
+            string server_ca = 3;
+            // KMIP client certificate + private key (unencrypted)
+            string client_certificate = 4;
+            // KMIP Key identifier (if any)
+            string key_identifier = 5;
+        }
+
+        // If encryption at rest should be enabled or not
+        google.protobuf.BoolValue enable_encryption = 1;
+        // `kmip` section of mongod security config
+        KMIP kmip = 2;
+    }
+
+    message AuditLog {
+        // Audit filter
+        string filter = 1;
+        // Allows runtime configuration of audit filter and auditAuthorizationSuccess
+        google.protobuf.BoolValue runtime_configuration = 2;
+    }
+
+    message SetParameter {
+        // Enables the auditing of authorization successes
+        google.protobuf.BoolValue audit_authorization_success = 1;
+        // Enables or disables the mechanism that controls the rate at which the primary applies its writes with the
+        // goal of keeping the secondary members [majority committed](https://www.mongodb.com/docs/v7.0/reference/command/replSetGetStatus/#replSetGetStatus.optimes.lastCommittedOpTime)
+        // lag under a configurable maximum value.
+        google.protobuf.BoolValue enable_flow_control = 2;
+
+        // The minimum time window in seconds for which the storage engine keeps the snapshot history.
+        google.protobuf.Int64Value min_snapshot_history_window_in_seconds = 3 [(value) = ">=0"];
+
+        // The target maximum majority committed lag when running with flow control
+        google.protobuf.Int64Value flow_control_target_lag_seconds = 4 [(value) = ">0"];
+
+        // The amount of time to wait to log a warning once the flow control mechanism detects the majority commit point has not moved.
+        google.protobuf.Int64Value flow_control_warn_threshold_seconds = 5 [(value) = ">=0"];
+
+        // Time in milliseconds to wait between batches of insertions during cloning step of the migration process.
+        google.protobuf.Int64Value migrate_clone_insertion_batch_delay_ms = 6 [(value) = ">=0"];
+
+        // The maximum number of documents to insert in a single batch during the cloning step of the migration process.
+        google.protobuf.Int64Value migrate_clone_insertion_batch_size = 7 [(value) = ">=0"];
+
+        // Minimum delay before a migrated chunk is deleted from the source shard.
+        google.protobuf.Int64Value orphan_cleanup_delay_secs = 8;
+
+        // Specifies the maximum batch size used for updating the persisted chunk cache.
+        google.protobuf.Int64Value persisted_chunk_cache_update_max_batch_size = 9;
+
+        // The amount of time in milliseconds to wait before the next batch of deletion during the cleanup stage of chunk migration (or the cleanupOrphaned command).
+        google.protobuf.Int64Value range_deleter_batch_delay_ms = 10 [(value) = ">=0"];
+
+        // The maximum number of documents in each batch to delete during the cleanup stage of chunk migration (or the cleanupOrphaned command).
+        google.protobuf.Int64Value range_deleter_batch_size = 11 [(value) = ">=0"];
+
+        message MirrorReads {
+            // The sampling rate used to mirror a subset of operations that support mirroring.
+            google.protobuf.DoubleValue sampling_rate = 1;
+
+            // The maximum time in milliseconds for the mirrored reads.
+            google.protobuf.Int64Value max_time_ms = 2;
+        }
+
+        // Specifies the settings for mirrored reads for the mongod instance
+        MirrorReads mirror_reads = 12;
+    }
+
+    message Oplog {
+        // Oplog maxsize in percents.
+        google.protobuf.Int64Value max_size_percent = 1;
+
+        // The minimum number of hours to preserve an oplog entry, where decimal values represent the fractions of an hour.
+        google.protobuf.DoubleValue min_retention_hours = 2;
+    }
+
+    // `storage` section of mongod configuration.
+    Storage storage = 1;
+
+    // `operationProfiling` section of mongod configuration.
+    OperationProfiling operation_profiling = 2;
+
+    // `net` section of mongod configuration.
+    Network net = 3;
+
+    // `security` section of mongod configuration.
+    Security security = 4;
+
+    // `AuditLog` section of mongod configuration.
+    AuditLog audit_log = 5;
+
+    // `SetParameter` section of mongod configuration.
+    SetParameter set_parameter = 6;
+
+    // `Oplog` section of mongod configuration.
+    Oplog oplog = 7;
+
+    // Chained replication setting
+    google.protobuf.BoolValue chaining_allowed = 8;
+}
+
+message MongoCfgConfig {
+    message Storage {
+        // Configuration of WiredTiger storage engine.
+        message WiredTiger {
+            message EngineConfig {
+                // The maximum size of the internal cache that WiredTiger will use for all data.
+                google.protobuf.DoubleValue cache_size_gb = 1;
+
+                // The maximum size of the internal cache that WiredTiger will use for all data in percents.
+                google.protobuf.DoubleValue cache_size = 2;
+            }
+
+            // Engine configuration for WiredTiger.
+            EngineConfig engine_config = 1;
+        }
+
+        // Configuration of the WiredTiger storage engine.
+        WiredTiger wired_tiger = 1;
+    }
+
+    message OperationProfiling {
+        enum Mode {
+            // Mode unspecified.
+            MODE_UNSPECIFIED = 0;
+
+            // The profiler is off and does not collect any data.
+            OFF = 1;
+
+            // The profiler collects data for operations that take longer than the value of [slow_op_threshold].
+            SLOW_OP = 2;
+
+            // The profiler collects data for all operations.
+            ALL = 3;
+        }
+
+        // Mode which specifies operations that should be profiled.
+        Mode mode = 1;
+
+        // The slow operation time threshold, in milliseconds. Operations that run
+        // for longer than this threshold are considered slow, and are processed by the profiler
+        // running in the SLOW_OP mode. For details see [MongoDB documentation](https://www.mongodb.com/docs/v7.0/reference/configuration-options/#mongodb-setting-operationProfiling.slowOpThresholdMs).
+        google.protobuf.Int64Value slow_op_threshold = 2 [(value) = ">0"];
+    }
+
+    message Network {
+        // The maximum number of simultaneous connections that mongocfg will accept.
+        google.protobuf.Int64Value max_incoming_connections = 1 [(value) = "10-32768"];
+    }
+
+    message SetParameter {
+        // Enables or disables the mechanism that controls the rate at which the primary applies its writes with the
+        // goal of keeping the secondary members [majority committed](https://www.mongodb.com/docs/v4.2/reference/command/replSetGetStatus/#replSetGetStatus.optimes.lastCommittedOpTime)
+        // lag under a configurable maximum value.
+        google.protobuf.BoolValue enable_flow_control = 1;
+
+        // Enables the auditing of authorization successes
+        // https://www.mongodb.com/docs/manual/reference/parameters/#mongodb-parameter-param.auditAuthorizationSuccess
+        google.protobuf.BoolValue audit_authorization_success = 2;
+    }
+
+    message AuditLog {
+        // Audit filter, should be valid JSON object string
+        string filter = 1;
+    }
+
+    message Oplog {
+        // Oplog maxsize in percents.
+        google.protobuf.Int64Value max_size_percent = 1;
+
+        // The minimum number of hours to preserve an oplog entry, where decimal values represent the fractions of an hour.
+        google.protobuf.DoubleValue min_retention_hours = 2;
+    }
+
+    // `storage` section of mongocfg configuration.
+    Storage storage = 1;
+
+    // `operationProfiling` section of mongocfg configuration.
+    OperationProfiling operation_profiling = 2;
+
+    // `net` section of mongocfg configuration.
+    Network net = 3;
+
+    // `setParameter` section of mongocfg configuration.
+    SetParameter set_parameter = 4;
+
+    // `AuditLog` section of mongocfg configuration.
+    AuditLog audit_log = 5;
+
+    // `Oplog` section of mongod configuration.
+    Oplog oplog = 6;
+
+    reserved 7;
+
+    // Chained replication setting
+    google.protobuf.BoolValue chaining_allowed = 8;
+}
+
+message MongosConfig {
+    message Network {
+        message Compression {
+            enum Compressor {
+                // Unspecified compression type.
+                COMPRESSOR_UNSPECIFIED = 0;
+
+                // The [Snappy](https://docs.mongodb.com/v4.2/reference/glossary/#term-snappy) compression.
+                SNAPPY = 1;
+
+                // The [zlib](https://docs.mongodb.com/v4.2/reference/glossary/#term-zlib) compression.
+                ZLIB = 2;
+
+                // The [zstd](https://docs.mongodb.com/v4.2/reference/glossary/#term-zstd) compression.
+                ZSTD = 3;
+
+                //No compression
+                DISABLED = 4;
+            }
+            // Specifies the default compressor(s) to use for communication between this mongod or mongos instance and:
+            // - other members of the deployment if the instance is part of a replica set or a sharded cluster
+            // - mongosh
+            // - drivers that support the OP_COMPRESSED message format.
+            // MongoDB supports the following compressors:
+            repeated Compressor compressors = 1 [(size) = "1-3"];
+        }
+
+        // The maximum number of simultaneous connections that mongos will accept.
+        google.protobuf.Int64Value max_incoming_connections = 1 [(value) = "10-32768"];
+
+        // Compression settings
+        Compression compression = 2;
+    }
+
+    message SetParameter {
+        // Enables the auditing of authorization successes
+        // https://www.mongodb.com/docs/manual/reference/parameters/#mongodb-parameter-param.auditAuthorizationSuccess
+        google.protobuf.BoolValue audit_authorization_success = 1;
+
+        // Specifies whether mongos supports hedged reads for those read operations whose read preference have enabled the hedged read option.
+        google.protobuf.StringValue read_hedging_mode  = 2;
+
+        //Maximum number of outbound connections each TaskExecutor connection pool can open to any given mongod instance.
+        google.protobuf.Int64Value sharding_task_executor_pool_max_size = 3;
+
+        // Maximum number of simultaneous initiating connections (including pending connections in setup/refresh state) each TaskExecutor connection pool can have to a mongod instance.
+        google.protobuf.Int64Value sharding_task_executor_pool_max_connecting = 4;
+
+        // Minimum number of outbound connections each TaskExecutor connection pool can open to any given mongod instance.
+        google.protobuf.Int64Value sharding_task_executor_pool_min_size = 5;
+
+        // On a mongos instance, this parameter sets the policy that determines the minimum size limit of its connection pools to nodes within replica sets.
+        google.protobuf.StringValue sharding_task_executor_pool_replica_set_matching = 6;
+
+        // Maximum time that mongos goes without communication to a host before mongos drops all connections to the host.
+        google.protobuf.Int64Value sharding_task_executor_pool_host_timeout_ms = 7;
+
+        // Maximum time the mongos waits before attempting to heartbeat an idle connection in the pool.
+        google.protobuf.Int64Value sharding_task_executor_pool_refresh_requirement_ms = 8;
+
+        // Maximum time the mongos waits for a heartbeat before timing out the heartbeat.
+        google.protobuf.Int64Value sharding_task_executor_pool_refresh_timeout_ms = 9;
+
+        // Configures a mongos instance to prewarm its connection pool on startup.
+        google.protobuf.BoolValue warm_min_connections_in_sharding_task_executor_pool_on_startup = 10;
+
+        // Sets the timeout threshold in milliseconds for a mongos to wait for ShardingTaskExecutorPoolMinSize connections to be established per shard host when using the warmMinConnectionsInShardingTaskExecutorPoolOnStartup parameter.
+        google.protobuf.Int64Value warm_min_connections_in_sharding_task_executor_pool_on_startup_wait_ms = 11;
+
+        // Optional override for ShardingTaskExecutorPoolMaxSize to set the maximum number of outbound connections each TaskExecutor connection pool can open to a configuration server.
+        google.protobuf.Int64Value sharding_task_executor_pool_max_size_for_config_servers = 12;
+
+        // Optional override for ShardingTaskExecutorPoolMinSize to set the minimum number of outbound connections each TaskExecutor connection pool can open to a configuration server.
+        google.protobuf.Int64Value sharding_task_executor_pool_min_size_for_config_servers  = 13;
+    }
+
+    message AuditLog {
+        // Audit filter, should be valid JSON object string
+        string filter = 1;
+    }
+
+    // Network settings for mongos.
+    Network net = 3;
+
+    // `setParameter` section of mongos configuration.
+    SetParameter set_parameter = 4;
+
+    // `AuditLog` section of mongos configuration.
+    AuditLog audit_log = 5;
+
+    // `ChunkSize` parameter of mongos configuration.
+    google.protobuf.Int64Value chunk_size = 6;
+}
+
+message MongodConfigSet {
+    // Effective mongod settings for a MongoDB cluster (a combination of settings defined
+    // in [user_config] and [default_config]).
+    MongodConfig effective_config = 1;
+
+    // User-defined mongod settings for a MongoDB cluster.
+    MongodConfig user_config = 2;
+
+    // Default mongod configuration for a MongoDB cluster.
+    MongodConfig default_config = 3;
+}
+
+message MongoCfgConfigSet {
+    // Effective mongocfg settings for a MongoDB cluster (a combination of settings defined
+    // in [user_config] and [default_config]).
+    MongoCfgConfig effective_config = 1;
+
+    // User-defined mongocfg settings for a MongoDB cluster.
+    MongoCfgConfig user_config = 2;
+
+    // Default mongocfg configuration for a MongoDB cluster.
+    MongoCfgConfig default_config = 3;
+}
+
+message MongosConfigSet {
+    // Effective mongos settings for a MongoDB cluster (a combination of settings defined
+    // in [user_config] and [default_config]).
+    MongosConfig effective_config = 1;
+
+    // User-defined mongos settings for a MongoDB cluster.
+    MongosConfig user_config = 2;
+
+    // Default mongos configuration for a MongoDB cluster.
+    MongosConfig default_config = 3;
+}

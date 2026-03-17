@@ -1,0 +1,133 @@
+{% extends "base/base.html" %}
+
+{% block preamble %}
+    {{ super() }}
+    <!-- Template JS -->
+    {% for src in template_resources['js'].values() %}
+    <script src="{{ src }}"></script>
+    {% endfor %}
+    {% for src in template_resources['js_modules'].values() %}
+    <script src="{{ src }}" type="module"></script>
+    {% endfor %}
+{% endblock %}
+
+{% block postamble %}
+    <!-- Template CSS -->
+    {% for css in template_resources['css'].values() %}
+    <link rel="stylesheet" href="{{ css }}">
+    {% endfor %}
+    {% for raw_css in template_resources['raw_css'] %}
+    <style type="text/css">
+    {{ raw_css }}
+    </style>
+    {% endfor %}
+
+    <style>
+      :root {
+	--header-background: {{ header_background or "var(--design-primary-color, var(--panel-primary-color))" }};
+	--header-color: {{ header_color or "var(--design-primary-text-color, var(--panel-on-primary-color))" }};
+	--sidebar-width: {{ sidebar_width }}px;
+      }
+      #header, #header :host {
+	--bs-body-bg: var(--header-background);
+	--bs-body-color: var(--header-color);
+	--design-background-text-color: var(--header-color);
+	--design-background-color: var(--header-background);
+	background-color: var(--header-background);
+	color: var(--header-color);
+      }
+      #sidebar {
+	max-width: var(--sidebar-width) !important;
+	width: var(--sidebar-width);
+      }
+    </style>
+{% endblock %}
+
+<!-- goes in body -->
+{% block contents %}
+<div class="container-fluid d-flex flex-column vh-100 overflow-hidden" id="container">
+  <nav class="navbar navbar-expand-md sticky-top shadow" id="header">
+    {% if nav %}
+    <button type="button" id="sidebar-toggle" class="navbar-toggle" data-bs-toggle="collapse" data-bs-target="#sidebar" aria-expanded="true" aria-label="Toggle sidebar" aria-controls="sidebar">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    {% endif %}
+    <div class="app-header">
+      {% if app_logo %}<a class="navbar-brand app-logo" href="{{ site_url }}"><img src="{{ app_logo }}" class="app-logo"></a>{% endif %}
+      {% if site_title %}
+      <a class="title" href="{{ site_url }}" >&nbsp;{{ site_title }}</a>
+      {% endif %}
+      {% if site_title and app_title%}<span class="title">-</span>{% endif %}
+      {% if app_title %}<a class="title" href="" >&nbsp;{{ app_title }}</a>{% endif %}
+    </div>
+    <div id="header-items">
+    {% for doc in docs %}
+    {% for root in doc.roots %}
+    {% if "header" in root.tags %}
+    {{ embed(root) | indent(8) }}
+    {% endif %}
+    {% endfor %}
+    {% endfor %}
+    {% if busy %}
+    </div>
+    <div class="pn-busy-container">
+      {{ embed(roots.busy_indicator) | indent(6) }}
+    </div>
+    {% endif %}
+  </nav>
+
+  <div class="row overflow-hidden" id="content">
+    {% if nav %}
+    <div class="sidenav collapse-horizontal {{ 'collapse' if collapsed_sidebar else 'show'}}" id="sidebar">
+      <ul class="nav flex-column">
+	{% for doc in docs %}
+	{% for root in doc.roots %}
+	{% if "nav" in root.tags %}
+        {{ embed(root) | indent(8) }}
+	{% endif %}
+	{% endfor %}
+	{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="col mh-100 float-left" id="main">
+      {% if main_max_width %}
+      <div style="margin-left: auto; margin-right: auto; max-width: {{main_max_width}}">
+      {% endif %}
+          {% for doc in docs %}
+          {% for root in doc.roots %}
+          {% if "main" in root.tags %}
+          {{ embed(root) | indent(6) }}
+          {% endif %}
+          {% endfor %}
+          {% endfor %}
+      {% if main_max_width %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div id="pn-Modal" class="modal fade pn-modal" role="dialog" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content pn-modal-content">
+	<button type="button" id="pn-closeModal" class="btn-close pn-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
+	<div class="modal-body">
+	  {% for doc in docs %}
+	  {% for root in doc.roots %}
+	  {% if "modal" in root.tags %}
+	  {{ embed(root) | indent(6) }}
+	  {% endif %}
+	  {% endfor %}
+	  {% endfor %}
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% block state_roots %}
+{{ super() }}
+{% endblock %}
+
+{% endblock %}

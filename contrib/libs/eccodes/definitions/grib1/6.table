@@ -1,0 +1,24 @@
+# CODE TABLE 6 Data Representation Type
+0 ll Latitude/Longitude Grid
+1 mm Mercator Projection Grid
+2 gp Gnomonic Projection Grid
+3 lc Lambert Conformal
+4 gg Gaussian Latitude/Longitude Grid
+5 ps Polar Stereographic Projection Grid
+6 6  Universal Transverse Mercator
+7 7  Simple polyconic projection
+8 8 Albers equal-area, secant or tangent, conic or bi-polar
+9 9 Miller's cylingrical projection
+10 10 Rotated Latitude/Longitude grid
+13 ol Oblique Lambert conformal
+14 14 Rotated Gaussian latitude/longitude grid
+20 20 Stretched latitude/longitude grid
+24 24 Stretched Gaussian latitude/longitude
+30 30 Stretched and rotated latitude/longitude
+34 34 Stretched and rotated Gaussian latitude/longitude
+50 sh Spherical Harmonic Coefficients
+60 60 Rotated Spherical Harmonic coefficients
+70 70 Stretched Spherical Harmonic coefficients
+80 80 Stretched and rotated Spherical Harmonic
+90 sv Space view perspective or orthographic grid
+193 193 Quasi-regular latitude/longitude

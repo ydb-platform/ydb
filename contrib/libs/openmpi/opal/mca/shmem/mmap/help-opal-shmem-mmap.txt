@@ -1,0 +1,53 @@
+# -*- text -*-
+#
+# Copyright (c) 2009-2014 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2010-2012 Los Alamos National Security, LLC.
+#                         All rights reserved.
+#
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI's common shmem support.
+#
+[sys call fail]
+A system call failed during shared memory initialization that should
+not have.  It is likely that your MPI job will now either abort or
+experience performance degradation.
+
+  Local host:  %s
+  System call: %s %s
+  Error:       %s (errno %d)
+#
+[mmap on nfs]
+WARNING: Open MPI will create a shared memory backing file in a
+directory that appears to be mounted on a network filesystem.
+Creating the shared memory backup file on a network file system, such
+as NFS or Lustre is not recommended -- it may cause excessive network
+traffic to your file servers and/or cause shared memory traffic in
+Open MPI to be much slower than expected.
+
+You may want to check what the typical temporary directory is on your
+node.  Possible sources of the location of this temporary directory
+include the $TEMPDIR, $TEMP, and $TMP environment variables.
+
+Note, too, that system administrators can set a list of filesystems
+where Open MPI is disallowed from creating temporary files by setting
+the MCA parameter "orte_no_session_dir".
+
+  Local host: %s
+  Filename:   %s
+
+You can set the MCA paramter shmem_mmap_enable_nfs_warning to 0 to
+disable this message.
+#
+[target full]
+It appears as if there is not enough space for %s (the shared-memory backing
+file). It is likely that your MPI job will now either abort or experience
+performance degradation.
+
+  Local host:  %s
+  Space Requested: %lu B
+  Space Available: %llu B

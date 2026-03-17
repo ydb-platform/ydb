@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.clickhouse.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/clickhouse/v1/resource_preset.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/clickhouse/v1;clickhouse";
+option java_package = "yandex.cloud.api.mdb.clickhouse.v1";
+
+// A set of methods for managing ResourcePreset resources.
+service ResourcePresetService {
+  // Returns the specified ResourcePreset resource.
+  //
+  // To get the list of available ResourcePreset resources, make a [List] request.
+  rpc Get (GetResourcePresetRequest) returns (ResourcePreset) {
+    option (google.api.http) = { get: "/managed-clickhouse/v1/resourcePresets/{resource_preset_id}" };
+  }
+
+  // Retrieves the list of available ResourcePreset resources.
+  rpc List (ListResourcePresetsRequest) returns (ListResourcePresetsResponse) {
+    option (google.api.http) = { get: "/managed-clickhouse/v1/resourcePresets" };
+  }
+}
+
+message GetResourcePresetRequest {
+  // ID of the resource preset to return.
+  // To get the resource preset ID, use a [ResourcePresetService.List] request.
+  string resource_preset_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListResourcePresetsRequest {
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListResourcePresetsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, Set [page_token] to the [ListResourcePresetsResponse.next_page_token]
+  // returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListResourcePresetsResponse {
+  // List of ResourcePreset resources.
+  repeated ResourcePreset resource_presets = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListResourcePresetsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListResourcePresetsRequest.page_token] parameter in the next list request. Each subsequent
+  // list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

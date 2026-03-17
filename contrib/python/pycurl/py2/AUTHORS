@@ -1,0 +1,86 @@
+Copyright (C) 2001-2008 by Kjetil Jacobsen <kjetilja at gmail.com>
+Copyright (C) 2001-2008 by Markus F.X.J. Oberhumer <markus at oberhumer.com>
+Copyright (C) 2013-2020 by Oleg Pudeyev <oleg at bsdpower.com>
+
+Please see README, COPYING-LGPL and COPYING-MIT for license information.
+
+The following individuals contributed code to PycURL:
+
+Aaron Hill <visine19 at hotmail.com>
+Adam Guthrie <therigu at users.sourceforge.net>
+Adam Jacob Muller <adam at isprime.com>
+Amit Mongia <amit_mongia at hotmail.com>
+Andjelko Horvat <comel at vingd.com>
+Arshad Khan <khan.m.arshad at gmail.com>
+Barry Warsaw <barry at python.org>
+Bastian Kleineidam
+Benjamin Peterson <benjamin at python.org>
+Casey Miller <camiller at linkedin.com>
+Christopher Warner <cwarner at kernelcode.com>
+Clint Clayton <clintclayton at me.com>
+Conrad Steenberg <conrad at hep.caltech.edu>
+Daniel Pena Arteaga <dpena at ph.tum.de>
+Daniel Stenberg <daniel at haxx.se>
+decitre <decitre at gmail.com>
+Dmitriy Taychenachev <dmitriy.taychenachev at skypicker.com>
+Dmitry Ketov <dketov at gmail.com>
+Domenico Andreoli <cavok at libero.it>
+Dominique <curl-and-python at d242.net>
+Eric S. Raymond <esr at thyrsus.com>
+Francisco Alves <chico at corp.globo.com>
+Gabi Davar <grizzly.nyo at gmail.com>
+Gisle Vanem <gvanem at yahoo.no>
+Gregory Petukhov <lorien at lorien.name>
+Hugo <hugovk at users.noreply.github.com>
+Iain R. Learmonth <irl at fsfe.org>
+ideal <idealities at gmail.com>
+Jakob Truelsen <jakob at scalgo.com>
+Jakub Wilk <jwilk at jwilk.net>
+Jan Kryl <jan.kryl at nexenta.com>
+Jayne <corvine at gmail.com>
+James Deucker <bitwisecook at users.noreply.github.com>
+JiCiT <jason at infinitebubble.com>
+Jim Patterson
+Jozef Melicher <jozef.melicher at eset.sk>
+K.S.Sreeram <sreeram at tachyontech.net>
+Kamil Dudka <kdudka at redhat.com>
+Kevin Ko <kevin.s.ko at gmail.com>
+Khavish Anshudass Bhundoo <khavishbhundoo at users.noreply.github.com>
+kxrd <onyeabor at riseup.net>
+Lipin Dmitriy <blackwithwhite666 at gmail.com>
+Léo El Amri <leo at superlel.me>
+Marc Labranche <mlabranche at developertown.com>
+Marcelo Jorge Vieira <metal at alucinados.com>
+Marien Zwart <marienz at users.sourceforge.net>
+Mark Eichin
+Markus <nepenthesdev at gmail.com>
+Martin Muenstermann <mamuema at sourceforge.net>
+Matt King <matt at gnik.com>
+Nelson Chen <crazysim at gmail.com>
+Nick Pilon <npilon at oreilly.com>
+Oren <orenyomtov at users.noreply.github.com>
+Orion Poplawski <orion at cora.nwra.com>
+Oskari Saarenmaa <os at ohmu.fi>
+Paul Pacheco
+Roland Sommer <rol at ndsommer.de>
+Romuald Brunet <romuald at gandi.net>
+Romulo A. Ceccon <romuloceccon at gmail.com>
+Samuel Dion-Girardeau <samuel.diongirardeau at gmail.com>
+Srinivas <spg349 at nyu.edu>
+Tal Einat <tal.einat at socialcodeinc.com>
+Thomas Hunger <teh at camvine.org>
+Tino Lange <Tino.Lange at gmx.de>
+toddrme2178 <toddrme2178 at gmail.com>
+Tom Pierce <tom.pierce0 at gmail.com>
+Victor Lascurain <bittor at eleka.net>
+Vitaly Murashev <vitaly.murashev at gmail.com>
+Vitezslav Cizek <vcizek at suse.com>
+Wei C <gitsouler at users.noreply.github.com>
+Whitney Sorenson <wsorenson at gmail.com>
+Wim Lewis <wiml at users.sourceforge.net>
+Yiteng Zhang <yiteng.zhang at oracle.com>
+Yuhui H <eyecat at gmail.com>
+Yuri Ushakov <yuri.ushakov at gmail.com>
+Yves Bastide <yves at botify.com>
+Zdenek Pavlas <zpavlas at redhat.com>
+ziggy <ziggy at elephant-bird.net>

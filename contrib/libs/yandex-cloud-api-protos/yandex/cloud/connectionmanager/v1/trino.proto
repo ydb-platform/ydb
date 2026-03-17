@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package yandex.cloud.connectionmanager.v1;
+
+import "yandex/cloud/connectionmanager/v1/common.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/connectionmanager/v1;connectionmanager";
+option java_package = "yandex.cloud.api.connectionmanager.v1";
+
+message TrinoAuth {
+    oneof security {
+        UserPasswordAuth user_password = 1;
+    }
+}
+
+message TrinoCluster {
+    message Coordinator {
+        string host = 1;
+        int64 port = 2;
+    }
+
+    Coordinator coordinator = 1;
+    TLSParams tls_params = 2;
+}
+
+message TrinoConnection {
+    TrinoCluster cluster = 1;
+    TrinoAuth auth = 2;
+}

@@ -1,0 +1,15 @@
+Metadata-Version: 2.1
+Name: sobol-seq
+Version: 0.2.0
+Summary: Sobol sequence generator
+Home-page: https://github.com/naught101/sobol_seq
+Author: naught101
+Author-email: naught101@gmail.com
+License: MIT
+Platform: UNKNOWN
+Requires-Dist: scipy
+Requires-Dist: numpy
+
+UNKNOWN
+
+

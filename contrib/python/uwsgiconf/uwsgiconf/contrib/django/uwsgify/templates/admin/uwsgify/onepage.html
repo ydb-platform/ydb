@@ -1,0 +1,46 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% if not is_popup %}
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=model_meta.app_config.label %}">{{ model_meta.app_config.verbose_name }}</a>
+&rsaquo; {{ model_meta.verbose_name_plural|capfirst }}
+</div>
+{% endblock %}
+{% endif %}
+
+{% block content %}
+
+    {% for panel_name, panel_data in panels.items  %}
+    <div class="results">
+        <h2>{{ panel_name }}</h2>
+
+        <table width="100%">
+            <tbody>
+            {% for title, values in panel_data.rows.items %}
+            <tr class="{% cycle 'row1' 'row2' %}">
+                {% if title %}<td nowrap width="25%"><strong>{{ title }}:</strong></td>{% endif %}
+                {% for value in values %}
+                    <td>
+                        {% if value.auto_id %}
+                            <form method="POST">
+                            {% csrf_token %}
+                            <table width="100%">{{ value|safe }}</table>
+                            {% include "admin/submit_line.html" %}
+                            </form>
+                        {% else %}
+                            {{ value|linebreaksbr }}
+                        {% endif %}
+                    </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <hr>
+    </div>
+    {% endfor %}
+
+{% endblock %}

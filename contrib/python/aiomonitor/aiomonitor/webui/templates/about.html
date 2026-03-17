@@ -1,0 +1,6 @@
+{% extends "layout.html" %}
+{% block content %}
+<ul>
+  <li>Version: <span hx-get="/api/version" hx-trigger="load" hx-swap="innerHTML" mustache-template="scalar-value">(loading)</span></li>
+</ul>
+{% endblock %}

@@ -1,0 +1,5 @@
+0 0 Current direction (Degree true)
+1 1 Current speed (m s-1)
+2 2 u-component of current (m s-1)
+3 3 v-component of current (m s-1)
+255 255 Missing

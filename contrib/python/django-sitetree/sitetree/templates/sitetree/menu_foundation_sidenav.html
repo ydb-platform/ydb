@@ -1,0 +1,8 @@
+{% load sitetree %}
+<ul class="side-nav">
+	{% for item in sitetree_items %}
+	<li {% if item.is_current or item.in_current_branch %}class="active"{% endif %}>
+        <a href="{% sitetree_url for item %}">{{ item.title_resolved }}</a>
+	</li>
+	{% endfor %}
+</ul>

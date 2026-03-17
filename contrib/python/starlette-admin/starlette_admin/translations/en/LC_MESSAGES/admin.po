@@ -1,0 +1,191 @@
+# English translations for starlette-admin.
+# Copyright (C) 2023 ORGANIZATION
+# This file is distributed under the same license as the starlette-admin
+# project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2023.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: starlette-admin VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2023-10-28 16:32-0500\n"
+"PO-Revision-Date: 2022-12-25 13:16+0100\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: en\n"
+"Language-Team: en <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.13.0\n"
+
+#: starlette_admin/actions.py:11 starlette_admin/actions.py:107
+#: starlette_admin/templates/modals/actions.html:12
+msgid "Yes, Proceed"
+msgstr ""
+
+#: starlette_admin/auth.py:31
+msgid "Administrator"
+msgstr ""
+
+#: starlette_admin/base.py:44 starlette_admin/contrib/odmantic/admin.py:17
+#: starlette_admin/contrib/sqla/admin.py:28
+#: starlette_admin/templates/create.html:7
+#: starlette_admin/templates/detail.html:8
+#: starlette_admin/templates/edit.html:7 starlette_admin/templates/list.html:7
+msgid "Admin"
+msgstr ""
+
+#: starlette_admin/base.py:254
+#, python-format
+msgid "Model with identity %(identity)s not found"
+msgstr ""
+
+#: starlette_admin/templates/forms/_delete.html:8
+#: starlette_admin/templates/modals/delete.html:25 starlette_admin/views.py:461
+#: starlette_admin/views.py:498
+msgid "Delete"
+msgstr ""
+
+#: starlette_admin/views.py:462
+msgid "Are you sure you want to delete selected items?"
+msgstr ""
+
+#: starlette_admin/views.py:463
+msgid "Yes, delete all"
+msgstr ""
+
+#: starlette_admin/views.py:468 starlette_admin/views.py:507
+#, python-format
+msgid "Item was successfully deleted"
+msgid_plural "%(count)d items were successfully deleted"
+msgstr[0] ""
+msgstr[1] ""
+
+#: starlette_admin/views.py:476
+msgid "View"
+msgstr ""
+
+#: starlette_admin/templates/edit.html:12 starlette_admin/views.py:488
+msgid "Edit"
+msgstr ""
+
+#: starlette_admin/templates/modals/delete.html:15 starlette_admin/views.py:499
+msgid "Are you sure you want to delete this item?"
+msgstr ""
+
+#: starlette_admin/views.py:818
+msgid "All"
+msgstr ""
+
+#: starlette_admin/templates/actions.html:6
+msgid "With selected"
+msgstr ""
+
+#: starlette_admin/templates/create.html:12
+msgid "Create"
+msgstr ""
+
+#: starlette_admin/templates/create.html:25
+#: starlette_admin/templates/list.html:34
+#, python-format
+msgid "New %(name)s"
+msgstr ""
+
+#: starlette_admin/templates/create.html:44
+#: starlette_admin/templates/edit.html:46
+#: starlette_admin/templates/modals/actions.html:10
+#: starlette_admin/templates/modals/delete.html:21
+msgid "Cancel"
+msgstr ""
+
+#: starlette_admin/templates/create.html:46
+#: starlette_admin/templates/edit.html:48
+msgid "Save and add another"
+msgstr ""
+
+#: starlette_admin/templates/create.html:48
+#: starlette_admin/templates/edit.html:50
+msgid "Save and continue editing"
+msgstr ""
+
+#: starlette_admin/templates/create.html:49
+#: starlette_admin/templates/edit.html:51
+msgid "Save"
+msgstr ""
+
+#: starlette_admin/templates/detail.html:13
+msgid "Detail"
+msgstr ""
+
+#: starlette_admin/templates/detail.html:47
+msgid "Attribute"
+msgstr ""
+
+#: starlette_admin/templates/detail.html:48
+msgid "Value"
+msgstr ""
+
+#: starlette_admin/templates/edit.html:27
+#, python-format
+msgid "Edit %(name)s"
+msgstr ""
+
+#: starlette_admin/templates/error.html:7
+msgid "Oops… You just found an error page"
+msgstr ""
+
+#: starlette_admin/templates/error.html:29
+msgid "Take me home"
+msgstr ""
+
+#: starlette_admin/templates/layout.html:95
+#: starlette_admin/templates/layout.html:118
+#: starlette_admin/templates/layout.html:204
+msgid "Logout"
+msgstr ""
+
+#: starlette_admin/templates/list.html:67
+msgid "Search"
+msgstr ""
+
+#: starlette_admin/templates/login.html:16
+msgid "Login to your account"
+msgstr ""
+
+#: starlette_admin/templates/login.html:32
+msgid "Username"
+msgstr ""
+
+#: starlette_admin/templates/login.html:43
+msgid "Password"
+msgstr ""
+
+#: starlette_admin/templates/login.html:56
+msgid "Remember me"
+msgstr ""
+
+#: starlette_admin/templates/login.html:60
+msgid "Sign in"
+msgstr ""
+
+#: starlette_admin/templates/row-actions.html:38
+msgid "Actions"
+msgstr ""
+
+#: starlette_admin/templates/forms/_delete.html:13
+msgid "Check this to delete the current content of this field"
+msgstr ""
+
+#: starlette_admin/templates/forms/enum.html:5
+#, python-format
+msgid "Select a %(label)s"
+msgstr ""
+
+#: starlette_admin/templates/forms/list.html:44
+msgid "Add item"
+msgstr ""
+
+#: starlette_admin/templates/modals/loading.html:7
+msgid "Loading"
+msgstr ""

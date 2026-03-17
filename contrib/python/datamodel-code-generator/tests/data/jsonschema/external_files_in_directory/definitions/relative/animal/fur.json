@@ -1,0 +1,10 @@
+{
+  "$id": "https://example.com/external_files_in_directory/definitions/relative/animal/fur.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fur",
+  "type": "string",
+    "enum": [
+        "Short hair",
+        "Long hair"
+    ]
+}

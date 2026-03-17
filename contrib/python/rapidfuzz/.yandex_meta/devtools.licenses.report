@@ -1,0 +1,292 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     GPL-1.0-or-later     11bc8d50fd2115beaf73eadf5f658dfb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        .dist-info/METADATA [268:268]
+        README.md [246:246]
+
+KEEP     MIT                  14395d49cccf7dd9c262788c7c3eb609
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [4:21]
+        extern/rapidfuzz-cpp/LICENSE [4:21]
+
+SKIP     GPL-1.0-or-later     144e70dcd9392a8d4a223b34fd92bf13
+BELONGS ya.make
+    License text:
+        1) It is MIT licensed so it can be used with whichever License you might want to choose for your project, while you're forced to adopt the GPL license when using FuzzyWuzzy
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        .dist-info/METADATA [70:70]
+        README.md [48:48]
+
+KEEP     MIT                  15d6cc89f9399e868cebfbe906e8117b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 87.50
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        .dist-info/METADATA [267:268]
+        README.md [245:246]
+
+KEEP     MIT                  1eaf467c6d00edd4a5876ad437b67edf
+BELONGS ya.make
+    License text:
+        /* SPDX-License-Identifier: MIT */
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        extern/rapidfuzz-cpp/rapidfuzz/details/CharSet.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/GrowingHashmap.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/Matrix.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/PatternMatchVector.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/Range.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/common.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/common_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/config.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/distance.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/intrinsics.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/simd.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/simd_avx2.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/simd_sse2.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/type_traits.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/details/types.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/DamerauLevenshtein.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/DamerauLevenshtein_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Hamming.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Hamming_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Indel.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Indel_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Jaro.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/JaroWinkler.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/JaroWinkler_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Jaro_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/LCSseq.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/LCSseq_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Levenshtein.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Levenshtein_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/OSA.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/OSA_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Postfix.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Postfix_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Prefix.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Prefix_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/fuzz.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/fuzz_impl.hpp [1:1]
+        extern/rapidfuzz-cpp/rapidfuzz/rapidfuzz_all.hpp [1:1]
+        rapidfuzz/utils.hpp [1:1]
+
+KEEP     NCSA                 249145ba229f81fc16ae83c71e3ec322
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        extern/taskflow/LICENSE [41:66]
+
+KEEP     MPL-2.0              4fcf3e7e3c87a274caf887bae6435d65
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        extern/taskflow/taskflow/core/nonblocking_notifier.hpp [22:24]
+
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        extern/taskflow/LICENSE [7:23]
+
+KEEP     NCSA                 a55bfe045445972405b94dbd608fc2eb
+BELONGS ya.make
+    License text:
+        University of Illinois/NCSA Open Source License
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        extern/taskflow/LICENSE [28:28]
+
+KEEP     BSL-1.0              dbc40b56f99e0477383a65331b89261d
+BELONGS ya.make
+    License text:
+        //   Distributed under the Boost Software License, Version 1.0. (See
+        //   accompanying file LICENSE_1_0.txt or copy at
+        //   http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        extern/taskflow/taskflow/utility/uuid.hpp [26:28]
+
+KEEP     MIT                  e0ec95fcdf241042730c2934d3110a91
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: extern/taskflow/LICENSE at line 1
+FILE_INCLUDE extern/rapidfuzz-cpp/LICENSE found in files: extern/taskflow/LICENSE at line 1
+FILE_INCLUDE extern/taskflow/LICENSE found in files: extern/taskflow/LICENSE at line 1
+    License text:
+        TASKFLOW MIT LICENSE 
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        extern/taskflow/LICENSE [1:1]
+
+KEEP     MIT                  e59c3e52085871b083ddadbd3e07c13f
+BELONGS ya.make
+    License text:
+        \# SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        rapidfuzz/_common_py.py [1:1]
+        rapidfuzz/_feature_detector.py [1:1]
+        rapidfuzz/_utils.py [1:1]
+        rapidfuzz/distance/DamerauLevenshtein.py [1:1]
+        rapidfuzz/distance/DamerauLevenshtein.pyi [1:1]
+        rapidfuzz/distance/DamerauLevenshtein_py.py [1:1]
+        rapidfuzz/distance/Hamming.py [1:1]
+        rapidfuzz/distance/Hamming.pyi [1:1]
+        rapidfuzz/distance/Hamming_py.py [1:1]
+        rapidfuzz/distance/Indel.py [1:1]
+        rapidfuzz/distance/Indel.pyi [1:1]
+        rapidfuzz/distance/Indel_py.py [1:1]
+        rapidfuzz/distance/Jaro.py [1:1]
+        rapidfuzz/distance/Jaro.pyi [1:1]
+        rapidfuzz/distance/JaroWinkler.py [1:1]
+        rapidfuzz/distance/JaroWinkler.pyi [1:1]
+        rapidfuzz/distance/JaroWinkler_py.py [1:1]
+        rapidfuzz/distance/Jaro_py.py [1:1]
+        rapidfuzz/distance/LCSseq.py [1:1]
+        rapidfuzz/distance/LCSseq.pyi [1:1]
+        rapidfuzz/distance/LCSseq_py.py [1:1]
+        rapidfuzz/distance/Levenshtein.py [1:1]
+        rapidfuzz/distance/Levenshtein.pyi [1:1]
+        rapidfuzz/distance/Levenshtein_py.py [1:1]
+        rapidfuzz/distance/OSA.py [1:1]
+        rapidfuzz/distance/OSA.pyi [1:1]
+        rapidfuzz/distance/OSA_py.py [1:1]
+        rapidfuzz/distance/Postfix.py [1:1]
+        rapidfuzz/distance/Postfix.pyi [1:1]
+        rapidfuzz/distance/Postfix_py.py [1:1]
+        rapidfuzz/distance/Prefix.py [1:1]
+        rapidfuzz/distance/Prefix.pyi [1:1]
+        rapidfuzz/distance/Prefix_py.py [1:1]
+        rapidfuzz/distance/__init__.py [1:1]
+        rapidfuzz/distance/__init__.pyi [1:1]
+        rapidfuzz/distance/_initialize.py [1:1]
+        rapidfuzz/distance/_initialize.pyi [1:1]
+        rapidfuzz/distance/_initialize_py.py [1:1]
+        rapidfuzz/distance/metrics_py.py [1:1]
+        rapidfuzz/fuzz.py [1:1]
+        rapidfuzz/fuzz.pyi [1:1]
+        rapidfuzz/fuzz_py.py [1:1]
+        rapidfuzz/process.py [1:1]
+        rapidfuzz/process_cpp.py [1:1]
+        rapidfuzz/process_py.py [1:1]
+        rapidfuzz/utils.py [1:1]
+        rapidfuzz/utils.pyi [1:1]
+        rapidfuzz/utils_py.py [1:1]
+
+KEEP     MIT                  ec8ce855e2570f2457a6f1a605a5b0fa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        .dist-info/METADATA [268:268]
+        README.md [246:246]
+
+KEEP     MIT                  f49ba857e490840cd10b354cc7e37154
+BELONGS ya.make
+    License text:
+        1) It is MIT licensed so it can be used with whichever License you might want to choose for your project, while you're forced to adopt the GPL license when using FuzzyWuzzy
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        .dist-info/METADATA [70:70]
+        README.md [48:48]

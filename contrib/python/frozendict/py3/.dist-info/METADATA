@@ -1,0 +1,48 @@
+Metadata-Version: 2.1
+Name: frozendict
+Version: 1.2
+Summary: An immutable dictionary
+Home-page: https://github.com/slezica/python-frozendict
+Author: Santiago Lezica
+Author-email: slezica89@gmail.com
+License: MIT License
+Platform: UNKNOWN
+
+==========
+frozendict
+==========
+
+``frozendict`` is an immutable wrapper around dictionaries that implements the
+complete mapping interface. It can be used as a drop-in replacement for
+dictionaries where immutability is desired.
+
+Of course, this is ``python``, and you can still poke around the object's
+internals if you want.
+
+The ``frozendict`` constructor mimics ``dict``, and all of the expected
+interfaces (``iter``, ``len``, ``repr``, ``hash``, ``getitem``) are provided.
+Note that a ``frozendict`` does not guarantee the immutability of its values, so
+the utility of ``hash`` method is restricted by usage.
+
+The only difference is that the ``copy()`` method of ``frozendict`` takes
+variable keyword arguments, which will be present as key/value pairs in the new,
+immutable copy.
+
+Example shell usage:
+
+.. code-block:: python
+
+    from frozendict import frozendict
+
+    fd = frozendict({ 'hello': 'World' })
+
+    print fd
+    # <frozendict {'hello': 'World'}>
+
+    print fd['hello']
+    # 'World'
+
+    print fd.copy(another='key/value')
+    # <frozendict {'hello': 'World', 'another': 'key/value'}>
+
+

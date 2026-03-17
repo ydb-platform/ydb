@@ -1,0 +1,392 @@
+# vim: set syntax=annrulebook:
+# В этом файле определяется порядок команд, в котором их следует подавать на устройство.
+# - Если порядок команды не важен - ее можно не писать сюда совсем.
+# - Если команда начинается с undo и прописан параметр %order_reverse - команда считается
+#   обратной, но занимает место между прямыми там, где указано (т.е. undo vlan batch
+#   будет стоять после блоков interface).
+
+sysname
+
+m-lag
+
+# переключаем режим BFD с софта на аппаратный
+undo hardware-resource firmware-mode *
+hardware-resource firmware-mode *   %order_reverse
+
+#clock
+#info-center
+
+# на vpn-instance OOB/MLAG есть много ссылок отовсюду, так что создадим как можно раньше
+ip vpn-instance */[OoMm][OoLl][BbAa].*/
+
+#ntp
+#dns
+
+#mac-address timer aging
+
+#rsa
+#ecc
+
+# из-за того, что h3c не позволяет иметь в одном prefix-list 2 одинаковых правила,
+# нужно сначала удалить все несовпадающие, а затем заполнить их заново
+# в таком случае нужно расскомментить эту строчку, но она не позволяет снести plist целиком
+# сначала мы добавляем stub-правило в рулсет чтобы оно не позволяло prefix-list'у "пропасть"
+# индекс референсится в логике патчинга префикс-листа h3c.misc.prefix_list
+*/(ip|ipv6)/ prefix-list * index 99999999
+undo */(ip|ipv6)/ prefix-list * index *   %order_reverse
+*/(ip|ipv6)/ prefix-list
+
+# common block для фабрики
+bfd peer-ip
+ip unreachables
+ip ttl-expires
+lldp global 
+vxlan vlan-based
+stp global
+l2vpn enable
+vxlan tunnel mac-learning
+vxlan tunnel arp-learning
+hardware-resource vxlan
+vxlan ip-forwarding
+
+
+line vty
+    ~
+ssh server 
+netconf ssh server
+sftp server
+scp server
+
+# далее если у нас МЛАГ надо это указать vvtep
+evpn m-lag group 10.203.78.1
+
+# дальше идут тенанты vsi
+vsi
+
+ip vpn-instance
+    route-distinguisher
+    address-family evpn
+        ~
+    address-family ipv4
+        ~
+    address-family ipv6
+        ~
+    ~
+
+# это должно идти после vpn-instance
+ntp
+
+#stp mode
+#stp bpdu-protection
+#stp enable
+#stp region-configuration
+
+acl port-pool
+acl ip-pool
+acl ipv6-pool
+acl ~
+    undo rule * description %order_reverse
+    undo rule ~ %order_reverse
+    rule * */deny|permit/
+    rule * description
+
+system tcam
+
+undo system tcam acl template * all %order_reverse
+undo system tcam acl template * %order_reverse
+undo system tcam acl$ %order_reverse
+
+traffic classifier
+traffic behavior
+traffic policy
+qos group
+qos schedule-profile
+port-wred
+
+dhcp
+
+vlan all
+vlan 
+
+hwtacacs-server
+hwtacacs server
+radius-server
+
+local-user ~
+    password hash *  %logic=h3c.aaa.user
+    service-type ~   
+    ~ %global
+
+ssh user
+
+user-interface
+drop-profile
+
+interface */(?i)(M-GigabitEthernet[^.]*)[^.]\d*$/
+FTP client
+ftp client
+sflow
+
+# SR глобально -> MPLS -> IS-IS -> IS-IS и SID на интерфейсах
+segment-routing
+    sr-te policy *
+        candidate-path * *
+            undo segment-list * %order_reverse
+    undo segment-list *  %order_reverse
+
+# Сначала глобально mpls включаем, потом на интерфейсы
+mpls
+    mpls te cspf
+    mpls te cspf preferred-igp
+
+mpls ldp
+mpls ldp remote-peer *
+
+explicit-path
+
+vsi *
+    mtu 
+    vxlan
+    evpn encapsulation vxlan
+        route-distinguisher
+        vpn-target
+
+interface */Vsi\d+/
+interface */Bridge-Aggregation\d+/
+interface */LoopBack\d+/
+
+interface *
+    port link-mode * %order_reverse
+    undo ip address * * sub  %order_reverse
+    undo ip address * *  %order_reverse
+    description
+    port link-mode * %order_reverse
+    ip binding
+    ipv6 enable
+    ipv6 nd ra prefix
+    ipv6
+    ip address * *
+    ip address * * sub
+    dhcpv6
+    isis enable
+    isis
+    undo isis *
+    undo isis enable  %order_reverse
+    mpls
+    mpls ldp
+    mpls ldp transport-address interface
+    mpls rsvp-te
+    mpls rsvp-te bfd
+    port link-type
+    port trunk pvid
+    port trunk permit
+    undo port trunk permit vlan all
+    undo port trunk permit vlan 1 %order_reverse
+    port hybrid
+    undo port hybrid vlan
+    port hybrid tagged
+    port hybrid untagged
+    port hybrid vlan
+    port hybrid pvid
+    voice-vlan */\d+/
+    voice-vlan
+    undo port link-aggregation
+    port link-aggregation
+    mode
+    qos (wfq|drr)
+    qos queue
+    vrrp6 vrid [11|12] virtual-ip FE80*
+    vrrp6 vrid [11|12] virtual-ip
+    vrrp6 vrid [11|12]
+    vrrp vrid [11|12] virtual-ip
+    vrrp vrid [11|12]
+    ~
+    poe
+
+# Нужно чтобы subif'ы портов шли после конфигурации самих портов, иначе свитч ругнется на то что порт l2
+interface */\S+\.\d+/
+
+# Некоторые команды требуют сначала определить конфигурацию на L2 интерфейсах, а потом уже на vlanif
+interface */Vlan-interface\d+/
+
+# Должны быть после interface потому что в нем ссылается traffic-policy
+# И именно в данном порядке
+# policy ссылаются на behavior и classifier, они на acl'и
+undo qos group          %order_reverse
+undo qos schedule-profile	%order_reverse
+undo traffic policy     %order_reverse
+undo traffic behavior   %order_reverse
+undo traffic classifier %order_reverse
+
+# Должен быть после interface потому что в нем ссылается на diffserv domain
+undo diffserv domain * 	%order_reverse
+
+# маршруты идут после интерфейсов
+ip route-static
+ipv6 route-static
+
+route-policy
+
+ospf
+    opaque-capability enable
+    area
+
+bgp
+    router-id
+    graceful-restart
+    timer keepalive
+    # [NOCDEV-1182] у load-balancing есть несколько взаимоисключающих флейверов
+    undo undo maximum load-balancing %order_reverse
+    maximum load-balancing
+    # [NOCDEV-2043] Тут только декларируем пиров и группы
+    # поскольку на них есть ссылки из family блоков
+    group
+    peer * as-number *
+    peer * local-as *
+    peer * group *
+    peer * connect-interface *
+    address-family l2vpn evpn
+        peer * enable
+        peer * ~
+    address-family ipv[46]
+        balance
+        pic
+        additional-paths
+        import-route
+        group
+        peer * as-number *
+        peer * enable
+        peer * ~
+    # [NOCDEV-2043] Остальное в глобальном блоке делаем тут
+    undo peer * description %order_reverse
+    undo peer * * * %order_reverse
+    undo peer * * %order_reverse
+    undo peer * %order_reverse
+    undo group * %order_reverse
+    peer * ~
+
+
+# Вырубаем bfd после bgp, но до vpn
+undo bfd * %order_reverse
+undo bfd %order_reverse
+
+undo ip vpn-instance %order_reverse
+undo route-policy %order_reverse
+undo route-policy */VRF_.*/ %order_reverse
+undo ip community-filter %order_reverse
+undo ip extcommunity-filter %order_reverse
+undo ip as-path-filter %order_reverse
+
+# Вырубаем bfd после bgp
+undo bfd * %order_reverse
+undo bfd %order_reverse
+
+info-center
+
+# Should be after acl definition
+snmp-agent sys-info
+snmp-agent mib-view
+snmp-agent community complexity-check
+snmp-agent community
+snmp-agent target-host
+snmp-agent trap source
+snmp-agent
+#ifindex constant
+
+cpu-defend policy
+cpu-defend-policy
+slot *
+    cpu-defend-policy %order_reverse
+undo cpu-defend policy  %order_reverse
+
+ssh server rsa-key min-length
+rsa peer-public-key
+ssh user
+ssh user * assign
+ssh user * authentication-type
+ssh user * service-type
+
+local-user * password
+local-user * service-type
+local-user * level
+local-user * ftp-directory
+
+stelnet server
+stelnet ipv4 server
+stelnet ipv6 server
+
+telnet server acl
+ssh server acl
+*/(ftp|FTP)/ server acl
+*/(ftp|FTP)/ acl
+telnet ipv6 server acl
+ssh ipv6 server acl
+*/(ftp|FTP)/ ipv6 server acl
+*/(ftp|FTP)/ ipv6 acl
+
+ssh server-source all-interface
+ssh ipv6 server-source all-interface
+telnet server-source all-interface
+telnet ipv6 server-source all-interface
+
+#lldp
+
+#stelnet
+#ssh
+
+#header
+
+#command-privilege
+#user-interface maximum-vty
+#user-interface
+
+domain
+default-domain
+telemetry
+    sensor-group *
+    destination-group *
+    subscription *
+
+diffserv domain *
+    ip-dscp-inbound ~
+
+#Удаляем acl в самом конце
+undo acl                %order_reverse
+
+# Удаляем iface совсем в конце
+# сначала subif
+undo interface */.*[.]\d+/ %order_reverse
+# vlanif
+undo interface */Vlanif\d+/ %order_reverse
+undo interface */Vbdif\d+/ %order_reverse
+
+# удалять eth-trunk можно только после того, как вычистим member interfaces
+undo interface */Eth-Trunk\d+/  %order_reverse
+undo interface             %order_reverse
+
+# interface Tunnel* ссылается на 'explicit-path'
+undo interface */Tunnel.*/ %order_reverse
+undo explicit-path %order_reverse
+
+# drop-profile можно удалять только после удаления референсов на него в интерфейсах
+undo drop-profile %order_reverse
+
+# vlan'ы удаляем после vlanif/subif
+undo vlan %order_reverse
+undo vlan batch %order_reverse
+undo observe-port %order_reverse
+
+#sflow может висеть а subif/eth-trunk
+undo sflow %order_reverse
+
+# Данное стаб-правило должно удаляться в самую посленюю очередь
+# поскольку если префикс-лист должен уходить из конфигурации полностью
+# перед этим должны быть удалены все его референсы в конфиге
+# индекс референсится в логике патчинга префикс-листа h3c.misc.prefix_list
+undo */(ip|ipv6)/ prefix-list * index 99999999  %order_reverse
+
+#remove template only after all references will be cleared
+undo radius-server template %order_reverse
+undo hwtacacs-server template %order_reverse
+
+~

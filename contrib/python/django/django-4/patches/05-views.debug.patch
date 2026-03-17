@@ -1,0 +1,20 @@
+Arcadize Django 2.2 views.debug. BCL-1587
+
+--- contrib/python/django/django-4/django/views/debug.py
++++ contrib/python/django/django-4/django/views/debug.py
+@@ -6,2 +6,3 @@ import functools
+ from pathlib import Path
++import io, pkgutil
+
+@@ -394,1 +395,1 @@ class ExceptionReporter:
+-        with self.html_template_path.open(encoding="utf-8") as fh:
++        with io.StringIO(pkgutil.get_data(__package__, "templates/technical_500.html").decode("utf-8")) as fh:
+@@ -401,1 +402,1 @@ class ExceptionReporter:
+-        with self.text_template_path.open(encoding="utf-8") as fh:
++        with io.StringIO(pkgutil.get_data(__package__, "templates/technical_500.txt").decode("utf-8")) as fh:
+@@ -584,1 +585,1 @@ def technical_404_response(request, exception):
+-    with builtin_template_path("technical_404.html").open(encoding="utf-8") as fh:
++    with io.StringIO(pkgutil.get_data(__package__, "templates/technical_404.html").decode("utf-8")) as fh:
+@@ -605,1 +606,1 @@ def technical_404_response(request, exception):
+-    with builtin_template_path("default_urlconf.html").open(encoding="utf-8") as fh:
++    with io.StringIO(pkgutil.get_data(__package__, "templates/default_urlconf.html").decode("utf-8")) as fh:

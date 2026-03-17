@@ -1,0 +1,42 @@
+{% for decorator in decorators -%}
+{{ decorator }}
+{% endfor -%}
+{%- if base_class %}
+class {{ class_name }}({{ base_class }}{%- for key, value in (base_class_kwargs|default({})).items() -%}
+, {{ key }}={{ value }}
+{%- endfor -%}):
+{%- else %}
+class {{ class_name }}:
+{%- endif %}
+{%- if description %}
+    """
+    {{ description | indent(4) }}
+    """
+{%- endif %}
+{%- if not fields and not description %}
+    pass
+{%- endif %}
+{%- for field in fields -%}
+    {%- if not field.annotated and field.field %}
+    {{ field.name }}: {{ field.type_hint }} = {{ field.field }}
+    {%- else %}
+    {%- if field.annotated and not field.field %}
+    {{ field.name }}: {{ field.annotated }}
+    {%- elif field.annotated and field.field %}
+    {{ field.name }}: {{ field.annotated }} = {{ field.field }}
+    {%- else %}
+    {{ field.name }}: {{ field.type_hint }}
+    {%- endif %}
+    {%- if not field.field and (not field.required or field.data_type.is_optional or field.nullable)
+            %} = {{ field.represented_default }}
+    {%- endif -%}
+    {%- endif %}
+
+
+
+    {%- if field.docstring %}
+    """
+    {{ field.docstring | indent(4) }}
+    """
+    {%- endif %}
+{%- endfor -%}

@@ -1,0 +1,151 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           612e86bacce71a89978258414148be17
+BELONGS ya.make
+    License text:
+        Apache 2.0，请查看 [LICENSE](LICENSE.txt) 获取更多信息。
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README-zh.md [239:239]
+
+KEEP     Apache-2.0           6a0063a5eab5f37aabe1e2f75c555d12
+BELONGS ya.make
+    License text:
+        license: Apache-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CITATION.cff [12:12]
+
+KEEP     Apache-2.0           6daa5d0a3df49b5ad21479adec3c9229
+BELONGS ya.make
+    License text:
+        License: Apache-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        .dist-info/METADATA [8:8]
+
+KEEP     Apache-2.0           834480f1c988c733790b8e87e9fffb06
+BELONGS tests/ya.make
+    License text:
+              "License: Apache-2.0\n",
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        tests/pd_zerocopy.ipynb [36:36]
+
+KEEP     Apache-2.0           8511eee7d15983020bba04845a0b6458
+BELONGS ya.make
+    License text:
+        \## License
+        Apache 2.0, see [LICENSE](LICENSE.txt) for more information.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        .dist-info/METADATA [517:518]
+        README.md [481:482]
+
+KEEP     Apache-2.0           903e92f30c2746fa5357d50df79b1d0a
+BELONGS ya.make
+    License text:
+        Classifier: License :: OSI Approved :: Apache Software License
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        .dist-info/METADATA [18:18]
+
+KEEP     LicenseRef-scancode-unknown-license-reference a1bf8aee2fb4a1b7a116bfd6453028b1
+BELONGS ya.make
+    License text:
+        Apache 2.0, see [LICENSE](LICENSE.txt) for more information.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        .dist-info/METADATA [518:518]
+        README.md [482:482]
+
+KEEP     Apache-2.0           bd5adf08ad2ca505fbdc86d11f8fde9d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 99.81
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [3:203]
+
+KEEP     MIT AND LicenseRef-scancode-unknown-license-reference db967293dce7b621f45fa3aada6a2f26
+BELONGS tests/ya.make
+    License text:
+            :license: MIT, see LICENSE for more details.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        tests/timeout_decorator.py [5:5]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        tests/timeout_decorator.py [5:5]

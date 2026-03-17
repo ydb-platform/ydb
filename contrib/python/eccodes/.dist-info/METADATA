@@ -1,0 +1,530 @@
+Metadata-Version: 2.4
+Name: eccodes
+Version: 2.43.0
+Summary: Python interface to the ecCodes GRIB and BUFR decoder/encoder
+Home-page: https://github.com/ecmwf/eccodes-python
+Author: European Centre for Medium-Range Weather Forecasts (ECMWF)
+Author-email: software.support@ecmwf.int
+License: Apache License Version 2.0
+Keywords: ecCodes GRIB BUFR
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Operating System :: OS Independent
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: attrs
+Requires-Dist: cffi
+Requires-Dist: findlibs
+Requires-Dist: eccodeslib; platform_system != "Windows"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary
+
+.. image:: https://img.shields.io/pypi/v/eccodes.svg
+   :target: https://pypi.python.org/pypi/eccodes/
+
+Python 3 interface to decode and encode GRIB and BUFR files via the
+`ECMWF ecCodes library <https://confluence.ecmwf.int/display/ECC/>`_.
+
+Features:
+
+- reads and writes GRIB 1 and 2 files,
+- reads and writes BUFR 3 and 4 files,
+- supports all modern versions of Python and PyPy3,
+- works on most *Linux* distributions and *MacOS*, the *ecCodes* C-library
+  is the only system dependency,
+- PyPI package can be installed without compiling,
+  at the cost of being twice as slow as the original *ecCodes* module,
+- an optional compile step makes the code as fast as the original module
+  but it needs the recommended (the most up-to-date) version of *ecCodes*.
+
+Limitations:
+
+- Microsoft Windows support is untested.
+
+
+Installation
+============
+
+**From version 2.43.0, the ecCodes Python bindings on PyPi will depend
+on the PyPi package 'eccodeslib' on Linux and MacOS. This package provides
+the binary ecCodes library. On Windows, the ecCodes Python bindings will
+continue to directly provide the ecCodes binary library without a dependency
+on eccodeslib. See below for details.**
+
+Installation from PyPI
+----------------------
+
+The package can be installed from PyPI with::
+
+    $ pip install eccodes
+
+This installation will, by default, include the ecCodes binary library (either
+supplied by the 'eccodes' package on Windows, or via the 'eccodeslib' package
+on Linux and MacOS), meaning that no external ecCodes binary library is
+required.
+
+
+Bypassing the provided binary library
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Linux and MacOS
++++++++++++++++
+
+If you have an external ecCodes binary library that you wish to use, consult the documentation
+of the `findlibs <https://github.com/ecmwf/findlibs>`_ package, which is used by the ecCodes Python bindings to
+locate the binary library. This allows the use of environment variables
+to refine the search algorithm.
+
+
+Windows
++++++++
+
+If you have an external ecCodes binary library that you wish to use, set the
+following environment variable before you import eccodes::
+
+    $ export ECCODES_PYTHON_USE_FINDLIBS=1
+
+If this is set, the ecCodes' Python bindings will use the `findlibs <https://github.com/ecmwf/findlibs>`_ package
+to locate the binary library.
+
+You may also install a version of ecCodes' Python interface that does not
+include a binary library at all, in which case the findlibs mechanism will
+be used as before::
+
+    $ pip install eccodes --no-binary eccodes
+
+See also 'Debugging the library search', below.
+
+
+Installation from conda
+-----------------------
+
+ecCodes' Python bindings can be installed from the `conda-forge <https://conda-forge.org/>`_ channel with::
+
+    $ conda install -c conda-forge python-eccodes
+
+This will install the Python bindings (`python-eccodes`) and also the ecCodes
+binary library (`eccodes`) on which they depend.
+
+
+System dependencies
+-------------------
+
+The Python module depends on the ECMWF *ecCodes* binary library.
+From version 2.37.0, this library is supplied with the Python
+module on both PyPi and conda, as described above. If you wish
+to install and use a separate binary library (see above), it must
+be installed on the system and accessible as a shared library.
+
+On a MacOS with HomeBrew use::
+
+    $ brew install eccodes
+
+Or if you manage binary packages with *Conda* but use Python bindings from elsewhere, use::
+
+    $ conda install -c conda-forge eccodes
+
+As an alternative you may install the official source distribution
+by following the instructions at
+https://confluence.ecmwf.int/display/ECC/ecCodes+installation
+
+You may run a simple selfcheck command to ensure that your system is set
+up correctly::
+
+    $ python -m eccodes selfcheck
+    Found: ecCodes v2.39.0.
+    Your system is ready.
+
+
+Debugging the library search
+----------------------------
+
+In order to gain insights into the search for the binary library, set
+the following environment variable before importing eccodes::
+
+    $ export ECCODES_PYTHON_TRACE_LIB_SEARCH=1
+
+
+Usage
+-----
+
+Refer to the *ecCodes* `documentation pages <https://confluence.ecmwf.int/display/ECC/Documentation>`_
+for usage.
+
+
+Experimental features
+=====================
+
+Fast bindings
+-------------
+
+To test the much faster *CFFI* API level, out-of-line mode you need the
+*ecCodes* header files.
+Then you need to clone the repo in the same folder as your *ecCodes*
+source tree, make a ``pip`` development install and custom compile
+the binary bindings::
+
+    $ git clone https://github.com/ecmwf/eccodes-python
+    $ cd eccodes-python
+    $ pip install -e .
+    $ python builder.py
+
+To revert back to ABI level, in-line mode just remove the compiled bindings::
+
+    $ rm gribapi/_bindings.*
+
+
+Project resources
+=================
+
+============= =========================================================
+Development   https://github.com/ecmwf/eccodes-python
+Download      https://pypi.org/project/eccodes
+============= =========================================================
+
+
+Contributing
+============
+
+The main repository is hosted on GitHub,
+testing, bug reports and contributions are highly welcomed and appreciated:
+
+https://github.com/ecmwf/eccodes-python
+
+Please see the CONTRIBUTING.rst document for the best way to help.
+
+Maintainers:
+
+- `Shahram Najm <https://github.com/shahramn>`_ - `ECMWF <https://ecmwf.int>`_
+- `Eugen Betke <https://github.com/joobog>`_ - `ECMWF <https://ecmwf.int>`_
+
+Contributors:
+
+- `Iain Russell <https://github.com/iainrussell>`_ - `ECMWF <https://ecmwf.int>`_
+- `Alessandro Amici <https://github.com/alexamici>`_ - `B-Open <https://bopen.eu>`_
+
+See also the list of other `contributors <https://github.com/ecmwf/eccodes-python/contributors>`_
+who participated in this project.
+
+.. |copy|   unicode:: U+000A9 .. COPYRIGHT SIGN
+
+License
+=======
+
+|copy| Copyright 2017- ECMWF.
+
+This software is licensed under the terms of the Apache Licence Version 2.0
+which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+
+In applying this licence, ECMWF does not waive the privileges and immunities
+granted to it by virtue of its status as an intergovernmental organisation nor
+does it submit to any jurisdiction.
+
+Changelog for eccodes-python
+============================
+
+2.43.0 (2025-07-24)
+--------------------
+
+- ECC-2106: Use eccodeslib instead of own-built binaries
+
+
+2.42.0 (2025-06-25)
+--------------------
+
+- ECC-2081: Allow memoryview as input to codes_new_from_message
+- ECC-2086: GRIB: getting the bitmap using up all the memory
+- ECC-2072: high-level 'get' function should return default value if key is not implemented
+
+
+2.41.0 (2025-04-10)
+--------------------
+
+- ECC-2034: GRIB encoding: Data quality checks via the API
+- GitHub pull request #124: Add basic BUFR support (high-level interface)
+
+
+2.40.1 (2025-03-17)
+--------------------
+
+- Update version to be the same as the ecCodes library
+
+
+2.40.0 (2025-02-12)
+--------------------
+
+- Update version to be the same as the ecCodes library
+
+
+2.39.2 (2025-01-27)
+--------------------
+
+- GitHub pull request #109: Allow setting of array in highlevel.Message.set
+- Add support for Python version 3.13
+
+
+2.39.1 (2024-12-10)
+--------------------
+
+- Build wheel with thread-safety enabled
+
+2.39.0 (2024-11-25)
+--------------------
+
+- ECC-1972: Support Windows with binary wheel
+- Update to artifact actions v4
+
+2.38.3 (2024-10-17)
+--------------------
+
+- Update version to be the same as the ecCodes library
+
+2.38.1 (2024-09-26)
+--------------------
+
+- ECC-1923: ecCodes binary wheel can affect floating-point computations in Python
+
+
+2.38.0 (2024-09-25)
+--------------------
+
+- ECC-1790: Add codes_get_offset
+- ECC-1899: API function to allow setting debug level
+- Function to query library features
+
+2.37.0 (2024-09-09)
+-------------------
+
+- bundle ecCodes binary library with the PyPi distribution, for Linux and MacOS
+
+
+1.7.1 (2024-06-19)
+--------------------
+
+- `np.Infinity` was removed in the NumPy 2.0 release
+
+1.7.0 (2024-02-26)
+--------------------
+
+- ECC-1761: Add function to extract message offsets and sizes
+- ECC-1742: Add function to clone only the meta-data of a message
+
+1.6.1 (2023-10-02)
+--------------------
+
+- ECC-1693: Update minimum recommended version
+- Fix flake8 warning E721
+
+1.6.0 (2023-07-11)
+--------------------
+
+- ECC-1630: Get API version as an integer
+- ECC-1622: Drop Python version 3.7
+- ECC-1601: GRIB: Support data values array decoded in single-precision
+- ECC-1611: Add function to determine if a BUFR key is a coordinate descriptor
+
+1.5.2 (2023-04-04)
+--------------------
+
+- Add support for Python versions 3.10 and 3.11
+- ECC-1555: 2D numpy array incorrectly handled
+- ECC-1539: Use the 'warnings' library for selfcheck
+- ECC-1538: Add support for CODES_TYPE_BYTES
+- ECC-1524: Check values in High-level Message.set function should retrieve based on value type
+- ECC-1527: Handle floats in high-level Message.set function check values
+
+
+1.5.1 (2023-01-25)
+--------------------
+
+- ECC-1446: Data file era5-levels-members.grib not included in released tar file
+- ECC-1460: Cannot import eccodes on M1 MacBook Pro
+- ECC-1505: High-level Message.set function should allow dictionary and check result
+
+1.5.0 (2022-08-25)
+--------------------
+
+- ECC-1404: Add the grib_get_gaussian_latitudes() function
+- ECC-1405: Add new function: codes_any_new_from_samples
+- ECC-1415: Implement a higher-level Python interface (still experimental)
+- ECC-1429: Remove the file 'eccodes/messages.py'
+- GitHub pull request #62: add pypi badge
+
+1.4.2 (2022-05-20)
+--------------------
+
+- ECC-1389: Drop Python version 3.5 and 3.6
+- ECC-1390: NameError: name 'GribInternalError' is not defined
+- Add test for GRIB bitmap
+
+
+1.4.1 (2022-03-03)
+--------------------
+
+- ECC-1351: Support numpy.int64 in codes_set() and codes_set_long()
+- ECC-1317: Data file tiggelam_cnmc_sfc.grib2 not included in released tar file
+
+
+1.4.0 (2021-12-03)
+--------------------
+
+- ECC-1234: Remove the experimental high-level interface
+- ECC-1282: Add codes_dump()
+
+
+1.3.4 (2021-08-27)
+--------------------
+
+- Update documentation
+
+
+1.3.3 (2021-06-21)
+--------------------
+
+- ECC-1246: UnicodeDecodeError when parsing BUFR file
+
+
+1.3.2 (2021-04-16)
+--------------------
+
+- Restore the experimental high-level interface
+
+
+1.3.1 (2021-04-16)
+--------------------
+
+- Fix the recommended version
+
+
+1.3.0 (2021-04-09)
+--------------------
+
+- ECC-1231: Remove the experimental high-level interface
+- Added the "findlibs" module
+- Fix tests/test_high_level_api.py when MEMFS enabled
+- ECC-1226: Python3 bindings: Typo causes AttributeError when calling codes_index_get_double
+
+
+1.2.0 (2021-03-23)
+--------------------
+
+- Added test for multi-field GRIBs
+- Fix deprecation warning: `np.float` is a deprecated alias for the builtin `float`
+- Experimental feature: grib_nearest_find
+
+
+1.1.0 (2021-01-20)
+--------------------
+
+- ECC-1171: Performance: Python bindings: remove assert statements
+- ECC-1161: Python3 bindings: Do not raise exception on first failed attempt
+- ECC-1176: Python3 bindings: float32 recognised as int instead of float
+- GitHub pull request #41: Remove the apparent support for Python 2
+- GitHub pull request #44: Fix CFFI crash on windows
+- GitHub pull request #42: Add unit testing with GitHub actions (linux, macos and windows)
+
+
+1.0.0 (2020-10-14)
+--------------------
+
+- ECC-1143: CMake: Migration to ecbuild v3.4
+- ECC-1133: C API: Propagate const char* for codes_index_new_from_file and codes_index_select_string
+
+
+0.9.9 (2020-08-04)
+-------------------
+
+- Support for ecmwflibs. An additional way to find ECMWF libraries (if available)
+- ECC-1140: Segfault from invalid pointer reference in grib_set_double_array()
+
+
+0.9.8 (2020-06-26)
+-------------------
+
+- ECC-1110: Removed obsolete function codes_close_file()
+- Provide missing argument to exceptions
+- Fix codes_set_definitions_path() typo
+- Fix grib_get_double_element(). Missing last argument
+- Add more tests to increase coverage
+- GitHub pull request #15: Add .__next__() method to eccodes.CodesFile class
+- ECC-1113: Python3 bindings under Windows: codes_get_long_array returns incorrect values
+- ECC-1108: Python3 bindings under Windows: use of handle causes crash
+- ECC-1121: Segfault when closing GribFile if messages are closed manually
+
+
+0.9.6 (2020-03-10)
+-------------------
+
+- Update Copyright notices
+- Function-argument type checks: Improve error message
+- Fix C function calls for codes_gribex_mode_on/codes_gribex_mode_off
+
+
+0.9.5 (2020-01-15)
+-------------------
+
+- ECC-1029: Function-argument type-checking should be disabled by default.
+            To enable these checks, export ECCODES_PYTHON_ENABLE_TYPE_CHECKS=1
+- ECC-1032: Added codes_samples_path() and codes_definition_path()
+- ECC-1042: Python3 interface writes integer arrays incorrectly
+- ECC-794: Python3 interface: Expose the grib_get_data function
+
+
+0.9.4 (2019-11-27)
+------------------
+
+- Added new function: codes_get_version_info
+- ECC-753: Expose the codes_grib_nearest_find_multiple function in Python
+- ECC-1007: Python3 interface for eccodes cannot write large arrays
+
+
+0.9.3 (2019-10-04)
+------------------
+
+- New exception added: FunctionalityNotEnabledError
+- BUFR decoding: support for multi-element constant arrays (ECC-428)
+
+
+0.9.2 (2019-07-09)
+------------------
+
+- All ecCodes tests now pass
+- Simplify the xx_new_from_file calls
+- Fix for grib_set_string_array
+- Use ECCODES_DIR to locate the library
+- Remove the new-style high-level interface. It is still available in
+  `cfgrib <https://github.com/ecmwf/cfgrib>`_.
+
+0.9.1 (2019-06-06)
+------------------
+
+- ``codes_get_long_array`` and ``codes_get_double_array`` now return a ``np.ndarray``.
+  See: `#3 <https://github.com/ecmwf/eccodes-python/issues/3>`_.
+
+
+0.9.0 (2019-05-07)
+------------------
+
+- Declare the project as **Beta**.
+
+
+0.8.0 (2019-04-08)
+------------------
+
+- First public release.

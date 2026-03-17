@@ -1,0 +1,1694 @@
+====================CC0-1.0====================
+   To the extent possible under law, the author(s) have dedicated all copyright
+   and related and neighboring rights to this software to the public domain
+   worldwide. This software is distributed without any warranty.
+
+   You should have received a copy of the CC0 Public Domain Dedication along with
+   this software. If not, see <https://creativecommons.org/publicdomain/zero/1.0/>.
+
+
+====================CC0-1.0====================
+/* SPDX-License-Identifier: CC0-1.0 */
+
+
+====================COPYRIGHT====================
+   Copyright (C) 2007-2019 Free Software Foundation, Inc.
+   This file is part of the GNU C Library.
+
+
+====================COPYRIGHT====================
+  Copyright © 2008 Alan Jenkins <alan.christopher.jenkins@googlemail.com>
+
+
+====================COPYRIGHT====================
+  Copyright © 2016 Michael Karcher
+
+
+====================COPYRIGHT====================
+ *  Copyright (C) 1999, 2000 Tom Tromey
+ *  Copyright © 2000, 2005 Red Hat, Inc.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1999 Tom Tromey
+ * Copyright (C) 2000 Red Hat, Inc.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2012 Josh Triplett <josh@joshtriplett.org>
+
+
+====================COPYRIGHT====================
+ Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
+ 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ Everyone is permitted to copy and distribute verbatim copies
+
+
+====================COPYRIGHT====================
+ Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+ 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ Everyone is permitted to copy and distribute verbatim copies
+
+
+====================COPYRIGHT====================
+programs whose distribution conditions are different, write to the author
+to ask for permission.  For software which is copyrighted by the Free
+Software Foundation, write to the Free Software Foundation; we sometimes
+make exceptions for this.  Our decision will be guided by the two goals
+of preserving the free status of all derivatives of our free software and
+of promoting the sharing and reuse of software generally.
+
+
+====================File: src/libsystemd/sd-journal/lookup3.c====================
+#include "config.h"
+/* SPDX-License-Identifier: LicenseRef-lookup3-public-domain */
+/* Slightly modified by Lennart Poettering, to avoid name clashes, and
+ * unexport a few functions. */
+
+#include "lookup3.h"
+
+/*
+-------------------------------------------------------------------------------
+lookup3.c, by Bob Jenkins, May 2006, Public Domain.
+
+These are functions for producing 32-bit hashes for hash table lookup.
+hashword(), hashlittle(), hashlittle2(), hashbig(), mix(), and final()
+are externally useful functions.  Routines to test the hash are included
+if SELF_TEST is defined.  You can use this free for any purpose.  It's in
+the public domain.  It has no warranty.
+
+You probably want to use hashlittle().  hashlittle() and hashbig()
+hash byte arrays.  hashlittle() is faster than hashbig() on
+little-endian machines.  Intel and AMD are little-endian machines.
+On second thought, you probably want hashlittle2(), which is identical to
+hashlittle() except it returns two 32-bit hashes for the price of one.
+You could implement hashbig2() if you wanted but I haven't bothered here.
+
+If you want to find a hash of, say, exactly 7 integers, do
+  a = i1;  b = i2;  c = i3;
+  mix(a,b,c);
+  a += i4; b += i5; c += i6;
+  mix(a,b,c);
+  a += i7;
+  final(a,b,c);
+then use c as the hash value.  If you have a variable length array of
+4-byte integers to hash, use hashword().  If you have a byte array (like
+a character string), use hashlittle().  If you have several byte arrays, or
+a mix of things, see the comments above hashlittle().
+
+Why is this so big?  I read 12 bytes at a time into 3 4-byte integers,
+then mix those integers.  This is fast (you can do a lot more thorough
+mixing with 12*3 instructions on 3 integers than you can with 3 instructions
+on 1 byte), but shoehorning those bytes into integers efficiently is messy.
+-------------------------------------------------------------------------------
+*/
+/* #define SELF_TEST 1 */
+
+#include <stdint.h>     /* defines uint32_t etc */
+#include <stdio.h>      /* defines printf for tests */
+#include <sys/param.h>  /* attempt to define endianness */
+#include <time.h>       /* defines time_t for timings in the test */
+#ifdef linux
+# include <endian.h>    /* attempt to define endianness */
+#endif
+
+#if __GNUC__ >= 7
+_Pragma("GCC diagnostic ignored \"-Wimplicit-fallthrough\"")
+#endif
+
+/*
+ * My best guess at if you are big-endian or little-endian.  This may
+ * need adjustment.
+ */
+#if (defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && \
+     __BYTE_ORDER == __LITTLE_ENDIAN) || \
+    (defined(i386) || defined(__i386__) || defined(__i486__) || \
+     defined(__i586__) || defined(__i686__) || defined(vax) || defined(MIPSEL))
+# define HASH_LITTLE_ENDIAN 1
+# define HASH_BIG_ENDIAN 0
+#elif (defined(__BYTE_ORDER) && defined(__BIG_ENDIAN) && \
+       __BYTE_ORDER == __BIG_ENDIAN) || \
+      (defined(sparc) || defined(POWERPC) || defined(mc68000) || defined(sel))
+# define HASH_LITTLE_ENDIAN 0
+# define HASH_BIG_ENDIAN 1
+#else
+# define HASH_LITTLE_ENDIAN 0
+# define HASH_BIG_ENDIAN 0
+#endif
+
+#define hashsize(n) ((uint32_t)1<<(n))
+#define hashmask(n) (hashsize(n)-1)
+#define rot(x,k) (((x)<<(k)) | ((x)>>(32-(k))))
+
+/*
+-------------------------------------------------------------------------------
+mix -- mix 3 32-bit values reversibly.
+
+This is reversible, so any information in (a,b,c) before mix() is
+still in (a,b,c) after mix().
+
+If four pairs of (a,b,c) inputs are run through mix(), or through
+mix() in reverse, there are at least 32 bits of the output that
+are sometimes the same for one pair and different for another pair.
+This was tested for:
+* pairs that differed by one bit, by two bits, in any combination
+  of top bits of (a,b,c), or in any combination of bottom bits of
+  (a,b,c).
+* "differ" is defined as +, -, ^, or ~^.  For + and -, I transformed
+  the output delta to a Gray code (a^(a>>1)) so a string of 1's (as
+  is commonly produced by subtraction) look like a single 1-bit
+  difference.
+* the base values were pseudorandom, all zero but one bit set, or
+  all zero plus a counter that starts at zero.
+
+Some k values for my "a-=c; a^=rot(c,k); c+=b;" arrangement that
+satisfy this are
+    4  6  8 16 19  4
+    9 15  3 18 27 15
+   14  9  3  7 17  3
+Well, "9 15 3 18 27 15" didn't quite get 32 bits diffing
+for "differ" defined as + with a one-bit base and a two-bit delta.  I
+used http://burtleburtle.net/bob/hash/avalanche.html to choose
+the operations, constants, and arrangements of the variables.
+
+This does not achieve avalanche.  There are input bits of (a,b,c)
+that fail to affect some output bits of (a,b,c), especially of a.  The
+most thoroughly mixed value is c, but it doesn't really even achieve
+avalanche in c.
+
+This allows some parallelism.  Read-after-writes are good at doubling
+the number of bits affected, so the goal of mixing pulls in the opposite
+direction as the goal of parallelism.  I did what I could.  Rotates
+seem to cost as much as shifts on every machine I could lay my hands
+on, and rotates are much kinder to the top and bottom bits, so I used
+rotates.
+-------------------------------------------------------------------------------
+*/
+#define mix(a,b,c) \
+{ \
+  a -= c;  a ^= rot(c, 4);  c += b; \
+  b -= a;  b ^= rot(a, 6);  a += c; \
+  c -= b;  c ^= rot(b, 8);  b += a; \
+  a -= c;  a ^= rot(c,16);  c += b; \
+  b -= a;  b ^= rot(a,19);  a += c; \
+  c -= b;  c ^= rot(b, 4);  b += a; \
+}
+
+/*
+-------------------------------------------------------------------------------
+final -- final mixing of 3 32-bit values (a,b,c) into c
+
+Pairs of (a,b,c) values differing in only a few bits will usually
+produce values of c that look totally different.  This was tested for
+* pairs that differed by one bit, by two bits, in any combination
+  of top bits of (a,b,c), or in any combination of bottom bits of
+  (a,b,c).
+* "differ" is defined as +, -, ^, or ~^.  For + and -, I transformed
+  the output delta to a Gray code (a^(a>>1)) so a string of 1's (as
+  is commonly produced by subtraction) look like a single 1-bit
+  difference.
+* the base values were pseudorandom, all zero but one bit set, or
+  all zero plus a counter that starts at zero.
+
+These constants passed:
+ 14 11 25 16 4 14 24
+ 12 14 25 16 4 14 24
+and these came close:
+  4  8 15 26 3 22 24
+ 10  8 15 26 3 22 24
+ 11  8 15 26 3 22 24
+-------------------------------------------------------------------------------
+*/
+#define final(a,b,c) \
+{ \
+  c ^= b; c -= rot(b,14); \
+  a ^= c; a -= rot(c,11); \
+  b ^= a; b -= rot(a,25); \
+  c ^= b; c -= rot(b,16); \
+  a ^= c; a -= rot(c,4);  \
+  b ^= a; b -= rot(a,14); \
+  c ^= b; c -= rot(b,24); \
+}
+
+/*
+--------------------------------------------------------------------
+ This works on all machines.  To be useful, it requires
+ -- that the key be an array of uint32_t's, and
+ -- that the length be the number of uint32_t's in the key
+
+ The function hashword() is identical to hashlittle() on little-endian
+ machines, and identical to hashbig() on big-endian machines,
+ except that the length has to be measured in uint32_ts rather than in
+ bytes.  hashlittle() is more complicated than hashword() only because
+ hashlittle() has to dance around fitting the key bytes into registers.
+--------------------------------------------------------------------
+*/
+uint32_t jenkins_hashword(
+const uint32_t *k,                   /* the key, an array of uint32_t values */
+size_t          length,               /* the length of the key, in uint32_ts */
+uint32_t        initval)         /* the previous hash, or an arbitrary value */
+{
+  uint32_t a,b,c;
+
+  /* Set up the internal state */
+  a = b = c = 0xdeadbeef + (((uint32_t)length)<<2) + initval;
+
+  /*------------------------------------------------- handle most of the key */
+  while (length > 3)
+  {
+    a += k[0];
+    b += k[1];
+    c += k[2];
+    mix(a,b,c);
+    length -= 3;
+    k += 3;
+  }
+
+  /*------------------------------------------- handle the last 3 uint32_t's */
+  switch(length)                     /* all the case statements fall through */
+  {
+  case 3 : c+=k[2];
+  case 2 : b+=k[1];
+  case 1 : a+=k[0];
+    final(a,b,c);
+  case 0:     /* case 0: nothing left to add */
+    break;
+  }
+  /*------------------------------------------------------ report the result */
+  return c;
+}
+
+/*
+--------------------------------------------------------------------
+hashword2() -- same as hashword(), but take two seeds and return two
+32-bit values.  pc and pb must both be nonnull, and *pc and *pb must
+both be initialized with seeds.  If you pass in (*pb)==0, the output
+(*pc) will be the same as the return value from hashword().
+--------------------------------------------------------------------
+*/
+void jenkins_hashword2 (
+const uint32_t *k,                   /* the key, an array of uint32_t values */
+size_t          length,               /* the length of the key, in uint32_ts */
+uint32_t       *pc,                      /* IN: seed OUT: primary hash value */
+uint32_t       *pb)               /* IN: more seed OUT: secondary hash value */
+{
+  uint32_t a,b,c;
+
+  /* Set up the internal state */
+  a = b = c = 0xdeadbeef + ((uint32_t)(length<<2)) + *pc;
+  c += *pb;
+
+  /*------------------------------------------------- handle most of the key */
+  while (length > 3)
+  {
+    a += k[0];
+    b += k[1];
+    c += k[2];
+    mix(a,b,c);
+    length -= 3;
+    k += 3;
+  }
+
+  /*------------------------------------------- handle the last 3 uint32_t's */
+  switch(length)                     /* all the case statements fall through */
+  {
+  case 3 : c+=k[2];
+  case 2 : b+=k[1];
+  case 1 : a+=k[0];
+    final(a,b,c);
+  case 0:     /* case 0: nothing left to add */
+    break;
+  }
+  /*------------------------------------------------------ report the result */
+  *pc=c; *pb=b;
+}
+
+/*
+-------------------------------------------------------------------------------
+hashlittle() -- hash a variable-length key into a 32-bit value
+  k       : the key (the unaligned variable-length array of bytes)
+  length  : the length of the key, counting by bytes
+  initval : can be any 4-byte value
+Returns a 32-bit value.  Every bit of the key affects every bit of
+the return value.  Two keys differing by one or two bits will have
+totally different hash values.
+
+The best hash table sizes are powers of 2.  There is no need to do
+mod a prime (mod is sooo slow!).  If you need less than 32 bits,
+use a bitmask.  For example, if you need only 10 bits, do
+  h = (h & hashmask(10));
+In which case, the hash table should have hashsize(10) elements.
+
+If you are hashing n strings (uint8_t **)k, do it like this:
+  for (i=0, h=0; i<n; ++i) h = hashlittle( k[i], len[i], h);
+
+By Bob Jenkins, 2006.  bob_jenkins@burtleburtle.net.  You may use this
+code any way you wish, private, educational, or commercial.  It's free.
+
+Use for hash table lookup, or anything where one collision in 2^^32 is
+acceptable.  Do NOT use for cryptographic purposes.
+-------------------------------------------------------------------------------
+*/
+
+uint32_t jenkins_hashlittle( const void *key, size_t length, uint32_t initval)
+{
+  uint32_t a,b,c;                                          /* internal state */
+  union { const void *ptr; size_t i; } u;     /* needed for Mac Powerbook G4 */
+
+  /* Set up the internal state */
+  a = b = c = 0xdeadbeef + ((uint32_t)length) + initval;
+
+  u.ptr = key;
+  if (HASH_LITTLE_ENDIAN && ((u.i & 0x3) == 0)) {
+    const uint32_t *k = (const uint32_t *)key;         /* read 32-bit chunks */
+
+    /*------ all but last block: aligned reads and affect 32 bits of (a,b,c) */
+    while (length > 12)
+    {
+      a += k[0];
+      b += k[1];
+      c += k[2];
+      mix(a,b,c);
+      length -= 12;
+      k += 3;
+    }
+
+    /*----------------------------- handle the last (probably partial) block */
+    /*
+     * "k[2]&0xffffff" actually reads beyond the end of the string, but
+     * then masks off the part it's not allowed to read.  Because the
+     * string is aligned, the masked-off tail is in the same word as the
+     * rest of the string.  Every machine with memory protection I've seen
+     * does it on word boundaries, so is OK with this.  But valgrind will
+     * still catch it and complain.  The masking trick does make the hash
+     * noticeably faster for short strings (like English words).
+     */
+#if !VALGRIND && !HAS_FEATURE_ADDRESS_SANITIZER && !HAS_FEATURE_MEMORY_SANITIZER
+
+    switch(length)
+    {
+    case 12: c+=k[2]; b+=k[1]; a+=k[0]; break;
+    case 11: c+=k[2]&0xffffff; b+=k[1]; a+=k[0]; break;
+    case 10: c+=k[2]&0xffff; b+=k[1]; a+=k[0]; break;
+    case 9 : c+=k[2]&0xff; b+=k[1]; a+=k[0]; break;
+    case 8 : b+=k[1]; a+=k[0]; break;
+    case 7 : b+=k[1]&0xffffff; a+=k[0]; break;
+    case 6 : b+=k[1]&0xffff; a+=k[0]; break;
+    case 5 : b+=k[1]&0xff; a+=k[0]; break;
+    case 4 : a+=k[0]; break;
+    case 3 : a+=k[0]&0xffffff; break;
+    case 2 : a+=k[0]&0xffff; break;
+    case 1 : a+=k[0]&0xff; break;
+    case 0 : return c;              /* zero length strings require no mixing */
+    }
+
+#else /* make valgrind happy */
+    {
+      const uint8_t *k8 = (const uint8_t *) k;
+
+      switch(length)
+      {
+      case 12: c+=k[2]; b+=k[1]; a+=k[0]; break;
+      case 11: c+=((uint32_t)k8[10])<<16;  /* fall through */
+      case 10: c+=((uint32_t)k8[9])<<8;    /* fall through */
+      case 9 : c+=k8[8];                   /* fall through */
+      case 8 : b+=k[1]; a+=k[0]; break;
+      case 7 : b+=((uint32_t)k8[6])<<16;   /* fall through */
+      case 6 : b+=((uint32_t)k8[5])<<8;    /* fall through */
+      case 5 : b+=k8[4];                   /* fall through */
+      case 4 : a+=k[0]; break;
+      case 3 : a+=((uint32_t)k8[2])<<16;   /* fall through */
+      case 2 : a+=((uint32_t)k8[1])<<8;    /* fall through */
+      case 1 : a+=k8[0]; break;
+      case 0 : return c;
+      }
+    }
+
+#endif /* !valgrind */
+
+  } else if (HASH_LITTLE_ENDIAN && ((u.i & 0x1) == 0)) {
+    const uint16_t *k = (const uint16_t *)key;         /* read 16-bit chunks */
+    const uint8_t  *k8;
+
+    /*--------------- all but last block: aligned reads and different mixing */
+    while (length > 12)
+    {
+      a += k[0] + (((uint32_t)k[1])<<16);
+      b += k[2] + (((uint32_t)k[3])<<16);
+      c += k[4] + (((uint32_t)k[5])<<16);
+      mix(a,b,c);
+      length -= 12;
+      k += 6;
+    }
+
+    /*----------------------------- handle the last (probably partial) block */
+    k8 = (const uint8_t *)k;
+    switch(length)
+    {
+    case 12: c+=k[4]+(((uint32_t)k[5])<<16);
+             b+=k[2]+(((uint32_t)k[3])<<16);
+             a+=k[0]+(((uint32_t)k[1])<<16);
+             break;
+    case 11: c+=((uint32_t)k8[10])<<16;     /* fall through */
+    case 10: c+=k[4];
+             b+=k[2]+(((uint32_t)k[3])<<16);
+             a+=k[0]+(((uint32_t)k[1])<<16);
+             break;
+    case 9 : c+=k8[8];                      /* fall through */
+    case 8 : b+=k[2]+(((uint32_t)k[3])<<16);
+             a+=k[0]+(((uint32_t)k[1])<<16);
+             break;
+    case 7 : b+=((uint32_t)k8[6])<<16;      /* fall through */
+    case 6 : b+=k[2];
+             a+=k[0]+(((uint32_t)k[1])<<16);
+             break;
+    case 5 : b+=k8[4];                      /* fall through */
+    case 4 : a+=k[0]+(((uint32_t)k[1])<<16);
+             break;
+    case 3 : a+=((uint32_t)k8[2])<<16;      /* fall through */
+    case 2 : a+=k[0];
+             break;
+    case 1 : a+=k8[0];
+             break;
+    case 0 : return c;                     /* zero length requires no mixing */
+    }
+
+  } else {                        /* need to read the key one byte at a time */
+    const uint8_t *k = (const uint8_t *)key;
+
+    /*--------------- all but the last block: affect some 32 bits of (a,b,c) */
+    while (length > 12)
+    {
+      a += k[0];
+      a += ((uint32_t)k[1])<<8;
+      a += ((uint32_t)k[2])<<16;
+      a += ((uint32_t)k[3])<<24;
+      b += k[4];
+      b += ((uint32_t)k[5])<<8;
+      b += ((uint32_t)k[6])<<16;
+      b += ((uint32_t)k[7])<<24;
+      c += k[8];
+      c += ((uint32_t)k[9])<<8;
+      c += ((uint32_t)k[10])<<16;
+      c += ((uint32_t)k[11])<<24;
+      mix(a,b,c);
+      length -= 12;
+      k += 12;
+    }
+
+    /*-------------------------------- last block: affect all 32 bits of (c) */
+    switch(length)                   /* all the case statements fall through */
+    {
+    case 12: c+=((uint32_t)k[11])<<24;
+    case 11: c+=((uint32_t)k[10])<<16;
+    case 10: c+=((uint32_t)k[9])<<8;
+    case 9 : c+=k[8];
+    case 8 : b+=((uint32_t)k[7])<<24;
+    case 7 : b+=((uint32_t)k[6])<<16;
+    case 6 : b+=((uint32_t)k[5])<<8;
+    case 5 : b+=k[4];
+    case 4 : a+=((uint32_t)k[3])<<24;
+    case 3 : a+=((uint32_t)k[2])<<16;
+    case 2 : a+=((uint32_t)k[1])<<8;
+    case 1 : a+=k[0];
+             break;
+    case 0 : return c;
+    }
+  }
+
+  final(a,b,c);
+  return c;
+}
+
+/*
+ * hashlittle2: return 2 32-bit hash values
+ *
+ * This is identical to hashlittle(), except it returns two 32-bit hash
+ * values instead of just one.  This is good enough for hash table
+ * lookup with 2^^64 buckets, or if you want a second hash if you're not
+ * happy with the first, or if you want a probably-unique 64-bit ID for
+ * the key.  *pc is better mixed than *pb, so use *pc first.  If you want
+ * a 64-bit value do something like "*pc + (((uint64_t)*pb)<<32)".
+ */
+void jenkins_hashlittle2(
+  const void *key,       /* the key to hash */
+  size_t      length,    /* length of the key */
+  uint32_t   *pc,        /* IN: primary initval, OUT: primary hash */
+  uint32_t   *pb)        /* IN: secondary initval, OUT: secondary hash */
+{
+  uint32_t a,b,c;                                          /* internal state */
+  union { const void *ptr; size_t i; } u;     /* needed for Mac Powerbook G4 */
+
+  /* Set up the internal state */
+  a = b = c = 0xdeadbeef + ((uint32_t)length) + *pc;
+  c += *pb;
+
+  u.ptr = key;
+  if (HASH_LITTLE_ENDIAN && ((u.i & 0x3) == 0)) {
+    const uint32_t *k = (const uint32_t *)key;         /* read 32-bit chunks */
+
+    /*------ all but last block: aligned reads and affect 32 bits of (a,b,c) */
+    while (length > 12)
+    {
+      a += k[0];
+      b += k[1];
+      c += k[2];
+      mix(a,b,c);
+      length -= 12;
+      k += 3;
+    }
+
+    /*----------------------------- handle the last (probably partial) block */
+    /*
+     * "k[2]&0xffffff" actually reads beyond the end of the string, but
+     * then masks off the part it's not allowed to read.  Because the
+     * string is aligned, the masked-off tail is in the same word as the
+     * rest of the string.  Every machine with memory protection I've seen
+     * does it on word boundaries, so is OK with this.  But valgrind will
+     * still catch it and complain.  The masking trick does make the hash
+     * noticeably faster for short strings (like English words).
+     */
+#if !VALGRIND && !HAS_FEATURE_ADDRESS_SANITIZER && !HAS_FEATURE_MEMORY_SANITIZER
+
+    switch(length)
+    {
+    case 12: c+=k[2]; b+=k[1]; a+=k[0]; break;
+    case 11: c+=k[2]&0xffffff; b+=k[1]; a+=k[0]; break;
+    case 10: c+=k[2]&0xffff; b+=k[1]; a+=k[0]; break;
+    case 9 : c+=k[2]&0xff; b+=k[1]; a+=k[0]; break;
+    case 8 : b+=k[1]; a+=k[0]; break;
+    case 7 : b+=k[1]&0xffffff; a+=k[0]; break;
+    case 6 : b+=k[1]&0xffff; a+=k[0]; break;
+    case 5 : b+=k[1]&0xff; a+=k[0]; break;
+    case 4 : a+=k[0]; break;
+    case 3 : a+=k[0]&0xffffff; break;
+    case 2 : a+=k[0]&0xffff; break;
+    case 1 : a+=k[0]&0xff; break;
+    case 0 : *pc=c; *pb=b; return;  /* zero length strings require no mixing */
+    }
+
+#else /* make valgrind happy */
+
+    {
+      const uint8_t *k8 = (const uint8_t *)k;
+      switch(length)
+      {
+      case 12: c+=k[2]; b+=k[1]; a+=k[0]; break;
+      case 11: c+=((uint32_t)k8[10])<<16;  /* fall through */
+      case 10: c+=((uint32_t)k8[9])<<8;    /* fall through */
+      case 9 : c+=k8[8];                   /* fall through */
+      case 8 : b+=k[1]; a+=k[0]; break;
+      case 7 : b+=((uint32_t)k8[6])<<16;   /* fall through */
+      case 6 : b+=((uint32_t)k8[5])<<8;    /* fall through */
+      case 5 : b+=k8[4];                   /* fall through */
+      case 4 : a+=k[0]; break;
+      case 3 : a+=((uint32_t)k8[2])<<16;   /* fall through */
+      case 2 : a+=((uint32_t)k8[1])<<8;    /* fall through */
+      case 1 : a+=k8[0]; break;
+      case 0 : *pc=c; *pb=b; return;  /* zero length strings require no mixing */
+      }
+    }
+
+#endif /* !valgrind */
+
+  } else if (HASH_LITTLE_ENDIAN && ((u.i & 0x1) == 0)) {
+    const uint16_t *k = (const uint16_t *)key;         /* read 16-bit chunks */
+    const uint8_t  *k8;
+
+    /*--------------- all but last block: aligned reads and different mixing */
+    while (length > 12)
+    {
+      a += k[0] + (((uint32_t)k[1])<<16);
+      b += k[2] + (((uint32_t)k[3])<<16);
+      c += k[4] + (((uint32_t)k[5])<<16);
+      mix(a,b,c);
+      length -= 12;
+      k += 6;
+    }
+
+    /*----------------------------- handle the last (probably partial) block */
+    k8 = (const uint8_t *)k;
+    switch(length)
+    {
+    case 12: c+=k[4]+(((uint32_t)k[5])<<16);
+             b+=k[2]+(((uint32_t)k[3])<<16);
+             a+=k[0]+(((uint32_t)k[1])<<16);
+             break;
+    case 11: c+=((uint32_t)k8[10])<<16;     /* fall through */
+    case 10: c+=k[4];
+             b+=k[2]+(((uint32_t)k[3])<<16);
+             a+=k[0]+(((uint32_t)k[1])<<16);
+             break;
+    case 9 : c+=k8[8];                      /* fall through */
+    case 8 : b+=k[2]+(((uint32_t)k[3])<<16);
+             a+=k[0]+(((uint32_t)k[1])<<16);
+             break;
+    case 7 : b+=((uint32_t)k8[6])<<16;      /* fall through */
+    case 6 : b+=k[2];
+             a+=k[0]+(((uint32_t)k[1])<<16);
+             break;
+    case 5 : b+=k8[4];                      /* fall through */
+    case 4 : a+=k[0]+(((uint32_t)k[1])<<16);
+             break;
+    case 3 : a+=((uint32_t)k8[2])<<16;      /* fall through */
+    case 2 : a+=k[0];
+             break;
+    case 1 : a+=k8[0];
+             break;
+    case 0 : *pc=c; *pb=b; return;  /* zero length strings require no mixing */
+    }
+
+  } else {                        /* need to read the key one byte at a time */
+    const uint8_t *k = (const uint8_t *)key;
+
+    /*--------------- all but the last block: affect some 32 bits of (a,b,c) */
+    while (length > 12)
+    {
+      a += k[0];
+      a += ((uint32_t)k[1])<<8;
+      a += ((uint32_t)k[2])<<16;
+      a += ((uint32_t)k[3])<<24;
+      b += k[4];
+      b += ((uint32_t)k[5])<<8;
+      b += ((uint32_t)k[6])<<16;
+      b += ((uint32_t)k[7])<<24;
+      c += k[8];
+      c += ((uint32_t)k[9])<<8;
+      c += ((uint32_t)k[10])<<16;
+      c += ((uint32_t)k[11])<<24;
+      mix(a,b,c);
+      length -= 12;
+      k += 12;
+    }
+
+    /*-------------------------------- last block: affect all 32 bits of (c) */
+    switch(length)                   /* all the case statements fall through */
+    {
+    case 12: c+=((uint32_t)k[11])<<24;
+    case 11: c+=((uint32_t)k[10])<<16;
+    case 10: c+=((uint32_t)k[9])<<8;
+    case 9 : c+=k[8];
+    case 8 : b+=((uint32_t)k[7])<<24;
+    case 7 : b+=((uint32_t)k[6])<<16;
+    case 6 : b+=((uint32_t)k[5])<<8;
+    case 5 : b+=k[4];
+    case 4 : a+=((uint32_t)k[3])<<24;
+    case 3 : a+=((uint32_t)k[2])<<16;
+    case 2 : a+=((uint32_t)k[1])<<8;
+    case 1 : a+=k[0];
+             break;
+    case 0 : *pc=c; *pb=b; return;  /* zero length strings require no mixing */
+    }
+  }
+
+  final(a,b,c);
+  *pc=c; *pb=b;
+}
+
+/*
+ * hashbig():
+ * This is the same as hashword() on big-endian machines.  It is different
+ * from hashlittle() on all machines.  hashbig() takes advantage of
+ * big-endian byte ordering.
+ */
+uint32_t jenkins_hashbig( const void *key, size_t length, uint32_t initval)
+{
+  uint32_t a,b,c;
+  union { const void *ptr; size_t i; } u; /* to cast key to (size_t) happily */
+
+  /* Set up the internal state */
+  a = b = c = 0xdeadbeef + ((uint32_t)length) + initval;
+
+  u.ptr = key;
+  if (HASH_BIG_ENDIAN && ((u.i & 0x3) == 0)) {
+    const uint32_t *k = (const uint32_t *)key;         /* read 32-bit chunks */
+
+    /*------ all but last block: aligned reads and affect 32 bits of (a,b,c) */
+    while (length > 12)
+    {
+      a += k[0];
+      b += k[1];
+      c += k[2];
+      mix(a,b,c);
+      length -= 12;
+      k += 3;
+    }
+
+    /*----------------------------- handle the last (probably partial) block */
+    /*
+     * "k[2]<<8" actually reads beyond the end of the string, but
+     * then shifts out the part it's not allowed to read.  Because the
+     * string is aligned, the illegal read is in the same word as the
+     * rest of the string.  Every machine with memory protection I've seen
+     * does it on word boundaries, so is OK with this.  But valgrind will
+     * still catch it and complain.  The masking trick does make the hash
+     * noticeably faster for short strings (like English words).
+     */
+#if !VALGRIND && !HAS_FEATURE_ADDRESS_SANITIZER && !HAS_FEATURE_MEMORY_SANITIZER
+
+    switch(length)
+    {
+    case 12: c+=k[2]; b+=k[1]; a+=k[0]; break;
+    case 11: c+=k[2]&0xffffff00; b+=k[1]; a+=k[0]; break;
+    case 10: c+=k[2]&0xffff0000; b+=k[1]; a+=k[0]; break;
+    case 9 : c+=k[2]&0xff000000; b+=k[1]; a+=k[0]; break;
+    case 8 : b+=k[1]; a+=k[0]; break;
+    case 7 : b+=k[1]&0xffffff00; a+=k[0]; break;
+    case 6 : b+=k[1]&0xffff0000; a+=k[0]; break;
+    case 5 : b+=k[1]&0xff000000; a+=k[0]; break;
+    case 4 : a+=k[0]; break;
+    case 3 : a+=k[0]&0xffffff00; break;
+    case 2 : a+=k[0]&0xffff0000; break;
+    case 1 : a+=k[0]&0xff000000; break;
+    case 0 : return c;              /* zero length strings require no mixing */
+    }
+
+#else  /* make valgrind happy */
+
+    {
+      const uint8_t *k8 = (const uint8_t *)k;
+      switch(length)                   /* all the case statements fall through */
+      {
+      case 12: c+=k[2]; b+=k[1]; a+=k[0]; break;
+      case 11: c+=((uint32_t)k8[10])<<8;  /* fall through */
+      case 10: c+=((uint32_t)k8[9])<<16;  /* fall through */
+      case 9 : c+=((uint32_t)k8[8])<<24;  /* fall through */
+      case 8 : b+=k[1]; a+=k[0]; break;
+      case 7 : b+=((uint32_t)k8[6])<<8;   /* fall through */
+      case 6 : b+=((uint32_t)k8[5])<<16;  /* fall through */
+      case 5 : b+=((uint32_t)k8[4])<<24;  /* fall through */
+      case 4 : a+=k[0]; break;
+      case 3 : a+=((uint32_t)k8[2])<<8;   /* fall through */
+      case 2 : a+=((uint32_t)k8[1])<<16;  /* fall through */
+      case 1 : a+=((uint32_t)k8[0])<<24; break;
+      case 0 : return c;
+      }
+    }
+
+#endif /* !VALGRIND */
+
+  } else {                        /* need to read the key one byte at a time */
+    const uint8_t *k = (const uint8_t *)key;
+
+    /*--------------- all but the last block: affect some 32 bits of (a,b,c) */
+    while (length > 12)
+    {
+      a += ((uint32_t)k[0])<<24;
+      a += ((uint32_t)k[1])<<16;
+      a += ((uint32_t)k[2])<<8;
+      a += ((uint32_t)k[3]);
+      b += ((uint32_t)k[4])<<24;
+      b += ((uint32_t)k[5])<<16;
+      b += ((uint32_t)k[6])<<8;
+      b += ((uint32_t)k[7]);
+      c += ((uint32_t)k[8])<<24;
+      c += ((uint32_t)k[9])<<16;
+      c += ((uint32_t)k[10])<<8;
+      c += ((uint32_t)k[11]);
+      mix(a,b,c);
+      length -= 12;
+      k += 12;
+    }
+
+    /*-------------------------------- last block: affect all 32 bits of (c) */
+    switch(length)                   /* all the case statements fall through */
+    {
+    case 12: c+=k[11];
+    case 11: c+=((uint32_t)k[10])<<8;
+    case 10: c+=((uint32_t)k[9])<<16;
+    case 9 : c+=((uint32_t)k[8])<<24;
+    case 8 : b+=k[7];
+    case 7 : b+=((uint32_t)k[6])<<8;
+    case 6 : b+=((uint32_t)k[5])<<16;
+    case 5 : b+=((uint32_t)k[4])<<24;
+    case 4 : a+=k[3];
+    case 3 : a+=((uint32_t)k[2])<<8;
+    case 2 : a+=((uint32_t)k[1])<<16;
+    case 1 : a+=((uint32_t)k[0])<<24;
+             break;
+    case 0 : return c;
+    }
+  }
+
+  final(a,b,c);
+  return c;
+}
+
+#ifdef SELF_TEST
+
+/* used for timings */
+void driver1()
+{
+  uint8_t buf[256];
+  uint32_t i;
+  uint32_t h=0;
+  time_t a,z;
+
+  time(&a);
+  for (i=0; i<256; ++i) buf[i] = 'x';
+  for (i=0; i<1; ++i)
+  {
+    h = hashlittle(&buf[0],1,h);
+  }
+  time(&z);
+  if (z-a > 0) printf("time %d %.8x\n", z-a, h);
+}
+
+/* check that every input bit changes every output bit half the time */
+#define HASHSTATE 1
+#define HASHLEN   1
+#define MAXPAIR 60
+#define MAXLEN  70
+void driver2()
+{
+  uint8_t qa[MAXLEN+1], qb[MAXLEN+2], *a = &qa[0], *b = &qb[1];
+  uint32_t c[HASHSTATE], d[HASHSTATE], i=0, j=0, k, l, m=0, z;
+  uint32_t e[HASHSTATE],f[HASHSTATE],g[HASHSTATE],h[HASHSTATE];
+  uint32_t x[HASHSTATE],y[HASHSTATE];
+  uint32_t hlen;
+
+  printf("No more than %d trials should ever be needed \n",MAXPAIR/2);
+  for (hlen=0; hlen < MAXLEN; ++hlen)
+  {
+    z=0;
+    for (i=0; i<hlen; ++i)  /*----------------------- for each input byte, */
+    {
+      for (j=0; j<8; ++j)   /*------------------------ for each input bit, */
+      {
+        for (m=1; m<8; ++m) /*------------- for several possible initvals, */
+        {
+          for (l=0; l<HASHSTATE; ++l)
+            e[l]=f[l]=g[l]=h[l]=x[l]=y[l]=~((uint32_t)0);
+
+          /*---- check that every output bit is affected by that input bit */
+          for (k=0; k<MAXPAIR; k+=2)
+          {
+            uint32_t finished=1;
+            /* keys have one bit different */
+            for (l=0; l<hlen+1; ++l) {a[l] = b[l] = (uint8_t)0;}
+            /* have a and b be two keys differing in only one bit */
+            a[i] ^= (k<<j);
+            a[i] ^= (k>>(8-j));
+             c[0] = hashlittle(a, hlen, m);
+            b[i] ^= ((k+1)<<j);
+            b[i] ^= ((k+1)>>(8-j));
+             d[0] = hashlittle(b, hlen, m);
+            /* check every bit is 1, 0, set, and not set at least once */
+            for (l=0; l<HASHSTATE; ++l)
+            {
+              e[l] &= (c[l]^d[l]);
+              f[l] &= ~(c[l]^d[l]);
+              g[l] &= c[l];
+              h[l] &= ~c[l];
+              x[l] &= d[l];
+              y[l] &= ~d[l];
+              if (e[l]|f[l]|g[l]|h[l]|x[l]|y[l]) finished=0;
+            }
+            if (finished) break;
+          }
+          if (k>z) z=k;
+          if (k==MAXPAIR)
+          {
+             printf("Some bit didn't change: ");
+             printf("%.8x %.8x %.8x %.8x %.8x %.8x  ",
+                    e[0],f[0],g[0],h[0],x[0],y[0]);
+             printf("i %d j %d m %d len %d\n", i, j, m, hlen);
+          }
+          if (z==MAXPAIR) goto done;
+        }
+      }
+    }
+   done:
+    if (z < MAXPAIR)
+    {
+      printf("Mix success  %2d bytes  %2d initvals  ",i,m);
+      printf("required  %d  trials\n", z/2);
+    }
+  }
+  printf("\n");
+}
+
+/* Check for reading beyond the end of the buffer and alignment problems */
+void driver3()
+{
+  uint8_t buf[MAXLEN+20], *b;
+  uint32_t len;
+  uint8_t q[] = "This is the time for all good men to come to the aid of their country...";
+  uint32_t h;
+  uint8_t qq[] = "xThis is the time for all good men to come to the aid of their country...";
+  uint32_t i;
+  uint8_t qqq[] = "xxThis is the time for all good men to come to the aid of their country...";
+  uint32_t j;
+  uint8_t qqqq[] = "xxxThis is the time for all good men to come to the aid of their country...";
+  uint32_t ref,x,y;
+  uint8_t *p;
+
+  printf("Endianness.  These lines should all be the same (for values filled in):\n");
+  printf("%.8x                            %.8x                            %.8x\n",
+         hashword((const uint32_t *)q, (sizeof(q)-1)/4, 13),
+         hashword((const uint32_t *)q, (sizeof(q)-5)/4, 13),
+         hashword((const uint32_t *)q, (sizeof(q)-9)/4, 13));
+  p = q;
+  printf("%.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x\n",
+         hashlittle(p, sizeof(q)-1, 13), hashlittle(p, sizeof(q)-2, 13),
+         hashlittle(p, sizeof(q)-3, 13), hashlittle(p, sizeof(q)-4, 13),
+         hashlittle(p, sizeof(q)-5, 13), hashlittle(p, sizeof(q)-6, 13),
+         hashlittle(p, sizeof(q)-7, 13), hashlittle(p, sizeof(q)-8, 13),
+         hashlittle(p, sizeof(q)-9, 13), hashlittle(p, sizeof(q)-10, 13),
+         hashlittle(p, sizeof(q)-11, 13), hashlittle(p, sizeof(q)-12, 13));
+  p = &qq[1];
+  printf("%.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x\n",
+         hashlittle(p, sizeof(q)-1, 13), hashlittle(p, sizeof(q)-2, 13),
+         hashlittle(p, sizeof(q)-3, 13), hashlittle(p, sizeof(q)-4, 13),
+         hashlittle(p, sizeof(q)-5, 13), hashlittle(p, sizeof(q)-6, 13),
+         hashlittle(p, sizeof(q)-7, 13), hashlittle(p, sizeof(q)-8, 13),
+         hashlittle(p, sizeof(q)-9, 13), hashlittle(p, sizeof(q)-10, 13),
+         hashlittle(p, sizeof(q)-11, 13), hashlittle(p, sizeof(q)-12, 13));
+  p = &qqq[2];
+  printf("%.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x\n",
+         hashlittle(p, sizeof(q)-1, 13), hashlittle(p, sizeof(q)-2, 13),
+         hashlittle(p, sizeof(q)-3, 13), hashlittle(p, sizeof(q)-4, 13),
+         hashlittle(p, sizeof(q)-5, 13), hashlittle(p, sizeof(q)-6, 13),
+         hashlittle(p, sizeof(q)-7, 13), hashlittle(p, sizeof(q)-8, 13),
+         hashlittle(p, sizeof(q)-9, 13), hashlittle(p, sizeof(q)-10, 13),
+         hashlittle(p, sizeof(q)-11, 13), hashlittle(p, sizeof(q)-12, 13));
+  p = &qqqq[3];
+  printf("%.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x %.8x\n",
+         hashlittle(p, sizeof(q)-1, 13), hashlittle(p, sizeof(q)-2, 13),
+         hashlittle(p, sizeof(q)-3, 13), hashlittle(p, sizeof(q)-4, 13),
+         hashlittle(p, sizeof(q)-5, 13), hashlittle(p, sizeof(q)-6, 13),
+         hashlittle(p, sizeof(q)-7, 13), hashlittle(p, sizeof(q)-8, 13),
+         hashlittle(p, sizeof(q)-9, 13), hashlittle(p, sizeof(q)-10, 13),
+         hashlittle(p, sizeof(q)-11, 13), hashlittle(p, sizeof(q)-12, 13));
+  printf("\n");
+
+  /* check that hashlittle2 and hashlittle produce the same results */
+  i=47; j=0;
+  hashlittle2(q, sizeof(q), &i, &j);
+  if (hashlittle(q, sizeof(q), 47) != i)
+    printf("hashlittle2 and hashlittle mismatch\n");
+
+  /* check that hashword2 and hashword produce the same results */
+  len = 0xdeadbeef;
+  i=47, j=0;
+  hashword2(&len, 1, &i, &j);
+  if (hashword(&len, 1, 47) != i)
+    printf("hashword2 and hashword mismatch %x %x\n",
+           i, hashword(&len, 1, 47));
+
+  /* check hashlittle doesn't read before or after the ends of the string */
+  for (h=0, b=buf+1; h<8; ++h, ++b)
+  {
+    for (i=0; i<MAXLEN; ++i)
+    {
+      len = i;
+      for (j=0; j<i; ++j) *(b+j)=0;
+
+      /* these should all be equal */
+      ref = hashlittle(b, len, (uint32_t)1);
+      *(b+i)=(uint8_t)~0;
+      *(b-1)=(uint8_t)~0;
+      x = hashlittle(b, len, (uint32_t)1);
+      y = hashlittle(b, len, (uint32_t)1);
+      if ((ref != x) || (ref != y))
+      {
+        printf("alignment error: %.8x %.8x %.8x %d %d\n",ref,x,y,
+               h, i);
+      }
+    }
+  }
+}
+
+/* check for problems with nulls */
+ void driver4()
+{
+  uint8_t buf[1];
+  uint32_t h,i,state[HASHSTATE];
+
+  buf[0] = ~0;
+  for (i=0; i<HASHSTATE; ++i) state[i] = 1;
+  printf("These should all be different\n");
+  for (i=0, h=0; i<8; ++i)
+  {
+    h = hashlittle(buf, 0, h);
+    printf("%2ld  0-byte strings, hash is  %.8x\n", i, h);
+  }
+}
+
+void driver5()
+{
+  uint32_t b,c;
+  b=0, c=0, hashlittle2("", 0, &c, &b);
+  printf("hash is %.8lx %.8lx\n", c, b);   /* deadbeef deadbeef */
+  b=0xdeadbeef, c=0, hashlittle2("", 0, &c, &b);
+  printf("hash is %.8lx %.8lx\n", c, b);   /* bd5b7dde deadbeef */
+  b=0xdeadbeef, c=0xdeadbeef, hashlittle2("", 0, &c, &b);
+  printf("hash is %.8lx %.8lx\n", c, b);   /* 9c093ccd bd5b7dde */
+  b=0, c=0, hashlittle2("Four score and seven years ago", 30, &c, &b);
+  printf("hash is %.8lx %.8lx\n", c, b);   /* 17770551 ce7226e6 */
+  b=1, c=0, hashlittle2("Four score and seven years ago", 30, &c, &b);
+  printf("hash is %.8lx %.8lx\n", c, b);   /* e3607cae bd371de4 */
+  b=0, c=1, hashlittle2("Four score and seven years ago", 30, &c, &b);
+  printf("hash is %.8lx %.8lx\n", c, b);   /* cd628161 6cbea4b3 */
+  c = hashlittle("Four score and seven years ago", 30, 0);
+  printf("hash is %.8lx\n", c);   /* 17770551 */
+  c = hashlittle("Four score and seven years ago", 30, 1);
+  printf("hash is %.8lx\n", c);   /* cd628161 */
+}
+
+int main()
+{
+  driver1();   /* test that the key is hashed: used for timings */
+  driver2();   /* test that whole key is hashed thoroughly */
+  driver3();   /* test that nothing but the key is hashed */
+  driver4();   /* test hashing multiple buffers (all buffers are null) */
+  driver5();   /* test the hash against known vectors */
+  return 1;
+}
+
+#endif  /* SELF_TEST */
+
+
+====================LGPL-2.0-or-later====================
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Library General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Library General Public License for more details.
+ *
+ * You should have received a copy of the GNU Library General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+
+====================LGPL-2.1-only====================
+                  GNU LESSER GENERAL PUBLIC LICENSE
+                       Version 2.1, February 1999
+
+ Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+ 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+[This is the first released version of the Lesser GPL.  It also counts
+ as the successor of the GNU Library Public License, version 2, hence
+ the version number 2.1.]
+
+                            Preamble
+
+  The licenses for most software are designed to take away your
+freedom to share and change it.  By contrast, the GNU General Public
+Licenses are intended to guarantee your freedom to share and change
+free software--to make sure the software is free for all its users.
+
+  This license, the Lesser General Public License, applies to some
+specially designated software packages--typically libraries--of the
+Free Software Foundation and other authors who decide to use it.  You
+can use it too, but we suggest you first think carefully about whether
+this license or the ordinary General Public License is the better
+strategy to use in any particular case, based on the explanations below.
+
+  When we speak of free software, we are referring to freedom of use,
+not price.  Our General Public Licenses are designed to make sure that
+you have the freedom to distribute copies of free software (and charge
+for this service if you wish); that you receive source code or can get
+it if you want it; that you can change the software and use pieces of
+it in new free programs; and that you are informed that you can do
+these things.
+
+  To protect your rights, we need to make restrictions that forbid
+distributors to deny you these rights or to ask you to surrender these
+rights.  These restrictions translate to certain responsibilities for
+you if you distribute copies of the library or if you modify it.
+
+  For example, if you distribute copies of the library, whether gratis
+or for a fee, you must give the recipients all the rights that we gave
+you.  You must make sure that they, too, receive or can get the source
+code.  If you link other code with the library, you must provide
+complete object files to the recipients, so that they can relink them
+with the library after making changes to the library and recompiling
+it.  And you must show them these terms so they know their rights.
+
+  We protect your rights with a two-step method: (1) we copyright the
+library, and (2) we offer you this license, which gives you legal
+permission to copy, distribute and/or modify the library.
+
+  To protect each distributor, we want to make it very clear that
+there is no warranty for the free library.  Also, if the library is
+modified by someone else and passed on, the recipients should know
+that what they have is not the original version, so that the original
+author's reputation will not be affected by problems that might be
+introduced by others.
+
+  Finally, software patents pose a constant threat to the existence of
+any free program.  We wish to make sure that a company cannot
+effectively restrict the users of a free program by obtaining a
+restrictive license from a patent holder.  Therefore, we insist that
+any patent license obtained for a version of the library must be
+consistent with the full freedom of use specified in this license.
+
+  Most GNU software, including some libraries, is covered by the
+ordinary GNU General Public License.  This license, the GNU Lesser
+General Public License, applies to certain designated libraries, and
+is quite different from the ordinary General Public License.  We use
+this license for certain libraries in order to permit linking those
+libraries into non-free programs.
+
+  When a program is linked with a library, whether statically or using
+a shared library, the combination of the two is legally speaking a
+combined work, a derivative of the original library.  The ordinary
+General Public License therefore permits such linking only if the
+entire combination fits its criteria of freedom.  The Lesser General
+Public License permits more lax criteria for linking other code with
+the library.
+
+  We call this license the "Lesser" General Public License because it
+does Less to protect the user's freedom than the ordinary General
+Public License.  It also provides other free software developers Less
+of an advantage over competing non-free programs.  These disadvantages
+are the reason we use the ordinary General Public License for many
+libraries.  However, the Lesser license provides advantages in certain
+special circumstances.
+
+  For example, on rare occasions, there may be a special need to
+encourage the widest possible use of a certain library, so that it becomes
+a de-facto standard.  To achieve this, non-free programs must be
+allowed to use the library.  A more frequent case is that a free
+library does the same job as widely used non-free libraries.  In this
+case, there is little to gain by limiting the free library to free
+software only, so we use the Lesser General Public License.
+
+  In other cases, permission to use a particular library in non-free
+programs enables a greater number of people to use a large body of
+free software.  For example, permission to use the GNU C Library in
+non-free programs enables many more people to use the whole GNU
+operating system, as well as its variant, the GNU/Linux operating
+system.
+
+  Although the Lesser General Public License is Less protective of the
+users' freedom, it does ensure that the user of a program that is
+linked with the Library has the freedom and the wherewithal to run
+that program using a modified version of the Library.
+
+  The precise terms and conditions for copying, distribution and
+modification follow.  Pay close attention to the difference between a
+"work based on the library" and a "work that uses the library".  The
+former contains code derived from the library, whereas the latter must
+be combined with the library in order to run.
+
+                  GNU LESSER GENERAL PUBLIC LICENSE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+  0. This License Agreement applies to any software library or other
+program which contains a notice placed by the copyright holder or
+other authorized party saying it may be distributed under the terms of
+this Lesser General Public License (also called "this License").
+Each licensee is addressed as "you".
+
+  A "library" means a collection of software functions and/or data
+prepared so as to be conveniently linked with application programs
+(which use some of those functions and data) to form executables.
+
+  The "Library", below, refers to any such software library or work
+which has been distributed under these terms.  A "work based on the
+Library" means either the Library or any derivative work under
+copyright law: that is to say, a work containing the Library or a
+portion of it, either verbatim or with modifications and/or translated
+straightforwardly into another language.  (Hereinafter, translation is
+included without limitation in the term "modification".)
+
+  "Source code" for a work means the preferred form of the work for
+making modifications to it.  For a library, complete source code means
+all the source code for all modules it contains, plus any associated
+interface definition files, plus the scripts used to control compilation
+and installation of the library.
+
+  Activities other than copying, distribution and modification are not
+covered by this License; they are outside its scope.  The act of
+running a program using the Library is not restricted, and output from
+such a program is covered only if its contents constitute a work based
+on the Library (independent of the use of the Library in a tool for
+writing it).  Whether that is true depends on what the Library does
+and what the program that uses the Library does.
+
+  1. You may copy and distribute verbatim copies of the Library's
+complete source code as you receive it, in any medium, provided that
+you conspicuously and appropriately publish on each copy an
+appropriate copyright notice and disclaimer of warranty; keep intact
+all the notices that refer to this License and to the absence of any
+warranty; and distribute a copy of this License along with the
+Library.
+
+  You may charge a fee for the physical act of transferring a copy,
+and you may at your option offer warranty protection in exchange for a
+fee.
+
+  2. You may modify your copy or copies of the Library or any portion
+of it, thus forming a work based on the Library, and copy and
+distribute such modifications or work under the terms of Section 1
+above, provided that you also meet all of these conditions:
+
+    a) The modified work must itself be a software library.
+
+    b) You must cause the files modified to carry prominent notices
+    stating that you changed the files and the date of any change.
+
+    c) You must cause the whole of the work to be licensed at no
+    charge to all third parties under the terms of this License.
+
+    d) If a facility in the modified Library refers to a function or a
+    table of data to be supplied by an application program that uses
+    the facility, other than as an argument passed when the facility
+    is invoked, then you must make a good faith effort to ensure that,
+    in the event an application does not supply such function or
+    table, the facility still operates, and performs whatever part of
+    its purpose remains meaningful.
+
+    (For example, a function in a library to compute square roots has
+    a purpose that is entirely well-defined independent of the
+    application.  Therefore, Subsection 2d requires that any
+    application-supplied function or table used by this function must
+    be optional: if the application does not supply it, the square
+    root function must still compute square roots.)
+
+These requirements apply to the modified work as a whole.  If
+identifiable sections of that work are not derived from the Library,
+and can be reasonably considered independent and separate works in
+themselves, then this License, and its terms, do not apply to those
+sections when you distribute them as separate works.  But when you
+distribute the same sections as part of a whole which is a work based
+on the Library, the distribution of the whole must be on the terms of
+this License, whose permissions for other licensees extend to the
+entire whole, and thus to each and every part regardless of who wrote
+it.
+
+Thus, it is not the intent of this section to claim rights or contest
+your rights to work written entirely by you; rather, the intent is to
+exercise the right to control the distribution of derivative or
+collective works based on the Library.
+
+In addition, mere aggregation of another work not based on the Library
+with the Library (or with a work based on the Library) on a volume of
+a storage or distribution medium does not bring the other work under
+the scope of this License.
+
+  3. You may opt to apply the terms of the ordinary GNU General Public
+License instead of this License to a given copy of the Library.  To do
+this, you must alter all the notices that refer to this License, so
+that they refer to the ordinary GNU General Public License, version 2,
+instead of to this License.  (If a newer version than version 2 of the
+ordinary GNU General Public License has appeared, then you can specify
+that version instead if you wish.)  Do not make any other change in
+these notices.
+
+  Once this change is made in a given copy, it is irreversible for
+that copy, so the ordinary GNU General Public License applies to all
+subsequent copies and derivative works made from that copy.
+
+  This option is useful when you wish to copy part of the code of
+the Library into a program that is not a library.
+
+  4. You may copy and distribute the Library (or a portion or
+derivative of it, under Section 2) in object code or executable form
+under the terms of Sections 1 and 2 above provided that you accompany
+it with the complete corresponding machine-readable source code, which
+must be distributed under the terms of Sections 1 and 2 above on a
+medium customarily used for software interchange.
+
+  If distribution of object code is made by offering access to copy
+from a designated place, then offering equivalent access to copy the
+source code from the same place satisfies the requirement to
+distribute the source code, even though third parties are not
+compelled to copy the source along with the object code.
+
+  5. A program that contains no derivative of any portion of the
+Library, but is designed to work with the Library by being compiled or
+linked with it, is called a "work that uses the Library".  Such a
+work, in isolation, is not a derivative work of the Library, and
+therefore falls outside the scope of this License.
+
+  However, linking a "work that uses the Library" with the Library
+creates an executable that is a derivative of the Library (because it
+contains portions of the Library), rather than a "work that uses the
+library".  The executable is therefore covered by this License.
+Section 6 states terms for distribution of such executables.
+
+  When a "work that uses the Library" uses material from a header file
+that is part of the Library, the object code for the work may be a
+derivative work of the Library even though the source code is not.
+Whether this is true is especially significant if the work can be
+linked without the Library, or if the work is itself a library.  The
+threshold for this to be true is not precisely defined by law.
+
+  If such an object file uses only numerical parameters, data
+structure layouts and accessors, and small macros and small inline
+functions (ten lines or less in length), then the use of the object
+file is unrestricted, regardless of whether it is legally a derivative
+work.  (Executables containing this object code plus portions of the
+Library will still fall under Section 6.)
+
+  Otherwise, if the work is a derivative of the Library, you may
+distribute the object code for the work under the terms of Section 6.
+Any executables containing that work also fall under Section 6,
+whether or not they are linked directly with the Library itself.
+
+  6. As an exception to the Sections above, you may also combine or
+link a "work that uses the Library" with the Library to produce a
+work containing portions of the Library, and distribute that work
+under terms of your choice, provided that the terms permit
+modification of the work for the customer's own use and reverse
+engineering for debugging such modifications.
+
+  You must give prominent notice with each copy of the work that the
+Library is used in it and that the Library and its use are covered by
+this License.  You must supply a copy of this License.  If the work
+during execution displays copyright notices, you must include the
+copyright notice for the Library among them, as well as a reference
+directing the user to the copy of this License.  Also, you must do one
+of these things:
+
+    a) Accompany the work with the complete corresponding
+    machine-readable source code for the Library including whatever
+    changes were used in the work (which must be distributed under
+    Sections 1 and 2 above); and, if the work is an executable linked
+    with the Library, with the complete machine-readable "work that
+    uses the Library", as object code and/or source code, so that the
+    user can modify the Library and then relink to produce a modified
+    executable containing the modified Library.  (It is understood
+    that the user who changes the contents of definitions files in the
+    Library will not necessarily be able to recompile the application
+    to use the modified definitions.)
+
+    b) Use a suitable shared library mechanism for linking with the
+    Library.  A suitable mechanism is one that (1) uses at run time a
+    copy of the library already present on the user's computer system,
+    rather than copying library functions into the executable, and (2)
+    will operate properly with a modified version of the library, if
+    the user installs one, as long as the modified version is
+    interface-compatible with the version that the work was made with.
+
+    c) Accompany the work with a written offer, valid for at
+    least three years, to give the same user the materials
+    specified in Subsection 6a, above, for a charge no more
+    than the cost of performing this distribution.
+
+    d) If distribution of the work is made by offering access to copy
+    from a designated place, offer equivalent access to copy the above
+    specified materials from the same place.
+
+    e) Verify that the user has already received a copy of these
+    materials or that you have already sent this user a copy.
+
+  For an executable, the required form of the "work that uses the
+Library" must include any data and utility programs needed for
+reproducing the executable from it.  However, as a special exception,
+the materials to be distributed need not include anything that is
+normally distributed (in either source or binary form) with the major
+components (compiler, kernel, and so on) of the operating system on
+which the executable runs, unless that component itself accompanies
+the executable.
+
+  It may happen that this requirement contradicts the license
+restrictions of other proprietary libraries that do not normally
+accompany the operating system.  Such a contradiction means you cannot
+use both them and the Library together in an executable that you
+distribute.
+
+  7. You may place library facilities that are a work based on the
+Library side-by-side in a single library together with other library
+facilities not covered by this License, and distribute such a combined
+library, provided that the separate distribution of the work based on
+the Library and of the other library facilities is otherwise
+permitted, and provided that you do these two things:
+
+    a) Accompany the combined library with a copy of the same work
+    based on the Library, uncombined with any other library
+    facilities.  This must be distributed under the terms of the
+    Sections above.
+
+    b) Give prominent notice with the combined library of the fact
+    that part of it is a work based on the Library, and explaining
+    where to find the accompanying uncombined form of the same work.
+
+  8. You may not copy, modify, sublicense, link with, or distribute
+the Library except as expressly provided under this License.  Any
+attempt otherwise to copy, modify, sublicense, link with, or
+distribute the Library is void, and will automatically terminate your
+rights under this License.  However, parties who have received copies,
+or rights, from you under this License will not have their licenses
+terminated so long as such parties remain in full compliance.
+
+  9. You are not required to accept this License, since you have not
+signed it.  However, nothing else grants you permission to modify or
+distribute the Library or its derivative works.  These actions are
+prohibited by law if you do not accept this License.  Therefore, by
+modifying or distributing the Library (or any work based on the
+Library), you indicate your acceptance of this License to do so, and
+all its terms and conditions for copying, distributing or modifying
+the Library or works based on it.
+
+  10. Each time you redistribute the Library (or any work based on the
+Library), the recipient automatically receives a license from the
+original licensor to copy, distribute, link with or modify the Library
+subject to these terms and conditions.  You may not impose any further
+restrictions on the recipients' exercise of the rights granted herein.
+You are not responsible for enforcing compliance by third parties with
+this License.
+
+  11. If, as a consequence of a court judgment or allegation of patent
+infringement or for any other reason (not limited to patent issues),
+conditions are imposed on you (whether by court order, agreement or
+otherwise) that contradict the conditions of this License, they do not
+excuse you from the conditions of this License.  If you cannot
+distribute so as to satisfy simultaneously your obligations under this
+License and any other pertinent obligations, then as a consequence you
+may not distribute the Library at all.  For example, if a patent
+license would not permit royalty-free redistribution of the Library by
+all those who receive copies directly or indirectly through you, then
+the only way you could satisfy both it and this License would be to
+refrain entirely from distribution of the Library.
+
+If any portion of this section is held invalid or unenforceable under any
+particular circumstance, the balance of the section is intended to apply,
+and the section as a whole is intended to apply in other circumstances.
+
+It is not the purpose of this section to induce you to infringe any
+patents or other property right claims or to contest validity of any
+such claims; this section has the sole purpose of protecting the
+integrity of the free software distribution system which is
+implemented by public license practices.  Many people have made
+generous contributions to the wide range of software distributed
+through that system in reliance on consistent application of that
+system; it is up to the author/donor to decide if he or she is willing
+to distribute software through any other system and a licensee cannot
+impose that choice.
+
+This section is intended to make thoroughly clear what is believed to
+be a consequence of the rest of this License.
+
+  12. If the distribution and/or use of the Library is restricted in
+certain countries either by patents or by copyrighted interfaces, the
+original copyright holder who places the Library under this License may add
+an explicit geographical distribution limitation excluding those countries,
+so that distribution is permitted only in or among countries not thus
+excluded.  In such case, this License incorporates the limitation as if
+written in the body of this License.
+
+  13. The Free Software Foundation may publish revised and/or new
+versions of the Lesser General Public License from time to time.
+Such new versions will be similar in spirit to the present version,
+but may differ in detail to address new problems or concerns.
+
+Each version is given a distinguishing version number.  If the Library
+specifies a version number of this License which applies to it and
+"any later version", you have the option of following the terms and
+conditions either of that version or of any later version published by
+the Free Software Foundation.  If the Library does not specify a
+license version number, you may choose any version ever published by
+the Free Software Foundation.
+
+  14. If you wish to incorporate parts of the Library into other free
+programs whose distribution conditions are incompatible with these,
+write to the author to ask for permission.  For software which is
+copyrighted by the Free Software Foundation, write to the Free
+Software Foundation; we sometimes make exceptions for this.  Our
+decision will be guided by the two goals of preserving the free status
+of all derivatives of our free software and of promoting the sharing
+and reuse of software generally.
+
+                            NO WARRANTY
+
+  15. BECAUSE THE LIBRARY IS LICENSED FREE OF CHARGE, THERE IS NO
+WARRANTY FOR THE LIBRARY, TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR
+OTHER PARTIES PROVIDE THE LIBRARY "AS IS" WITHOUT WARRANTY OF ANY
+KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+LIBRARY IS WITH YOU.  SHOULD THE LIBRARY PROVE DEFECTIVE, YOU ASSUME
+THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+  16. IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN
+WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY
+AND/OR REDISTRIBUTE THE LIBRARY AS PERMITTED ABOVE, BE LIABLE TO YOU
+FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR
+CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE
+LIBRARY (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING
+RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
+FAILURE OF THE LIBRARY TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
+SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGES.
+
+                     END OF TERMS AND CONDITIONS
+
+           How to Apply These Terms to Your New Libraries
+
+  If you develop a new library, and you want it to be of the greatest
+possible use to the public, we recommend making it free software that
+everyone can redistribute and change.  You can do so by permitting
+redistribution under these terms (or, alternatively, under the terms of the
+ordinary General Public License).
+
+  To apply these terms, attach the following notices to the library.  It is
+safest to attach them to the start of each source file to most effectively
+convey the exclusion of warranty; and each file should have at least the
+"copyright" line and a pointer to where the full notice is found.
+
+    <one line to give the library's name and a brief idea of what it does.>
+    Copyright (C) <year>  <name of author>
+
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
+
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public
+    License along with this library; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+Also add information on how to contact you by electronic and paper mail.
+
+You should also get your employer (if you work as a programmer) or your
+school, if any, to sign a "copyright disclaimer" for the library, if
+necessary.  Here is a sample; alter the names:
+
+  Yoyodyne, Inc., hereby disclaims all copyright interest in the
+  library `Frob' (a library for tweaking knobs) written by James Random Hacker.
+
+  <signature of Ty Coon>, 1 April 1990
+  Ty Coon, President of Vice
+
+That's all there is to it!
+
+====================LGPL-2.1-only====================
+LICENSE:
+        LGPL-2.1-or-later for all code, exceptions noted in LICENSES/README.md
+
+
+====================LGPL-2.1-or-later====================
+        LGPL-2.1-or-later for all code, exceptions noted in LICENSES/README.md
+
+
+====================LGPL-2.1-or-later====================
+   The GNU C Library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 2.1 of the License, or (at your option) any later version.
+
+   The GNU C Library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with the GNU C Library; if not, see
+   <http://www.gnu.org/licenses/>.  */
+
+
+====================LGPL-2.1-or-later====================
+  SPDX-License-Identifier: LGPL-2.1-or-later
+
+
+====================LGPL-2.1-or-later====================
+  systemd is free software; you can redistribute it and/or modify it
+  under the terms of the GNU Lesser General Public License as published by
+  the Free Software Foundation; either version 2.1 of the License, or
+  (at your option) any later version.
+
+
+====================LGPL-2.1-or-later====================
+  systemd is free software; you can redistribute it and/or modify it
+  under the terms of the GNU Lesser General Public License as published by
+  the Free Software Foundation; either version 2.1 of the License, or
+  (at your option) any later version.
+
+  systemd is distributed in the hope that it will be useful, but
+  WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+  Lesser General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License
+  along with systemd; If not, see <http://www.gnu.org/licenses/>.
+
+
+====================LGPL-2.1-or-later====================
+/* SPDX-License-Identifier: LGPL-2.1-or-later
+
+
+====================LGPL-2.1-or-later====================
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
+
+====================MIT====================
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+
+
+====================MIT====================
+/* SPDX-License-Identifier: MIT
+
+
+====================Public-Domain====================
+/* SPDX-License-Identifier: LicenseRef-lookup3-public-domain */
+
+
+====================Public-Domain====================
+/* SPDX-License-Identifier: LicenseRef-murmurhash2-public-domain */
+
+
+====================Public-Domain====================
+// MurmurHash2 was written by Austin Appleby, and is placed in the public
+// domain. The author hereby disclaims copyright to this source code.
+
+
+====================Public-Domain====================
+if SELF_TEST is defined.  You can use this free for any purpose.  It's in
+the public domain.  It has no warranty.
+
+
+====================Public-Domain====================
+lookup3.c, by Bob Jenkins, May 2006, Public Domain.

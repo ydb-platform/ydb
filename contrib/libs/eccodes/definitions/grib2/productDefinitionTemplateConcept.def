@@ -1,0 +1,55 @@
+# Concept for the Product Definition Template
+'base_deterministic_instantaneous'           = {productDefinitionTemplateNumber=0;}
+'base_ensemble_instantaneous'                = {productDefinitionTemplateNumber=1;}
+'base_deterministic_statistically_processed' = {productDefinitionTemplateNumber=8;}
+'base_ensemble_statistically_processed'      = {productDefinitionTemplateNumber=11;}
+
+'chemical_deterministic_instantaneous'           = {productDefinitionTemplateNumber=40;}
+'chemical_ensemble_instantaneous'                = {productDefinitionTemplateNumber=41;}
+'chemical_deterministic_statistically_processed' = {productDefinitionTemplateNumber=42;}
+'chemical_ensemble_statistically_processed'      = {productDefinitionTemplateNumber=43;}
+
+'chemical_srcsink_deterministic_instantaneous'           = {productDefinitionTemplateNumber=76;}
+'chemical_srcsink_ensemble_instantaneous'                = {productDefinitionTemplateNumber=77;}
+'chemical_srcsink_deterministic_statistically_processed' = {productDefinitionTemplateNumber=78;}
+'chemical_srcsink_ensemble_statistically_processed'      = {productDefinitionTemplateNumber=79;}
+
+'aerosol_optical_deterministic_instantaneous' = {productDefinitionTemplateNumber=48;}
+'aerosol_optical_ensemble_instantaneous'      = {productDefinitionTemplateNumber=49;}
+
+'aerosol_deterministic_instantaneous'           = {productDefinitionTemplateNumber=50;}
+'aerosol_deterministic_statistically_processed' = {productDefinitionTemplateNumber=46;}
+'aerosol_ensemble_instantaneous'                = {productDefinitionTemplateNumber=45;}
+'aerosol_ensemble_statistically_processed'      = {productDefinitionTemplateNumber=85;}
+
+'postproc_deterministic_instantaneous'           = {productDefinitionTemplateNumber=70;}
+'postproc_ensemble_instantaneous'                = {productDefinitionTemplateNumber=71;}
+'postproc_deterministic_statistically_processed' = {productDefinitionTemplateNumber=72;}
+'postproc_ensemble_statistically_processed'      = {productDefinitionTemplateNumber=73;}
+
+'quantile_forecast_instantaneous'           = {productDefinitionTemplateNumber=86;}
+'quantile_forecast_statistically_processed' = {productDefinitionTemplateNumber=87;}
+
+'postproc_quantile_forecast_instantaneous'           = {productDefinitionTemplateNumber=89;}
+'postproc_quantile_forecast_statistically_processed' = {productDefinitionTemplateNumber=90;}
+
+'wavespectra_list_deterministic_instantaneous' = {productDefinitionTemplateNumber=99;}
+'wavespectra_list_ensemble_instantaneous'      = {productDefinitionTemplateNumber=100;}
+
+'wavespectra_formulae_deterministic_instantaneous' = {productDefinitionTemplateNumber=101;}
+'wavespectra_formulae_ensemble_instantaneous'      = {productDefinitionTemplateNumber=102;}
+
+'waves_period_range_deterministic_instantaneous' = {productDefinitionTemplateNumber=103;}
+'waves_period_range_ensemble_instantaneous'      = {productDefinitionTemplateNumber=104;}
+
+
+'referencePeriod_relation_deterministic_instantaneous' = {productDefinitionTemplateNumber=105;}
+'referencePeriod_relation_ensemble_instantaneous'      = {productDefinitionTemplateNumber=106;}
+'referencePeriod_relation_derived_instantaneous'       = {productDefinitionTemplateNumber=107;}
+'referencePeriod_relation_probability_instantaneous'   = {productDefinitionTemplateNumber=112;}
+
+'probability_forecast_instantaneous'           = {productDefinitionTemplateNumber=5;}
+'probability_forecast_statistically_processed' = {productDefinitionTemplateNumber=9;}
+
+'categorical_forecast_instantaneous'           = {productDefinitionTemplateNumber=51;}
+'categorical_forecast_statistically_processed' = {productDefinitionTemplateNumber=91;}

@@ -1,0 +1,35 @@
+# GRID DEFINITION spherical harmonic coefficients (including rotated, stretched, or stretched and rotated)
+constant isGridded = false;
+
+# J - pentagonal resolution parameter
+unsigned[2] J : dump ;
+alias pentagonalResolutionParameterJ= J;
+alias geography.J=J;
+
+# K - pentagonal resolution parameter
+unsigned[2] K  : dump;
+alias pentagonalResolutionParameterK=K;
+alias geography.K=K;
+
+# M - pentagonal resolution parameter
+unsigned[2] M : dump ;
+alias pentagonalResolutionParameterM=M;
+alias geography.M=M;
+
+constant _T = -1 : hidden;
+meta numberOfValues spectral_truncation(J,K,M,_T)  : dump;
+alias numberOfPoints=numberOfValues;
+alias numberOfDataPoints=numberOfValues;
+#alias ls.valuesCount=numberOfValues;
+
+# Representation type
+codetable[1] representationType 'grib1/9.table' = 1 : no_copy;
+
+# Representation mode
+codetable[1] representationMode 'grib1/10.table' = 2 : no_copy;
+
+# Set to zero (reserved)
+pad padding_grid50_1(18);
+
+# For now, to make section2 happy
+constant Nj = 0;

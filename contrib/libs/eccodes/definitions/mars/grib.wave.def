@@ -1,0 +1,3 @@
+transient conceptDir = "mars";
+concept waveDomain(unknown,"wave_domain.def",conceptDir,conceptDir) : no_copy,read_only;
+alias mars.domain = waveDomain;

@@ -1,0 +1,13 @@
+#Code Table obstat.2.0: Observation types
+1 Synop Synop
+2 Airep Airep
+3 Satob Satob
+4 Dribu Dribu
+5 Temp Temp
+6 Pilot Pilot
+7 Satem Satem
+8 Paob Paob
+9 Scatterometer Scatterometer
+10 GPSRO Limb
+13 Radar Radar
+#14-255 Reserved

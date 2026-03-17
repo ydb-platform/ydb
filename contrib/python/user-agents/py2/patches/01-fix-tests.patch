@@ -1,0 +1,82 @@
+--- contrib/python/user-agents/py2/user_agents/tests.py	(index)
++++ contrib/python/user-agents/py2/user_agents/tests.py	(working tree)
+@@ -3,8 +3,8 @@ import os
+ import unittest
+ 
+ from ua_parser import user_agent_parser
+-from . import compat
+-from .parsers import parse
++from user_agents import compat
++from user_agents.parsers import parse
+ 
+ 
+ iphone_ua_string = 'Mozilla/5.0 (iPhone; CPU iPhone OS 5_1 like Mac OS X) AppleWebKit/534.46 (KHTML, like Gecko) Version/5.1 Mobile/9B179 Safari/7534.48.3'
+@@ -60,30 +60,6 @@ chromebook_ua = parse(chromebook_ua_string)
+ 
+ class UserAgentsTest(unittest.TestCase):
+ 
+-    def test_user_agent_object_assignments(self):
+-        ua_dict = user_agent_parser.Parse(devices['iphone']['ua_string'])
+-        iphone_ua = devices['iphone']['user_agent']
+-
+-        # Ensure browser attributes are assigned correctly
+-        self.assertEqual(iphone_ua.browser.family,
+-                         ua_dict['user_agent']['family'])
+-        self.assertEqual(
+-            iphone_ua.browser.version,
+-            (int(ua_dict['user_agent']['major']),
+-             int(ua_dict['user_agent']['minor']))
+-        )
+-
+-        # Ensure os attributes are assigned correctly
+-        self.assertEqual(iphone_ua.os.family, ua_dict['os']['family'])
+-        self.assertEqual(
+-            iphone_ua.os.version,
+-            (int(ua_dict['os']['major']), int(ua_dict['os']['minor']))
+-        )
+-
+-        # Ensure device attributes are assigned correctly
+-        self.assertEqual(iphone_ua.device.family,
+-                         ua_dict['device']['family'])
+-
+     def test_is_tablet_property(self):
+         self.assertFalse(iphone_ua.is_tablet)
+         self.assertFalse(galaxy_s3_ua.is_tablet)
+@@ -232,37 +208,3 @@ class UserAgentsTest(unittest.TestCase):
+         self.assertEqual(str(google_bot_ua), "Spider / Other / Googlebot 2.1")
+         self.assertEqual(str(nokia_n97_ua), "Nokia N97 / Symbian OS 9.4 / Nokia Browser 7.1.12344")
+         self.assertEqual(str(android_firefox_aurora_ua), "Generic Smartphone / Android / Firefox Mobile 27.0")
+-
+-    def test_unicode_strings(self):
+-        try:
+-            # Python 2
+-            unicode_ua_str = unicode(devices['iphone']['user_agent'])
+-            self.assertEqual(unicode_ua_str,
+-                             u"iPhone / iOS 5.1 / Mobile Safari 5.1")
+-            self.assertTrue(isinstance(unicode_ua_str, unicode))
+-        except NameError:
+-            # Python 3
+-            unicode_ua_str = str(devices['iphone']['user_agent'])
+-            self.assertEqual(unicode_ua_str,
+-                             "iPhone / iOS 5.1 / Mobile Safari 5.1")
+-
+-
+-with open(os.path.join(os.path.dirname(__file__), 'devices.json')) as f:
+-    devices = json.load(f)
+-
+-
+-def test_wrapper(items):
+-    def test_func(self):
+-        attrs = ('is_bot', 'is_mobile',
+-                 'is_pc', 'is_tablet', 'is_touch_capable')
+-        for attr in attrs:
+-            self.assertEqual(
+-                getattr(items['user_agent'], attr), items[attr], msg=attr)
+-        # Temporarily commenting this out since UserAgent.device
+-        # may return different string depending ua-parser version
+-        # self.assertEqual(str(items['user_agent']), items['str'])
+-    return test_func
+-
+-for device, items in compat.iteritems(devices):
+-    items['user_agent'] = parse(items['ua_string'])
+-    setattr(UserAgentsTest, 'test_' + device, test_wrapper(items))

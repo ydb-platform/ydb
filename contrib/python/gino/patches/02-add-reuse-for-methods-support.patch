@@ -1,0 +1,42 @@
+--- contrib/python/gino/gino/engine.py	(bae6f7a64f358d621cd0d03659adabac2274ce0f)
++++ contrib/python/gino/gino/engine.py	(a2b420573e5f7dea4be1865c9e0da143810dcf7c)
+@@ -737,7 +737,8 @@ class GinoEngine:
+ 
+         """
+         read_only = params.pop('read_only', True)
+-        async with self.acquire(reuse=True, read_only=read_only) as conn:
++        reuse = params.pop('reuse', True)
++        async with self.acquire(reuse=reuse, read_only=read_only) as conn:
+             return await conn.all(clause, *multiparams, **params)
+ 
+     async def first(self, clause, *multiparams, **params):
+@@ -756,7 +757,8 @@ class GinoEngine:
+ 
+         """
+         read_only = params.pop('read_only', True)
+-        async with self.acquire(reuse=True, read_only=read_only) as conn:
++        reuse = params.pop('reuse', True)
++        async with self.acquire(reuse=reuse, read_only=read_only) as conn:
+             return await conn.one_or_none(clause, *multiparams, **params)
+ 
+     async def one(self, clause, *multiparams, **params):
+@@ -765,7 +767,8 @@ class GinoEngine:
+ 
+         """
+         read_only = params.pop('read_only', True)
+-        async with self.acquire(reuse=True, read_only=read_only) as conn:
++        reuse = params.pop('reuse', True)
++        async with self.acquire(reuse=reuse, read_only=read_only) as conn:
+             return await conn.one(clause, *multiparams, **params)
+ 
+     async def scalar(self, clause, *multiparams, **params):
+@@ -774,7 +777,8 @@ class GinoEngine:
+ 
+         """
+         read_only = params.pop('read_only', True)
+-        async with self.acquire(reuse=True, read_only=read_only) as conn:
++        reuse = params.pop('reuse', True)
++        async with self.acquire(reuse=reuse, read_only=read_only) as conn:
+             return await conn.scalar(clause, *multiparams, **params)
+ 
+     async def status(self, clause, *multiparams, **params):

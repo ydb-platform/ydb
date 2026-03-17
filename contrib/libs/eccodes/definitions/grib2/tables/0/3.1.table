@@ -1,0 +1,26 @@
+0 0 Latitude/longitude. Also called equidistant cylindrical, or Plate Carree
+1 1 Rotated latitude/longitude
+2 2 Stretched latitude/longitude
+3 3 Stretched and rotated latitude/longitude
+10 10 Mercator
+20 20 Polar stereographic can be south or north
+30 30 Lambert Conformal can be secant or tangent, conical or bipolar
+31 31 Albers equal-area
+40 40 Gaussian latitude/longitude
+41 41 Rotated Gaussian latitude/longitude
+42 42 Stretched Gaussian latitude/longitude
+43 43 Stretched and rotated Gaussian latitude/longitude
+50 50 Spherical harmonic coefficients
+51 51 Rotated spherical harmonic coefficients
+52 52 Stretched spherical harmonic coefficients
+53 53 Stretched and rotated spherical harmonic coefficients
+90 90 Space view perspective orthographic
+100 100 Triangular grid based on an icosahedron
+110 110 Equatorial azimuthal equidistant projection
+120 120 Azimuth-range projection
+130 130 Irregular latitude/longitude grid
+140 140 Lambert azimuthal equal area projection
+1000 1000 Cross-section grid, with points equally spaced on the horizontal
+1100 1100 Hovmoller diagram grid, with points equally spaced on the horizontal
+1200 1200 Time section grid
+65535 65535 Missing

@@ -1,0 +1,34 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls %}
+{% load url from simple_history_compat %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url "admin:index" %}">{% trans "Home" %}</a> &rsaquo;
+    <a href="{% url "admin:app_list" app_label %}">{{app_label|capfirst|escape}}</a> &rsaquo;
+    <a href="{{changelist_url}}">{{opts.verbose_name_plural|capfirst}}</a> &rsaquo;
+    <a href="{{change_url}}">{{original|truncatewords:"18"}}</a> &rsaquo;
+    <a href="../">{% trans "History" %}</a> &rsaquo;
+    {% if revert_disabled %}{% blocktrans with original_opts.verbose_name as verbose_name %}View {{verbose_name}}{% endblocktrans %}{% else %}{% blocktrans with original_opts.verbose_name as verbose_name %}Revert {{verbose_name}}{% endblocktrans %}{% endif %}
+  </div>
+{% endblock %}
+
+{% block submit_buttons_top %}
+  {% include "simple_history/submit_line.html" %}
+{% endblock %}
+
+{% block submit_buttons_bottom %}
+  {% include "simple_history/submit_line.html" %}
+{% endblock %}
+
+{% block object-tools-items %}
+{# We override this block from the django template to fix up the history link #}
+<li>
+    <a href="{% add_preserved_filters history_url %}" class="historylink">{% translate "History" %}</a>
+</li>
+{% if has_absolute_url %}<li><a href="{{ absolute_url }}" class="viewsitelink">{% translate "View on site" %}</a></li>{% endif %}
+{% endblock %}
+
+{% block form_top %}
+<p>{% if not revert_disabled %}{% blocktrans %}Press the 'Revert' button below to revert to this version of the object.{% endblocktrans %}{% endif %}{% if change_history %}{% blocktrans %}Press the 'Change History' button below to edit the history.{% endblocktrans %}{% endif %}</p>
+{% endblock %}

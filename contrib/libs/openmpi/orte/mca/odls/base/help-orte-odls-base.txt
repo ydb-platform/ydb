@@ -1,0 +1,103 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2007 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2010      Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2014      Research Organization for Information Science
+#                         and Technology (RIST). All rights reserved.
+# Copyright (c) 2017      Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for Open RTE's ODLS Framework
+#
+[orte-odls-base:could-not-kill]
+WARNING: A process refused to die despite all the efforts!
+This process may still be running and/or consuming resources.
+
+Host: %s
+PID:  %d
+
+[orte-odls-base:could-not-preload-binary]
+WARNING: Could not preload the binary file.
+
+Binary: %s
+
+Will continue attempting to launch the process.
+[orte-odls-base:could-not-preload-files]
+WARNING: Could not preload the files specified.
+
+Fileset: %s
+
+Will continue attempting to launch the process.
+[orte-odls-base:could-not-preload]
+WARNING: Could not preload the requested files and directories.
+
+Binary : %s
+Fileset: %s
+
+Will continue attempting to launch the process.
+
+#
+[orte-odls-base:xterm-rank-out-of-bounds]
+The xterm option was asked to display a rank that is larger
+than the number of procs in the job:
+
+Node:      %s
+Rank:      %d
+Num procs: %d
+
+Note that ranks start with 0, not 1, and must be specified
+accordingly.
+#
+[orte-odls-base:xterm-neg-rank]
+The xterm option was asked to display a rank that is negative:
+
+Rank:      %d
+Num procs: %d
+
+Note that ranks start with 0, not 1, and must be specified
+accordingly.
+#
+[orte-odls-base:show-bindings]
+System has detected external process binding to cores %04lx.
+#
+[warn not bound]
+A request to bind the processes to a %s was made, but the operation
+resulted in the processes being unbound. This was most likely caused
+by the following:
+
+  %s
+
+This is only a warning that can be suppressed in the future by
+setting the odls_warn_if_not_bound MCA parameter to 0. Execution
+will continue.
+
+  Local host:        %s
+  Application name:  %s
+  Action requested:  %s %s
+#
+[error not bound]
+A request to bind the processes to a %s was made, but the operation
+resulted in the processes being unbound. This was most likely caused
+by the following:
+
+  %s
+
+This is an error; your job will now abort.
+
+  Local host:        %s
+  Application name:  %s
+  Action requested:  %s %s
+#
+[orte-odls-base:fork-agent-not-found]
+The specified fork agent was not found:
+
+  Node:        %s
+  Fork agent:  %s
+
+The application cannot be launched.

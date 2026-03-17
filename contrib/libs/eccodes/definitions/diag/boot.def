@@ -1,0 +1,14 @@
+## (C) Copyright 2005- ECMWF.
+
+position startOfHeaders;
+ascii[4]      identifier;
+
+alias ls.identifier=identifier;
+transient     missingValue = 9999;
+constant ieeeFloats = 0: edition_specific;
+constant zero=0:hidden;
+
+template      section1 "diag/section.1.def";
+template      section4 "diag/section.4.def";
+ascii[4]      endMark;
+position      totalLength;

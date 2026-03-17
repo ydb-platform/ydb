@@ -1,0 +1,24 @@
+--- contrib/python/graphql-query/graphql_query/templates.py	(index)
++++ contrib/python/graphql-query/graphql_query/templates.py	(working tree)
+@@ -1,7 +1,4 @@
+-import os
+-from pathlib import Path
+-
+-from jinja2 import Environment, FileSystemLoader, Template
++from jinja2 import Environment, Template, PackageLoader
+ 
+ __all__ = [
+     "_template_key_value",
+@@ -19,11 +16,7 @@ __all__ = [
+     "_template_field",
+ ]
+ 
+-
+-# templates setting for render of classes
+-TEMPLATES_FOLDER = Path(os.path.join(os.path.dirname(__file__), "templates/"))
+-
+-template_env = Environment(loader=FileSystemLoader(searchpath=TEMPLATES_FOLDER))
++template_env = Environment(loader=PackageLoader(__name__, 'templates'))
+ 
+ 
+ _template_key_value: Template = template_env.get_template("argument_key_value.jinja2")

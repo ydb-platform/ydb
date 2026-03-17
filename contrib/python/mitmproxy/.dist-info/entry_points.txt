@@ -1,0 +1,8 @@
+[console_scripts]
+mitmdump = mitmproxy.tools.main:mitmdump
+mitmproxy = mitmproxy.tools.main:mitmproxy
+mitmweb = mitmproxy.tools.main:mitmweb
+
+[pyinstaller40]
+hook-dirs = mitmproxy.utils.pyinstaller:hook_dirs
+

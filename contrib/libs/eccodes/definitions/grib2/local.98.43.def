@@ -1,0 +1,34 @@
+# (C) Copyright 2005- ECMWF.
+
+# Local definition 43 - Class ed EERIE project climate keywords
+
+# CMIP related activity keyword
+codetable[2] activity "grib2/destine_activity.table" ;
+alias mars.activity = activity;
+
+# CMIP related experiment keyword
+codetable[2] experiment "grib2/destine_experiment.table" ;
+alias mars.experiment = experiment;
+
+# Generation keyword - synergise with DestinE ClimateDT and use this to version the dataset
+unsigned[1] generation = 255 : dump;
+alias mars.generation = generation;
+
+# Model keyword to index multiple models within EERIE
+codetable[2] model "grib2/destine_model.table" : dump;
+alias mars.model = model;
+
+# Climate run realization keyword, which relates to an initial condition perturbation
+unsigned[1] realization = 255 ;
+alias mars.realization = realization;
+
+# Allows simultaneous archiving of resolutions
+# high resolution for best available vs standard resolution for quick access and plotting
+codetable[2] resolution "grib2/destine_resolution.table" : dump;
+alias mars.resolution = resolution;
+
+# Remove mars domain from this data
+unalias mars.domain;
+
+# Add some padding just in case we want more keys in the future
+pad padding_loc43(30);

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v2;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v2;datasphere";
+option java_package = "yandex.cloud.api.datasphere.v2";
+
+message User {
+  // ID of the user.
+  string id = 1;
+
+  // Name of the user.
+  string name = 2;
+
+  // Email of the user.
+  string email = 3;
+
+  // URL to the user's profile picture.
+  string picture = 4;
+
+  // An image content of the user's profile picture.
+  string picture_data = 5;
+}

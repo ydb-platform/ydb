@@ -1,0 +1,16 @@
+about_resource: version.py
+package_url: pkg:pypi/deb-pkg-tools@8.4
+copyright: |
+    Copyright (C) Peter Odding <peter@peterodding.com>
+
+notes: This has been substantially modified and enhanced from the original 
+ python-deb-pkg-tools code to extract the version comparison code.
+
+license_expression: mit
+homepage_url: https://github.com/xolox/python-deb-pkg-tools
+
+notes: |
+  based on https://raw.githubusercontent.com/xolox/python-deb-pkg-tools/a3d6ef1d82c6342b6a57876fc2360875e033f8f0/deb_pkg_tools/version/native.py
+  and on https://raw.githubusercontent.com/xolox/python-deb-pkg-tools/a3d6ef1d82c6342b6a57876fc2360875e033f8f0/deb_pkg_tools/version/__init__.py
+  merged and simplified in a single module and further modified to work with
+  our class structure.

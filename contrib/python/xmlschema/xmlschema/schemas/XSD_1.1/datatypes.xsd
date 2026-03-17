@@ -1,0 +1,490 @@
+<?xml version='1.0'?>
+<!DOCTYPE xs:schema PUBLIC "-//W3C//DTD XSD 1.1//EN" "XMLSchema.dtd" [
+
+<!--
+        Make sure that processors that do not read the external
+        subset will know about the various IDs we declare
+  -->
+        <!ATTLIST xs:simpleType id ID #IMPLIED>
+        <!ATTLIST xs:maxExclusive id ID #IMPLIED>
+        <!ATTLIST xs:minExclusive id ID #IMPLIED>
+        <!ATTLIST xs:maxInclusive id ID #IMPLIED>
+        <!ATTLIST xs:minInclusive id ID #IMPLIED>
+        <!ATTLIST xs:totalDigits id ID #IMPLIED>
+        <!ATTLIST xs:fractionDigits id ID #IMPLIED>
+        <!ATTLIST xs:length id ID #IMPLIED>
+        <!ATTLIST xs:minLength id ID #IMPLIED>
+        <!ATTLIST xs:maxLength id ID #IMPLIED>
+        <!ATTLIST xs:enumeration id ID #IMPLIED>
+        <!ATTLIST xs:pattern id ID #IMPLIED>
+        <!ATTLIST xs:assertion id ID #IMPLIED>
+        <!ATTLIST xs:explicitTimezone id ID #IMPLIED>
+        <!ATTLIST xs:appinfo id ID #IMPLIED>
+        <!ATTLIST xs:documentation id ID #IMPLIED>
+        <!ATTLIST xs:list id ID #IMPLIED>
+        <!ATTLIST xs:union id ID #IMPLIED>
+        ]>
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           elementFormDefault="qualified" 
+           xml:lang="en"
+           targetNamespace="http://www.w3.org/2001/XMLSchema"
+           version="datatypes.xsd (rec-20120405)">
+  <xs:annotation>
+    <xs:documentation source="../datatypes/datatypes.html">
+      The schema corresponding to this document is normative,
+      with respect to the syntactic constraints it expresses in the
+      XML Schema language.  The documentation (within 'documentation'
+      elements) below, is not normative, but rather highlights important
+      aspects of the W3C Recommendation of which this is a part.
+
+      See below (at the bottom of this document) for information about
+      the revision and namespace-versioning policy governing this
+      schema document.
+    </xs:documentation>
+  </xs:annotation>
+
+
+  <xs:simpleType name="derivationControl">
+    <xs:annotation>
+      <xs:documentation>
+   A utility type, not for public use</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:NMTOKEN">
+      <xs:enumeration value="substitution"/>
+      <xs:enumeration value="extension"/>
+      <xs:enumeration value="restriction"/>
+      <xs:enumeration value="list"/>
+      <xs:enumeration value="union"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:group name="simpleDerivation">
+    <xs:choice>
+      <xs:element ref="xs:restriction"/>
+      <xs:element ref="xs:list"/>
+      <xs:element ref="xs:union"/>
+    </xs:choice>
+  </xs:group>
+  <xs:simpleType name="simpleDerivationSet">
+    <xs:annotation>
+      <xs:documentation>
+   #all or (possibly empty) subset of {restriction, extension, union, list}
+   </xs:documentation>
+      <xs:documentation>
+   A utility type, not for public use</xs:documentation>
+    </xs:annotation>
+    <xs:union>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:enumeration value="#all"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType>
+        <xs:list>
+          <xs:simpleType>
+            <xs:restriction base="xs:derivationControl">
+              <xs:enumeration value="list"/>
+              <xs:enumeration value="union"/>
+              <xs:enumeration value="restriction"/>
+              <xs:enumeration value="extension"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:list>
+      </xs:simpleType>
+    </xs:union>
+  </xs:simpleType>
+  <xs:complexType name="simpleType" abstract="true">
+    <xs:complexContent>
+      <xs:extension base="xs:annotated">
+        <xs:group ref="xs:simpleDerivation"/>
+        <xs:attribute name="final" type="xs:simpleDerivationSet"/>
+        <xs:attribute name="name" type="xs:NCName">
+          <xs:annotation>
+            <xs:documentation>
+              Can be restricted to required or forbidden
+            </xs:documentation>
+          </xs:annotation>
+        </xs:attribute>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="topLevelSimpleType">
+    <xs:complexContent>
+      <xs:restriction base="xs:simpleType">
+        <xs:sequence>
+          <xs:element ref="xs:annotation" minOccurs="0"/>
+          <xs:group ref="xs:simpleDerivation"/>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:NCName" use="required">
+          <xs:annotation>
+            <xs:documentation>
+              Required at the top level
+            </xs:documentation>
+          </xs:annotation>
+        </xs:attribute>
+        <xs:anyAttribute namespace="##other" processContents="lax"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="localSimpleType">
+    <xs:complexContent>
+      <xs:restriction base="xs:simpleType">
+        <xs:sequence>
+          <xs:element ref="xs:annotation" minOccurs="0"/>
+          <xs:group ref="xs:simpleDerivation"/>
+        </xs:sequence>
+        <xs:attribute name="name" use="prohibited">
+          <xs:annotation>
+            <xs:documentation>
+              Forbidden when nested
+            </xs:documentation>
+          </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="final" use="prohibited"/>
+        <xs:anyAttribute namespace="##other" processContents="lax"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="simpleType" type="xs:topLevelSimpleType" id="simpleType">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-simpleType"/>
+    </xs:annotation>
+  </xs:element>
+  <xs:element name="facet" abstract="true">
+    <xs:annotation>
+      <xs:documentation>
+        An abstract element, representing facets in general.
+        The facets defined by this spec are substitutable for
+        this element, and implementation-defined facets should
+        also name this as a substitution-group head.
+      </xs:documentation>
+    </xs:annotation>
+  </xs:element>
+  <xs:group name="simpleRestrictionModel">
+    <xs:sequence>
+      <xs:element name="simpleType" type="xs:localSimpleType" minOccurs="0"/>
+      <xs:choice minOccurs="0" 
+          maxOccurs="unbounded">
+        <xs:element ref="xs:facet"/>
+        <xs:any processContents="lax"
+            namespace="##other"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="restriction" id="restriction">
+    <xs:complexType>
+      <xs:annotation>
+        <xs:documentation
+             source="http://www.w3.org/TR/xmlschema11-2/#element-restriction">
+          base attribute and simpleType child are mutually
+          exclusive, but one or other is required
+        </xs:documentation>
+      </xs:annotation>
+      <xs:complexContent>
+        <xs:extension base="xs:annotated">
+          <xs:group ref="xs:simpleRestrictionModel"/>
+          <xs:attribute name="base" type="xs:QName" use="optional"/>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="list" id="list">
+    <xs:complexType>
+      <xs:annotation>
+        <xs:documentation
+             source="http://www.w3.org/TR/xmlschema11-2/#element-list">
+          itemType attribute and simpleType child are mutually
+          exclusive, but one or other is required
+        </xs:documentation>
+      </xs:annotation>
+      <xs:complexContent>
+        <xs:extension base="xs:annotated">
+          <xs:sequence>
+            <xs:element name="simpleType" type="xs:localSimpleType"
+                        minOccurs="0"/>
+          </xs:sequence>
+          <xs:attribute name="itemType" type="xs:QName" use="optional"/>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="union" id="union">
+    <xs:complexType>
+      <xs:annotation>
+        <xs:documentation
+             source="http://www.w3.org/TR/xmlschema11-2/#element-union">
+          memberTypes attribute must be non-empty or there must be
+          at least one simpleType child
+        </xs:documentation>
+      </xs:annotation>
+      <xs:complexContent>
+        <xs:extension base="xs:annotated">
+          <xs:sequence>
+            <xs:element name="simpleType" type="xs:localSimpleType"
+                        minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+          <xs:attribute name="memberTypes" use="optional">
+            <xs:simpleType>
+              <xs:list itemType="xs:QName"/>
+            </xs:simpleType>
+          </xs:attribute>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="facet">
+    <xs:complexContent>
+      <xs:extension base="xs:annotated">
+        <xs:attribute name="value" use="required"/>
+        <xs:attribute name="fixed" type="xs:boolean" default="false"
+                      use="optional"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="noFixedFacet">
+    <xs:complexContent>
+      <xs:restriction base="xs:facet">
+        <xs:sequence>
+          <xs:element ref="xs:annotation" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="fixed" use="prohibited"/>
+        <xs:anyAttribute namespace="##other" processContents="lax"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="minExclusive" type="xs:facet"  
+    id="minExclusive"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-minExclusive"/>
+    </xs:annotation>
+  </xs:element>
+  <xs:element name="minInclusive" type="xs:facet" 
+    id="minInclusive"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-minInclusive"/>
+    </xs:annotation>
+  </xs:element>
+  <xs:element name="maxExclusive" type="xs:facet" 
+    id="maxExclusive"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-maxExclusive"/>
+    </xs:annotation>
+  </xs:element>
+  <xs:element name="maxInclusive" type="xs:facet"  
+    id="maxInclusive"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-maxInclusive"/>
+    </xs:annotation>
+  </xs:element>
+  <xs:complexType name="numFacet">
+    <xs:complexContent>
+      <xs:restriction base="xs:facet">
+        <xs:sequence>
+          <xs:element ref="xs:annotation" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="value"  
+            type="xs:nonNegativeInteger" use="required"/>
+        <xs:anyAttribute namespace="##other" processContents="lax"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="intFacet">
+    <xs:complexContent>
+      <xs:restriction base="xs:facet">
+        <xs:sequence>
+          <xs:element ref="xs:annotation" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="value" type="xs:integer" use="required"/>
+        <xs:anyAttribute namespace="##other" processContents="lax"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:element name="totalDigits" id="totalDigits"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-totalDigits"/>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="xs:numFacet">
+          <xs:sequence>
+            <xs:element ref="xs:annotation" minOccurs="0"/>
+          </xs:sequence>
+          <xs:attribute name="value" type="xs:positiveInteger" use="required"/>
+          <xs:anyAttribute namespace="##other" processContents="lax"/>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="fractionDigits" type="xs:numFacet"  
+    id="fractionDigits"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-fractionDigits"/>
+    </xs:annotation>
+  </xs:element>
+
+  <xs:element name="length" type="xs:numFacet" id="length"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-length"/>
+    </xs:annotation>
+  </xs:element>
+  <xs:element name="minLength" type="xs:numFacet"  
+    id="minLength"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-minLength"/>
+    </xs:annotation>
+  </xs:element>
+  <xs:element name="maxLength" type="xs:numFacet"  
+    id="maxLength"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-maxLength"/>
+    </xs:annotation>
+  </xs:element>
+  <xs:element name="enumeration" type="xs:noFixedFacet"  
+    id="enumeration"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-enumeration"/>
+    </xs:annotation>
+  </xs:element>
+  <xs:element name="whiteSpace" id="whiteSpace"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-whiteSpace"/>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="xs:facet">
+          <xs:sequence>
+            <xs:element ref="xs:annotation" minOccurs="0"/>
+          </xs:sequence>
+          <xs:attribute name="value" use="required">
+            <xs:simpleType>
+              <xs:restriction base="xs:NMTOKEN">
+                <xs:enumeration value="preserve"/>
+                <xs:enumeration value="replace"/>
+                <xs:enumeration value="collapse"/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+          <xs:anyAttribute namespace="##other" processContents="lax"/>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pattern" id="pattern"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-pattern"/>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="xs:noFixedFacet">
+          <xs:sequence>
+            <xs:element ref="xs:annotation" minOccurs="0"/>
+          </xs:sequence>
+          <xs:attribute name="value" type="xs:string"  
+              use="required"/>
+          <xs:anyAttribute namespace="##other"  
+              processContents="lax"/>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="assertion" type="xs:assertion"
+              id="assertion" substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-assertion"/>
+    </xs:annotation>
+  </xs:element>
+  <xs:element name="explicitTimezone" id="explicitTimezone"
+    substitutionGroup="xs:facet">
+    <xs:annotation>
+      <xs:documentation
+           source="http://www.w3.org/TR/xmlschema11-2/#element-explicitTimezone"/>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="xs:facet">
+          <xs:sequence>
+            <xs:element ref="xs:annotation" minOccurs="0"/>
+          </xs:sequence>
+          <xs:attribute name="value" use="required">
+            <xs:simpleType>
+              <xs:restriction base="xs:NMTOKEN">
+                <xs:enumeration value="optional"/>
+                <xs:enumeration value="required"/>
+                <xs:enumeration value="prohibited"/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+          <xs:anyAttribute namespace="##other" processContents="lax"/>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:annotation>
+    <xs:documentation>
+      In keeping with the XML Schema WG's standard versioning policy, 
+      this schema document will persist at the URI
+      http://www.w3.org/2012/04/datatypes.xsd.
+
+      At the date of issue it can also be found at the URI
+      http://www.w3.org/2009/XMLSchema/datatypes.xsd.
+
+      The schema document at that URI may however change in the future, 
+      in order to remain compatible with the latest version of XSD 
+      and its namespace.  In other words, if XSD or the XML Schema 
+      namespace change, the version of this document at 
+      http://www.w3.org/2009/XMLSchema/datatypes.xsd will change accordingly; 
+      the version at http://www.w3.org/2012/04/datatypes.xsd will not change.
+
+      Previous dated (and unchanging) versions of this schema document 
+      include:
+
+        http://www.w3.org/2012/01/datatypes.xsd
+          (XSD 1.1 Proposed Recommendation)
+
+        http://www.w3.org/2011/07/datatypes.xsd
+          (XSD 1.1 Candidate Recommendation)
+
+        http://www.w3.org/2009/04/datatypes.xsd
+          (XSD 1.1 Candidate Recommendation)
+
+        http://www.w3.org/2004/10/datatypes.xsd
+          (XSD 1.0 Recommendation, Second Edition)
+
+        http://www.w3.org/2001/05/datatypes.xsd
+          (XSD 1.0 Recommendation, First Edition)
+
+    </xs:documentation>
+  </xs:annotation>
+
+
+
+</xs:schema>

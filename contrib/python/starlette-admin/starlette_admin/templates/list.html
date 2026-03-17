@@ -1,0 +1,162 @@
+{% extends "layout.html" %}
+{% block header %}
+    <div class="d-flex justify-content-between align-items-center">
+        <h1>{{ model.label }}</h1>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a href="{{ url_for(__name__ ~ ':index') }}">{{ _("Admin") }}</a>
+            </li>
+            <li class="breadcrumb-item active">{{ model.label }}</li>
+        </ol>
+    </div>
+{% endblock %}
+{% block modal %}
+    {% include "modals/loading.html" %}
+    {% include "modals/error.html" %}
+    {% include "modals/actions.html" %}
+{% endblock %}
+{% block content %}
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <div id="btn_container" class="card-title"></div>
+                        <div class="card-actions">
+                            <div class="btn-list">
+
+                                {% include "actions.html" %}
+
+                                {% if model.can_create(request) %}
+                                    <a href="{{ url_for(__name__ ~ ':create', identity=model.identity) }}"
+                                       class="btn btn-primary btn-block ms-2">
+                                        <i class="fa-solid fa-plus me-2"></i>
+                                        {{ _("New %(name)s", name=model.name ) }}
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body border-bottom p-0">
+                        <div class="d-flex m-3">
+                            <div id="pageLength_container"></div>
+                            <div class="ms-auto text-muted">
+                                <div class="ms-2 d-inline-block">
+                                    <div class="input-icon">
+                                        <span class="input-icon-addon">
+                                            <!-- Download SVG icon from http://tabler-icons.io/i/search -->
+                                            <svg xmlns="http://www.w3.org/2000/svg"
+                                                 class="icon"
+                                                 width="24"
+                                                 height="24"
+                                                 viewBox="0 0 24 24"
+                                                 stroke-width="2"
+                                                 stroke="currentColor"
+                                                 fill="none"
+                                                 stroke-linecap="round"
+                                                 stroke-linejoin="round">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                                <circle cx="10" cy="10" r="7"/>
+                                                <line x1="21" y1="21" x2="15" y2="15"/>
+                                            </svg>
+                                        </span>
+                                        <input type="search"
+                                               id="searchInput"
+                                               value=""
+                                               class="form-control"
+                                               placeholder="{{ _('Search') }}..."
+                                               aria-label="Search in list"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="alertContainer"></div>
+                    </div>
+                    <table id="dt" class="table table-vcenter text-nowrap">
+                        <thead>
+                        <tr id="table-header">
+                            <th></th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block head_css %}
+    {{ super() }}
+    <link rel="stylesheet"
+          href="{{ url_for(__name__ ~ ':statics', path='css/dt.min.css') }}"/>
+    <link rel="stylesheet"
+          href="{{ url_for(__name__ ~ ':statics', path='css/dt.checkboxes.css') }}"/>
+    {% for link in model._additional_css_links(request, "LIST" | ra) %}
+        <link rel="stylesheet" href="{{ link }}">
+    {% endfor %}
+    <style>
+        div.dataTables_wrapper div.dataTables_info {
+            padding-top: 0;
+        }
+
+        table.dataTable span.highlight {
+            background-color: #ffff88;
+            border-radius: 0.28571429rem;
+        }
+
+        table.dataTable span.column_highlight {
+            background-color: #ffcc99;
+            border-radius: 0.28571429rem;
+        }
+
+        table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control:before,
+        table.dataTable.dtr-inline.collapsed > tbody > tr > th.dtr-control:before {
+            background-color: #206bc4;
+        }
+
+        table.dataTable {
+            margin-top: 0px !important;
+            margin-bottom: 0px !important;
+        }
+    </style>
+{% endblock %}
+{% block script %}
+    {{ super() }}
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/vendor/moment.min.js') }}"></script>
+    {% if get_locale() != 'en' %}
+        <script type="text/javascript"
+                src="{{ url_for(__name__ ~ ':statics', path='i18n/momentjs/' ~ get_locale() ~ '.js') }}"></script>
+    {% endif %}
+    {% if 'pdf' in model.export_types %}
+        <script type="text/javascript"
+                src="{{ url_for(__name__ ~ ':statics', path='js/vendor/pdfmake.min.js') }}"></script>
+        <script type="text/javascript"
+                src="{{ url_for(__name__ ~ ':statics', path='js/vendor/vfs_fonts.js') }}"></script>
+    {% endif %}
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/vendor/dt.min.js') }}"></script>
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/vendor/dt.checkboxes.js') }}"></script>
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/vendor/dt.searchHighlight.js') }}"></script>
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/vendor/qs.min.js') }}"></script>
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/utils.js').include_query_params(v=1) }}"></script>
+    <script>var model = {{__js_model__ | tojson | safe}};</script>
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/render.js').include_query_params(v=1) }}"></script>
+    {% if custom_render_js(request) %}
+        <script type="text/javascript" src="{{ custom_render_js(request) }}"></script>
+    {% endif %}
+    {% for link in model._additional_js_links(request, "LIST" | ra) %}
+        <script type="text/javascript" src="{{ link }}"></script>
+    {% endfor %}
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/alerts.js').include_query_params(v=1) }}"></script>
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/actions.js').include_query_params(v=1) }}"></script>
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/list.js').include_query_params(v=2) }}"></script>
+{% endblock %}

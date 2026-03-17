@@ -1,0 +1,457 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2011-2018 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2011      Los Alamos National Security, LLC.
+#                         All rights reserved.
+# Copyright (c) 2014-2018 Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for Open RTE's orterun.
+#
+[orte-rmaps-base:alloc-error]
+There are not enough slots available in the system to satisfy the %d
+slots that were requested by the application:
+
+  %s
+
+Either request fewer slots for your application, or make more slots
+available for use.
+
+A "slot" is the Open MPI term for an allocatable unit where we can
+launch a process.  The number of slots available are defined by the
+environment in which Open MPI processes are run:
+
+  1. Hostfile, via "slots=N" clauses (N defaults to number of
+     processor cores if not provided)
+  2. The --host command line parameter, via a ":N" suffix on the
+     hostname (N defaults to 1 if not provided)
+  3. Resource manager (e.g., SLURM, PBS/Torque, LSF, etc.)
+  4. If none of a hostfile, the --host command line parameter, or an
+     RM is present, Open MPI defaults to the number of processor cores
+
+In all the above cases, if you want Open MPI to default to the number
+of hardware threads instead of the number of processor cores, use the
+--use-hwthread-cpus option.
+
+Alternatively, you can use the --oversubscribe option to ignore the
+number of available slots when deciding the number of processes to
+launch.
+#
+[orte-rmaps-base:not-all-mapped-alloc]
+Some of the requested hosts are not included in the current allocation for the
+application:
+  %s
+The requested hosts were:
+  %s
+
+Verify that you have mapped the allocated resources properly using the
+--host or --hostfile specification.
+[orte-rmaps-base:no-mapped-node]
+There are no allocated resources for the application:
+  %s
+that match the requested mapping:
+  %s: %s
+
+Verify that you have mapped the allocated resources properly for the
+indicated specification.
+[orte-rmaps-base:nolocal-no-available-resources]
+There are no available nodes allocated to this job. This could be because
+no nodes were found or all the available nodes were already used.
+
+Note that since the -nolocal option was given no processes can be
+launched on the local node.
+[orte-rmaps-base:no-available-resources]
+No nodes are available for this job, either due to a failure to
+allocate nodes to the job, or allocated nodes being marked
+as unavailable (e.g., down, rebooting, or a process attempting
+to be relocated to another node when none are available).
+[orte-rmaps-base:all-available-resources-used]
+All nodes which are allocated for this job are already filled.
+#
+[out-of-vpids]
+The system has exhausted its available ranks - the application is attempting
+to spawn too many daemons and will be aborted.
+
+This may be resolved by increasing the number of available ranks by
+re-configuring with the --enable-jumbo-apps option, and then
+re-building the application.
+#
+[rmaps:too-many-procs]
+Your job has requested a conflicting number of processes for the
+application:
+
+App: %s
+number of procs:  %d
+
+This is more processes than we can launch under the following
+additional directives and conditions:
+
+%s:   %d
+%s:   %d
+
+Please revise the conflict and try again.
+#
+[too-many-cpus-per-rank]
+Your job has requested more cpus per process(rank) than there
+are cpus in a socket:
+
+  Cpus/rank: %d
+  #cpus/socket: %d
+
+Please correct one or both of these values and try again.
+#
+[failed-map]
+Your job failed to map. Either no mapper was available, or none
+of the available mappers was able to perform the requested
+mapping operation. This can happen if you request a map type
+(e.g., loadbalance) and the corresponding mapper was not built.
+
+  Mapper result:    %s
+  #procs mapped:    %d
+  #nodes assigned:  %d
+
+#
+[unrecognized-policy]
+The specified %s policy is not recognized:
+
+  Policy: %s
+
+Please check for a typo or ensure that the option is a supported
+one.
+#
+[redefining-policy]
+Conflicting directives for %s policy are causing the policy
+to be redefined:
+
+  New policy:   %s
+  Prior policy:  %s
+
+Please check that only one policy is defined.
+#
+[rmaps:binding-target-not-found]
+A request was made to bind to %s, but an appropriate target could not
+be found on node %s.
+#
+[rmaps:binding-overload]
+A request was made to bind to that would result in binding more
+processes than cpus on a resource:
+
+   Bind to:     %s
+   Node:        %s
+   #processes:  %d
+   #cpus:       %d
+
+You can override this protection by adding the "overload-allowed"
+option to your binding directive.
+#
+[rmaps:no-topology]
+A mapping directive was given that requires knowledge of
+a remote node's topology. However, no topology info is
+available for the following node:
+
+  Node: %s
+
+The job cannot be executed under this condition. Please either
+remove the directive or investigate the lack of topology info.
+#
+[rmaps:no-available-cpus]
+While computing bindings, we found no available cpus on
+the following node:
+
+  Node:  %s
+
+Please check your allocation.
+#
+[rmaps:cpubind-not-supported]
+A request was made to bind a process, but at least one node does NOT
+support binding processes to cpus.
+
+Node: %s
+
+Open MPI uses the "hwloc" library to perform process and memory
+binding. This error message means that hwloc has indicated that
+processor binding support is not available on this machine.
+
+On OS X, processor and memory binding is not available at all (i.e.,
+the OS does not expose this functionality).
+
+On Linux, lack of the functionality can mean that you are on a
+platform where processor and memory affinity is not supported in Linux
+itself, or that hwloc was built without NUMA and/or processor affinity
+support. When building hwloc (which, depending on your Open MPI
+installation, may be embedded in Open MPI itself), it is important to
+have the libnuma header and library files available. Different linux
+distributions package these files under different names; look for
+packages with the word "numa" in them. You may also need a developer
+version of the package (e.g., with "dev" or "devel" in the name) to
+obtain the relevant header files.
+
+If you are getting this message on a non-OS X, non-Linux platform,
+then hwloc does not support processor / memory affinity on this
+platform. If the OS/platform does actually support processor / memory
+affinity, then you should contact the hwloc maintainers:
+https://github.com/open-mpi/hwloc.
+#
+[rmaps:membind-not-supported]
+WARNING: a request was made to bind a process. While the system
+supports binding the process itself, at least one node does NOT
+support binding memory to the process location.
+
+  Node:  %s
+
+Open MPI uses the "hwloc" library to perform process and memory
+binding. This error message means that hwloc has indicated that
+processor binding support is not available on this machine.
+
+On OS X, processor and memory binding is not available at all (i.e.,
+the OS does not expose this functionality).
+
+On Linux, lack of the functionality can mean that you are on a
+platform where processor and memory affinity is not supported in Linux
+itself, or that hwloc was built without NUMA and/or processor affinity
+support. When building hwloc (which, depending on your Open MPI
+installation, may be embedded in Open MPI itself), it is important to
+have the libnuma header and library files available. Different linux
+distributions package these files under different names; look for
+packages with the word "numa" in them. You may also need a developer
+version of the package (e.g., with "dev" or "devel" in the name) to
+obtain the relevant header files.
+
+If you are getting this message on a non-OS X, non-Linux platform,
+then hwloc does not support processor / memory affinity on this
+platform. If the OS/platform does actually support processor / memory
+affinity, then you should contact the hwloc maintainers:
+https://github.com/open-mpi/hwloc.
+
+This is a warning only; your job will continue, though performance may
+be degraded.
+#
+[rmaps:membind-not-supported-fatal]
+A request was made to bind a process. While the system
+supports binding the process itself, at least one node does NOT
+support binding memory to the process location.
+
+  Node:  %s
+
+Open MPI uses the "hwloc" library to perform process and memory
+binding. This error message means that hwloc has indicated that
+processor binding support is not available on this machine.
+
+On OS X, processor and memory binding is not available at all (i.e.,
+the OS does not expose this functionality).
+
+On Linux, lack of the functionality can mean that you are on a
+platform where processor and memory affinity is not supported in Linux
+itself, or that hwloc was built without NUMA and/or processor affinity
+support. When building hwloc (which, depending on your Open MPI
+installation, may be embedded in Open MPI itself), it is important to
+have the libnuma header and library files available. Different linux
+distributions package these files under different names; look for
+packages with the word "numa" in them. You may also need a developer
+version of the package (e.g., with "dev" or "devel" in the name) to
+obtain the relevant header files.
+
+If you are getting this message on a non-OS X, non-Linux platform,
+then hwloc does not support processor / memory affinity on this
+platform. If the OS/platform does actually support processor / memory
+affinity, then you should contact the hwloc maintainers:
+https://github.com/open-mpi/hwloc.
+
+The provided memory binding policy requires that Open MPI abort the
+job at this time.
+#
+[rmaps:no-bindable-objects]
+No bindable objects of the specified type were available
+on at least one node:
+
+  Node:    %s
+  Target:  %s
+#
+[rmaps:unknown-binding-level]
+Unknown binding level:
+
+  Target:  %s
+  Cache level:  %u
+#
+[orte-rmaps-base:missing-daemon]
+While attempting to build a map of this job, a node
+was detected to be missing a daemon:
+
+  Node:  %s
+
+This usually indicates a mismatch between what the
+allocation provided for the node name versus what was
+actually found on the node.
+#
+[orte-rmaps-base:no-objects]
+No objects of the specified type were found on at least one node:
+
+  Type: %s
+  Node: %s
+
+The map cannot be done as specified.
+#
+[topo-file]
+A topology file was given for the compute nodes, but
+we were unable to correctly process it. Common errors
+include incorrectly specifying the path to the file,
+or the file being generated in a way that is incompatible
+with the version of hwloc being used by OMPI.
+
+  File: %s
+
+Please correct the problem and try again.
+#
+[deprecated]
+The following command line options and corresponding MCA parameter have
+been deprecated and replaced as follows:
+
+  Command line options:
+    Deprecated:  %s
+    Replacement: %s
+
+  Equivalent MCA parameter:
+    Deprecated:  %s
+    Replacement: %s
+
+The deprecated forms *will* disappear in a future version of Open MPI.
+Please update to the new syntax.
+#
+[mismatch-binding]
+A request for multiple cpus-per-proc was given, but a conflicting binding
+policy was specified:
+
+  #cpus-per-proc:  %d
+  type of cpus:    %s
+  binding policy given: %s
+
+The correct binding policy for the given type of cpu is:
+
+  correct binding policy:  %s
+
+This is the binding policy we would apply by default for this
+situation, so no binding need be specified. Please correct the
+situation and try again.
+#
+[mapping-too-low]
+A request for multiple cpus-per-proc was given, but a directive
+was also give to map to an object level that has less cpus than
+requested ones:
+
+  #cpus-per-proc:  %d
+  number of cpus:  %d
+  map-by:          %s
+
+Please specify a mapping level that has more cpus, or else let us
+define a default mapping that will allow multiple cpus-per-proc.
+#
+[unrecognized-modifier]
+The mapping request contains an unrecognized modifier:
+
+  Request: %s
+
+Please check your request and try again.
+#
+[invalid-pattern]
+The mapping request contains a pattern that doesn't match
+the required syntax of #:object
+
+  Pattern: %s
+
+Please check your request and try again.
+#
+[orte-rmaps-base:oversubscribed]
+The requested number of processes exceeds the allocated
+number of slots:
+
+  #slots:       %d
+  #processes:   %d
+
+This creates an oversubscribed condition that may adversely
+impact performance when combined with the requested binding
+operation. We will continue, but will not bind the processes.
+This warning can be omitted by adding the "overload-allowed"
+qualifier to the binding policy.
+#
+[cannot-launch]
+Although we were able to map your job, we are unable to launch
+it at this time due to required resources being busy. Please
+try again later.
+#
+[rmaps:no-locale]
+The request to bind processes could not be completed due to
+an internal error - the locale of the following process was
+not set by the mapper code:
+
+  Process:  %s
+
+Please contact the OMPI developers for assistance. Meantime,
+you will still be able to run your application without binding
+by specifying "--bind-to none" on your command line.
+#
+[mapping-too-low-init]
+A request for multiple cpus-per-proc was given, but a directive
+was also give to map to an object level that cannot support that
+directive.
+
+Please specify a mapping level that has more than one cpu, or
+else let us define a default mapping that will allow multiple
+cpus-per-proc.
+#
+[seq:not-enough-resources]
+A sequential map was requested, but not enough node entries
+were given to support the requested number of processes:
+
+  Num procs:  %d
+  Num nodes:  %d
+
+We cannot continue - please adjust either the number of processes
+or provide more node locations in the file.
+#
+[device-not-specified]
+The request to map processes by distance could not be completed
+because device to map near by was not specified. Please, use
+rmaps_dist_device mca parameter to set it.
+#
+[num-procs-not-specified]
+Either the -host or -hostfile options were given, but the number
+of processes to start was omitted. This combination is not supported.
+
+Please specify the number of processes to run and try again.
+#
+[failed-assignments]
+The attempt to assign hardware locations to processes on a
+compute node failed:
+
+  Node:    %s
+  Policy:  %s
+
+We cannot continue - please check that the policy is in
+accordance with the actual available hardware.
+#
+[rmaps:insufficient-cpus]
+The request to bind processes to cpus in a provided list
+of logical id's based on their local rank on a node cannot
+be met due to there being more processes on a node than
+available cpus:
+
+  Node:         %s
+  Local rank:   %d
+  Cpu list:     %s
+
+Please adjust either the number of processes per node or
+the list of cpus.

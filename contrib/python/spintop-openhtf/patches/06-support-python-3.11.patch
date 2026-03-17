@@ -1,0 +1,19 @@
+--- contrib/python/spintop-openhtf/openhtf/util/functions.py	(index)
++++ contrib/python/spintop-openhtf/openhtf/util/functions.py	(working tree)
+@@ -20,9 +20,15 @@ import inspect
+ import time
+ 
+ 
++if not hasattr(inspect, "ArgSpec"):
++    ArgSpec = collections.namedtuple('ArgSpec', 'args varargs keywords defaults')
++else:
++    ArgSpec = inspect.ArgSpec
++
++
+ def getargspec(func):
+   fullargspec = inspect.getfullargspec(func)
+-  return inspect.ArgSpec(
++  return ArgSpec(
+     args=fullargspec.args, 
+     varargs=fullargspec.varargs,
+     keywords=fullargspec.varkw,

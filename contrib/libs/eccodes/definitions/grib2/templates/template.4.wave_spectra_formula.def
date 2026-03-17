@@ -1,0 +1,27 @@
+# (C) Copyright 2005- ECMWF.
+# Template for wave spectra defined using a formula for frequency and direction
+
+## Direction part
+# Type of direction sequence
+codetable[1] typeOfWaveDirectionSequence ('4.251.table',masterDir,localDir) : dump;
+
+# Number of following function parameters for the directions
+unsigned[1] numberOfWaveDirectionSequenceParameters = 1 : dump;
+alias NDSP = numberOfWaveDirectionSequenceParameters;
+
+listOfWaveDirectionSequenceParameters list(numberOfWaveDirectionSequenceParameters) {
+  signed[1]   scaleFactorOfWaveDirectionSequenceParameter : dump;
+  signed[4] scaledValueOfWaveDirectionSequenceParameter : dump;
+}
+
+## Frequency part
+codetable[1] typeOfWaveFrequencySequence ('4.251.table',masterDir,localDir) : dump;
+
+# Number of following function parameters for the frequencies
+unsigned[1] numberOfWaveFrequencySequenceParameters = 1 : dump;
+alias NFSP = numberOfWaveFrequencySequenceParameters;
+
+listOfWaveFrequencySequenceParameters list(numberOfWaveFrequencySequenceParameters) {
+  signed[1]   scaleFactorOfWaveFrequencySequenceParameter : dump;
+  signed[4] scaledValueOfWaveFrequencySequenceParameter : dump;
+}

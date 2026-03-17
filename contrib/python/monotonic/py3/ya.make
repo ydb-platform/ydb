@@ -2,8 +2,6 @@
 
 PY3_LIBRARY()
 
-SUBSCRIBER(g:python-contrib)
-
 VERSION(1.6)
 
 LICENSE(Apache-2.0)

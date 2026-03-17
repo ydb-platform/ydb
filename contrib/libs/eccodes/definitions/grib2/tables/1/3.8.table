@@ -1,0 +1,5 @@
+0 0 Grid points at triangle vertices
+1 1 Grid points at centres of triangles
+2 2 Grid points at midpoints of triangle sides
+255 255 Missing
+

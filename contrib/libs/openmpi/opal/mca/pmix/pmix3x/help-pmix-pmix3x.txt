@@ -1,0 +1,32 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2007 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2017      Intel, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI MCA error messages.
+#
+[evars]
+We found conflicting directives regarding the location of OPAL vs PMIx
+installation directories:
+
+%s
+
+This usually indicates that OMPI was configured to use its internal copy
+of PMIx, but another installation of PMIx is also in use on this system
+and could potentially cause confusion between the two sets of plugins.
+Please either unset the indicated environment variables, or configure
+OMPI to use the external PMIx installation.

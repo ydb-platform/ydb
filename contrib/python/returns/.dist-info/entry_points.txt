@@ -1,0 +1,6 @@
+[hypothesis]
+_=returns.contrib.hypothesis._entrypoint:_setup_hook
+
+[pytest11]
+returns=returns.contrib.pytest.plugin
+

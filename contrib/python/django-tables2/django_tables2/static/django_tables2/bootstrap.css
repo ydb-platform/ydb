@@ -1,0 +1,8 @@
+.table-container th.asc:after {
+    content: '\0000a0\0025b2';
+    float: right;
+}
+.table-container th.desc:after {
+    content: '\0000a0\0025bc';
+    float: right;
+}

@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.opensearch.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/opensearch/v1;opensearch";
+option java_package = "yandex.cloud.api.mdb.opensearch.v1";
+
+// A preset of resources for hardware configuration of the OpenSearch hosts.
+message ResourcePreset {
+
+  // ID of the resource preset.
+  string id = 1;
+
+  // IDs of the availability zones where the resource preset is available.
+  repeated string zone_ids = 2;
+
+  // Number of the CPU cores for an OpenSearch host created with the preset.
+  int64 cores = 3;
+
+  // RAM volume for an OpenSearch host created with the preset, in bytes.
+  int64 memory = 4;
+}

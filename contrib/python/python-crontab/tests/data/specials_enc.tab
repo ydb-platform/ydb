@@ -1,0 +1,5 @@
+@hourly hourly
+@daily daily
+@midnight midnight
+@weekly weekly
+@reboot reboot

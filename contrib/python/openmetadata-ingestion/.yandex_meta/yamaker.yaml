@@ -1,0 +1,15 @@
+requirements:
+  - contrib/python/sqlalchemy/sqlalchemy-1.4
+  - contrib/python/psycopg2
+  - pydantic: null
+  - contrib/python/pydantic/pydantic-2
+copy:
+  - metadata/generated/schema/tests/*
+  - metadata/generated/schema/api/tests/*
+exclude:
+  - metadata/ingestion/models/custom_pydantic.py
+keep:
+  - metadata/ingestion/models/custom_pydantic.py
+mark_as_sources:
+  - metadata/generated/schema/tests/*
+  - metadata/generated/schema/api/tests/*

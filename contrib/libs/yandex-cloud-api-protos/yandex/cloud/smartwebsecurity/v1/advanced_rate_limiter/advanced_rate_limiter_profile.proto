@@ -1,0 +1,190 @@
+syntax = "proto3";
+
+package yandex.cloud.smartwebsecurity.v1.advanced_rate_limiter;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/smartwebsecurity/v1/security_profile.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/smartwebsecurity/v1/advanced_rate_limiter;smartwebsecurity";
+option java_package = "yandex.cloud.api.smartwebsecurity.v1.advanced_rate_limiter";
+
+// A AdvancedRateLimiterProfile (ARL) resource.
+message AdvancedRateLimiterProfile {
+  // ID of the ARL profile.
+  string id = 1;
+
+  // ID of the folder that the ARL profile belongs to.
+  string folder_id = 2;
+
+  // Labels as `` key:value `` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 3 [
+    (size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // Name of the ARL profile. The name is unique within the folder. 1-50 characters long.
+  string name = 4 [
+    (required) = true,
+    (length) = "1-50",
+    (pattern) = "[a-zA-Z0-9][a-zA-Z0-9-_.]*"
+  ];
+
+  // Optional description of the ARL profile.
+  string description = 5 [(length) = "<=512"];
+
+  // List of rules.
+  repeated AdvancedRateLimiterRule advanced_rate_limiter_rules = 6;
+
+  // Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp created_at = 7;
+
+  reserved 8;
+
+  // ID of the cloud that the ARL profile belongs to.
+  string cloud_id = 9;
+}
+
+// A AdvancedRateLimiterRule object, see [Rules](/docs/smartwebsecurity/concepts/arl#traffic-conditions).
+message AdvancedRateLimiterRule {
+  // Name of the rule. The name is unique within the ARL profile. 1-50 characters long.
+  string name = 1 [
+    (required) = true,
+    (length) = "1-50",
+    (pattern) = "[a-zA-Z0-9][a-zA-Z0-9-_.]*"
+  ];
+
+  // Determines the priority in case there are several matched rules.
+  // Enter an integer within the range of 1 and 999999.
+  // The rule priority must be unique within the entire ARL profile.
+  // A lower numeric value means a higher priority.
+  int64 priority = 2 [(value) = "1-999999"];
+
+  // Optional description of the rule. 0-512 characters long.
+  string description = 3 [(length) = "<=512"];
+
+  // This allows you to evaluate backend capabilities and find the optimum limit values.
+  // Requests will not be blocked in this mode.
+  bool dry_run = 4;
+
+  oneof rule_specifier {
+    option (exactly_one) = true;
+
+    // Static quota. Counting each request individually.
+    StaticQuota static_quota = 5;
+
+    // Dynamic quota. Grouping requests by a certain attribute and limiting the number of groups.
+    DynamicQuota dynamic_quota = 6;
+  }
+
+  // Type of action to perform if this rule matched.
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+
+    // Deny request.
+    DENY = 1;
+  }
+
+  // StaticQuota object.
+  message StaticQuota {
+    // Action in case of exceeding this quota.
+    Action action = 1;
+
+    // The condition for matching the quota.
+    Condition condition = 2;
+
+    // Desired maximum number of requests per period.
+    // Enter an integer within the range of 1 and 9999999999999.
+    int64 limit = 3 [(value) = "1-9999999999999"];
+
+    // Period of time in seconds.
+    int64 period = 4 [(value) = "1,5,10,30,60,120,180,240,300,600,900,1200,1800,2700,3600"];
+  }
+
+  // DynamicQuota object.
+  message DynamicQuota {
+    message Characteristic {
+      reserved 3 to 9;
+      oneof characteristic_specifier {
+        option (exactly_one) = true;
+
+        // Characteristic automatically based on the Request path, HTTP method, IP address, Region, and Host attributes.
+        // See [Rules](/docs/smartwebsecurity/concepts/arl#requests-counting) for more details.
+        SimpleCharacteristic simple_characteristic = 1;
+
+        // Characteristic based on key match in the Query params, HTTP header, and HTTP cookie attributes.
+        // See [Rules](/docs/smartwebsecurity/concepts/arl#requests-counting) for more details.
+        KeyCharacteristic key_characteristic = 2;
+      }
+
+      message SimpleCharacteristic {
+        // Type of simple characteristic.
+        enum Type {
+          TYPE_UNSPECIFIED = 0;
+
+          // HTTP Request path.
+          REQUEST_PATH = 1;
+
+          // HTTP Method.
+          HTTP_METHOD = 2;
+
+          //IP address.
+          IP = 3;
+
+          // Region.
+          GEO = 4;
+
+          // Host.
+          HOST = 5;
+        }
+
+        // Type of simple characteristic.
+        Type type = 1;
+      }
+
+      message KeyCharacteristic {
+        // Type of key characteristic.
+        enum Type {
+          TYPE_UNSPECIFIED = 0;
+
+          // HTTP cookie key.
+          COOKIE_KEY = 1;
+
+          // HTTP header key.
+          HEADER_KEY = 2;
+
+          // Query params key.
+          QUERY_KEY = 3;
+        }
+
+        // Type of key characteristic.
+        Type type = 1;
+
+        // String value of the key.
+        string value = 2;
+      }
+
+      // Determines case-sensitive or case-insensitive keys matching.
+      bool case_insensitive = 10;
+    }
+
+    // Action in case of exceeding this quota.
+    Action action = 1;
+
+    // The condition for matching the quota.
+    Condition condition = 2;
+
+    // Desired maximum number of requests per period.
+    // Enter an integer within the range of 1 and 9999999999999.
+    int64 limit = 3 [(value) = "1-9999999999999"];
+
+    // Period of time in seconds.
+    int64 period = 4 [(value) = "1,5,10,30,60,120,180,240,300,600,900,1200,1800,2700,3600"];
+
+    // List of characteristics.
+    repeated Characteristic characteristics = 5 [(size) = "<=3"];
+  }
+}

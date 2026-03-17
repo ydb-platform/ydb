@@ -1,0 +1,93 @@
+Metadata-Version: 2.1
+Name: Flask-GraphQL
+Version: 2.0.1
+Summary: Adds GraphQL support to your Flask application
+Home-page: https://github.com/graphql-python/flask-graphql
+Author: Syrus Akbary
+Author-email: me@syrusakbary.com
+License: MIT
+Download-URL: https://github.com/graphql-python/flask-graphql/releases
+Keywords: api graphql protocol rest flask
+Platform: any
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: License :: OSI Approved :: MIT License
+Requires-Dist: graphql-core<3,>=2.1
+Requires-Dist: flask>=0.7.0
+Requires-Dist: graphql-server-core<2,>=1.1
+
+Flask-GraphQL
+=============
+
+|Build Status| |Coverage Status| |PyPI version|
+
+Adds GraphQL support to your Flask application.
+
+Usage
+-----
+
+Just use the ``GraphQLView`` view from ``flask_graphql``
+
+.. code:: python
+
+    from flask_graphql import GraphQLView
+
+    app.add_url_rule('/graphql', view_func=GraphQLView.as_view('graphql', schema=schema, graphiql=True))
+
+    # Optional, for adding batch query support (used in Apollo-Client)
+    app.add_url_rule('/graphql/batch', view_func=GraphQLView.as_view('graphql', schema=schema, batch=True))
+
+This will add ``/graphql`` and ``/graphiql`` endpoints to your app.
+
+Supported options
+~~~~~~~~~~~~~~~~~
+
+-  ``schema``: The ``GraphQLSchema`` object that you want the view to
+   execute when it gets a valid request.
+-  ``context``: A value to pass as the ``context`` to the ``graphql()``
+   function.
+-  ``root_value``: The ``root_value`` you want to provide to
+   ``executor.execute``.
+-  ``pretty``: Whether or not you want the response to be pretty printed
+   JSON.
+-  ``executor``: The ``Executor`` that you want to use to execute
+   queries.
+-  ``graphiql``: If ``True``, may present
+   `GraphiQL <https://github.com/graphql/graphiql>`__ when loaded
+   directly from a browser (a useful tool for debugging and
+   exploration).
+-  ``graphiql_template``: Inject a Jinja template string to customize
+   GraphiQL.
+-  ``batch``: Set the GraphQL view as batch (for using in
+   `Apollo-Client <http://dev.apollodata.com/core/network.html#query-batching>`__
+   or
+   `ReactRelayNetworkLayer <https://github.com/nodkz/react-relay-network-layer>`__)
+
+You can also subclass ``GraphQLView`` and overwrite
+``get_root_value(self, request)`` to have a dynamic root value per
+request.
+
+.. code:: python
+
+    class UserRootValue(GraphQLView):
+        def get_root_value(self, request):
+            return request.user
+
+.. |Build Status| image:: https://travis-ci.org/graphql-python/flask-graphql.svg?branch=master
+   :target: https://travis-ci.org/graphql-python/flask-graphql
+.. |Coverage Status| image:: https://coveralls.io/repos/graphql-python/flask-graphql/badge.svg?branch=master&service=github
+   :target: https://coveralls.io/github/graphql-python/flask-graphql?branch=master
+.. |PyPI version| image:: https://badge.fury.io/py/flask-graphql.svg
+   :target: https://badge.fury.io/py/flask-graphql
+
+

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package yandex.cloud.endpoint;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/endpoint/api_endpoint.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/endpoint;endpoint";
+option java_package = "yandex.cloud.api.endpoint";
+
+service ApiEndpointService {
+  rpc Get (GetApiEndpointRequest) returns (ApiEndpoint) {
+    option (google.api.http) = { get: "/endpoints/{api_endpoint_id}" };
+  }
+  rpc List (ListApiEndpointsRequest) returns (ListApiEndpointsResponse) {
+    option (google.api.http) = { get: "/endpoints" };
+  }
+}
+
+message GetApiEndpointRequest {
+  string api_endpoint_id = 1;
+}
+
+message ListApiEndpointsRequest {
+  int64 page_size = 1 [deprecated = true];
+  string page_token = 2 [deprecated = true];
+}
+
+message ListApiEndpointsResponse {
+  repeated ApiEndpoint endpoints = 1;
+  string next_page_token = 2;
+}

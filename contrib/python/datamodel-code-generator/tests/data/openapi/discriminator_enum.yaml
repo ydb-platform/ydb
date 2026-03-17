@@ -1,0 +1,40 @@
+openapi: "3.0.0"
+components:
+  schemas:
+    Request:
+      oneOf:
+        - $ref: '#/components/schemas/RequestV1'
+        - $ref: '#/components/schemas/RequestV2'
+      discriminator:
+        propertyName: version
+        mapping:
+          v1: '#/components/schemas/RequestV1'
+          v2: '#/components/schemas/RequestV2'
+
+    RequestVersionEnum:
+      type: string
+      description: this is not included!
+      title: no title!
+      enum:
+        - v1
+        - v2
+    RequestBase:
+      properties:
+        version:
+          $ref: '#/components/schemas/RequestVersionEnum'
+      required:
+        - version
+
+    RequestV1:
+      allOf:
+        - $ref: '#/components/schemas/RequestBase'
+      properties:
+        request_id:
+          type: string
+          title: test title
+          description: there is description
+      required:
+        - request_id
+    RequestV2:
+      allOf:
+        - $ref: '#/components/schemas/RequestBase'

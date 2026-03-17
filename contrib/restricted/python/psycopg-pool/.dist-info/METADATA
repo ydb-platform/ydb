@@ -1,0 +1,67 @@
+Metadata-Version: 2.4
+Name: psycopg-pool
+Version: 3.3.0
+Summary: Connection Pool for Psycopg
+Author-email: Daniele Varrazzo <daniele.varrazzo@gmail.com>
+License-Expression: LGPL-3.0-only
+Project-URL: Homepage, https://psycopg.org/
+Project-URL: Documentation, https://www.psycopg.org/psycopg3/docs/advanced/pool.html
+Project-URL: Changes, https://psycopg.org/psycopg3/docs/news_pool.html
+Project-URL: Code, https://github.com/psycopg/psycopg
+Project-URL: Issue Tracker, https://github.com/psycopg/psycopg/issues
+Project-URL: Funding, https://github.com/sponsors/dvarrazzo
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Database
+Classifier: Topic :: Database :: Front-Ends
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.10
+Description-Content-Type: text/x-rst
+License-File: LICENSE.txt
+Requires-Dist: typing-extensions>=4.6
+Provides-Extra: test
+Requires-Dist: anyio>=4.0; extra == "test"
+Requires-Dist: mypy>=1.14; extra == "test"
+Requires-Dist: pproxy>=2.7; extra == "test"
+Requires-Dist: pytest>=6.2.5; extra == "test"
+Requires-Dist: pytest-cov>=3.0; extra == "test"
+Requires-Dist: pytest-randomly>=3.5; extra == "test"
+Dynamic: license-file
+
+Psycopg 3: PostgreSQL database adapter for Python - Connection Pool
+===================================================================
+
+This distribution package is an optional component of `Psycopg 3`__: it
+contains the optional connection pool package `psycopg_pool`__.
+
+.. __: https://pypi.org/project/psycopg/
+.. __: https://www.psycopg.org/psycopg3/docs/advanced/pool.html
+
+This package is kept separate from the main ``psycopg`` package because it is
+likely that it will follow a different release cycle.
+
+You can also install this package using::
+
+    pip install "psycopg[pool]"
+
+Please read `the project readme`__ and `the installation documentation`__ for
+more details.
+
+.. __: https://github.com/psycopg/psycopg#readme
+.. __: https://www.psycopg.org/psycopg3/docs/basic/install.html
+       #installing-the-connection-pool
+
+
+Copyright (C) 2020 The Psycopg Team

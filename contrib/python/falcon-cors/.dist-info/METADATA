@@ -1,0 +1,16 @@
+Metadata-Version: 2.1
+Name: falcon-cors
+Version: 1.1.7
+Summary: Falcon CORS middlware
+Home-page: https://github.com/lwcolton/falcon-cors
+Author: Colton Leekley-Winslow
+Author-email: lwcolton@gmail.com
+License: UNKNOWN
+Download-URL: https://github.com/lwcolton/falcon-cors/archive/master.zip
+Keywords: falcon,cors,http
+Platform: UNKNOWN
+Requires-Dist: falcon
+
+UNKNOWN
+
+

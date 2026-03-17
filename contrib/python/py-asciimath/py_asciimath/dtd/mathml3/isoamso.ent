@@ -1,0 +1,107 @@
+
+<!--
+     File isoamso.ent produced by the XSL script entities.xsl
+     from input data in unicode.xml.
+
+     Copyright 1998 - 2011 W3C.
+
+     Use and distribution of this code are permitted under the terms of
+     either of the following two licences:
+
+     1) W3C Software Notice and License.
+        http://www.w3.org/Consortium/Legal/2002/copyright-software-20021231.html
+
+
+     2) The license used for the WHATWG HTML specification,
+        which states, in full:
+            You are granted a license to use, reproduce and create derivative
+            works of this document.
+
+ 
+     Please report any errors to David Carlisle
+     via the public W3C list www-math@w3.org.
+
+     The numeric character values assigned to each entity
+     (should) match the Unicode assignments in Unicode 5.x.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1991
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+
+-->
+
+
+<!-- 
+
+       Public identifier: -//W3C//ENTITIES Added Math Symbols: Ordinary//EN//XML
+       System identifier: http://www.w3.org/2003/entities/2007/isoamso.ent
+
+     The public identifier should always be used verbatim.
+     The system identifier may be changed to suit local requirements.
+
+     Typical invocation:
+
+       <!ENTITY % isoamso PUBLIC
+         "-//W3C//ENTITIES Added Math Symbols: Ordinary//EN//XML"
+         "http://www.w3.org/2003/entities/2007/isoamso.ent"
+       >
+       %isoamso;
+
+-->
+
+<!ENTITY ang              "&#x02220;" ><!--ANGLE -->
+<!ENTITY ange             "&#x029A4;" ><!--ANGLE WITH UNDERBAR -->
+<!ENTITY angmsd           "&#x02221;" ><!--MEASURED ANGLE -->
+<!ENTITY angmsdaa         "&#x029A8;" ><!--MEASURED ANGLE WITH OPEN ARM ENDING IN ARROW POINTING UP AND RIGHT -->
+<!ENTITY angmsdab         "&#x029A9;" ><!--MEASURED ANGLE WITH OPEN ARM ENDING IN ARROW POINTING UP AND LEFT -->
+<!ENTITY angmsdac         "&#x029AA;" ><!--MEASURED ANGLE WITH OPEN ARM ENDING IN ARROW POINTING DOWN AND RIGHT -->
+<!ENTITY angmsdad         "&#x029AB;" ><!--MEASURED ANGLE WITH OPEN ARM ENDING IN ARROW POINTING DOWN AND LEFT -->
+<!ENTITY angmsdae         "&#x029AC;" ><!--MEASURED ANGLE WITH OPEN ARM ENDING IN ARROW POINTING RIGHT AND UP -->
+<!ENTITY angmsdaf         "&#x029AD;" ><!--MEASURED ANGLE WITH OPEN ARM ENDING IN ARROW POINTING LEFT AND UP -->
+<!ENTITY angmsdag         "&#x029AE;" ><!--MEASURED ANGLE WITH OPEN ARM ENDING IN ARROW POINTING RIGHT AND DOWN -->
+<!ENTITY angmsdah         "&#x029AF;" ><!--MEASURED ANGLE WITH OPEN ARM ENDING IN ARROW POINTING LEFT AND DOWN -->
+<!ENTITY angrtvb          "&#x022BE;" ><!--RIGHT ANGLE WITH ARC -->
+<!ENTITY angrtvbd         "&#x0299D;" ><!--MEASURED RIGHT ANGLE WITH DOT -->
+<!ENTITY bbrk             "&#x023B5;" ><!--BOTTOM SQUARE BRACKET -->
+<!ENTITY bbrktbrk         "&#x023B6;" ><!--BOTTOM SQUARE BRACKET OVER TOP SQUARE BRACKET -->
+<!ENTITY bemptyv          "&#x029B0;" ><!--REVERSED EMPTY SET -->
+<!ENTITY beth             "&#x02136;" ><!--BET SYMBOL -->
+<!ENTITY boxbox           "&#x029C9;" ><!--TWO JOINED SQUARES -->
+<!ENTITY bprime           "&#x02035;" ><!--REVERSED PRIME -->
+<!ENTITY bsemi            "&#x0204F;" ><!--REVERSED SEMICOLON -->
+<!ENTITY cemptyv          "&#x029B2;" ><!--EMPTY SET WITH SMALL CIRCLE ABOVE -->
+<!ENTITY cirE             "&#x029C3;" ><!--CIRCLE WITH TWO HORIZONTAL STROKES TO THE RIGHT -->
+<!ENTITY cirscir          "&#x029C2;" ><!--CIRCLE WITH SMALL CIRCLE TO THE RIGHT -->
+<!ENTITY comp             "&#x02201;" ><!--COMPLEMENT -->
+<!ENTITY daleth           "&#x02138;" ><!--DALET SYMBOL -->
+<!ENTITY demptyv          "&#x029B1;" ><!--EMPTY SET WITH OVERBAR -->
+<!ENTITY ell              "&#x02113;" ><!--SCRIPT SMALL L -->
+<!ENTITY empty            "&#x02205;" ><!--EMPTY SET -->
+<!ENTITY emptyv           "&#x02205;" ><!--EMPTY SET -->
+<!ENTITY gimel            "&#x02137;" ><!--GIMEL SYMBOL -->
+<!ENTITY iiota            "&#x02129;" ><!--TURNED GREEK SMALL LETTER IOTA -->
+<!ENTITY image            "&#x02111;" ><!--BLACK-LETTER CAPITAL I -->
+<!ENTITY imath            "&#x00131;" ><!--LATIN SMALL LETTER DOTLESS I -->
+<!ENTITY jmath            "&#x00237;" ><!--LATIN SMALL LETTER DOTLESS J -->
+<!ENTITY laemptyv         "&#x029B4;" ><!--EMPTY SET WITH LEFT ARROW ABOVE -->
+<!ENTITY lltri            "&#x025FA;" ><!--LOWER LEFT TRIANGLE -->
+<!ENTITY lrtri            "&#x022BF;" ><!--RIGHT TRIANGLE -->
+<!ENTITY mho              "&#x02127;" ><!--INVERTED OHM SIGN -->
+<!ENTITY nang             "&#x02220;&#x020D2;" ><!--ANGLE with vertical line -->
+<!ENTITY nexist           "&#x02204;" ><!--THERE DOES NOT EXIST -->
+<!ENTITY oS               "&#x024C8;" ><!--CIRCLED LATIN CAPITAL LETTER S -->
+<!ENTITY planck           "&#x0210F;" ><!--PLANCK CONSTANT OVER TWO PI -->
+<!ENTITY plankv           "&#x0210F;" ><!--PLANCK CONSTANT OVER TWO PI -->
+<!ENTITY raemptyv         "&#x029B3;" ><!--EMPTY SET WITH RIGHT ARROW ABOVE -->
+<!ENTITY range            "&#x029A5;" ><!--REVERSED ANGLE WITH UNDERBAR -->
+<!ENTITY real             "&#x0211C;" ><!--BLACK-LETTER CAPITAL R -->
+<!ENTITY tbrk             "&#x023B4;" ><!--TOP SQUARE BRACKET -->
+<!ENTITY trpezium         "&#x023E2;" ><!--WHITE TRAPEZIUM -->
+<!ENTITY ultri            "&#x025F8;" ><!--UPPER LEFT TRIANGLE -->
+<!ENTITY urtri            "&#x025F9;" ><!--UPPER RIGHT TRIANGLE -->
+<!ENTITY vzigzag          "&#x0299A;" ><!--VERTICAL ZIGZAG LINE -->
+<!ENTITY weierp           "&#x02118;" ><!--SCRIPT CAPITAL P -->

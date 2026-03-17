@@ -1,0 +1,27 @@
+# (C) Copyright 2005- ECMWF.
+#
+# This software is licensed under the terms of the Apache Licence Version 2.0
+# which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+# 
+# In applying this licence, ECMWF does not waive the privileges and immunities granted to it by
+# virtue of its status as an intergovernmental organisation nor does it submit to any jurisdiction.
+#
+
+constant domain = "g";
+constant param = "127.128";
+constant second = 0;
+constant step = 0;
+constant levtype = "ml";
+constant levelist = 1;
+meta      date    budgdate(yearOfCentury,month,day);
+alias ls.step=step;
+alias ls.date=date;
+meta      time    time(hour,minute,second);
+
+
+alias mars.step     = step;
+alias mars.date     = date;
+alias mars.time     = time;
+alias mars.levtype  = levtype;
+alias mars.param    = param;
+alias mars.levelist = levelist;

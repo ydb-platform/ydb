@@ -1,0 +1,142 @@
+syntax = "proto3";
+
+package yandex.cloud.maintenance.v2;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/maintenance/v2;maintenance";
+option java_package = "yandex.cloud.api.maintenance.v2";
+
+message Maintenance {
+  enum Status {
+    // Not set.
+    STATUS_UNSPECIFIED = 0;
+    // Maintenance is scheduled for a future time.
+    SCHEDULED = 1;
+    // Maintenance is currently running.
+    RUNNING = 2;
+    // Maintenance completed successfully.
+    SUCCEEDED = 3;
+    // Maintenance is cancelled and will not run.
+    CANCELLED = 4;
+  }
+
+  message Resource {
+    // ID of the resource
+    string id = 1;
+    // The type of the resource, e.g. resource-manager.cloud, resource-manager.folder, compute.instance, etc.
+    string type = 2;
+  }
+
+  message Detail {
+    // Unique key (service-specific).
+    string key = 1;
+    // Description (service-specific).
+    string value = 2;
+  }
+
+  // ID of the maintenance.
+  string id = 1;
+
+  // Full path to the resource affected by maintenance,
+  // represented as a hierarchy from specific resource to top-level container.
+  // Example for a Compute instance with ID "I" in folder "F" and cloud "C":
+  // resource_path = [
+  //    { "compute.instance", "I" },
+  //    { "resource-manager.folder", "F" },
+  //    { "resource-manager.cloud", "C" }
+  // ]
+  repeated Resource resource_path = 2;
+
+  // Describes action to be performed.
+  string description = 3;
+  // Service-specific details.
+  repeated Detail details = 4;
+  // Status of the maintenance.
+  Status status = 5;
+
+  // The creation time of the maintenance.
+  google.protobuf.Timestamp created_at = 6;
+  // The time when the maintenance was scheduled to start.
+  google.protobuf.Timestamp start_scheduled_at = 7;
+  // The time when the maintenance is estimated to complete. Optional.
+  google.protobuf.Timestamp completion_scheduled_at = 8;
+  // Latest time the maintenance can be postponed to.
+  google.protobuf.Timestamp max_start_scheduled_at = 9;
+  // The time time when the maintenance has actually started.
+  google.protobuf.Timestamp started_at = 10;
+  // The time time when the maintenance has actually completed successfully.
+  google.protobuf.Timestamp succeeded_at = 11;
+  // The time time when the maintenance has actually been cancelled.
+  google.protobuf.Timestamp cancelled_at = 12;
+
+  // Indicates whether the user can control (reschedule) the maintenance.
+  bool user_controllable = 13;
+}
+
+// ListMaintenancesRequest allows listing maintenances by cloud ID, folder ID, resource type or resource ID.
+message ListMaintenancesRequest {
+  // Container specifies the resources for which to list maintenances. (Required)
+  oneof container {
+    // Cloud ID for the resources.
+    string cloud_id = 1 [(length) = "<=50"];
+    // Folder ID for the resources.
+    string folder_id = 2 [(length) = "<=50"];
+    // Resource ID of the target resource.
+    string resource_id = 3 [(length) = "<=50"];
+  }
+
+  // The maximum number of maintenances to return per response.
+  int64 page_size = 4 [(value) = "<=1000"];
+  // Token to retrieve the next page of results. Omitted on the first request.
+  string page_token = 5 [(length) = "<=500"];
+
+  // By which field the listing should be ordered and in which direction,
+  // format is "created_at desc". The default sorting order is ascending.
+  // Supported fields: ["created_at", "start_scheduled_at", "started_at"].
+  string order_by = 6 [(length) = "<=100"];
+
+  // Filter list by various fields.
+  // Supported fields: ["status", "resource_type", "resource_id"]
+  string filter = 7 [(length) = "<=100"];
+}
+
+message ListMaintenancesResponse {
+  // List of maintenances.
+  repeated Maintenance maintenances = 1;
+
+  // Token to retrieve the next page of results.
+  string next_page_token = 2;
+}
+
+// GetMaintenanceRequest allows getting Maintenance by ID.
+message GetMaintenanceRequest {
+  string maintenance_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+// RescheduleMaintenanceRequest allows to reschedule maintenance to another date and time.
+message RescheduleMaintenanceRequest {
+  enum Type {
+    // Not set.
+    TYPE_UNSPECIFIED = 0;
+    // If the user wants to reschedule the maintenance to happen now.
+    IMMEDIATE = 1;
+    // If the user wants to reschedule the maintenance for the next maintenance window.
+    NEXT_AVAILABLE_WINDOW = 2;
+    // If the user wants to reschedule the maintenance to a specific time.
+    SPECIFIC_TIME = 3;
+  }
+
+  // Required. ID of the maintenance.
+  string maintenance_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Required. If `reschedule_type` is "SPECIFIC_TIME",
+  // must set up `schedule_time` as well.
+  Type reschedule_type = 2;
+
+  // Optional. Timestamp the maintenance shall be rescheduled to,
+  // if `reschedule_type` = "SPECIFIC_TIME".
+  // Must be in RFC 3339 format (e.g. "2025-11-15T16:19:00.094Z").
+  google.protobuf.Timestamp scheduled_at = 3;
+}

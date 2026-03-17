@@ -1,0 +1,98 @@
+# (C) Copyright 2005- ECMWF.
+
+# Uncertainties in ensembles of regional re-analysis project (UERRA)
+constant marsClass = 'ur';
+
+alias tigge_short_name=shortName;
+alias short_name=shortName;
+alias parameter=paramId;
+alias tigge_name=name;
+
+alias parameter.paramId=paramId;
+alias parameter.shortName=shortName;
+alias parameter.units=units;
+alias parameter.name=name;
+
+# Special UERRA rule for level type 103 'Specified height level above ground (m)'
+if(typeOfFirstFixedSurface == 103) {
+    # only the parameters above 10m
+    if (level > 10) {
+        constant heightLevelName = 'hl';
+        alias mars.levtype = heightLevelName;
+        # levelist was unaliased in template.4.horizontal.def so we must have it back
+        alias mars.levelist = level;
+    }
+}
+if(typeOfFirstFixedSurface == 118) {
+    constant levTypeName = 'ml';
+    alias mars.levtype = levTypeName;
+}
+
+# See GRIB-871 and ECC-854
+if(typeOfFirstFixedSurface == 151 && typeOfSecondFixedSurface == 151) {
+    alias level = bottomLevel;
+    #alias mars.levelist = level;
+}
+
+# if there is a local section, we take the experimentVersionNumber
+if(localUsePresent == 1){
+    alias mars.expver = experimentVersionNumber;
+}
+if(localUsePresent == 0){
+    alias mars.expver = marsExpver;
+}
+
+alias mars.class  = marsClass;
+alias mars.param = paramId;
+alias mars.origin = centre;
+
+# See GRIB-911 re typeOfProcessedData values in UERRA
+concept marsType(unknown) {
+   fc = {
+     typeOfProcessedData = 1;
+   }
+   "9" = {
+     typeOfProcessedData = 1;
+   }
+
+   an = {
+     typeOfProcessedData = 0;
+   }
+   "2" = {
+     typeOfProcessedData = 0;
+   }
+
+   # See ECC-456. Special rule for Swedish data
+   # oi is Optimal Interpolation
+   oi = {
+     centre = 82;
+     typeOfGeneratingProcess = 0;
+     generatingProcessIdentifier = 50;
+   }
+   "4" = {
+     centre = 82;
+     typeOfGeneratingProcess = 0;
+     generatingProcessIdentifier = 50;
+   }
+}
+
+# See GRIB-205 re no_copy
+# Cannot use typeOfProcessedData for stream. See GRIB-911
+concept marsStream(unknown) {
+    oper = {
+      productDefinitionTemplateNumber = 8;
+    }
+    oper = {
+      productDefinitionTemplateNumber = 0;
+    }
+
+    enda = {
+      productDefinitionTemplateNumber = 11;
+    }
+    enda = {
+      productDefinitionTemplateNumber = 1;
+    }
+} : no_copy;
+
+alias mars.stream = marsStream;
+alias mars.type   = marsType;

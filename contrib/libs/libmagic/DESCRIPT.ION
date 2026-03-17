@@ -1,0 +1,41 @@
+DESCRIPT.ION description of files used by 4DOS,Volkow-,Total-,Double Commander with Time-stamp: "24-06-2023 11:29:28"
+. sources of command line tool file to identify file types
+doc directory with man pages for the file command, libmagic library and magic file and makefile scripts to generate these from templates
+m4 directory with M4 macro processor script texts
+magic directory with compiled database magic.mgc and the source texts
+python directory with Python script executables
+src directory with C sources
+tests directory with testfiles and results
+AUTHORS AUTHORS text
+COPYING Copyright text
+ChangeLog Log text about Changes
+INSTALL Installation Instructions text
+MAINT Maintenance notes text
+Makefile makefile script text used by make program, created from Makefile.in by configure script
+Makefile.am makefile script to generate template Makefile.in by automake
+Makefile.in template to create Makefile script by configure script and is generated from Makefile.am by automake
+NEWS NEWS text
+README README text for file(1) command and the libmagic(3) library as pure ASCII text
+README.DEVELOPER README text how to get started developing
+README.md README text for file(1) command and the libmagic(3) library as Markdown document
+RELEASE-PROCEDURE README text how to release file
+TODO TODO text
+acinclude.m4 M4 macro processor script with changes to check for daylight
+aclocal.m4 M4 macro processor script generated automatically by aclocal
+compile Wrapper shell script for compilers which do not understand '-c -o'
+config.guess shell script to guess a canonical system name
+config.h C source header text for system-dependent variables created from config.h.in by configure script
+config.h.in template to create C source header config.h by configure script
+config.log Log text created by configure script
+config.status shell script to print or recreate the current configuration
+config.sub shell script to canonicalize a configuration name
+configure shell script to guess values for system-dependent variables (create config.h) and create Makefile
+configure.ac M4 macro processor text to recreate configure shell script by autoconf
+depcomp shell script to compile a program generating dependencies as side-effects
+install-sh shell script for system without install binary to install (copy change attribute) a program, script, or datafile
+libmagic.pc ASCII text created from libmagic.pc.in by configure script
+libmagic.pc.in template to create libmagic.pc by configure script
+libtool shell script that hides the complexity of using shared libraries and is generated automatically by config.status
+ltmain.sh shell script to provide generalized library-building support services
+missing shell script wrapper for a few potentially missing GNU programs
+stamp-h1 timestamp for config.h

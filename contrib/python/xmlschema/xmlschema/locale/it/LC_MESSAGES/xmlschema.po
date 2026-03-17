@@ -1,0 +1,1979 @@
+# Italian translations for xmlschema package.
+# Copyright (C) 2022 , 2016, SISSA (International School for Advanced Studies).
+# This file is distributed under the same license as the xmlschema package.
+# Davide Brunato <brunato@sissa.it>, 2022.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: xmlschema\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-20 06:55+0100\n"
+"PO-Revision-Date: 2022-05-09 16:08+0200\n"
+"Last-Translator: Davide Brunato <brunato@sissa.it>\n"
+"Language-Team: Italian\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: xmlschema/documents.py:51
+#, fuzzy
+msgid "invalid schema class {!r}"
+msgstr "classe schema {!r} non valida"
+
+#: xmlschema/documents.py:89
+#, fuzzy
+msgid "cannot get a schema for XML data, provide a schema argument"
+msgstr ""
+"impossibile ottenere uno schema per i dati XML, fornire un argomento 'schema' appropriato."
+
+#: xmlschema/exports.py:148
+msgid "target directory {} is not empty"
+msgstr "la directory target {} non è vuota"
+
+#: xmlschema/exports.py:151
+msgid "target {} is not a directory"
+msgstr "il target {} non è una directory"
+
+#: xmlschema/exports.py:154
+msgid "target parent directory {} does not exist"
+msgstr "la directory {} parent del target non esiste"
+
+#: xmlschema/exports.py:157
+msgid "target parent {} is not a directory"
+msgstr "la directory {} parent del target non è una directory"
+
+#: xmlschema/exports.py:171
+msgid "target directory {} violation for exported path {}, {}"
+msgstr "violazione della directory target {} per il path esportato {}, {}"
+
+#: xmlschema/loaders.py:117
+msgid ""
+"if the 'namespace' attribute is not present on the import statement then the "
+"imported schema must have a 'targetNamespace'"
+msgstr ""
+"se l'attributo 'namespace' non è presente nell'istruzione import, lo schema "
+"importato deve avere un 'targetNamespace'"
+
+#: xmlschema/loaders.py:121
+msgid ""
+"the attribute 'namespace' must be different from schema's 'targetNamespace'"
+msgstr ""
+"l'attributo 'namespace' deve essere diverso dal 'targetNamespace' dello "
+"schema"
+
+#: xmlschema/loaders.py:155
+msgid "Include schema failed: {}"
+msgstr "Inclusione dello schema non riuscita: {}"
+
+#: xmlschema/loaders.py:164
+msgid "Redefine schema failed: {}"
+msgstr "Ridefinizione dello schema non riuscita: {}"
+
+#: xmlschema/loaders.py:166
+msgid "Override schema failed: {}"
+msgstr "Sovrascrittura dello schema non riuscita: {}"
+
+#: xmlschema/loaders.py:173
+msgid "can't include schema {!r}: {}"
+msgstr "impossibile includere lo schema {!r}: {}"
+
+#: xmlschema/loaders.py:175
+msgid "can't redefine schema {!r}: {}"
+msgstr "impossibile ridefinire lo schema {!r}: {}"
+
+#: xmlschema/loaders.py:177
+msgid "can't override schema {!r}: {}"
+msgstr "impossibile sovrascrivere lo schema {!r}: {}"
+
+#: xmlschema/loaders.py:185
+msgid "can't {} the same schema {!r}"
+msgstr "non è possibile {} lo stesso schema {!r}"
+
+#: xmlschema/loaders.py:214
+msgid "import of namespace {!r} failed: {}"
+msgstr "importazione dello spazio dei nomi {!r} non riuscita: {}"
+
+#: xmlschema/loaders.py:216
+msgid "import of chameleon schema failed: {}"
+msgstr "importazione dello schema camaleonte fallita: {}"
+
+#: xmlschema/loaders.py:230
+msgid "Import of namespace {!r} from {!r} failed: {}."
+msgstr "Importazione dello spazio dei nomi {!r} da {!r} fallita: {}."
+
+#: xmlschema/loaders.py:253
+msgid "imported schema {!r} has an unmatched namespace {!r}"
+msgstr ""
+"lo schema importato {!r} ha uno spazio dei nomi non corrispondente {!r}"
+
+#: xmlschema/locations.py:34
+msgid "wrong type {!r} for locations argument"
+msgstr "l'argomento locations è di tipo errato {!r}"
+
+#: xmlschema/resources/arguments.py:46
+msgid "source XML document is empty"
+msgstr "il document XML sorgente è vuoto"
+
+#: xmlschema/resources/arguments.py:78
+msgid "invalid value {!r} for argument {!r}"
+msgstr "valore {!r} non valide per l'argomento {!r}"
+
+#: xmlschema/utils/descriptors.py:112 xmlschema/validators/builders.py:187
+msgid "Can't set attribute {}"
+msgstr "Non è possibile assegnare l'attributo {}"
+
+#: xmlschema/utils/descriptors.py:116 xmlschema/validators/builders.py:190
+msgid "Can't delete attribute {}"
+msgstr "Non è possibile cancellare l'attributo {}"
+
+#: xmlschema/utils/descriptors.py:124
+msgid "invalid type {!r} for argument {!r}"
+msgstr "tipo {!r} non valido per l'argomento {!r}"
+
+#: xmlschema/utils/descriptors.py:138
+msgid "invalid value {!r} for argument {!r}: must be one of {}"
+msgstr "valore non valido {!r} per l'argomento {!r}: must be one of {}"
+
+#: xmlschema/utils/descriptors.py:156
+msgid "the argument {!r} must be greater or equal than {}"
+msgstr "il valore dell'argomento {!r} dev'essere maggiore o uguale a {}"
+
+#: xmlschema/utils/descriptors.py:159
+msgid "the argument {!r} must be lesser or equal than {}"
+msgstr "il numero di cifre deve essere minore o uguale a {!r}"
+
+#: xmlschema/utils/logger.py:30
+msgid "{!r} is not a valid loglevel"
+msgstr "{!r} non è un loglevel valido"
+
+#: xmlschema/validators/assertions.py:76
+msgid "base_type={!r} is not a complexType definition"
+msgstr "base_type={!r} non è una definizione complexType"
+
+#: xmlschema/validators/attributes.py:89
+msgid "unknown attribute {!r}"
+msgstr "attributo sconosciuto {!r}"
+
+#: xmlschema/validators/attributes.py:105
+msgid "referenced attribute has a different fixed value {!r}"
+msgstr "l'attributo riferito ha un valore fisso diverso {!r}"
+
+#: xmlschema/validators/attributes.py:110
+msgid "attribute {!r} is not allowed when attribute reference is used"
+msgstr ""
+"l'attributo {!r} non è consentito quando si utilizza un riferimento ad "
+"attributo"
+
+#: xmlschema/validators/attributes.py:126
+msgid "an attribute name must be different from 'xmlns'"
+msgstr "un nome di attributo deve essere diverso da 'xmlns'"
+
+#: xmlschema/validators/attributes.py:133
+#, python-format
+msgid "cannot add attributes in %r namespace"
+msgstr "impossibile aggiungere attributi nello spazio dei nomi %r"
+
+#: xmlschema/validators/attributes.py:154
+msgid "ambiguous type definition for XSD attribute"
+msgstr "definizione di tipo ambigua per l'attributo XSD"
+
+#: xmlschema/validators/attributes.py:166
+msgid "XSD attribute's type must be a simpleType"
+msgstr "il tipo di un attributo XSD deve essere un simpleType"
+
+#: xmlschema/validators/attributes.py:173 xmlschema/validators/elements.py:291
+msgid "'default' and 'fixed' attributes are mutually exclusive"
+msgstr "gli attributi 'default' e 'fixed' sono mutuamente esclusivi"
+
+#: xmlschema/validators/attributes.py:177
+msgid ""
+"the attribute 'use' must be 'optional' if the attribute 'default' is present"
+msgstr ""
+"l'attributo 'use' deve essere 'optional' se è presente l'attributo 'default'"
+
+#: xmlschema/validators/attributes.py:182
+msgid "default value {!r} is not compatible with attribute's type"
+msgstr "il valore di default {!r} non è compatibile con il tipo dell'attributo"
+
+#: xmlschema/validators/attributes.py:185
+msgid "xs:ID key attributes cannot have a default value"
+msgstr "gli attributi chiave xs:ID non possono avere un valore predefinito"
+
+#: xmlschema/validators/attributes.py:191
+msgid "fixed value {!r} is not compatible with attribute's type"
+msgstr "il valore fisso {!r} non è compatibile con il tipo dell'attributo"
+
+#: xmlschema/validators/attributes.py:194
+msgid "xs:ID key attributes cannot have a fixed value"
+msgstr "gli attributi chiave xs:ID non possono avere un valore fisso"
+
+#: xmlschema/validators/attributes.py:238 xmlschema/validators/elements.py:766
+msgid ""
+"cannot validate against xs:NOTATION directly, only against a subtype with an "
+"enumeration facet"
+msgstr ""
+"non si può convalidare direttamente con xs:NOTATION, solo con un sottotipo "
+"con facet di enumerazione"
+
+#: xmlschema/validators/attributes.py:242 xmlschema/validators/elements.py:770
+msgid "missing enumeration facet in xs:NOTATION subtype"
+msgstr "facet di enumerazione mancante nel sottotipo di xs:NOTATION"
+
+#: xmlschema/validators/attributes.py:251
+msgid "attribute {0!r} has a fixed value {1!r}"
+msgstr "l'attributo {0!r} ha un valore fisso {1!r}"
+
+#: xmlschema/validators/attributes.py:305
+msgid "attribute 'fixed' with use=prohibited is not allowed in XSD 1.1"
+msgstr "l'attributo 'fixed' con use=prohibited non è consentito in XSD 1.1"
+
+#: xmlschema/validators/attributes.py:397
+msgid "more anyAttribute declarations in the same attribute group"
+msgstr "più dichiarazioni anyAttribute nello stesso gruppo di attributi"
+
+#: xmlschema/validators/attributes.py:400
+msgid "another declaration after anyAttribute"
+msgstr "un'altra dichiarazione dopo anyAttribute"
+
+#: xmlschema/validators/attributes.py:416
+msgid "multiple declaration for attribute {!r}"
+msgstr "dichiarazione multipla per l'attributo {!r}"
+
+#: xmlschema/validators/attributes.py:425
+msgid "the attribute 'ref' is required in a local attributeGroup"
+msgstr "l'attributo 'ref' è richiesto in un attributeGroup locale"
+
+#: xmlschema/validators/attributes.py:435
+msgid "duplicated attributeGroup {!r}"
+msgstr "attributeGroup {!r} duplicato"
+
+#: xmlschema/validators/attributes.py:441
+msgid "in a redefinition the reference to itself must be the first"
+msgstr "in una ridefinizione il riferimento a se stesso deve essere il primo"
+
+#: xmlschema/validators/attributes.py:452
+msgid "attributeGroup ref={!r} is not in the redefined group"
+msgstr "attributeGroup ref={!r} non è nel gruppo ridefinito"
+
+#: xmlschema/validators/attributes.py:456
+msgid "Circular attribute groups not allowed in XSD 1.0"
+msgstr "Gruppi di attributi circolari non consentiti in XSD 1.0"
+
+#: xmlschema/validators/attributes.py:464
+msgid "unknown attribute group {!r}"
+msgstr "gruppo di attributi sconosciuto {!r}"
+
+#: xmlschema/validators/attributes.py:475
+msgid "multiple declaration of attribute {!r}"
+msgstr "dichiarazione multipla dell'attributo {!r}"
+
+#: xmlschema/validators/attributes.py:485
+msgid "(attribute | attributeGroup) expected, found {!r}."
+msgstr "(attribute | attributeGroup) previsto, trovato {!r}."
+
+#: xmlschema/validators/attributes.py:496
+msgid "Unexpected attribute {!r} in restriction"
+msgstr "Attributo imprevisto {!r} in restrizione"
+
+#: xmlschema/validators/attributes.py:512
+msgid "Attribute wildcard is not a restriction of the base wildcard"
+msgstr "La wildcard attributo non è una restrizione della wildcard di base"
+
+#: xmlschema/validators/attributes.py:522
+msgid "Attribute type is not a restriction of the base attribute type"
+msgstr ""
+"Il tipo dell'attributo non è una restrizione del tipo dell'attributo di base"
+
+#: xmlschema/validators/attributes.py:527
+msgid "Attribute {!r}: unmatched attribute use in restriction"
+msgstr "Attributo {!r}: attributo 'use' non corrispondente nella restrizione"
+
+#: xmlschema/validators/attributes.py:533
+msgid "Attribute {!r}: derived attribute has a different fixed value"
+msgstr "Attributo {!r}: l'attributo derivato ha un valore fisso diverso"
+
+#: xmlschema/validators/attributes.py:537
+msgid "Attribute {!r}: 'inheritable' property change in restriction"
+msgstr ""
+"Attributo {!r}: modifica della proprietà 'inheritable' nella restrizione"
+
+#: xmlschema/validators/attributes.py:551
+msgid "Missing required attribute {!r} in redefinition restriction"
+msgstr ""
+"Attributo obbligatorio {!r} mancante nella restrizione di ridefinizione"
+
+#: xmlschema/validators/attributes.py:556
+msgid "Attribute {!r}: unmatched attribute use in redefinition"
+msgstr ""
+"Attributo {!r}: utilizzo di attributi non corrispondenti nella ridefinizione"
+
+#: xmlschema/validators/attributes.py:559
+msgid "Attribute {!r}: redefinition remove fixed constraint"
+msgstr "Attributo {!r}: la ridefinizione rimuove il vincolo fixed"
+
+#: xmlschema/validators/attributes.py:568
+msgid "Redefinition restriction contains additional attribute {!r}"
+msgstr "La restrizione di ridefinizione contiene un attributo aggiuntivo {!r}"
+
+#: xmlschema/validators/attributes.py:572
+msgid "Wrong attribute order in redefinition restriction"
+msgstr "Ordine degli attributi errato nella restrizione di ridefinizione"
+
+#: xmlschema/validators/attributes.py:591
+msgid "multiple ID attributes not allowed for XSD 1.0"
+msgstr "attributi ID multipli non consentiti per XSD 1.0"
+
+#: xmlschema/validators/attributes.py:646
+#: xmlschema/validators/attributes.py:722
+msgid "missing required attribute {!r}"
+msgstr "attributo richiesto {!r} mancante"
+
+#: xmlschema/validators/attributes.py:677
+#: xmlschema/validators/attributes.py:740
+#, python-format
+msgid "%r is not an attribute of the XSI namespace"
+msgstr "%r non è un attributo dello spazio dei nomi XSI"
+
+#: xmlschema/validators/attributes.py:685
+#: xmlschema/validators/attributes.py:748
+#, python-format
+msgid "%r attribute not allowed for element"
+msgstr "l'attributo %r non è consentito per l'elemento"
+
+#: xmlschema/validators/attributes.py:691
+#, python-format
+msgid "use of attribute %r is prohibited"
+msgstr "l'uso dell'attributo %r è vietato"
+
+#: xmlschema/validators/builders.py:232
+msgid "'model' argument must be (sequence | choice | all)"
+msgstr "l'argomento 'model' deve essere (sequence | choice | all)"
+
+#: xmlschema/validators/builders.py:317 xmlschema/validators/builders.py:325
+msgid "(restriction | list | union) expected"
+msgstr "previsto (restriction | list | union)"
+
+#: xmlschema/validators/builders.py:336
+msgid "missing attribute 'name' in a global simpleType"
+msgstr "attributo 'name' mancante in un simpleType globale"
+
+#: xmlschema/validators/builders.py:341
+msgid "attribute 'name' not allowed for a local simpleType"
+msgstr "l'attributo 'name' non è consentito per un simpleType locale"
+
+#: xmlschema/validators/builders.py:463
+msgid "global {} {!r} not found"
+msgstr "{} globale {!r} non trovato"
+
+#: xmlschema/validators/builders.py:517
+msgid "global xs:{} with name={!r} is already built"
+msgstr "xs:{} globale con nome={!r} è già costruito"
+
+#: xmlschema/validators/builders.py:519
+msgid "global xs:{} with name={!r} is already defined"
+msgstr "xs:{} globale con nome={!r} è già definito"
+
+#: xmlschema/validators/builders.py:546
+msgid "global xs:{} with name={!r} is already loaded"
+msgstr "xs:{} globale con nome={!r} è già caricato"
+
+#: xmlschema/validators/builders.py:560
+msgid "not a redefinition!"
+msgstr "non è una ridefinizione!"
+
+#: xmlschema/validators/builders.py:618
+msgid "redefined schema {!r} has a different targetNamespace"
+msgstr "lo schema ridefinito {!r} ha un targetNamespace diverso"
+
+#: xmlschema/validators/builders.py:629
+msgid "unexpected instance {!r} in XSD {} global map"
+msgstr "istanza imprevista {!r} nella mappa XSD {} globale"
+
+#: xmlschema/validators/complex_types.py:137
+msgid "missing attribute 'name' in a global complexType"
+msgstr "attributo 'name' mancante in tipo complesso globale"
+
+#: xmlschema/validators/complex_types.py:142
+msgid "attribute 'name' not allowed in a local complexType"
+msgstr "attributo 'name' non ammesso in tipo complesso locale"
+
+#: xmlschema/validators/complex_types.py:165
+msgid "'mixed' attribute not allowed with simpleContent"
+msgstr "l'attributo 'mixed' non è ammesso se il contenuto è simpleContent"
+
+#: xmlschema/validators/complex_types.py:180
+#, python-format
+msgid "unexpected tag %r after simpleContent declaration:"
+msgstr "tag %r non previsto dopo dichiarazione simpleContent"
+
+#: xmlschema/validators/complex_types.py:191
+msgid ""
+"value of 'mixed' attribute in complexType and complexContent must be the same"
+msgstr ""
+"il valore dell'attributo 'mixed' di un complexType e del suo complexContent "
+"dev'essere uguale"
+
+#: xmlschema/validators/complex_types.py:211
+#, python-format
+msgid "unexpected tag %r after complexContent declaration"
+msgstr "tag %r non previsto dopo dichiarazione complexContent"
+
+#: xmlschema/validators/complex_types.py:236
+#, python-format
+msgid "unexpected tag %r for complexType content"
+msgstr "tag %r non previsto per un contenuto di complexType"
+
+#: xmlschema/validators/complex_types.py:244
+#: xmlschema/validators/simple_types.py:1266
+msgid "wrong definition with self-reference"
+msgstr "definizione errata con autoreferenzialità"
+
+#: xmlschema/validators/complex_types.py:247
+#: xmlschema/validators/simple_types.py:1273
+msgid "wrong redefinition without self-reference"
+msgstr "ridefinizione errata senza autoreferenzialità"
+
+#: xmlschema/validators/complex_types.py:258
+msgid "restriction or extension tag expected"
+msgstr "previsto tag di restrizione o estensione"
+
+#: xmlschema/validators/complex_types.py:265
+msgid "{!r} is expected to have a redefined/overridden component"
+msgstr "è previsto che {!r} abbia almeno un componente ridefinito/sostituito"
+
+#: xmlschema/validators/complex_types.py:270
+msgid "{0!r} derivation not allowed for {1!r}"
+msgstr "derivazione {0!r} non ammessa per {1!r}"
+
+#: xmlschema/validators/complex_types.py:280
+msgid "'base' attribute required"
+msgstr "attributo 'base' richiesto"
+
+#: xmlschema/validators/complex_types.py:289
+#, python-format
+msgid "missing base type %r"
+msgstr "tipo base %r mancante"
+
+#: xmlschema/validators/complex_types.py:300
+#: xmlschema/validators/complex_types.py:314
+msgid "a complexType ancestor required: {!r}"
+msgstr "è richiesto un antenato complexType: {!r}"
+
+#: xmlschema/validators/complex_types.py:305
+#, python-format
+msgid "derivation by %r blocked by attribute 'final' in base type"
+msgstr "derivazione per %r bloccata de attributo 'final' nel tipo base"
+
+#: xmlschema/validators/complex_types.py:324
+msgid "a not empty simpleContent cannot restrict an empty content type"
+msgstr ""
+"un simpleContent non vuoto non può essere restrizione di un tipo di "
+"contenuto vuoto"
+
+#: xmlschema/validators/complex_types.py:333
+msgid "content type is not a restriction of base content"
+msgstr "il tipo di contenuto non è una restrizione di quello di base"
+
+#: xmlschema/validators/complex_types.py:341
+msgid "with simpleContent cannot restrict an element-only content type"
+msgstr ""
+"con un simpleContent non si può restringere un tipo di contenuto element-only"
+
+#: xmlschema/validators/complex_types.py:353 xmlschema/validators/groups.py:544
+#, python-format
+msgid "unexpected tag %r"
+msgstr "tag %r inatteso"
+
+#: xmlschema/validators/complex_types.py:363
+#, python-format
+msgid "base type %r has no simple content"
+msgstr "il tipo base %r non ha contenuto semplice"
+
+#: xmlschema/validators/complex_types.py:371
+msgid "the base type is not derivable by restriction"
+msgstr "il tipo base non è derivabile per restrizione"
+
+#: xmlschema/validators/complex_types.py:374
+#: xmlschema/validators/complex_types.py:467
+#: xmlschema/validators/complex_types.py:914
+#, python-format
+msgid "base %r is simple or has a simple content"
+msgstr "la base %r è semplice o ha contenuto semplice"
+
+#: xmlschema/validators/complex_types.py:386
+#, python-brace-format
+msgid ""
+"restriction of an xs:{0} with more than one particle with xs:{1} is forbidden"
+msgstr ""
+"la restrizione di un xs:{0} avente più di una particella con xs:{1} è "
+"proibita"
+
+#: xmlschema/validators/complex_types.py:398
+msgid "derived a mixed content from a base type that has element-only content"
+msgstr ""
+"derivazione di contenuto misto da un tipo base con contenuto element-only"
+
+#: xmlschema/validators/complex_types.py:401
+msgid "an empty content derivation from base type that has not empty content"
+msgstr ""
+"derivazione di un contenuto vuoto da un tipo base con contenuto non vuoto"
+
+#: xmlschema/validators/complex_types.py:412
+msgid "{0!r} is not a restriction of the base type {1!r}"
+msgstr "{0!r} non è una restrizione del tipo base {1!r}"
+
+#: xmlschema/validators/complex_types.py:421
+#: xmlschema/validators/complex_types.py:919
+msgid "the base type is not derivable by extension"
+msgstr "il tipo base non è derivabile per estensione"
+
+#: xmlschema/validators/complex_types.py:454
+#: xmlschema/validators/complex_types.py:964
+#: xmlschema/validators/complex_types.py:1014
+#, python-format
+msgid ""
+"base has a different content type (mixed=%r) and the extension group is not "
+"empty."
+msgstr ""
+"la base ha un diverso tipo di contenuto (mixed=%r) e il gruppo di estensione "
+"non è vuoto"
+
+#: xmlschema/validators/complex_types.py:474
+msgid "cannot extend a complex content with xs:all"
+msgstr "non si può estendere un contenuto complesso con xs:all"
+
+#: xmlschema/validators/complex_types.py:477
+msgid "xs:sequence cannot extend xs:all"
+msgstr "xs:sequence non può estendere xs:all"
+
+#: xmlschema/validators/complex_types.py:487
+msgid "XSD 1.0 does not allow extension of a not empty 'all' model group"
+msgstr "XSD 1.0 non permette l'estensione di un gruppo modello 'all' non vuoto"
+
+#: xmlschema/validators/complex_types.py:490
+#, python-format
+msgid ""
+"base has a different content type (mixed=%r) and the extension group is not "
+"empty"
+msgstr ""
+"la base ha un diverso tipo di contenuto (mixed=%r) e il gruppo di estensione "
+"non è vuoto"
+
+#: xmlschema/validators/complex_types.py:503
+#: xmlschema/validators/complex_types.py:1028
+msgid "extended type has a mixed content but the base is element-only"
+msgstr "il tipo esteso ha un contenuto misto ma la base è element-only"
+
+#: xmlschema/validators/complex_types.py:670
+msgid "global type {!r} is not built"
+msgstr "il tipo globale {!r} non è costruito"
+
+#: xmlschema/validators/complex_types.py:745
+#: xmlschema/validators/complex_types.py:771
+#, python-format
+msgid "cannot decode %(obj)r data with %(decoder)r"
+msgstr "non posso decodificare i dati di %(obj)r con %(decoder)r"
+
+#: xmlschema/validators/complex_types.py:868
+msgid "the simple content of {!r} is not a valid simple type in XSD 1.1"
+msgstr "il contenuto semplice di {!r} non è un tipo semplice valido in XSD 1.1"
+
+#: xmlschema/validators/complex_types.py:875
+msgid "openContent mismatch between type and model group"
+msgstr "openContent non corrispondente tra il tipo e il modello di gruppo"
+
+#: xmlschema/validators/complex_types.py:887
+#, python-format
+msgid "attribute %r must be inheritable"
+msgstr "l'attributo %r dev'essere ereditabile"
+
+#: xmlschema/validators/complex_types.py:903
+msgid "default attribute {!r} is already declared in the complex type"
+msgstr "l'attributo di default {!r} è già dichiarato nel tipo complesso"
+
+#: xmlschema/validators/complex_types.py:968
+msgid "cannot extend an empty mixed content with an xs:all"
+msgstr "non si può estendere un contenuto misto vuoto con xs:all"
+
+#: xmlschema/validators/complex_types.py:986
+#, python-format
+msgid "xs:all cannot extend a not empty xs:%s"
+msgstr "xs:all non può estendere un xs:%s non vuoto"
+
+#: xmlschema/validators/complex_types.py:1001
+msgid "cannot extend a not empty 'all' model group with a different model"
+msgstr "non si può estendere un gruppo 'all' non vuoto con un modello diverso"
+
+#: xmlschema/validators/complex_types.py:1004
+msgid "when extend an xs:all group minOccurs must be the same"
+msgstr ""
+"quando si estende un gruppo xs:all il valore di minOccurs dev'essere lo "
+"stesso"
+
+#: xmlschema/validators/complex_types.py:1007
+msgid "cannot extend an xs:all group with mixed empty content"
+msgstr "non si può estendere un gruppo xs:all con un contenuto misto vuoto"
+
+#: xmlschema/validators/complex_types.py:1051
+msgid "{0!r} is not an extension of the base type {1!r}"
+msgstr "{0!r} non è un'estensione del tipo base {1!r}"
+
+#: xmlschema/validators/elements.py:178
+#, python-format
+msgid "unknown element %r"
+msgstr "elemento %r sconosciuto"
+
+#: xmlschema/validators/elements.py:197
+msgid "attribute {!r} is not allowed when element reference is used"
+msgstr ""
+"l'attributo {!r} non è ammesso quando si una un riferimento ad elemento"
+
+#: xmlschema/validators/elements.py:218
+msgid "local scope elements cannot have abstract attribute"
+msgstr "gli elementi locali non possono avere l'attributo 'abstract'"
+
+#: xmlschema/validators/elements.py:245
+msgid "attribute {!r} is not allowed in a global element declaration"
+msgstr ""
+"l'attributo {!r} non è ammesso in una dichiarazione di elemento globale"
+
+#: xmlschema/validators/elements.py:250
+msgid "attribute {!r} not allowed in a local element declaration"
+msgstr "l'attributo {!r} non è ammesso in una dichiarazione di elemento locale"
+
+#: xmlschema/validators/elements.py:268 xmlschema/validators/elements.py:1529
+#: xmlschema/validators/simple_types.py:908
+#: xmlschema/validators/simple_types.py:1070
+#: xmlschema/validators/simple_types.py:1279
+msgid "unknown type {!r}"
+msgstr "tipo {!r} sconosciuto"
+
+#: xmlschema/validators/elements.py:273
+msgid ""
+"the attribute 'type' and a xs:{} local declaration are mutually exclusive"
+msgstr ""
+"l'attributo 'type' e una dichiarazione xs:{} locale sono mutuamente esclusivi"
+
+#: xmlschema/validators/elements.py:295
+msgid "'default' value {!r} is not compatible with element's type"
+msgstr "il valore di default {!r} non è compatibile con il tipo dell'elemento"
+
+#: xmlschema/validators/elements.py:299
+msgid "xs:ID or a type derived from xs:ID cannot have a default value"
+msgstr ""
+"xs:ID o un tipo derivato da xs:ID non possono avere un valore di default"
+
+#: xmlschema/validators/elements.py:305
+msgid "'fixed' value {!r} is not compatible with element's type"
+msgstr "il valore di fisso {!r} non è compatibile con il tipo dell'elemento"
+
+#: xmlschema/validators/elements.py:309
+msgid "xs:ID or a type derived from xs:ID cannot have a fixed value"
+msgstr "xs:ID o un tipo derivato da xs:ID non possono avere un valore fisso"
+
+#: xmlschema/validators/elements.py:326 xmlschema/validators/elements.py:334
+#, python-format
+msgid "duplicated identity constraint %r:"
+msgstr "vincolo di identità %r duplicato"
+
+#: xmlschema/validators/elements.py:356
+#, python-format
+msgid "unknown substitutionGroup %r"
+msgstr "gruppo di sostituzione %r sconosciuto"
+
+#: xmlschema/validators/elements.py:361
+#, python-format
+msgid "circularity found for substitutionGroup %r"
+msgstr "trovata circolarità per il gruppo di sostituzione %r"
+
+#: xmlschema/validators/elements.py:376
+msgid ""
+"{0!r} type is not of the same or a derivation of the head element {1!r} type"
+msgstr ""
+"il tipo {0!r} non è lo stesso o non è una derivazione del tipo dell'elemento "
+"di testa {1!r}"
+
+#: xmlschema/validators/elements.py:380
+#, python-format
+msgid ""
+"head element %r can't be substituted by an element that has a derivation of "
+"its type"
+msgstr ""
+"l'elemento di testa %r non può essere sostituito da un elemento che ha una "
+"derivazione del suo tipo"
+
+#: xmlschema/validators/elements.py:384
+#, python-format
+msgid ""
+"head element %r can't be substituted by an element that has an extension of "
+"its type"
+msgstr ""
+"l'elemento di testa %r non può essere sostituito da un elemento che ha una "
+"estensione del suo tipo"
+
+#: xmlschema/validators/elements.py:388
+#, python-format
+msgid ""
+"head element %r can't be substituted by an element that has a restriction of "
+"its type"
+msgstr ""
+"l'elemento di testa %r non può essere sostituito da un elemento che ha una "
+"restrizione del suo tipo"
+
+#: xmlschema/validators/elements.py:566
+msgid "schemaLocation declaration after namespace start"
+msgstr "dichiarazione schemaLocation dopo l'inizio dello spazio dei nomi"
+
+#: xmlschema/validators/elements.py:599 xmlschema/validators/elements.py:935
+msgid "can't use an abstract element for validating an instance"
+msgstr "non è possibile utilizzare un elemento astratto per la convalida"
+
+#: xmlschema/validators/elements.py:602 xmlschema/validators/elements.py:938
+msgid ""
+"can't use an abstract XSD element for validation unless it's the head of a "
+"substitution group"
+msgstr "non è possibile utilizzare un elemento astratto per la convalida a "
+"meno che non sia la l'elemento di testa di un gruppo di sostituzione"
+
+#: xmlschema/validators/elements.py:610 xmlschema/validators/elements.py:951
+msgid "can't use an abstract XSD element for validation"
+msgstr "non è possibile utilizzare un elemento astratto per la convalida"
+
+#: xmlschema/validators/elements.py:664
+#, python-format
+msgid "usage of %r is blocked"
+msgstr "l'utilizzo di %r è bloccato"
+
+#: xmlschema/validators/elements.py:668
+#, python-format
+msgid "%r is abstract"
+msgstr "%r è astratto"
+
+#: xmlschema/validators/elements.py:697
+msgid "element is not nillable"
+msgstr "l'elemento non è annullabile"
+
+#: xmlschema/validators/elements.py:700
+msgid "xsi:nil attribute must have a boolean value"
+msgstr "l'attributo xsi:nil deve avere un valore booleano"
+
+#: xmlschema/validators/elements.py:705
+msgid "xsi:nil='true' but the element has a fixed value"
+msgstr "xsi:nil='true' ma l'elemento ha un valore fisso"
+
+#: xmlschema/validators/elements.py:708
+msgid "xsi:nil='true' but the element is not empty"
+msgstr "xsi:nil='true' ma l'elemento non è vuoto"
+
+#: xmlschema/validators/elements.py:714
+msgid "character data is not allowed because content is empty"
+msgstr "i caratteri non sono consentiti perché il contenuto è vuoto"
+
+#: xmlschema/validators/elements.py:733 xmlschema/validators/elements.py:749
+#, python-format
+msgid "must have the fixed value %r"
+msgstr "deve avere il valore fisso %r"
+
+#: xmlschema/validators/elements.py:738
+msgid "a simple content element can't have child elements"
+msgstr "un elemento con contenuto semplice non può avere elementi figlio"
+
+#: xmlschema/validators/elements.py:1284
+msgid "test attribute missing in non-final alternative"
+msgstr "attributo test mancante in alternativa non finale"
+
+#: xmlschema/validators/elements.py:1396
+msgid "Maybe a not equivalent type table between elements {0!r} and {1!r}"
+msgstr ""
+"Forse una tabella di tipo non equivalente tra gli elementi {0!r} e {1!r}"
+
+#: xmlschema/validators/elements.py:1429
+#, python-brace-format
+msgid "adding schema at {url} change the "
+msgstr ""
+
+#: xmlschema/validators/elements.py:1511 xmlschema/validators/elements.py:1519
+msgid "missing 'type' attribute"
+msgstr "attributo 'type' mancante"
+
+#: xmlschema/validators/elements.py:1523
+msgid "declared type is not derived from {!r}"
+msgstr "il tipo dichiarato non è derivato da {!r}"
+
+#: xmlschema/validators/elements.py:1533
+msgid "type {0!r} is not derived from {1!r}"
+msgstr "il tipo {0!r} non è derivato da {1!r}"
+
+#: xmlschema/validators/elements.py:1538
+#, python-format
+msgid ""
+"the attribute 'type' and the xs:%s local declaration are mutually exclusive"
+msgstr ""
+"l'attributo 'type' e la dichiarazione locale xs:%s si escludono a vicenda"
+
+#: xmlschema/validators/exceptions.py:177
+msgid "Circular definition detected for xs:{} {!r}."
+msgstr "Rilevata definizione circolare per xs:{} {!r}."
+
+#: xmlschema/validators/exceptions.py:439
+#, python-format
+msgid "The content of element %r is not complete."
+msgstr "Il contenuto dell'elemento %r non è completo."
+
+#: xmlschema/validators/exceptions.py:443
+#, python-format
+msgid "Unexpected child with tag %r at position %d."
+msgstr "Figlio imprevisto con tag %r alla posizione %d."
+
+#: xmlschema/validators/exceptions.py:459
+#, python-format
+msgid " Tag (%s) expected."
+msgstr " Previsto tag (%s)."
+
+#: xmlschema/validators/exceptions.py:461
+#, python-format
+msgid " Tag %s expected."
+msgstr " Previsto tag %s."
+
+#: xmlschema/validators/exceptions.py:463
+#, python-format
+msgid " Tag %r expected."
+msgstr " Previsto tag %r."
+
+#: xmlschema/validators/facets.py:87
+msgid "{0!r} facet value is fixed to {1!r}"
+msgstr "il valore della facet {0!r} è fissato a {1!r}"
+
+#: xmlschema/validators/facets.py:95
+msgid "invalid type {!r} provided: {}"
+msgstr "tipo non valido {!r} fornito: {}"
+
+#: xmlschema/validators/facets.py:138 xmlschema/validators/facets.py:141
+msgid "facet value can be only 'collapse'"
+msgstr "il valore della facet può essere solo 'collapse'"
+
+#: xmlschema/validators/facets.py:143
+msgid "facet value can be only 'replace' or 'collapse'"
+msgstr "il valore della facet può essere solo 'replace' o 'collapse'"
+
+#: xmlschema/validators/facets.py:149
+msgid "value contains tabs or newlines"
+msgstr "il valore contiene tabulazioni o nuove righe"
+
+#: xmlschema/validators/facets.py:158
+msgid "value contains non collapsed white spaces"
+msgstr "il valore contiene spazi bianchi non compressi"
+
+#: xmlschema/validators/facets.py:184
+msgid "base facet has a different length ({})"
+msgstr "la facet di base ha una lunghezza diversa ({})"
+
+#: xmlschema/validators/facets.py:195
+msgid "length has to be {!r}"
+msgstr "la lunghezza deve essere {!r}"
+
+#: xmlschema/validators/facets.py:222
+msgid "base facet has a greater min length ({})"
+msgstr "la facet di base ha una lunghezza minima maggiore ({})"
+
+#: xmlschema/validators/facets.py:233
+msgid "value length cannot be lesser than {!r}"
+msgstr "la lunghezza del valore non può essere inferiore a {!r}"
+
+#: xmlschema/validators/facets.py:260
+msgid "base type has a lesser max length ({})"
+msgstr "il tipo di base ha una lunghezza massima inferiore ({})"
+
+#: xmlschema/validators/facets.py:271
+msgid "value length cannot be greater than {!r}"
+msgstr "la lunghezza del valore non può essere maggiore di {!r}"
+
+#: xmlschema/validators/facets.py:305 xmlschema/validators/facets.py:346
+#: xmlschema/validators/facets.py:389 xmlschema/validators/facets.py:428
+msgid "invalid restriction: {}"
+msgstr "restrizione non valida: {}"
+
+#: xmlschema/validators/facets.py:312
+msgid "value has to be greater or equal than {!r}"
+msgstr "il valore deve essere maggiore o uguale a {!r}"
+
+#: xmlschema/validators/facets.py:350
+msgid "invalid restriction: {} is also the maximum"
+msgstr "restrizione non valida: {} è anche il massimo"
+
+#: xmlschema/validators/facets.py:356
+msgid "value has to be greater than {!r}"
+msgstr "il valore deve essere maggiore di {!r}"
+
+#: xmlschema/validators/facets.py:394
+msgid "value has to be less than or equal than {!r}"
+msgstr "il valore deve essere minore o uguale a {!r}"
+
+#: xmlschema/validators/facets.py:432
+msgid "invalid restriction: {} is also the minimum"
+msgstr "restrizione non valida: {} è anche il minimo"
+
+#: xmlschema/validators/facets.py:438
+msgid "value has to be lesser than {!r}"
+msgstr "il valore deve essere inferiore a {!r}"
+
+#: xmlschema/validators/facets.py:475 xmlschema/validators/facets.py:537
+msgid "invalid restriction: base value is lower ({})"
+msgstr "restrizione non valida: il valore di base è inferiore ({})"
+
+#: xmlschema/validators/facets.py:488
+msgid "the number of digits has to be lesser or equal than {!r}"
+msgstr "il numero di cifre deve essere minore o uguale a {!r}"
+
+#: xmlschema/validators/facets.py:516
+msgid ""
+"fractionDigits facet can be applied only to types derived from xs:decimal"
+msgstr ""
+"la facet fractionDigits può essere applicata solo ai tipi derivati da xs:"
+"decimal"
+
+#: xmlschema/validators/facets.py:532
+msgid "fractionDigits facet value must be 0 for types derived from xs:integer"
+msgstr ""
+"il valore della facet fractionDigits dev'essere 0 per i tipi derivati da xs:"
+"integer"
+
+#: xmlschema/validators/facets.py:549
+msgid "the number of fraction digits has to be lesser or equal than {!r}"
+msgstr "il numero di cifre della frazione dev'essere minore o uguale a {!r}"
+
+#: xmlschema/validators/facets.py:579
+msgid "invalid restriction from {!r}"
+msgstr "restrizione non valida da {!r}"
+
+#: xmlschema/validators/facets.py:585
+msgid "time zone required for value {!r}"
+msgstr "fuso orario richiesto per il valore {!r}"
+
+#: xmlschema/validators/facets.py:593
+msgid "time zone prohibited for value {!r}"
+msgstr "fuso orario vietato per il valore {!r}"
+
+#: xmlschema/validators/facets.py:643
+msgid "value {!r} must match a notation declaration"
+msgstr "il valore {!r} deve corrispondere a una dichiarazione di notazione"
+
+#: xmlschema/validators/facets.py:701
+msgid "value must be one of {!r}"
+msgstr "il valore deve essere uno di {!r}"
+
+#: xmlschema/validators/facets.py:798
+msgid "value doesn't match any pattern of {!r}"
+msgstr "il valore non corrisponde a nessun pattern di {!r}"
+
+#: xmlschema/validators/facets.py:849
+msgid "missing attribute 'test'"
+msgstr "attributo mancante 'test'"
+
+#: xmlschema/validators/facets.py:879
+msgid "value is not true with test path {!r}"
+msgstr "il valore non è vero con il test path {!r}"
+
+#: xmlschema/validators/global_maps.py:142
+msgid "multiple redefinition for {} {!r}"
+msgstr "ridefinizione multipla per {} {!r}"
+
+#: xmlschema/validators/global_maps.py:157
+msgid "circular redefinition for {} {!r}"
+msgstr "ridefinizione circolare per {} {!r}"
+
+#: xmlschema/validators/global_maps.py:262
+msgid "can't change attribute {!r} of a global maps instance"
+msgstr ""
+"non è possibile modificare l'attributo {!r} delle mappe globali di un meta-schema"
+
+#: xmlschema/validators/global_maps.py:324
+msgid "wrong tag {!r} for an XSD global definition/declaration"
+msgstr "tag errato {!r} per una dichiarazione/definizione globale XSD"
+
+#: xmlschema/validators/global_maps.py:382
+msgid "{0!r} cannot substitute {1!r}"
+msgstr "{0!r} non può sostituire {1!r}"
+
+#: xmlschema/validators/global_maps.py:684
+msgid "defaultAttributes={0!r} doesn't match any attribute group of {1!r}"
+msgstr ""
+"defaultAttributes={0!r} non corrisponde a nessun gruppo di attributi di {1!r}"
+
+#: xmlschema/validators/global_maps.py:731
+msgid "global maps main validator is not registered"
+msgstr ""
+
+#: xmlschema/validators/global_maps.py:744
+msgid "schema {} does not belong to namespace {!r}"
+msgstr "lo schema {} non appartiene allo spazio de nomi {!r}"
+
+#: xmlschema/validators/global_maps.py:748
+msgid "duplicate of schema {} found in namespace {!r}"
+msgstr "duplicato dello schema {} trovato nello spazio dei nomi {!r}"
+
+#: xmlschema/validators/global_maps.py:753
+msgid "registered schemas do not match namespace mapped schemas"
+msgstr "gli schemi registrati non corrispondono agli schemi mappati sugli spazi dei nomi"
+
+#: xmlschema/validators/global_maps.py:773
+msgid "circularity found for substitution group with head element {}"
+msgstr ""
+"circolarità trovata per il gruppo di sostituzione con elemento di testa {}"
+
+#: xmlschema/validators/global_maps.py:778
+msgid "global group not built!"
+msgstr "gruppo globale non costruito!"
+
+#: xmlschema/validators/global_maps.py:785
+msgid "the redefined group is an illegal restriction"
+msgstr "il gruppo ridefinito è una restrizione illegale"
+
+#: xmlschema/validators/global_maps.py:801
+msgid "the derived group is an illegal restriction"
+msgstr "il gruppo derivato è una restrizione illegale"
+
+#: xmlschema/validators/global_maps.py:811
+msgid "restriction has an open content but base type has not"
+msgstr "la restrizione ha un contenuto aperto ma il tipo di base no"
+
+#: xmlschema/validators/global_maps.py:817
+msgid ""
+"can't verify the content model of {!r} due to exceeding of maximum recursion "
+"depth"
+msgstr ""
+"impossibile verificare il modello di contenuto di {!r} a causa del "
+"superamento della profondità massima di ricorsione"
+
+#: xmlschema/validators/groups.py:399
+msgid "{!r} is not a particle of the model group"
+msgstr "{!r} non è una particella del gruppo di modelli"
+
+#: xmlschema/validators/groups.py:481 xmlschema/validators/groups.py:521
+msgid "attribute 'name' not allowed in a local group"
+msgstr "l'attributo 'nome' non è consentito in un gruppo locale"
+
+#: xmlschema/validators/groups.py:490
+#, python-format
+msgid "missing group %r"
+msgstr "gruppo mancante %r"
+
+#: xmlschema/validators/groups.py:500 xmlschema/validators/groups.py:552
+msgid "maxOccurs must be 1 for 'all' model groups"
+msgstr "maxOccurs deve essere 1 per i gruppi modello 'all'"
+
+#: xmlschema/validators/groups.py:503 xmlschema/validators/groups.py:555
+#: xmlschema/validators/groups.py:1243
+msgid "minOccurs must be (0 | 1) for 'all' model groups"
+msgstr "minOccurs deve essere (0 | 1) per i gruppi modello 'all'"
+
+#: xmlschema/validators/groups.py:506
+msgid "in XSD 1.0 an 'all' model group cannot be nested"
+msgstr "in XSD 1.0 un gruppo di modelli 'all' non può essere nidificato"
+
+#: xmlschema/validators/groups.py:525 xmlschema/validators/groups.py:535
+msgid "attribute 'minOccurs' not allowed in a global group"
+msgstr "l'attributo 'minOccurs' non è consentito in un gruppo globale"
+
+#: xmlschema/validators/groups.py:528 xmlschema/validators/groups.py:538
+msgid "attribute 'maxOccurs' not allowed in a global group"
+msgstr "l'attributo 'maxOccurs' non è consentito in un gruppo globale"
+
+#: xmlschema/validators/groups.py:566
+msgid "'all' model can contain only elements"
+msgstr "un modello 'all' può contenere solo elementi"
+
+#: xmlschema/validators/groups.py:576 xmlschema/validators/groups.py:1259
+msgid "missing attribute 'ref' in local group"
+msgstr "attributo mancante 'ref' in gruppo locale"
+
+#: xmlschema/validators/groups.py:585
+msgid "'all' model can appears only at 1st level of a model group"
+msgstr ""
+"un modello 'all' può apparire solo al 1° livello di un gruppo di modelli"
+
+#: xmlschema/validators/groups.py:593
+msgid "Redefined group reference can't have minOccurs/maxOccurs other than 1"
+msgstr ""
+"il riferimento al gruppo ridefinito non può avere minOccurs/maxOccurs "
+"diverso da 1"
+
+#: xmlschema/validators/groups.py:597 xmlschema/validators/groups.py:1281
+#, python-format
+msgid "Circular definition detected for group %r"
+msgstr "Rilevata definizione circolare per il gruppo %r"
+
+#: xmlschema/validators/groups.py:853
+#, python-format
+msgid "substitution of %r is blocked"
+msgstr "la sostituzione di %r è bloccata"
+
+#: xmlschema/validators/groups.py:906
+msgid "usage of {0!r} with type {1} is blocked by head element"
+msgstr "l'utilizzo di {0!r} con tipo {1} è bloccato dall'elemento di testa"
+
+#: xmlschema/validators/groups.py:931
+msgid "{0!r} that matches {1!r} is not consistent with local declaration {2!r}"
+msgstr ""
+"{0!r} che corrisponde a {1!r} non è coerente con la dichiarazione locale {2!"
+"r}"
+
+#: xmlschema/validators/groups.py:937
+msgid "Maybe a not equivalent type table between elements {0!r} and {1!r}."
+msgstr ""
+"Forse una tabella di tipo non equivalente tra gli elementi {0!r} e {1!r}."
+
+#: xmlschema/validators/groups.py:966
+msgid "an empty 'choice' group with minOccurs > 0 cannot validate any content"
+msgstr ""
+"un gruppo 'choice' vuoto con minOccurs > 0 non può convalidare alcun "
+"contenuto"
+
+#: xmlschema/validators/groups.py:977 xmlschema/validators/groups.py:1211
+msgid "character data between child elements not allowed"
+msgstr "caratteri tra elementi figlio non consentiti"
+
+#: xmlschema/validators/groups.py:990
+#, python-format
+msgid "XML data depth exceeded (MAX_XML_DEPTH=%r)"
+msgstr "profondità dei dati XML superata (MAX_XML_DEPTH=%r)"
+
+#: xmlschema/validators/groups.py:1168
+msgid "{!r} does not match any declared element of the model group"
+msgstr ""
+"{!r} non corrisponde a nessun elemento dichiarato del gruppo di modelli"
+
+#: xmlschema/validators/groups.py:1171
+msgid "{0} has an unknown prefix {1!r}"
+msgstr "{0} ha un prefisso sconosciuto {1!r}"
+
+#: xmlschema/validators/groups.py:1206
+msgid "wrong content type {!r}"
+msgstr "tipo di contenuto sbagliato {!r}"
+
+#: xmlschema/validators/groups.py:1240
+msgid "maxOccurs must be (0 | 1) for 'all' model groups"
+msgstr "maxOccurs deve essere (0 | 1) per i gruppi con modello 'all'"
+
+#: xmlschema/validators/groups.py:1269
+#, python-brace-format
+msgid "an xs:{0} group cannot include a reference to an xs:{1} group"
+msgstr "un gruppo xs:{0} non può includere un riferimento a un gruppo xs:{1}"
+
+#: xmlschema/validators/groups.py:1276
+msgid "Redefined group reference cannot have minOccurs/maxOccurs other than 1"
+msgstr ""
+"il riferimento al gruppo ridefinito non può avere minOccurs/maxOccurs "
+"diverso da 1"
+
+#: xmlschema/validators/helpers.py:50
+#, python-format
+msgid "wrong value %r for attribute %r"
+msgstr "il valore %r per l'attributo %r è sbagliato"
+
+#: xmlschema/validators/helpers.py:79
+msgid "value is not a valid xs:decimal"
+msgstr "il valore non è un xs:decimal valido"
+
+#: xmlschema/validators/helpers.py:85
+msgid "value is not an xs:QName"
+msgstr "il valore non è un xs:QName"
+
+#: xmlschema/validators/helpers.py:91 xmlschema/validators/helpers.py:97
+#: xmlschema/validators/helpers.py:103 xmlschema/validators/helpers.py:109
+#: xmlschema/validators/helpers.py:115 xmlschema/validators/helpers.py:121
+#: xmlschema/validators/helpers.py:127 xmlschema/validators/helpers.py:133
+msgid "value must be {:s}"
+msgstr "il valore dev'essere {:s}"
+
+#: xmlschema/validators/helpers.py:139
+msgid "value must be negative"
+msgstr "il valore dev'essere negativo"
+
+#: xmlschema/validators/helpers.py:145
+msgid "value must be positive"
+msgstr "il valore dev'essere positivo"
+
+#: xmlschema/validators/helpers.py:151
+msgid "value must be non positive"
+msgstr "il valore dev'essere non positivo"
+
+#: xmlschema/validators/helpers.py:157
+msgid "value must be non negative"
+msgstr "il valore dev'essere non negativo"
+
+#: xmlschema/validators/helpers.py:164
+msgid "not an hexadecimal number"
+msgstr "non è un numero esadecimale"
+
+#: xmlschema/validators/helpers.py:177
+msgid "not a base64 encoding"
+msgstr "non è una codifica base64"
+
+#: xmlschema/validators/helpers.py:182
+msgid "no value is allowed for xs:error type"
+msgstr "nessun valore è ammesso per il tipo xs:error"
+
+#: xmlschema/validators/helpers.py:192
+msgid "{!r} is not a boolean value"
+msgstr "{!r} non è un valore booleano"
+
+#: xmlschema/validators/models.py:144
+msgid ""
+"Element Declarations Consistent violation between {0!r} and {1!r}: match the "
+"same name but with different types"
+msgstr ""
+"violazione della consistenza della dichiarazione degli elementi tra {0!r} e "
+"{1!r}: corrispondenza del nome ma con tipi diversi"
+
+#: xmlschema/validators/models.py:158
+msgid "{0!r} and {1!r} overlap and are in the same {2!r} group"
+msgstr "{0!r} e {1!r} si sovrappongono e sono nello stesso gruppo {2!r}"
+
+#: xmlschema/validators/models.py:170
+msgid "Unique Particle Attribution violation between {0!r} and {1!r}"
+msgstr "violazione dell'attribuzione di particelle univoche tra {0!r} e {1!r}"
+
+#: xmlschema/validators/notations.py:36
+msgid "a notation declaration must be global"
+msgstr "una dichiarazione notation dev'essere globale"
+
+#: xmlschema/validators/notations.py:40
+msgid "a notation must have a 'name' attribute"
+msgstr "una notation deve avere l'attributo 'name'"
+
+#: xmlschema/validators/notations.py:43
+msgid "a notation must have a 'public' or a 'system' attribute"
+msgstr "una notation deve avere un attributo 'public' o 'system'"
+
+#: xmlschema/validators/particles.py:142
+msgid "minOccurs value is not an integer value"
+msgstr "il valore di minOccurs non è un valore intero"
+
+#: xmlschema/validators/particles.py:146
+msgid "minOccurs value must be a non negative integer"
+msgstr "il valore di minOccurs dev'essere un intero non negativo"
+
+#: xmlschema/validators/particles.py:154
+msgid "minOccurs must be lesser or equal than maxOccurs"
+msgstr "minOccurs dev'essere inferiore o uguale a maxOccurs"
+
+#: xmlschema/validators/particles.py:162
+msgid "maxOccurs value must be a non negative integer or 'unbounded'"
+msgstr "il valore di maxOccurs dev'essere un intero non negativo o 'unbounded'"
+
+#: xmlschema/validators/particles.py:166
+msgid "maxOccurs must be 'unbounded' or greater than minOccurs"
+msgstr "maxOccurs dev'essere 'unbounded' o maggiore di minOccurs"
+
+#: xmlschema/validators/schemas.py:146
+msgid "XSD_VERSION must be '1.0' or '1.1'"
+msgstr "XSD_VERSION deve essere '1.0' o '1.1'"
+
+#: xmlschema/validators/schemas.py:323
+msgid "no XSD source provided!"
+msgstr "nessun sorgente XSD fornito!"
+
+#: xmlschema/validators/schemas.py:349
+msgid "the attribute 'targetNamespace' cannot be an empty string"
+msgstr "l'attributo 'targetNamespace' non può essere una stringa vuota"
+
+#: xmlschema/validators/schemas.py:352
+msgid ""
+"targetNamespace of XSD resource {} differs from what expected (found {!r} "
+"instead of {!r})"
+msgstr ""
+
+#: xmlschema/validators/schemas.py:374
+#, python-brace-format
+msgid "The namespace {nm.XMLNS_NAMESPACE} cannot be used as 'targetNamespace'"
+msgstr ""
+
+#: xmlschema/validators/schemas.py:443
+#, python-format
+msgid "'global_maps' argument must be an %r instance"
+msgstr "l'argomento 'global_maps' deve essere un'istanza %r"
+
+#: xmlschema/validators/schemas.py:510
+msgid "can't change the global maps instance of a class meta-schema"
+msgstr ""
+"non è possibile modificare l'istanza delle mappe globali di un meta-schema"
+
+#: xmlschema/validators/schemas.py:514
+msgid ""
+"can't change the global maps instance of a schema that is the main validator "
+"of another global maps instance"
+msgstr ""
+"non è possibile modificare l'istanza delle mappe globali di uno schema che è"
+"il validatore principale di un altra istanza di mappe globali"
+
+#: xmlschema/validators/schemas.py:528
+msgid "can't set the meta_schema instance of a schema"
+msgstr ""
+"non è possibile modificare il meta_schema di uno schema"
+
+#: xmlschema/validators/schemas.py:536 xmlschema/validators/schemas.py:540
+msgid "can't change the {!r} attribute of a schema"
+msgstr "non è possibile cambiare l'attributo {!r} di una schema"
+
+#: xmlschema/validators/schemas.py:738
+#, python-format
+msgid "meta-schema unavailable for %r"
+msgstr "meta-schema non disponibile per %r"
+
+#: xmlschema/validators/schemas.py:949
+msgid "the namespace {!r} is not loaded"
+msgstr "lo spazio dei nomi {!r} non è caricato"
+
+#: xmlschema/validators/schemas.py:1083
+msgid "invalid attribute vc:minVersion value"
+msgstr "valore non valido per l'attributo vc:minVersion"
+
+#: xmlschema/validators/schemas.py:1092
+msgid "invalid attribute vc:maxVersion value"
+msgstr "valore non valido per l'attributo vc:maxVersion"
+
+#: xmlschema/validators/schemas.py:1168 xmlschema/validators/schemas.py:1175
+msgid "{!r} is not a valid value for xs:QName"
+msgstr "{!r} non è un valore valido per xs:QName"
+
+#: xmlschema/validators/schemas.py:1184
+msgid "prefix {!r} not found in namespace map"
+msgstr "prefisso {!r} non trovato nella mappa degli spazi dei nomi"
+
+#: xmlschema/validators/schemas.py:1192
+msgid ""
+"the QName {!r} is mapped to no namespace, but this requires that there is an "
+"xs:import statement in the schema without the 'namespace' attribute."
+msgstr ""
+"il QName {!r} non è mappato su alcuno spazio dei nomi, ma ciò richiede che "
+"sia presente un'istruzione xs:import nello schema senza l'attributo "
+"'namespace'."
+
+#: xmlschema/validators/schemas.py:1201
+msgid ""
+"the QName {!r} is mapped to the namespace {!r}, but this namespace has not "
+"an xs:import statement in the schema."
+msgstr ""
+"il QName {0!r} è mappato allo spazio dei nomi {1!r}, ma questo spazio dei "
+"nomi non ha un'istruzione xs:import nello schema."
+
+#: xmlschema/validators/schemas.py:1365 xmlschema/validators/schemas.py:1422
+#: xmlschema/validators/schemas.py:1601
+msgid "{!r} is not an element of the schema"
+msgstr "{!r} non è un elemento dello schema"
+
+#: xmlschema/validators/schemas.py:1379
+msgid "the provided path selects nothing to validate"
+msgstr "il path fornito non seleziona nulla"
+
+#: xmlschema/validators/schemas.py:1395
+#, python-format
+msgid "IDREF %r not found in XML document"
+msgstr "IDREF %r non trovato nel documento XML"
+
+#: xmlschema/validators/schemas.py:1703
+msgid "encoding needs at least one XSD element declaration"
+msgstr "la codifica richiede almeno una dichiarazione di elemento XSD"
+
+#: xmlschema/validators/schemas.py:1745
+#, python-format
+msgid "the path %r doesn't match any element of the schema!"
+msgstr "il path %r non corrisponde a nessun elemento dello schema!"
+
+#: xmlschema/validators/schemas.py:1747
+msgid ""
+"unable to select an element for encoding data, provide a valid 'path' "
+"argument."
+msgstr ""
+"impossibile selezionare un elemento per la decodifica dei dati, fornire un "
+"argomento 'path' valido."
+
+#: xmlschema/validators/simple_types.py:120
+msgid "wrong value %r for facet xs:whiteSpace"
+msgstr "valore errato %r per il facet xs:whiteSpace'"
+
+#: xmlschema/validators/simple_types.py:162
+msgid "facets not allowed for a direct derivation of xs:anySimpleType"
+msgstr "facet non consentite per una derivazione diretta di xs:anySimpleType"
+
+#: xmlschema/validators/simple_types.py:166
+msgid "facets not allowed for a direct content derivation of xs:anySimpleType"
+msgstr ""
+"facet non consentite per una derivazione diretta del contenuto di xs:"
+"anySimpleType"
+
+#: xmlschema/validators/simple_types.py:172
+msgid "one or more facets are not applicable, admitted set is {!r}"
+msgstr "una o più facet non sono applicabili, l'insieme ammesso è {!r}"
+
+#: xmlschema/validators/simple_types.py:178
+#, python-format
+msgid "facet group must have the same base type: %r"
+msgstr "il gruppo di vincoli facet deve avere lo stesso tipo di base: %r"
+
+#: xmlschema/validators/simple_types.py:188
+msgid "'length' value must be non a negative integer"
+msgstr "il valore di 'length' deve essere un numero intero non negativo"
+
+#: xmlschema/validators/simple_types.py:192
+msgid "'minLength' value must be less than or equal to 'length'"
+msgstr "il valore di 'minLength' deve essere minore o uguale a 'length'"
+
+#: xmlschema/validators/simple_types.py:199
+msgid "cannot specify both 'length' and 'minLength'"
+msgstr "non si può specificare sia 'length' che 'minLength'"
+
+#: xmlschema/validators/simple_types.py:204
+msgid "'maxLength' value must be greater or equal to 'length'"
+msgstr "il valore di 'maxLength' deve essere maggiore o uguale a 'length'"
+
+#: xmlschema/validators/simple_types.py:212
+msgid "cannot specify both 'length' and 'maxLength'"
+msgstr "non si può specificare sia 'length' che 'maxLength'"
+
+#: xmlschema/validators/simple_types.py:221
+msgid "'minLength' value must be a non negative integer"
+msgstr "il valore di 'minLength' deve essere un numero intero non negativo"
+
+#: xmlschema/validators/simple_types.py:224
+msgid "'maxLength' value is less than 'minLength'"
+msgstr "il valore di 'maxLength' è minore di 'minLength'"
+
+#: xmlschema/validators/simple_types.py:227
+msgid "'minLength' has a lesser value than parent"
+msgstr "'minLength' ha un valore minore del genitore"
+
+#: xmlschema/validators/simple_types.py:230
+msgid "'minLength' has a greater value than parent 'maxLength'"
+msgstr "'minLength' ha un valore maggiore di 'maxLength' del genitore"
+
+#: xmlschema/validators/simple_types.py:235
+msgid "'maxLength' value must be a non negative integer"
+msgstr "il valore 'maxLength' deve essere un numero intero non negativo"
+
+#: xmlschema/validators/simple_types.py:238
+msgid "'maxLength' has a lesser value than parent 'minLength'"
+msgstr "'maxLength' ha un valore inferiore rispetto a 'minLength' del genitore"
+
+#: xmlschema/validators/simple_types.py:241
+msgid "'maxLength' has a greater value than parent"
+msgstr "'maxLength' ha un valore maggiore del genitore"
+
+#: xmlschema/validators/simple_types.py:252
+msgid "cannot specify both 'minInclusive' and 'minExclusive'"
+msgstr "non è possibile specificare sia 'minInclusive' che 'minExclusive'"
+
+#: xmlschema/validators/simple_types.py:255
+msgid "'minInclusive' must be less or equal to 'maxInclusive'"
+msgstr "'minInclusive' deve essere minore o uguale a 'maxInclusive'"
+
+#: xmlschema/validators/simple_types.py:258
+msgid "'minInclusive' must be lesser than 'maxExclusive'"
+msgstr "'minInclusive' deve essere inferiore a 'maxExclusive'"
+
+#: xmlschema/validators/simple_types.py:263
+msgid "'minExclusive' must be lesser than 'maxInclusive'"
+msgstr "'minExclusive' deve essere inferiore a 'maxInclusive'"
+
+#: xmlschema/validators/simple_types.py:266
+msgid "'minExclusive' must be less or equal to 'maxExclusive'"
+msgstr "'minExclusive' deve essere minore o uguale a 'maxExclusive'"
+
+#: xmlschema/validators/simple_types.py:270
+msgid "cannot specify both 'maxInclusive' and 'maxExclusive'"
+msgstr "non è possibile specificare sia 'maxInclusive' che 'maxExclusive'"
+
+#: xmlschema/validators/simple_types.py:276
+msgid ""
+"fractionDigits facet value cannot be lesser than the value of totalDigits "
+"facet"
+msgstr ""
+"il valore della facet fractionDigits non può essere inferiore al valore "
+"della facet totalDigits"
+
+#: xmlschema/validators/simple_types.py:282
+msgid ""
+"totalDigits facet value cannot be greater than the value of the same facet "
+"in the base type"
+msgstr ""
+"il valore della facet totalDigits non può essere maggiore del valore della "
+"stessa facet nel tipo di base"
+
+#: xmlschema/validators/simple_types.py:291
+#, python-format
+msgid ""
+"the explicitTimezone facet value cannot be changed if the base type has the "
+"same facet with value %r"
+msgstr ""
+"il valore del facet explicitTimezone non può essere modificato se il tipo di "
+"base ha lo stesso facet con valore %r"
+
+#: xmlschema/validators/simple_types.py:691
+msgid "value is not an instance of {!r}"
+msgstr "il valore non è un'istanza di {!r}"
+
+#: xmlschema/validators/simple_types.py:713
+#: xmlschema/validators/simple_types.py:805
+#: xmlschema/validators/simple_types.py:1167
+msgid "invalid value {!r}"
+msgstr "valore non valido {!r}"
+
+#: xmlschema/validators/simple_types.py:740
+#, python-format
+msgid "unmapped prefix %r in a QName"
+msgstr "prefisso %r non mappato in un QName"
+
+#: xmlschema/validators/simple_types.py:753
+#: xmlschema/validators/simple_types.py:764
+msgid "duplicated xs:ID value {!r}"
+msgstr "valore xs:ID {!r} duplicato"
+
+#: xmlschema/validators/simple_types.py:759
+msgid "no more than one attribute of type ID should be present in an element"
+msgstr "non deve essere presente più di un attributo di tipo ID in un elemento"
+
+#: xmlschema/validators/simple_types.py:783
+msgid "boolean value {0!r} requires a {1!r} decoder"
+msgstr "il valore booleano {0!r} richiede un decodificatore {1!r}"
+
+#: xmlschema/validators/simple_types.py:789
+msgid "{0!r} is not an instance of {1!r}"
+msgstr "{0!r} non è un'istanza di {1!r}"
+
+#: xmlschema/validators/simple_types.py:892
+msgid "ambiguous list type declaration"
+msgstr "dichiarazione ambigua di tipo lista"
+
+#: xmlschema/validators/simple_types.py:900
+msgid "missing list type declaration"
+msgstr "dichiarazione di tipo lista mancante"
+
+#: xmlschema/validators/simple_types.py:916
+#, python-format
+msgid "'final' value of the itemType %r forbids derivation by list"
+msgstr "il valore 'final' di itemType %r impedisce la derivazione da lista"
+
+#: xmlschema/validators/simple_types.py:920
+#: xmlschema/validators/simple_types.py:1093
+#: xmlschema/validators/simple_types.py:1376
+msgid "cannot use xs:anyAtomicType as base type of a user-defined type"
+msgstr ""
+"non si può usare xs:anyAtomicType come tipo base di un tipo definito "
+"dall'utente"
+
+#: xmlschema/validators/simple_types.py:926
+#, python-format
+msgid "%r: a list must be based on atomic data types"
+msgstr "%r: una lista deve essere basata su tipi di dati atomici"
+
+#: xmlschema/validators/simple_types.py:973
+msgid "unexpected nested list item {!r}"
+msgstr ""
+
+#: xmlschema/validators/simple_types.py:1080
+msgid "a {0!r} required, not {1!r}"
+msgstr "un {0!r} richiesto, non {1!r}"
+
+#: xmlschema/validators/simple_types.py:1084
+#, python-format
+msgid "'final' value of the memberTypes %r forbids derivation by union"
+msgstr ""
+"il valore 'final' dei memberTypes %r impedisce la derivazione per unione"
+
+#: xmlschema/validators/simple_types.py:1090
+msgid "missing xs:union type declarations"
+msgstr "dichiarazioni del tipo xs:union mancanti"
+
+#: xmlschema/validators/simple_types.py:1205
+msgid "no type suitable for encoding the object"
+msgstr "nessun tipo adatto per codificare l'oggetto"
+
+#: xmlschema/validators/simple_types.py:1249
+msgid "'name' attribute in a local simpleType definition"
+msgstr "attributo 'name' in una definizione simpleType locale"
+
+#: xmlschema/validators/simple_types.py:1289
+#, python-format
+msgid "wrong base type %r, an atomic type required"
+msgstr "tipo di base %r errato, è richiesto un tipo atomico"
+
+#: xmlschema/validators/simple_types.py:1295
+msgid "an xs:simpleType definition expected"
+msgstr "è prevista una definizione di xs:simpleType"
+
+#: xmlschema/validators/simple_types.py:1300
+msgid ""
+"when a complexType with simpleContent restricts a complexType with mixed and "
+"with emptiable content then a simpleType child declaration is required"
+msgstr ""
+"è richiesta una dichiarazione figlio simpleType quando un complexType con "
+"simpleContent restringe un complexType con contenuto misto e svuotabile"
+
+#: xmlschema/validators/simple_types.py:1305
+#, python-format
+msgid "simpleType restriction of %r is not allowed"
+msgstr "la restrizione simpleType di %r non è consentita"
+
+#: xmlschema/validators/simple_types.py:1314
+msgid "unexpected tag after attribute declarations"
+msgstr "tag imprevisto dopo le dichiarazioni di attributo"
+
+#: xmlschema/validators/simple_types.py:1319
+msgid "duplicated simpleType declaration"
+msgstr "dichiarazione simpleType duplicata"
+
+#: xmlschema/validators/simple_types.py:1345
+msgid "restriction with 'base' attribute and simpleType declaration"
+msgstr "restrizione con attributo 'base' e dichiarazione simpleType"
+
+#: xmlschema/validators/simple_types.py:1353
+#, python-format
+msgid "unexpected tag %r in restriction"
+msgstr "il tag %r non è previsto in una restrizione"
+
+#: xmlschema/validators/simple_types.py:1359
+#, python-format
+msgid "multiple %r constraint facet"
+msgstr "più vincoli facet %r"
+
+#: xmlschema/validators/simple_types.py:1371
+msgid "missing base type in restriction"
+msgstr "tipo di base mancante nella restrizione"
+
+#: xmlschema/validators/simple_types.py:1373
+#, python-format
+msgid "'final' value of the baseType %r forbids derivation by restriction"
+msgstr "il valore 'final' del baseType %r vieta la derivazione per restrizione"
+
+#: xmlschema/validators/simple_types.py:1430
+#: xmlschema/validators/simple_types.py:1453
+#, python-format
+msgid ""
+"wrong base type %r: a simpleType or a complexType with simple or mixed "
+"content required"
+msgstr ""
+"tipo base %r errato: è richiesto un simpleType o un complexType concontenuto "
+"semplice o misto"
+
+#: xmlschema/validators/validation.py:55
+msgid "validation mode must be a string"
+msgstr "il validation mode dev'essere una stringa"
+
+#: xmlschema/validators/validation.py:57
+#, python-format
+msgid "validation mode can be 'strict', 'lax' or 'skip': %r"
+msgstr "il modo di validazione può essere 'strict', 'lax' o 'skip': %r"
+
+#: xmlschema/validators/validation.py:179
+msgid "attribute {0}={1!r}: {2}"
+msgstr "attributo {0}={1!r}: {2}"
+
+#: xmlschema/validators/wildcards.py:92
+#, python-format
+msgid "wrong value %r in 'namespace' attribute"
+msgstr "valore errato %r nell'attributo 'namespace'"
+
+#: xmlschema/validators/wildcards.py:99
+#, python-format
+msgid "wrong value %r for 'processContents' attribute"
+msgstr "valore errato %r per l'attributo 'processContents'"
+
+#: xmlschema/validators/wildcards.py:107
+msgid "'namespace' and 'notNamespace' attributes are mutually exclusive"
+msgstr "gli attributi 'namespace' e 'notNamespace' sono mutuamente esclusivi"
+
+#: xmlschema/validators/wildcards.py:118
+#, python-format
+msgid "wrong value %r in 'notNamespace' attribute"
+msgstr "valore errato %r nell'attributo 'notNamespace'"
+
+#: xmlschema/validators/wildcards.py:134
+msgid "wrong value for 'notQName' attribute"
+msgstr "valore errato per l'attributo 'notQName'"
+
+#: xmlschema/validators/wildcards.py:141
+#, python-format
+msgid "unmapped QName in 'notQName' attribute: %s"
+msgstr "QName non mappato nell'attributo 'notQName': %s"
+
+#: xmlschema/validators/wildcards.py:145
+#, python-format
+msgid "wrong QName format in 'notQName' attribute: %s"
+msgstr "formato QName errato nell'attributo 'notQName': %s"
+
+#: xmlschema/validators/wildcards.py:153
+msgid "the namespace of each QName in notQName is allowed by notNamespace"
+msgstr ""
+"lo spazio dei nomi di ogni QName in notQName è consentito da notNamespace"
+
+#: xmlschema/validators/wildcards.py:157
+msgid "names in notQName must be in namespaces that are allowed"
+msgstr "i nomi in notQName devono trovarsi negli spazi dei nomi consentiti"
+
+#: xmlschema/validators/wildcards.py:334
+msgid "not expressible wildcard namespace union: {0!r} V {1!r}:"
+msgstr "unione di spazi dei nomi di wildcard non esprimibile: {0!r} V {1!r}:"
+
+#: xmlschema/validators/wildcards.py:502 xmlschema/validators/wildcards.py:545
+msgid "element {!r} is not allowed here"
+msgstr "l'elemento {!r} non è consentito qui"
+
+#: xmlschema/validators/wildcards.py:510 xmlschema/validators/wildcards.py:552
+#: xmlschema/validators/wildcards.py:691 xmlschema/validators/wildcards.py:720
+msgid "unavailable namespace {!r}"
+msgstr ""
+
+#: xmlschema/validators/wildcards.py:673 xmlschema/validators/wildcards.py:703
+#, python-format
+msgid "attribute %r not allowed"
+msgstr "attributo %r non consentito"
+
+#: xmlschema/validators/wildcards.py:685 xmlschema/validators/wildcards.py:714
+#, python-format
+msgid "attribute %r not found"
+msgstr "attributo %r non trovato"
+
+#: xmlschema/validators/wildcards.py:875
+#, python-format
+msgid "wrong value %r for 'mode' attribute"
+msgstr "valore errato %r per l'attributo 'mode'"
+
+#: xmlschema/validators/wildcards.py:881
+msgid ""
+"an openContent with mode='none' cannot have an <xs:any> child declaration"
+msgstr ""
+"un openContent con mode='none' non può avere una dichiarazione figlio <xs:"
+"any>"
+
+#: xmlschema/validators/wildcards.py:885
+msgid "an <xs:any> child declaration is required"
+msgstr "è richiesta una dichiarazione figlio <xs:any>"
+
+#: xmlschema/validators/wildcards.py:919
+msgid "defaultOpenContent must be a child of the schema"
+msgstr "defaultOpenContent deve essere un figlio dello schema"
+
+#: xmlschema/validators/wildcards.py:922
+msgid "the attribute 'mode' of a defaultOpenContent cannot be 'none'"
+msgstr "l'attributo 'mode' di un defaultOpenContent non può essere 'none'"
+
+#: xmlschema/validators/wildcards.py:925
+msgid "a defaultOpenContent declaration cannot be empty"
+msgstr "una dichiarazione defaultOpenContent non può essere vuota"
+
+#: xmlschema/validators/xsdbase.py:125
+msgid "%r is not built"
+msgstr "%r non è costruito"
+
+#: xmlschema/validators/xsdbase.py:130
+msgid "validation mode is 'strict' and %r is not built"
+msgstr "il modo di validazione è 'strict' e %r non costruito"
+
+#: xmlschema/validators/xsdbase.py:133
+#, fuzzy, python-format
+msgid "validation mode is 'strict' and %r is not valid"
+msgstr "il modo di validazione può essere 'strict', 'lax' o 'skip': %r"
+
+#: xmlschema/validators/xsdbase.py:249
+msgid ""
+"wrong value {0!r} for 'xpathDefaultNamespace' attribute, can be (anyURI | "
+"{1})."
+msgstr ""
+"valore errato {0!r} per l'attributo 'xpathDefaultNamespace', può essere "
+"(anyURI | {1})."
+
+#: xmlschema/validators/xsdbase.py:436
+#, python-format
+msgid "missing attribute 'name' in a global %r"
+msgstr "attributo 'name' mancante in %r globale"
+
+#: xmlschema/validators/xsdbase.py:439
+#, python-format
+msgid "missing both attributes 'name' and 'ref' in local %r"
+msgstr "attributi 'name' e 'ref' entrambi mancanti in %r locale"
+
+#: xmlschema/validators/xsdbase.py:442
+msgid "attributes 'name' and 'ref' are mutually exclusive"
+msgstr "gli attributi 'name' e 'ref' sono mutuamente esclusivi"
+
+#: xmlschema/validators/xsdbase.py:445
+#, python-format
+msgid "attribute 'ref' not allowed in a global %r"
+msgstr "l'attributo 'ref' non è ammesso in un %r globale"
+
+#: xmlschema/validators/xsdbase.py:454
+msgid "a reference component cannot have child definitions/declarations"
+msgstr ""
+"un componente riferimento non può avere definizioni/dichiarazioni figlie"
+
+#: xmlschema/validators/xsdbase.py:469
+msgid "too many XSD components, unexpected {0!r} found at position {1}"
+msgstr "troppi componenti XSD, trovato un {0!r} inatteso alla posizione {1}"
+
+#: xmlschema/validators/xsdbase.py:486
+#, python-brace-format
+msgid "The namespace {XMLNS_NAMESPACE} cannot be used as 'targetNamespace'"
+msgstr ""
+
+#: xmlschema/validators/xsdbase.py:490
+msgid ""
+"attribute 'name' must be present when 'targetNamespace' attribute is provided"
+msgstr ""
+"l'attributo 'name' deve essere presente quando viene fornito l'attributo "
+"'targetNamespace'"
+
+#: xmlschema/validators/xsdbase.py:494
+msgid ""
+"attribute 'form' must be absent when 'targetNamespace' attribute is provided"
+msgstr ""
+"l'attributo 'form' deve essere assente quando viene fornito l'attributo "
+"'targetNamespace'"
+
+#: xmlschema/validators/xsdbase.py:499
+#, python-format
+msgid "a global %s must have the same namespace as its parent schema"
+msgstr "un %r globale deve avere lo stesso namespace del suo schema genitore"
+
+#: xmlschema/validators/xsdbase.py:507
+msgid ""
+"a declaration contained in a global complexType must have the same namespace "
+"as its parent schema"
+msgstr ""
+"una dichiarazione contenuta in un complexType globale deve avere lo stesso "
+"namespace del suo schema genitore"
+
+#: xmlschema/validators/xsdbase.py:632
+msgid "parent circularity from {}"
+msgstr "circolarità del genitore da {}"
+
+#: xmlschema/validators/identities.py:89
+msgid "'xpath' attribute required"
+msgstr "l'attributo 'xpath' è obbligatorio"
+
+#: xmlschema/validators/identities.py:104
+msgid "invalid XPath expression for an {}"
+msgstr "espressione XPath non valida per un {}"
+
+#: xmlschema/validators/identities.py:173
+msgid "missing required attribute 'name'"
+msgstr "attributo obbligatorio 'name' mancante"
+
+#: xmlschema/validators/identities.py:181
+msgid "missing 'selector' declaration"
+msgstr "dichiarazione 'selector' mancante"
+
+#: xmlschema/validators/identities.py:198
+msgid "unknown identity constraint {!r}"
+msgstr "vincolo di identità sconosciuto {!r}"
+
+#: xmlschema/validators/identities.py:203
+msgid "attribute 'ref' points to a different kind constraint"
+msgstr "l'attributo 'ref' punta a un vincolo di tipo diverso"
+
+#: xmlschema/validators/identities.py:231
+msgid "selector xpath expression can only select elements"
+msgstr "l'espressione xpath di un selector può selezionare solo elementi"
+
+#: xmlschema/validators/identities.py:286
+msgid "missing required attribute 'refer'"
+msgstr "attributo obbligatorio 'refer' mancante"
+
+#: xmlschema/validators/identities.py:316
+#, python-format
+msgid "key/unique identity constraint %r is missing"
+msgstr "vincolo di identità chiave/univoco %r mancante"
+
+#: xmlschema/validators/identities.py:321
+#, python-format
+msgid "reference to a non key/unique identity constraint %r"
+msgstr "riferimento a vincolo di identità non chiave/univoco %r"
+
+#: xmlschema/validators/identities.py:324
+msgid "field cardinality mismatch between {0!r} and {1!r}"
+msgstr "mancata corrispondenza della cardinalità del campo tra {0!r} e {1!r}"
+
+#: xmlschema/validators/identities.py:401
+msgid "duplicated value {0!r} for {1!r}"
+msgstr "valore duplicato {0!r} per {1!r}"
+
+#: xmlschema/validators/identities.py:501
+msgid "%r field selects multiple values!"
+msgstr "il campo %r seleziona più valori!"
+
+#: xmlschema/validators/identities.py:510
+#, python-format
+msgid "%r field doesn't have a simple type!"
+msgstr "il campo %r non ha un tipo semplice!"
+
+#: xmlschema/validators/identities.py:542
+msgid "missing key field {0!r} for {1!r}"
+msgstr "campo chiave {0!r} mancante per {1!r}"
+
+#: xmlschema/converters/__init__.py:37
+msgid "'converter' argument must be a {0!r} subclass or instance: {1!r}"
+msgstr ""
+"l'argomento 'converter' deve essere una sottoclasse o un'istanza di {0!r}: "
+"{1!r}"
+
+#~ msgid "circular definition found between {0!r} and {1!r}"
+#~ msgstr "definizione circolare trovata tra {0!r} e {1!r}"
+
+#, python-format
+#~ msgid "missing dynamic loaded schema from %s"
+#~ msgstr "manca lo schema caricato dinamicamente da %s"
+
+#~ msgid "dynamic loaded schema change the assessment"
+#~ msgstr "lo schema a caricamento dinamico cambia la valutazione"
+
+#~ msgid "wrong element {0!r} for map {1!r}"
+#~ msgstr "elemento sbagliato {0!r} per la mappa {1!r}"
+
+#~ msgid "missing XSD namespace in meta-schema instance {!r}"
+#~ msgstr "spazio dei nomi XSD mancante nell'istanza del meta-schema {!r}"
+
+#~ msgid "missing default meta-schema instance {!r}"
+#~ msgstr "istanza {!r} del meta-schema predefinito mancante"
+
+#~ msgid "global element not built!"
+#~ msgstr "elemento globale non costruito!"
+
+#, python-format
+#~ msgid "global map has unbuilt components: %r"
+#~ msgstr "la mappa globale ha componenti non costruiti: %r"
+
+#~ msgid "Circular reference found between attribute groups {0!r} and {1!r}"
+#~ msgstr ""
+#~ "Riferimento circolare trovato tra i gruppi di attributi {0!r} e {1!r}"
+
+#~ msgid "wrong namespace ({0!r} instead of {1!r}) for XSD resource {2}"
+#~ msgstr ""
+#~ "spazio dei nomi errato ({0!r} invece di {1!r}) per la risorsa XSD {2}"
+
+#~ msgid "missing XSD namespace in meta-schema"
+#~ msgstr "spazio dei nomi XSD mancante nel meta-schema"
+
+#~ msgid "Missing meta-schema source URL"
+#~ msgstr "URL di origine del meta-schema mancante"
+
+#, fuzzy
+#~ msgid ""
+#~ "The argument 'base_schemas' must be a dictionary or a sequence of couples"
+#~ msgstr ""
+#~ "l'argomento 'base_schemas' deve essere un dizionario o una sequenza di "
+#~ "coppie"
+
+#~ msgid "a {0!r} or {1!r} object required"
+#~ msgstr "è richiesto un oggetto {0!r} o {1!r}"
+
+#~ msgid "circular definition found for type {!r}"
+#~ msgstr "definizione circolare trovata per il tipo {!r}"
+
+#~ msgid "circular definition found on xs:union type {!r}"
+#~ msgstr "definizione circolare trovata sul tipo xs:union {!r}"
+
+#, python-format
+#~ msgid "no type suitable for decoding the values %r"
+#~ msgstr "nessun tipo adatto a decodificare i valori %r"

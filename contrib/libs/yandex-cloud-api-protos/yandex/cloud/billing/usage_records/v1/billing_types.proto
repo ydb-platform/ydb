@@ -1,0 +1,88 @@
+syntax = "proto3";
+package yandex.cloud.billing.usage_records.v1;
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/billing/usage_records/v1;usageRecords";
+option java_package = "yandex.cloud.api.billing.usage_records.v1";
+
+// Represents a list of label values for filtering or grouping in usage reports.
+// For example, to filter resources with label key "env" that have value "prod" or "test",
+// a LabelList with values ["prod", "test"] would be used for the key "env".
+message LabelList {
+    // List of label values associated with a specific label key.
+    repeated string values = 1;
+}
+
+// Represents a billing account entity
+message BillingAccount {
+    // Unique identifier of the billing_account entity.
+    string id = 1;
+
+    // Human-readable display name of the billing account.
+    string name = 2;
+}
+
+// Represents a cloud entity
+message Cloud {
+    // Unique identifier of the cloud entity.
+    string id = 1;
+
+    // Human-readable display name of the cloud.
+    string name = 2;
+}
+
+// Represents a folder entity
+message Folder {
+    // Unique identifier of the folder entity.
+    string id = 1;
+
+    // Human-readable display name of the folder.
+    string name = 2;
+}
+
+// Represents a service entity
+message Service {
+    // Unique identifier of the service entity.
+    string id = 1;
+
+    // Service display name.
+    string name = 2;
+
+    // Service description.
+    string description = 3;
+}
+
+// Represents a SKU (Stock Keeping Unit)
+message SKU {
+    // Unique identifier of the entity (SKU).
+    string id = 1;
+
+    // Product (SKU) name.
+    string name = 2;
+
+    // Russian-language display name
+    string ru_translation = 3;
+
+    // English-language display name
+    string en_translation = 4;
+
+    // Unit of measurement for pricing (e.g., "hour", "byte", "1m*request").
+    string pricing_unit = 5;
+
+    // The service ID this SKU belongs to;
+    string service_id = 6;
+}
+
+// Represents a resource entity
+message Resource {
+    // Unique identifier of the resource entity.
+    string id = 1;
+}
+
+// Represents a key-value label pair attached to resources for custom metadata tagging.
+// Labels allow grouping and filtering resources by user-defined dimensions.
+message Label {
+    // Label key (e.g., "region", "environment", "team", "project").
+    string key = 1;
+
+    // The label value (e.g., "usa", "mexico", "prod", "test", "finance", "backend")
+    string value = 2;
+}

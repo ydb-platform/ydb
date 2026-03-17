@@ -1,0 +1,36 @@
+syntax = "proto3";
+package yandex.cloud.billing.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/billing/v1;billing";
+option java_package = "yandex.cloud.api.billing.v1";
+
+
+// A BillingAccount resource. For more information, see [BillingAccount](/docs/billing/concepts/billing-account).
+message BillingAccount {
+    // ID of the billing account.
+    string id = 1;
+
+    // Name of the billing account.
+    string name = 2;
+
+    // Creation timestamp.
+    google.protobuf.Timestamp created_at = 3;
+
+    // ISO 3166-1 alpha-2 country code of the billing account.
+    string country_code = 4;
+
+    // Currency of the billing account.
+    // Can be one of the following:
+    // * `RUB`
+    // * `USD`
+    // * `KZT`
+    string currency = 5;
+
+    // Represents whether corresponding billable objects can be used or not.
+    bool active = 6;
+
+    // Current balance of the billing account.
+    string balance = 7;
+}

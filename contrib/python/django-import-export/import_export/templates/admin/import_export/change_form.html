@@ -1,0 +1,11 @@
+{% extends 'admin/change_form.html' %}
+{% load i18n %}
+
+{% block submit_buttons_bottom %}
+  {{ block.super }}
+  {% if show_change_form_export %}
+  <div class="submit-row">
+    <input type="submit" value="{% translate 'Export' %}" class="default" name="_export-item">
+  </div>
+  {% endif %}
+{% endblock %}

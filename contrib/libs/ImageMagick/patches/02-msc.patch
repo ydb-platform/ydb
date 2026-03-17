@@ -1,0 +1,28 @@
+--- contrib/libs/ImageMagick/Magick++/lib/Magick++/Include.h	(index)
++++ contrib/libs/ImageMagick/Magick++/lib/Magick++/Include.h	(working tree)
+@@ -34,6 +34,11 @@
+ # error #include <vcl.h> /* Borland C++ Builder 4.0 requirement */
+ #endif // defined(__BORLANDC__)
+ 
++#if defined(_MSC_VER)
++#include <BaseTsd.h>
++typedef SSIZE_T ssize_t;
++#endif
++
+ //
+ // Include ImageMagick headers into namespace "MagickCore". If
+ // MAGICKCORE_IMPLEMENTATION is defined, include ImageMagick development
+--- contrib/libs/ImageMagick/magick/magick-type.h	(index)
++++ contrib/libs/ImageMagick/magick/magick-type.h	(working tree)
+@@ -64,6 +64,11 @@ typedef long double MagickDoubleType;
+ #error Your MagickDoubleType type is neither a float, nor a double, nor a long double
+ #endif
+ 
++#if defined(_MSC_VER)
++#include <BaseTsd.h>
++typedef SSIZE_T ssize_t;
++#endif
++
+ #if (MAGICKCORE_QUANTUM_DEPTH == 8)
+ #define MaxColormapSize  256UL
+ #define MaxMap  255UL

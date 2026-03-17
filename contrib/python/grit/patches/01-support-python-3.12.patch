@@ -1,0 +1,916 @@
+--- contrib/python/grit/grit/format/data_pack_unittest.py	(index)
++++ contrib/python/grit/grit/format/data_pack_unittest.py	(working tree)
+@@ -61 +61 @@ class FormatDataPackUnittest(unittest.TestCase):
+-    self.assertEquals(data, expected_data)
++    self.assertEqual(data, expected_data)
+--- contrib/python/grit/grit/format/gzip_string_unittest.py	(index)
++++ contrib/python/grit/grit/format/gzip_string_unittest.py	(working tree)
+@@ -35 +35 @@ class FormatGzipStringUnittest(unittest.TestCase):
+-      self.failUnless(header_begin == compressed[:2])
++      self.assertTrue(header_begin == compressed[:2])
+@@ -43 +43 @@ class FormatGzipStringUnittest(unittest.TestCase):
+-      self.failUnless(output == input)
++      self.assertTrue(output == input)
+@@ -53 +53 @@ class FormatGzipStringUnittest(unittest.TestCase):
+-    self.failUnless(header_begin == compressed[:2])
++    self.assertTrue(header_begin == compressed[:2])
+@@ -61 +61 @@ class FormatGzipStringUnittest(unittest.TestCase):
+-    self.failUnless(output == input)
++    self.assertTrue(output == input)
+--- contrib/python/grit/grit/format/html_inline_unittest.py	(index)
++++ contrib/python/grit/grit/format/html_inline_unittest.py	(working tree)
+@@ -80 +80 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
++    self.assertEqual(resources, source_resources)
+@@ -105 +105 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(str(cm.exception), 'Unmatched </if>')
++    self.assertEqual(str(cm.exception), 'Unmatched </if>')
+@@ -125 +125 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
++    self.assertEqual(resources, source_resources)
+@@ -180,2 +180,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -260,2 +260,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -310,2 +310,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -354 +354 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
++    self.assertEqual(resources, source_resources)
+@@ -400,2 +400,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -451,2 +451,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -463 +463 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
++    self.assertEqual(resources, source_resources)
+@@ -528,2 +528,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -551,2 +551,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -592,2 +592,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -655,2 +655,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -687,2 +687,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -744,2 +744,2 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
+-    self.failUnlessEqual(expected_inlined,
++    self.assertEqual(resources, source_resources)
++    self.assertEqual(expected_inlined,
+@@ -818 +818 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
++    self.assertEqual(resources, source_resources)
+@@ -824 +824 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(expected_inlined, actually_inlined);
++    self.assertEqual(expected_inlined, actually_inlined);
+@@ -872 +872 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
++    self.assertEqual(resources, source_resources)
+@@ -878 +878 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(expected_inlined, actually_inlined)
++    self.assertEqual(expected_inlined, actually_inlined)
+@@ -916 +916 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(resources, source_resources)
++    self.assertEqual(resources, source_resources)
+@@ -922 +922 @@ class HtmlInlineUnittest(unittest.TestCase):
+-    self.failUnlessEqual(expected_inlined, actually_inlined)
++    self.assertEqual(expected_inlined, actually_inlined)
+--- contrib/python/grit/grit/format/rc_header_unittest.py	(index)
++++ contrib/python/grit/grit/format/rc_header_unittest.py	(working tree)
+@@ -47,2 +47,2 @@ class RcHeaderFormatterUnittest(unittest.TestCase):
+-    self.failUnless(output.count('IDS_GREETING10000'))
+-    self.failUnless(output.count('ID_LOGO300'))
++    self.assertTrue(output.count('IDS_GREETING10000'))
++    self.assertTrue(output.count('ID_LOGO300'))
+@@ -79,4 +79,4 @@ class RcHeaderFormatterUnittest(unittest.TestCase):
+-    self.failUnless(output.count('IDS_FIRSTPRESENTSTRING10000'))
+-    self.failIf(output.count('IDS_MISSINGSTRING'))
+-    self.failUnless(output.count('IDS_LANGUAGESPECIFICSTRING10002'))
+-    self.failUnless(output.count('IDS_THIRDPRESENTSTRING10003'))
++    self.assertTrue(output.count('IDS_FIRSTPRESENTSTRING10000'))
++    self.assertFalse(output.count('IDS_MISSINGSTRING'))
++    self.assertTrue(output.count('IDS_LANGUAGESPECIFICSTRING10002'))
++    self.assertTrue(output.count('IDS_THIRDPRESENTSTRING10003'))
+--- contrib/python/grit/grit/gather/admin_template_unittest.py	(index)
++++ contrib/python/grit/grit/gather/admin_template_unittest.py	(working tree)
+@@ -37,2 +37,2 @@ class AdmGathererUnittest(unittest.TestCase):
+-    self.failUnless(len(gatherer.GetCliques()) == 2)
+-    self.failUnless(gatherer.GetCliques()[1].GetMessage().GetRealContent() ==
++    self.assertTrue(len(gatherer.GetCliques()) == 2)
++    self.assertTrue(gatherer.GetCliques()[1].GetMessage().GetRealContent() ==
+@@ -42 +42 @@ class AdmGathererUnittest(unittest.TestCase):
+-    self.failUnless(translation == gatherer.GetText().strip())
++    self.assertTrue(translation == gatherer.GetText().strip())
+@@ -64 +64 @@ class AdmGathererUnittest(unittest.TestCase):
+-    self.failUnless(len(cliques) > 20)
++    self.assertTrue(len(cliques) > 20)
+@@ -67 +67 @@ class AdmGathererUnittest(unittest.TestCase):
+-      self.failUnless(text == expected)
++      self.assertTrue(text == expected)
+@@ -110,2 +110,2 @@ class AdmGathererUnittest(unittest.TestCase):
+-      self.failUnless(os.path.isfile(dirname.GetPath('de_GoogleDesktop.adm')))
+-      self.failUnless(os.path.isfile(dirname.GetPath('de_README.txt')))
++      self.assertTrue(os.path.isfile(dirname.GetPath('de_GoogleDesktop.adm')))
++      self.assertTrue(os.path.isfile(dirname.GetPath('de_README.txt')))
+--- contrib/python/grit/grit/gather/chrome_html_unittest.py	(index)
++++ contrib/python/grit/grit/gather/chrome_html_unittest.py	(working tree)
+@@ -68 +68 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -109 +109 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -141 +141 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -170 +170 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -200 +200 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -227 +227 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -254 +254 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -281 +281 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -318 +318 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -355 +355 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -383 +383 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -414 +414 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -443 +443 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -479 +479 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -533 +533 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+@@ -590 +590 @@ class ChromeHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
++    self.assertEqual(StandardizeHtml(html.GetData('en', 'utf-8')),
+--- contrib/python/grit/grit/gather/chrome_scaled_image_unittest.py	(index)
++++ contrib/python/grit/grit/gather/chrome_scaled_image_unittest.py	(working tree)
+@@ -126 +126 @@ def _RunBuildTest(self, structures, inputs, expected_outputs, skip_rc=False,
+-      self.assertEquals(expected_data,
++      self.assertEqual(expected_data,
+@@ -129 +129 @@ def _RunBuildTest(self, structures, inputs, expected_outputs, skip_rc=False,
+-        self.assertEquals(expected_data,
++        self.assertEqual(expected_data,
+--- contrib/python/grit/grit/gather/policy_json_unittest.py	(index)
++++ contrib/python/grit/grit/gather/policy_json_unittest.py	(working tree)
+@@ -39,2 +39,2 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(len(gatherer.GetCliques()) == 0)
+-    self.failUnless(eval(original) == json.loads(gatherer.Translate('en')))
++    self.assertTrue(len(gatherer.GetCliques()) == 0)
++    self.assertTrue(eval(original) == json.loads(gatherer.Translate('en')))
+@@ -68 +68 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(len(gatherer.GetCliques()) == 4)
++    self.assertTrue(len(gatherer.GetCliques()) == 4)
+@@ -70 +70 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(expected == json.loads(gatherer.Translate('en')))
++    self.assertTrue(expected == json.loads(gatherer.Translate('en')))
+@@ -92 +92 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(len(gatherer.GetCliques()) == 1)
++    self.assertTrue(len(gatherer.GetCliques()) == 1)
+@@ -94 +94 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(expected == json.loads(gatherer.Translate('en')))
++    self.assertTrue(expected == json.loads(gatherer.Translate('en')))
+@@ -129 +129 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(len(gatherer.GetCliques()) == 4)
++    self.assertTrue(len(gatherer.GetCliques()) == 4)
+@@ -131 +131 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(expected == json.loads(gatherer.Translate('en')))
++    self.assertTrue(expected == json.loads(gatherer.Translate('en')))
+@@ -153 +153 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(len(gatherer.GetCliques()) == 1)
++    self.assertTrue(len(gatherer.GetCliques()) == 1)
+@@ -155 +155 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(expected == json.loads(gatherer.Translate('en')))
++    self.assertTrue(expected == json.loads(gatherer.Translate('en')))
+@@ -177 +177 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(len(gatherer.GetCliques()) == 1)
++    self.assertTrue(len(gatherer.GetCliques()) == 1)
+@@ -179 +179 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(expected == json.loads(gatherer.Translate('en')))
++    self.assertTrue(expected == json.loads(gatherer.Translate('en')))
+@@ -202 +202 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(len(gatherer.GetCliques()) == 1)
++    self.assertTrue(len(gatherer.GetCliques()) == 1)
+@@ -204 +204 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(expected == json.loads(gatherer.Translate('en')))
++    self.assertTrue(expected == json.loads(gatherer.Translate('en')))
+@@ -225 +225 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(len(gatherer.GetCliques()) == 1)
++    self.assertTrue(len(gatherer.GetCliques()) == 1)
+@@ -227 +227 @@ class PolicyJsonUnittest(unittest.TestCase):
+-    self.failUnless(expected == json.loads(gatherer.Translate('en')))
++    self.assertTrue(expected == json.loads(gatherer.Translate('en')))
+@@ -269 +269 @@ with a newline?''',
+-    self.failUnless(len(gatherer.GetCliques()) == 6)
++    self.assertTrue(len(gatherer.GetCliques()) == 6)
+@@ -271 +271 @@ with a newline?''',
+-    self.failUnless(expected == json.loads(gatherer.Translate('en')))
++    self.assertTrue(expected == json.loads(gatherer.Translate('en')))
+@@ -288 +288 @@ with a newline?''',
+-    self.failUnless(len(gatherer.GetCliques()) == 1)
++    self.assertTrue(len(gatherer.GetCliques()) == 1)
+@@ -290,2 +290,2 @@ with a newline?''',
+-    self.failUnless(expected == json.loads(gatherer.Translate('en')))
+-    self.failUnless(gatherer.GetCliques()[0].translateable)
++    self.assertTrue(expected == json.loads(gatherer.Translate('en')))
++    self.assertTrue(gatherer.GetCliques()[0].translateable)
+@@ -293 +293 @@ with a newline?''',
+-    self.failUnless(len(msg.GetPlaceholders()) == 1)
++    self.assertTrue(len(msg.GetPlaceholders()) == 1)
+@@ -295,3 +295,3 @@ with a newline?''',
+-    self.failUnless(ph.GetOriginal() == 'Chromium')
+-    self.failUnless(ph.GetPresentation() == 'PRODUCT_NAME')
+-    self.failUnless(ph.GetExample() == 'Google Chrome')
++    self.assertTrue(ph.GetOriginal() == 'Chromium')
++    self.assertTrue(ph.GetPresentation() == 'PRODUCT_NAME')
++    self.assertTrue(ph.GetExample() == 'Google Chrome')
+@@ -314 +314 @@ with a newline?''',
+-    self.failUnless(len(gatherer.GetCliques()) == 1)
++    self.assertTrue(len(gatherer.GetCliques()) == 1)
+@@ -316,2 +316,2 @@ with a newline?''',
+-    self.failUnless(expected == json.loads(gatherer.Translate('en')))
+-    self.failUnless(gatherer.GetCliques()[0].translateable)
++    self.assertTrue(expected == json.loads(gatherer.Translate('en')))
++    self.assertTrue(gatherer.GetCliques()[0].translateable)
+@@ -319 +319 @@ with a newline?''',
+-    self.failUnless(len(msg.GetPlaceholders()) == 1)
++    self.assertTrue(len(msg.GetPlaceholders()) == 1)
+@@ -321,3 +321,3 @@ with a newline?''',
+-    self.failUnless(ph.GetOriginal() == 'Google Chrome')
+-    self.failUnless(ph.GetPresentation() == 'PRODUCT_NAME')
+-    self.failUnless(ph.GetExample() == 'Google Chrome')
++    self.assertTrue(ph.GetOriginal() == 'Google Chrome')
++    self.assertTrue(ph.GetPresentation() == 'PRODUCT_NAME')
++    self.assertTrue(ph.GetExample() == 'Google Chrome')
+@@ -328 +328 @@ with a newline?''',
+-    self.assertEquals(
++    self.assertEqual(
+@@ -332 +332 @@ with a newline?''',
+-    self.assertEquals(
++    self.assertEqual(
+@@ -336 +336 @@ with a newline?''',
+-    self.assertEquals(
++    self.assertEqual(
+@@ -340 +340 @@ with a newline?''',
+-    self.assertEquals(
++    self.assertEqual(
+--- contrib/python/grit/grit/gather/tr_html_unittest.py	(index)
++++ contrib/python/grit/grit/gather/tr_html_unittest.py	(working tree)
+@@ -54 +54 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -60 +60 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -66 +66 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -74 +74 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -82 +82 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -91 +91 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -96 +96 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -102 +102 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -110 +110 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -120 +120 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -130 +130 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [(False, '<textarea>', ''),
++    self.assertEqual(chunks, [(False, '<textarea>', ''),
+@@ -135 +135 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [(False, '<p>', ''),
++    self.assertEqual(chunks, [(False, '<p>', ''),
+@@ -143 +143 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [(True, 'Break', ''),
++    self.assertEqual(chunks, [(True, 'Break', ''),
+@@ -152 +152 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [(False, '<a href=\'google.com\'>', ''),
++    self.assertEqual(chunks, [(False, '<a href=\'google.com\'>', ''),
+@@ -161 +161 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [(True, 'Please <!-- message-no-break --> '
++    self.assertEqual(chunks, [(True, 'Please <!-- message-no-break --> '
+@@ -166 +166 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [(True, 'Please', ''),
++    self.assertEqual(chunks, [(True, 'Please', ''),
+@@ -180 +180 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnlessEqual(chunks, [
++    self.assertEqual(chunks, [
+@@ -192 +192 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnless(pres ==
++    self.assertTrue(pres ==
+@@ -198 +198 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnless(pres ==
++    self.assertTrue(pres ==
+@@ -210 +210 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnless(pres ==
++    self.assertTrue(pres ==
+@@ -217 +217 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnless(pres == 'BEGIN_LINKBEGIN_BOLDX_NUM_XX_CAT_XEND_BOLDEND_LINK')
++    self.assertTrue(pres == 'BEGIN_LINKBEGIN_BOLDX_NUM_XX_CAT_XEND_BOLDEND_LINK')
+@@ -224 +224 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnless(pres ==
++    self.assertTrue(pres ==
+@@ -230 +230 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnless(pres ==
++    self.assertTrue(pres ==
+@@ -237 +237 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnless(pres ==
++    self.assertTrue(pres ==
+@@ -246 +246 @@ class ParserUnittest(unittest.TestCase):
+-    self.failUnless(pres ==
++    self.assertTrue(pres ==
+@@ -257 +257 @@ and <A HREF='http://desktop.google.com/privacyfaq.html?hl=[LANG_CODE]'>Privacy F
+-    self.failUnless(pres == '''You can read the
++    self.assertTrue(pres == '''You can read the
+@@ -264 +264 @@ and BEGIN_LINK_2Privacy FAQEND_LINK_2 online.''')
+-    self.failUnlessEqual(pres, '''Please BREAK don't break''')
++    self.assertEqual(pres, '''Please BREAK don't break''')
+@@ -269 +269 @@ class TrHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(html.fold_whitespace_, False)
++    self.assertEqual(html.fold_whitespace_, False)
+@@ -271 +271 @@ class TrHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(html.fold_whitespace_, False)
++    self.assertEqual(html.fold_whitespace_, False)
+@@ -273 +273 @@ class TrHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(html.fold_whitespace_, False)
++    self.assertEqual(html.fold_whitespace_, False)
+@@ -275 +275 @@ class TrHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(html.fold_whitespace_, True)
++    self.assertEqual(html.fold_whitespace_, True)
+@@ -282 +282 @@ class TrHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(html.skeleton_[1].GetMessage().GetPresentableContent(),
++    self.assertEqual(html.skeleton_[1].GetMessage().GetPresentableContent(),
+@@ -288 +288 @@ class TrHtmlUnittest(unittest.TestCase):
+-    self.failUnlessEqual(html.skeleton_[1].GetMessage().GetPresentableContent(),
++    self.assertEqual(html.skeleton_[1].GetMessage().GetPresentableContent(),
+@@ -299 +299 @@ class TrHtmlUnittest(unittest.TestCase):
+-    self.failUnless(html.skeleton_[3].GetMessage().GetPresentableContent() ==
++    self.assertTrue(html.skeleton_[3].GetMessage().GetPresentableContent() ==
+@@ -308 +308 @@ name=submit2></td>
+-    self.failUnless(html.skeleton_[1].GetMessage().GetPresentableContent() ==
++    self.assertTrue(html.skeleton_[1].GetMessage().GetPresentableContent() ==
+@@ -318 +318 @@ name=submit2></td>
+-    self.failUnless(html.skeleton_[1].GetMessage().GetRealContent() ==
++    self.assertTrue(html.skeleton_[1].GetMessage().GetRealContent() ==
+@@ -331,2 +331,2 @@ bla
+-    self.failUnless(content == 'Hello')
+-    self.failUnless(html.skeleton_[-1] == '</p>')
++    self.assertTrue(content == 'Hello')
++    self.assertTrue(html.skeleton_[-1] == '</p>')
+@@ -335 +335 @@ bla
+-    self.failUnless(html.skeleton_[2][0] == '\n')
++    self.assertTrue(html.skeleton_[2][0] == '\n')
+@@ -344,2 +344,2 @@ bla
+-    self.failUnlessEqual(msg.GetDescription(), 'explicit')
+-    self.failUnlessEqual(msg.GetRealContent(), 'Go!')
++    self.assertEqual(msg.GetDescription(), 'explicit')
++    self.assertEqual(msg.GetRealContent(), 'Go!')
+@@ -352,2 +352,2 @@ bla
+-    self.failUnlessEqual(msg.GetDescription(), 'explicit multiline')
+-    self.failUnlessEqual(msg.GetRealContent(), 'Go!')
++    self.assertEqual(msg.GetDescription(), 'explicit multiline')
++    self.assertEqual(msg.GetRealContent(), 'Go!')
+@@ -363 +363 @@ bla
+-        self.failIf(content.count('$/translate'))
++        self.assertFalse(content.count('$/translate'))
+@@ -385 +385 @@ bla
+-    self.failUnless(html.skeleton_[1].GetMessage().GetRealContent() ==
++    self.assertTrue(html.skeleton_[1].GetMessage().GetRealContent() ==
+@@ -387,2 +387,2 @@ bla
+-    self.failUnless(html.skeleton_[3].startswith('<'))
+-    self.failUnless(len(html.skeleton_) > 10)
++    self.assertTrue(html.skeleton_[3].startswith('<'))
++    self.assertTrue(len(html.skeleton_) > 10)
+@@ -405 +405 @@ bla
+-    self.failUnless(len(html.skeleton_) > 100)
++    self.assertTrue(len(html.skeleton_) > 100)
+@@ -418 +418 @@ bla
+-      self.failUnless(len(html.GetCliques()) == num)
++      self.assertTrue(len(html.GetCliques()) == num)
+@@ -485 +485 @@ bla
+-    self.failUnless(
++    self.assertTrue(
+@@ -491 +491 @@ bla
+-    self.failUnless(
++    self.assertTrue(
+@@ -498 +498 @@ bla
+-    self.failUnless(result == ' - ')
++    self.assertTrue(result == ' - ')
+@@ -504 +504 @@ bla
+-    self.failUnless(unescaped == u'\u00a9\u00a0 & "<hello>"')
++    self.assertTrue(unescaped == u'\u00a9\u00a0 & "<hello>"')
+@@ -506 +506 @@ bla
+-    self.failUnless(escaped_unescaped ==
++    self.assertTrue(escaped_unescaped ==
+@@ -516 +516 @@ bla
+-      self.failUnless(True)
++      self.assertTrue(True)
+--- contrib/python/grit/grit/gather/txt_unittest.py	(index)
++++ contrib/python/grit/grit/gather/txt_unittest.py	(working tree)
+@@ -28,3 +28,3 @@ class TxtUnittest(unittest.TestCase):
+-    self.failUnless(gatherer.GetText() == input.getvalue())
+-    self.failUnless(len(gatherer.GetCliques()) == 1)
+-    self.failUnless(gatherer.GetCliques()[0].GetMessage().GetRealContent() ==
++    self.assertTrue(gatherer.GetText() == input.getvalue())
++    self.assertTrue(len(gatherer.GetCliques()) == 1)
++    self.assertTrue(gatherer.GetCliques()[0].GetMessage().GetRealContent() ==
+--- contrib/python/grit/grit/grd_reader_unittest.py	(index)
++++ contrib/python/grit/grit/grd_reader_unittest.py	(working tree)
+@@ -62 +62 @@ class GrdReaderUnittest(unittest.TestCase):
+-    self.failUnless(tree.GetNodeById('IDS_GREETING'))
++    self.assertTrue(tree.GetNodeById('IDS_GREETING'))
+@@ -81,2 +81,2 @@ class GrdReaderUnittest(unittest.TestCase):
+-    self.failUnless(len(tree.children) == 1)
+-    self.failUnless(tree.children[0].name == 'outputs')
++    self.assertTrue(len(tree.children) == 1)
++    self.assertTrue(tree.children[0].name == 'outputs')
+@@ -101 +101 @@ class GrdReaderUnittest(unittest.TestCase):
+-    self.failUnless(greeting.GetCliques()[0].GetMessage().GetRealContent() ==
++    self.assertTrue(greeting.GetCliques()[0].GetMessage().GetRealContent() ==
+@@ -125,2 +125,2 @@ class GrdReaderUnittest(unittest.TestCase):
+-    self.failUnless(isinstance(messages_node, empty.MessagesNode))
+-    self.failUnless(messages_node.attrs["first_id"] !=
++    self.assertTrue(isinstance(messages_node, empty.MessagesNode))
++    self.assertTrue(messages_node.attrs["first_id"] !=
+@@ -190 +190 @@ class GrdReaderUnittest(unittest.TestCase):
+-    self.failUnless(hello.GetCliques()[0].GetId() == 'IDS_HELLO')
++    self.assertTrue(hello.GetCliques()[0].GetId() == 'IDS_HELLO')
+@@ -218 +218 @@ class GrdReaderUnittest(unittest.TestCase):
+-    self.failUnless(hello.GetCliques()[0].GetId() == 'IDS_HELLO')
++    self.assertTrue(hello.GetCliques()[0].GetId() == 'IDS_HELLO')
+--- contrib/python/grit/grit/grit_runner_unittest.py	(index)
++++ contrib/python/grit/grit/grit_runner_unittest.py	(working tree)
+@@ -37,3 +37,3 @@ class OptionArgsUnittest(unittest.TestCase):
+-    self.failUnless(output.count("'test'") == 0)  # tool name doesn't occur
+-    self.failUnless(output.count('bla'))
+-    self.failUnless(output.count('simple-input.xml'))
++    self.assertTrue(output.count("'test'") == 0)  # tool name doesn't occur
++    self.assertTrue(output.count('bla'))
++    self.assertTrue(output.count('simple-input.xml'))
+--- contrib/python/grit/grit/node/base_unittest.py	(index)
++++ contrib/python/grit/grit/node/base_unittest.py	(working tree)
+@@ -43 +43 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnless(node.GetCdata() == u'  two spaces')
++    self.assertTrue(node.GetCdata() == u'  two spaces')
+@@ -50 +50 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnless(node.GetCdata() == u'two spaces  ')
++    self.assertTrue(node.GetCdata() == u'two spaces  ')
+@@ -63,3 +63,3 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnless(node.mixed_content[0] == u'  two spaces  ')
+-    self.failUnless(node.mixed_content[2] == u' space before and after ')
+-    self.failUnless(node.mixed_content[-1] == u' space before two after  ')
++    self.assertTrue(node.mixed_content[0] == u'  two spaces  ')
++    self.assertTrue(node.mixed_content[2] == u' space before and after ')
++    self.assertTrue(node.mixed_content[-1] == u' space before two after  ')
+@@ -90 +90 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnless(non_indented_xml == u'<message name="name">\n  Hello '
++    self.assertTrue(non_indented_xml == u'<message name="name">\n  Hello '
+@@ -95 +95 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnless(indented_xml == u'  <message name="name">\n    Hello '
++    self.assertTrue(indented_xml == u'  <message name="name">\n    Hello '
+@@ -123 +123 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnless(non_indented_xml ==
++    self.assertTrue(non_indented_xml ==
+@@ -129 +129 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnless(indented_xml ==
++    self.assertTrue(indented_xml ==
+@@ -134 +134 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnless(node.GetNodeById('name'))
++    self.assertTrue(node.GetNodeById('name'))
+@@ -147 +147 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnless(xml.find('&nbsp;') == -1, 'should have no entities')
++    self.assertTrue(xml.find('&nbsp;') == -1, 'should have no entities')
+@@ -167 +167 @@ class NodeUnittest(unittest.TestCase):
+-      self.failUnless(type(n) == order[0])
++      self.assertTrue(type(n) == order[0])
+@@ -169 +169 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnless(len(order) == 0)
++    self.assertTrue(len(order) == 0)
+@@ -194,2 +194,2 @@ class NodeUnittest(unittest.TestCase):
+-    self.failUnlessEqual(len(output_nodes), 3)
+-    self.failUnlessEqual(output_nodes[2].attrs['filename'],
++    self.assertEqual(len(output_nodes), 3)
++    self.assertEqual(output_nodes[2].attrs['filename'],
+@@ -201 +201 @@ class NodeUnittest(unittest.TestCase):
+-      self.failUnlessEqual(expected_value, base.Node.EvaluateExpression(
++      self.assertEqual(expected_value, base.Node.EvaluateExpression(
+--- contrib/python/grit/grit/node/custom/filename_unittest.py	(index)
++++ contrib/python/grit/grit/node/custom/filename_unittest.py	(working tree)
+@@ -30 +30 @@ class WindowsFilenameUnittest(unittest.TestCase):
+-    self.failUnless(c.MessageForLanguage('fr').GetRealContent() == 'Bilingo bolongo ')
++    self.assertTrue(c.MessageForLanguage('fr').GetRealContent() == 'Bilingo bolongo ')
+--- contrib/python/grit/grit/node/message_unittest.py	(index)
++++ contrib/python/grit/grit/node/message_unittest.py	(working tree)
+@@ -34 +34 @@ class MessageUnittest(unittest.TestCase):
+-    self.failUnless(content == 'Hello USERNAME, how are you doing today?')
++    self.assertTrue(content == 'Hello USERNAME, how are you doing today?')
+@@ -45,3 +45,3 @@ class MessageUnittest(unittest.TestCase):
+-    self.failUnless(content == 'Hello there USERNAME')
+-    self.failUnless(msg.ws_at_start == '  ')
+-    self.failUnless(msg.ws_at_end == '   ')
++    self.assertTrue(content == 'Hello there USERNAME')
++    self.assertTrue(msg.ws_at_start == '  ')
++    self.assertTrue(msg.ws_at_end == '   ')
+@@ -54,6 +54,6 @@ class MessageUnittest(unittest.TestCase):
+-    self.failUnless(msg_node.children[0].name == 'ph')
+-    self.failUnless(msg_node.children[0].children[0].name == 'ex')
+-    self.failUnless(msg_node.children[0].children[0].GetCdata() == 'Joi')
+-    self.failUnless(msg_node.children[1].children[0].GetCdata() == '11')
+-    self.failUnless(msg_node.ws_at_start == '   ')
+-    self.failUnless(msg_node.ws_at_end == '\t\t')
++    self.assertTrue(msg_node.children[0].name == 'ph')
++    self.assertTrue(msg_node.children[0].children[0].name == 'ex')
++    self.assertTrue(msg_node.children[0].children[0].GetCdata() == 'Joi')
++    self.assertTrue(msg_node.children[1].children[0].GetCdata() == '11')
++    self.assertTrue(msg_node.ws_at_start == '   ')
++    self.assertTrue(msg_node.ws_at_end == '\t\t')
+@@ -66 +66 @@ class MessageUnittest(unittest.TestCase):
+-    self.failUnless(msg_from_node == text)
++    self.assertTrue(msg_from_node == text)
+@@ -83 +83 @@ class MessageUnittest(unittest.TestCase):
+-    self.failUnlessEqual(len(expected_formatter_data),
++    self.assertEqual(len(expected_formatter_data),
+@@ -86 +86 @@ class MessageUnittest(unittest.TestCase):
+-      self.failUnlessEqual(expected_formatter_data[key],
++      self.assertEqual(expected_formatter_data[key],
+@@ -99 +99 @@ class MessageUnittest(unittest.TestCase):
+-    self.failUnlessEqual(u'A...B.... %s\u2026 B\u2026 C\u2026', content)
++    self.assertEqual(u'A...B.... %s\u2026 B\u2026 C\u2026', content)
+@@ -110 +110 @@ class MessageUnittest(unittest.TestCase):
+-    self.failUnlessEqual(u'This is OK', content)
++    self.assertEqual(u'This is OK', content)
+@@ -253 +253 @@ class MessageUnittest(unittest.TestCase):
+-    self.failUnless(content == 'ERROR_COUNT error, WARNING_COUNT warning')
++    self.assertTrue(content == 'ERROR_COUNT error, WARNING_COUNT warning')
+--- contrib/python/grit/grit/node/node_io_unittest.py	(index)
++++ contrib/python/grit/grit/node/node_io_unittest.py	(working tree)
+@@ -51 +51 @@ class FileNodeUnittest(unittest.TestCase):
+-    self.failUnless(root.ToRealPath(file_node.GetInputPath()) ==
++    self.assertTrue(root.ToRealPath(file_node.GetInputPath()) ==
+@@ -160,6 +160,6 @@ class FileNodeUnittest(unittest.TestCase):
+-    self.failUnless(outputs[0] in active)
+-    self.failUnless(outputs[0].GetType() == 'rc_header')
+-    self.failUnless(outputs[1] in active)
+-    self.failUnless(outputs[1].GetType() == 'rc_all')
+-    self.failUnless(outputs[2] not in active)
+-    self.failUnless(outputs[2].GetType() == 'rc_all')
++    self.assertTrue(outputs[0] in active)
++    self.assertTrue(outputs[0].GetType() == 'rc_header')
++    self.assertTrue(outputs[1] in active)
++    self.assertTrue(outputs[1].GetType() == 'rc_all')
++    self.assertTrue(outputs[2] not in active)
++    self.assertTrue(outputs[2].GetType() == 'rc_all')
+--- contrib/python/grit/grit/pseudo_unittest.py	(index)
++++ contrib/python/grit/grit/pseudo_unittest.py	(working tree)
+@@ -24 +24 @@ class PseudoUnittest(unittest.TestCase):
+-    self.failUnless(pseudo.MapVowels('abebibobuby') ==
++    self.assertTrue(pseudo.MapVowels('abebibobuby') ==
+@@ -26 +26 @@ class PseudoUnittest(unittest.TestCase):
+-    self.failUnless(pseudo.MapVowels('ABEBIBOBUBY') ==
++    self.assertTrue(pseudo.MapVowels('ABEBIBOBUBY') ==
+@@ -31 +31 @@ class PseudoUnittest(unittest.TestCase):
+-    self.failUnless(out == pseudo.MapVowels(u'hePelloPo', True))
++    self.assertTrue(out == pseudo.MapVowels(u'hePelloPo', True))
+@@ -35 +35 @@ class PseudoUnittest(unittest.TestCase):
+-    self.failUnless(out == pseudo.MapVowels(
++    self.assertTrue(out == pseudo.MapVowels(
+@@ -40 +40 @@ class PseudoUnittest(unittest.TestCase):
+-    self.failUnless(out == pseudo.MapVowels(
++    self.assertTrue(out == pseudo.MapVowels(
+@@ -50 +50 @@ class PseudoUnittest(unittest.TestCase):
+-    self.failUnless(trans.GetPresentableContent() ==
++    self.assertTrue(trans.GetPresentableContent() ==
+--- contrib/python/grit/grit/shortcuts_unittest.py	(index)
++++ contrib/python/grit/grit/shortcuts_unittest.py	(working tree)
+@@ -36 +36 @@ class ShortcutsUnittest(unittest.TestCase):
+-    self.failUnless(warnings)
++    self.assertTrue(warnings)
+@@ -45 +45 @@ class ShortcutsUnittest(unittest.TestCase):
+-    self.failUnless(len(warnings) == 0)
++    self.assertTrue(len(warnings) == 0)
+@@ -78 +78 @@ END'''), 'IDD_SIDEBAR_RSS_PANEL_PROPPAGE')
+-    self.failUnless(len(warnings) == 0)
++    self.assertTrue(len(warnings) == 0)
+--- contrib/python/grit/grit/tclib_unittest.py	(index)
++++ contrib/python/grit/grit/tclib_unittest.py	(working tree)
+@@ -29,3 +29,3 @@ class TclibUnittest(unittest.TestCase):
+-    self.failUnlessEqual(msg.GetPresentableContent(), 'Hello Earthlings')
+-    self.failUnless(isinstance(msg.GetPresentableContent(), six.string_types))
+-    self.failUnlessEqual(msg.GetDescription(), 'Greetings message')
++    self.assertEqual(msg.GetPresentableContent(), 'Hello Earthlings')
++    self.assertTrue(isinstance(msg.GetPresentableContent(), six.string_types))
++    self.assertEqual(msg.GetDescription(), 'Greetings message')
+@@ -36,2 +36,2 @@ class TclibUnittest(unittest.TestCase):
+-    self.failUnless(msg.GetPresentableContent() == 'Hello')
+-    self.failUnless(isinstance(msg.GetPresentableContent(), six.string_types))
++    self.assertTrue(msg.GetPresentableContent() == 'Hello')
++    self.assertTrue(isinstance(msg.GetPresentableContent(), six.string_types))
+@@ -43 +43 @@ class TclibUnittest(unittest.TestCase):
+-    self.failUnless(msg.GetPresentableContent() == 'Howdie USERNAME')
++    self.assertTrue(msg.GetPresentableContent() == 'Howdie USERNAME')
+@@ -46,2 +46,2 @@ class TclibUnittest(unittest.TestCase):
+-    self.failUnless(trans.GetPresentableContent() == 'Howdie USERNAME')
+-    self.failUnless(isinstance(trans.GetPresentableContent(), six.string_types))
++    self.assertTrue(trans.GetPresentableContent() == 'Howdie USERNAME')
++    self.assertTrue(isinstance(trans.GetPresentableContent(), six.string_types))
+@@ -52 +52 @@ class TclibUnittest(unittest.TestCase):
+-    self.failUnless(msg.GetPresentableContent() == text)
++    self.assertTrue(msg.GetPresentableContent() == text)
+@@ -54 +54 @@ class TclibUnittest(unittest.TestCase):
+-    self.failUnless(from_list == text)
++    self.assertTrue(from_list == text)
+@@ -69 +69 @@ class TclibUnittest(unittest.TestCase):
+-    self.failUnless(isinstance(content[3], six.string_types))
++    self.assertTrue(isinstance(content[3], six.string_types))
+@@ -174 +174 @@ class TclibUnittest(unittest.TestCase):
+-      self.failUnless(msg.GetRealContent() == '1 2 3 4 5 6 7 8 9 10')
++      self.assertTrue(msg.GetRealContent() == '1 2 3 4 5 6 7 8 9 10')
+--- contrib/python/grit/grit/tool/build_unittest.py	(index)
++++ contrib/python/grit/grit/tool/build_unittest.py	(working tree)
+@@ -62 +62 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnless(os.path.isfile(expected_dep_file))
++    self.assertTrue(os.path.isfile(expected_dep_file))
+@@ -68,2 +68,2 @@ class BuildUnittest(unittest.TestCase):
+-      self.failUnlessEqual("default_100_percent.pak", dep_output_file)
+-      self.failUnlessEqual(deps, [
++      self.assertEqual("default_100_percent.pak", dep_output_file)
++      self.assertEqual(deps, [
+@@ -91 +91 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnless(os.path.isfile(expected_dep_file))
++    self.assertTrue(os.path.isfile(expected_dep_file))
+@@ -97,3 +97,3 @@ class BuildUnittest(unittest.TestCase):
+-      self.failUnlessEqual("resource.h", dep_output_file)
+-      self.failUnlessEqual(2, len(deps))
+-      self.failUnlessEqual(deps[0],
++      self.assertEqual("resource.h", dep_output_file)
++      self.assertEqual(2, len(deps))
++      self.assertEqual(deps[0],
+@@ -101 +101 @@ class BuildUnittest(unittest.TestCase):
+-      self.failUnlessEqual(deps[1],
++      self.assertEqual(deps[1],
+@@ -115 +115 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnlessEqual(2,
++    self.assertEqual(2,
+@@ -123 +123 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnlessEqual(0,
++    self.assertEqual(0,
+@@ -143 +143 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnlessEqual(2,
++    self.assertEqual(2,
+@@ -151 +151 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnlessEqual(0,
++    self.assertEqual(0,
+@@ -165 +165 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnless(os.path.exists(filename))
++    self.assertTrue(os.path.exists(filename))
+@@ -238,2 +238,2 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnless(os.path.exists(map_h))
+-    self.failUnless(os.path.exists(pak))
++    self.assertTrue(os.path.exists(map_h))
++    self.assertTrue(os.path.exists(pak))
+@@ -273 +273 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnless(os.path.exists(header))
++    self.assertTrue(os.path.exists(header))
+@@ -279 +279 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnless(os.path.exists(header))
++    self.assertTrue(os.path.exists(header))
+@@ -285 +285 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnless(os.path.exists(header))
++    self.assertTrue(os.path.exists(header))
+@@ -310 +310 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnless(os.path.isfile(expected_stamp_file))
++    self.assertTrue(os.path.isfile(expected_stamp_file))
+@@ -321 +321 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnless(os.path.isfile(expected_stamp_file))
++    self.assertTrue(os.path.isfile(expected_stamp_file))
+@@ -328 +328 @@ class BuildUnittest(unittest.TestCase):
+-    self.failUnless(os.path.isfile(expected_dep_file))
++    self.assertTrue(os.path.isfile(expected_dep_file))
+@@ -334,2 +334,2 @@ class BuildUnittest(unittest.TestCase):
+-      self.failUnlessEqual(expected_stamp_file_name, dep_output_file)
+-      self.failUnlessEqual(deps, [
++      self.assertEqual(expected_stamp_file_name, dep_output_file)
++      self.assertEqual(deps, [
+--- contrib/python/grit/grit/tool/buildinfo_unittest.py	(index)
++++ contrib/python/grit/grit/tool/buildinfo_unittest.py	(working tree)
+@@ -52,8 +52,8 @@ class BuildInfoUnittest(unittest.TestCase):
+-    self.failUnless(output.count(r'rc_all|sv_sidebar_loading.html'))
+-    self.failUnless(output.count(r'rc_header|resource.h'))
+-    self.failUnless(output.count(r'rc_all|en_generated_resources.rc'))
+-    self.failUnless(output.count(r'rc_all|sv_generated_resources.rc'))
+-    self.failUnless(output.count(r'input|../grit/testdata/substitute.xmb'))
+-    self.failUnless(output.count(r'input|../grit/testdata/pr.bmp'))
+-    self.failUnless(output.count(r'input|../grit/testdata/pr2.bmp'))
+-    self.failUnless(
++    self.assertTrue(output.count(r'rc_all|sv_sidebar_loading.html'))
++    self.assertTrue(output.count(r'rc_header|resource.h'))
++    self.assertTrue(output.count(r'rc_all|en_generated_resources.rc'))
++    self.assertTrue(output.count(r'rc_all|sv_generated_resources.rc'))
++    self.assertTrue(output.count(r'input|../grit/testdata/substitute.xmb'))
++    self.assertTrue(output.count(r'input|../grit/testdata/pr.bmp'))
++    self.assertTrue(output.count(r'input|../grit/testdata/pr2.bmp'))
++    self.assertTrue(
+@@ -61,2 +61,2 @@ class BuildInfoUnittest(unittest.TestCase):
+-    self.failUnless(output.count(r'input|../grit/testdata/transl.rc'))
+-    self.failUnless(output.count(r'input|../grit/testdata/transl1.rc'))
++    self.assertTrue(output.count(r'input|../grit/testdata/transl.rc'))
++    self.assertTrue(output.count(r'input|../grit/testdata/transl1.rc'))
+@@ -76 +76 @@ class BuildInfoUnittest(unittest.TestCase):
+-    self.failUnless(
++    self.assertTrue(
+@@ -78,2 +78,2 @@ class BuildInfoUnittest(unittest.TestCase):
+-    self.failUnless(output.count(r'rc_header|../grit/testdata/resource.h'))
+-    self.failUnless(
++    self.assertTrue(output.count(r'rc_header|../grit/testdata/resource.h'))
++    self.assertTrue(
+@@ -81 +81 @@ class BuildInfoUnittest(unittest.TestCase):
+-    self.failUnless(
++    self.assertTrue(
+@@ -83,2 +83,2 @@ class BuildInfoUnittest(unittest.TestCase):
+-    self.failUnless(output.count(r'input|../grit/testdata/substitute.xmb'))
+-    self.failUnlessEqual(0,
++    self.assertTrue(output.count(r'input|../grit/testdata/substitute.xmb'))
++    self.assertEqual(0,
+@@ -86 +86 @@ class BuildInfoUnittest(unittest.TestCase):
+-    self.failUnless(
++    self.assertTrue(
+--- contrib/python/grit/grit/tool/postprocess_unittest.py	(index)
++++ contrib/python/grit/grit/tool/postprocess_unittest.py	(working tree)
+@@ -44 +44 @@ END
+-    self.failUnless(
++    self.assertTrue(
+@@ -46 +46 @@ END
+-    self.failUnless(
++    self.assertTrue(
+--- contrib/python/grit/grit/tool/preprocess_unittest.py	(index)
++++ contrib/python/grit/grit/tool/preprocess_unittest.py	(working tree)
+@@ -36 +36 @@ class PreProcessingUnittest(unittest.TestCase):
+-    self.failUnless(
++    self.assertTrue(
+--- contrib/python/grit/grit/tool/rc2grd_unittest.py	(index)
++++ contrib/python/grit/grit/tool/rc2grd_unittest.py	(working tree)
+@@ -31,2 +31,2 @@ class Rc2GrdUnittest(unittest.TestCase):
+-    self.failUnless(msg.GetPresentableContent() == "Hello TODO_0001, how are you? I'm TODO_0002 years old!")
+-    self.failUnless(msg.GetRealContent() == original)
++    self.assertTrue(msg.GetPresentableContent() == "Hello TODO_0001, how are you? I'm TODO_0002 years old!")
++    self.assertTrue(msg.GetRealContent() == original)
+@@ -38 +38 @@ class Rc2GrdUnittest(unittest.TestCase):
+-    self.failUnless(msg.GetPresentableContent() ==
++    self.assertTrue(msg.GetPresentableContent() ==
+@@ -40 +40 @@ class Rc2GrdUnittest(unittest.TestCase):
+-    self.failUnless(msg.GetRealContent() == original)
++    self.assertTrue(msg.GetRealContent() == original)
+@@ -65 +65 @@ END
+-    self.failUnless(len(rc2grd._MENU.findall(two_menus)) == 2)
++    self.assertTrue(len(rc2grd._MENU.findall(two_menus)) == 2)
+@@ -81 +81 @@ END
+-    self.failUnless(tool.o.node.GetCdata().find('Set As Homepage') != -1)
++    self.assertTrue(tool.o.node.GetCdata().find('Set As Homepage') != -1)
+@@ -85 +85 @@ END
+-    self.failUnless(tool.o.node.attrs['translateable'] == 'false')
++    self.assertTrue(tool.o.node.attrs['translateable'] == 'false')
+@@ -124 +124 @@ The installation will not proceed if you choose to cancel.
+-    self.failUnless(
++    self.assertTrue(
+@@ -126 +126 @@ The installation will not proceed if you choose to cancel.
+-    self.failUnless(
++    self.assertTrue(
+@@ -128 +128 @@ The installation will not proceed if you choose to cancel.
+-    self.failUnless(
++    self.assertTrue(
+@@ -130 +130 @@ The installation will not proceed if you choose to cancel.
+-    self.failUnless(
++    self.assertTrue(
+@@ -132 +132 @@ The installation will not proceed if you choose to cancel.
+-    self.failUnless(
++    self.assertTrue(
+@@ -134 +134 @@ The installation will not proceed if you choose to cancel.
+-    self.failUnless(
++    self.assertTrue(
+@@ -136 +136 @@ The installation will not proceed if you choose to cancel.
+-    self.failUnless(
++    self.assertTrue(
+--- contrib/python/grit/grit/tool/update_resource_ids/assigner_unittest.py	(index)
++++ contrib/python/grit/grit/tool/update_resource_ids/assigner_unittest.py	(working tree)
+@@ -137 +137 @@ class AssignerUnittest(unittest.TestCase):
+-        self.failUnlessEqual(exp, actual)
++        self.assertEqual(exp, actual)
+@@ -140,2 +140,2 @@ class AssignerUnittest(unittest.TestCase):
+-        self.failUnlessEqual(actual, actual2)
+-        self.failUnlessEqual(new_spec, new_spec2)
++        self.assertEqual(actual, actual2)
++        self.assertEqual(new_spec, new_spec2)
+--- contrib/python/grit/grit/util_unittest.py	(index)
++++ contrib/python/grit/grit/util_unittest.py	(working tree)
+@@ -33 +33 @@ class UtilUnittest(unittest.TestCase):
+-    self.failUnless(cls == None)
++    self.assertTrue(cls == None)
+@@ -38 +38 @@ class UtilUnittest(unittest.TestCase):
+-    self.failUnless(cls == None)
++    self.assertTrue(cls == None)
+@@ -43 +43 @@ class UtilUnittest(unittest.TestCase):
+-    self.failUnless(isinstance(cls, TestBaseClassToLoad))
++    self.assertTrue(isinstance(cls, TestBaseClassToLoad))
+@@ -48 +48 @@ class UtilUnittest(unittest.TestCase):
+-    self.failUnless(cls == None)
++    self.assertTrue(cls == None)
+@@ -51,7 +51,7 @@ class UtilUnittest(unittest.TestCase):
+-    self.failUnless(util.CanonicalLanguage('en') == 'en')
+-    self.failUnless(util.CanonicalLanguage('pt_br') == 'pt-BR')
+-    self.failUnless(util.CanonicalLanguage('pt-br') == 'pt-BR')
+-    self.failUnless(util.CanonicalLanguage('pt-BR') == 'pt-BR')
+-    self.failUnless(util.CanonicalLanguage('pt/br') == 'pt-BR')
+-    self.failUnless(util.CanonicalLanguage('pt/BR') == 'pt-BR')
+-    self.failUnless(util.CanonicalLanguage('no_no_bokmal') == 'no-NO-BOKMAL')
++    self.assertTrue(util.CanonicalLanguage('en') == 'en')
++    self.assertTrue(util.CanonicalLanguage('pt_br') == 'pt-BR')
++    self.assertTrue(util.CanonicalLanguage('pt-br') == 'pt-BR')
++    self.assertTrue(util.CanonicalLanguage('pt-BR') == 'pt-BR')
++    self.assertTrue(util.CanonicalLanguage('pt/br') == 'pt-BR')
++    self.assertTrue(util.CanonicalLanguage('pt/BR') == 'pt-BR')
++    self.assertTrue(util.CanonicalLanguage('no_no_bokmal') == 'no-NO-BOKMAL')
+@@ -60,2 +60,2 @@ class UtilUnittest(unittest.TestCase):
+-    self.failUnless(util.UnescapeHtml('&#1010;') == six.unichr(1010))
+-    self.failUnless(util.UnescapeHtml('&#xABcd;') == six.unichr(43981))
++    self.assertTrue(util.UnescapeHtml('&#1010;') == six.unichr(1010))
++    self.assertTrue(util.UnescapeHtml('&#xABcd;') == six.unichr(43981))
+@@ -73 +73 @@ class UtilUnittest(unittest.TestCase):
+-          self.failUnless(result == expected_result)
++          self.assertTrue(result == expected_result)
+--- contrib/python/grit/grit/xtb_reader_unittest.py	(index)
++++ contrib/python/grit/grit/xtb_reader_unittest.py	(working tree)
+@@ -44,4 +44,4 @@ and another after a blank line.</translation>
+-    self.failUnless(len(messages[0][1]) == 1)
+-    self.failUnless(messages[3][1][0])  # PROBLEM_REPORT placeholder
+-    self.failUnless(messages[4][0] == '7729135689895381486')
+-    self.failUnless(messages[4][1][7][1] == 'and another after a blank line.')
++    self.assertTrue(len(messages[0][1]) == 1)
++    self.assertTrue(messages[3][1][0])  # PROBLEM_REPORT placeholder
++    self.assertTrue(messages[4][0] == '7729135689895381486')
++    self.assertTrue(messages[4][1][7][1] == 'and another after a blank line.')
+@@ -75 +75 @@ and another after a blank line.</translation>
+-    self.failUnless('Saelir %s',
++    self.assertTrue('Saelir %s',

@@ -1,0 +1,7 @@
+# Product discipline 1 - Hydrological products, parameter category 1: hydrology probabilities
+0 0 Conditional per cent precipitation amount fractile for an overall period (Encoded as an accumulation) (kg m-2)
+1 1 Per cent precipitation in a sub-period of an overall period (Encoded as per cent accumulation over the sub-period) (%)
+2 2 Probability of 0.01 inch of precipitation (POP) (%)
+# 3-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

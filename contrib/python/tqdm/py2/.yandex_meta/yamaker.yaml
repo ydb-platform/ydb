@@ -1,0 +1,3 @@
+mark_as_py3_sources:
+  - tqdm/asyncio.py
+  - tqdm/rich.py

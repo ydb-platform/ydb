@@ -1,0 +1,2 @@
+exclude:
+  - blackboxprotobuf/__main__.py

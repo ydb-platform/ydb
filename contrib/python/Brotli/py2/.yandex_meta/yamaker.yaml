@@ -1,0 +1,10 @@
+requirements:
+  - contrib/libs/brotli/c/common
+  - contrib/libs/brotli/c/dec
+  - contrib/libs/brotli/c/enc
+copy:
+  - python/brotli.py
+  - python/_brotli.c
+mark_as_sources:
+  - python/brotli.py
+  - python/_brotli.c

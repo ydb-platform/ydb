@@ -1,0 +1,17 @@
+#Provided by Henrik Feddersen (Danish Meteorological Institute)
+#Convective inhibition
+'cin' = {
+     discipline = 0 ;
+     parameterCategory = 7 ;
+     parameterNumber = 7 ;
+     typeOfSecondFixedSurface = 8 ;
+     typeOfFirstFixedSurface = 1 ;
+    }
+#Convective available potential energy
+'cape' = {
+     discipline = 0 ;
+     parameterCategory = 7 ;
+     parameterNumber = 6 ;
+     typeOfFirstFixedSurface = 1 ;
+     typeOfSecondFixedSurface = 8 ;
+    }

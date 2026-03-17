@@ -1,0 +1,97 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Yifu Yu <root@jackyyf.com>, 2015.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2018-04-19 11:31+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: YinKH <614457662@qq.com>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: .\admin.py:115
+#, python-format
+msgid ""
+"Default value type must be equal to declared config parameter type. Please "
+"fix the default value of '%(name)s'."
+msgstr "默认值的类型必须与参数声明类型相同，请修正%(name)s的值。"
+
+#: .\admin.py:125
+#, python-format
+msgid ""
+"Constance doesn't support config values of the type %(config_type)s. Please "
+"fix the value of '%(name)s'."
+msgstr "Constance不支持保存类型为%(config_type)s的值，请修正%(name)s的值。"
+
+#: .\admin.py:157
+msgid ""
+"The settings have been modified by someone else. Please reload the form and "
+"resubmit your changes."
+msgstr "设置已经被他人修改过，请刷新页面并重新提交您的更改。"
+
+#: .\admin.py:173
+msgid ""
+"CONSTANCE_CONFIG_FIELDSETS is missing field(s) that exists in "
+"CONSTANCE_CONFIG."
+msgstr "CONSTANCE_CONFIG_FIELDSETS中缺少在CONSTANCE_CONFIG中声明的字段。"
+
+#: .\admin.py:240
+msgid "Live settings updated successfully."
+msgstr "实时配置更新成功"
+
+#: .\admin.py:301
+msgid "config"
+msgstr "配置"
+
+#: .\backends\database\models.py:19
+msgid "constance"
+msgstr "Constance模块"
+
+#: .\backends\database\models.py:20
+msgid "constances"
+msgstr "Constance模块"
+
+#: .\management\commands\constance.py:30
+msgid "Get/Set In-database config settings handled by Constance"
+msgstr "获取或设置由Constance模块处理的数据库配置"
+
+#: .\templates\admin\constance\change_list.html:60
+msgid "Save"
+msgstr "保存"
+
+#: .\templates\admin\constance\change_list.html:69
+msgid "Home"
+msgstr "首页"
+
+#: .\templates\admin\constance\includes\results_list.html:5
+msgid "Name"
+msgstr "名称"
+
+#: .\templates\admin\constance\includes\results_list.html:6
+msgid "Default"
+msgstr "默认值"
+
+#: .\templates\admin\constance\includes\results_list.html:7
+msgid "Value"
+msgstr "当前值"
+
+#: .\templates\admin\constance\includes\results_list.html:8
+msgid "Is modified"
+msgstr "是否修改过"
+
+#: .\templates\admin\constance\includes\results_list.html:21
+msgid "Current file"
+msgstr "当前文件"
+
+#: .\templates\admin\constance\includes\results_list.html:36
+msgid "Reset to default"
+msgstr "重置至默认值"

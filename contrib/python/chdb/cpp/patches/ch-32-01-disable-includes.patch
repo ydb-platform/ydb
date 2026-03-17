@@ -1,0 +1,11 @@
+--- contrib/python/chdb/cpp/base/poco/Foundation/src/RegularExpression.cpp	(index)
++++ contrib/python/chdb/cpp/base/poco/Foundation/src/RegularExpression.cpp	(working tree)
+@@ -16,7 +16,7 @@
+ #include "Poco/Exception.h"
+ #include <sstream>
+ #if defined(POCO_UNBUNDLED_PCRE)
+-#include <pcre.h>
++#error #include <pcre.h>
+ #else
+ #include "pcre_config.h"
+ #include "pcre.h"

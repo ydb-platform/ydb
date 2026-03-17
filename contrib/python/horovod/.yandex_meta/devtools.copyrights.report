@@ -1,0 +1,340 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 01887143a2fd3c2bae8b1d95261d55ef
+BELONGS ya.make
+    License text:
+        Copyright (c) 2007-2010 Naoaki Okazaki
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        third_party/lbfgs/LICENSE.md [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 05083fc508c96a27f7612e0aa67e647b
+BELONGS ya.make
+    License text:
+        Copyright (c) 1990 Jorge Nocedal
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        third_party/lbfgs/LICENSE.md [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 15e76241e0c2a669bb67a3dfc6e704f9
+BELONGS horovod/common/ya.make
+    License text:
+         * Copyright (c) 2017-2018, NVIDIA CORPORATION.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/half.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b61819bb5f340792b5a1b5482512bdf
+BELONGS horovod/common/ya.make horovod/tensorflow/ya.make
+    License text:
+        // Copyright 2016 The TensorFlow Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/global_state.h [1:1]
+        horovod/common/message.cc [1:1]
+        horovod/common/message.h [1:1]
+        horovod/common/mpi_context.cc [1:1]
+        horovod/common/mpi_context.h [1:1]
+        horovod/common/operations.cc [1:1]
+        horovod/common/ops/collective_operations.cc [1:1]
+        horovod/common/ops/collective_operations.h [1:1]
+        horovod/common/ops/cuda_operations.cc [1:1]
+        horovod/common/ops/cuda_operations.h [1:1]
+        horovod/common/ops/ddl_operations.cc [1:1]
+        horovod/common/ops/ddl_operations.h [1:1]
+        horovod/common/ops/mlsl_operations.cc [1:1]
+        horovod/common/ops/mlsl_operations.h [1:1]
+        horovod/common/ops/mpi_cuda_operations.cc [1:1]
+        horovod/common/ops/mpi_cuda_operations.h [1:1]
+        horovod/common/ops/mpi_operations.cc [1:1]
+        horovod/common/ops/mpi_operations.h [1:1]
+        horovod/common/ops/nccl_operations.cc [1:1]
+        horovod/common/ops/nccl_operations.h [1:1]
+        horovod/common/util.py [1:1]
+        horovod/common/wire/message.fbs [1:1]
+        horovod/tensorflow/__init__.py [1:1]
+        horovod/tensorflow/mpi_ops.cc [1:1]
+        horovod/tensorflow/mpi_ops.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21b7271b62f2a0760435ea4ec3cdf9fa
+BELONGS horovod/common/ya.make horovod/tensorflow/ya.make
+    License text:
+         * Modifications copyright (C) 2018 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/half.h [3:3]
+        horovod/common/optim/bayesian_optimization.cc [2:2]
+        horovod/common/optim/bayesian_optimization.h [2:2]
+        horovod/common/optim/gaussian_process.cc [3:3]
+        horovod/common/optim/gaussian_process.h [3:3]
+        horovod/tensorflow/mpi_ops.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29677611772f6fa24afdd4527b2a3650
+BELONGS horovod/common/ya.make
+    License text:
+        // Modifications copyright (C) 2019 Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/common.h [2:2]
+        horovod/common/operations.cc [4:4]
+        horovod/common/ops/mlsl_operations.cc [2:3]
+        horovod/common/ops/mlsl_operations.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2e4d46e84762d3c2508a471cac49c4a0
+BELONGS ya.make
+    License text:
+        Copyright (c) 2016 Yixuan Qiu
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        third_party/lbfgs/LICENSE.md [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3015e933764a5e89d7799fc774ced46d
+BELONGS horovod/common/ya.make
+    License text:
+        // Copyright (c) 2007–2018 The scikit-learn developers. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/optim/gaussian_process.cc [1:1]
+        horovod/common/optim/gaussian_process.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3ae7e9ad9497342c252e56fbe34dcda4
+BELONGS horovod/common/ya.make
+    License text:
+        // Modifications copyright (C) 2019 Uber Technologies, Inc.
+        // Modifications copyright (C) 2019, NVIDIA CORPORATION. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/operations.cc [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55fca17fbcc1b643d69395806d51c8a0
+BELONGS horovod/common/ya.make
+    License text:
+        \# Copyright (C) 2019 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/basics.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 62bb560fd5d7b986a86d29ca50b4380a
+BELONGS ya.make
+    License text:
+        \# Copyright 2017 Uber Technologies, Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/_keras/__init__.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 68f298c4a5a3642aa7f0c9f6be13cc32
+BELONGS horovod/common/ya.make
+    License text:
+        // Copyright 2018 Martin Krasser. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/optim/bayesian_optimization.cc [1:1]
+        horovod/common/optim/bayesian_optimization.h [1:1]
+        horovod/common/optim/gaussian_process.cc [2:2]
+        horovod/common/optim/gaussian_process.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6abea4bfe6291eec9558ed95758378cb
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2016 Yixuan Qiu <yixuan.qiu@cos.name>
+        // Under MIT license
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        third_party/lbfgs/include/LBFGS.h [1:2]
+        third_party/lbfgs/include/LBFGS/LineSearch.h [1:2]
+        third_party/lbfgs/include/LBFGS/Param.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 821e3a2ac418dd60ac9641954a106fd5
+BELONGS horovod/common/ya.make ya.make
+    License text:
+        // Copyright 2019 Uber Technologies, Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/operations.h [1:1]
+        horovod/common/ops/operation_manager.cc [1:1]
+        horovod/common/ops/operation_manager.h [1:1]
+        horovod/common/timeline.cc [1:1]
+        horovod/common/timeline.h [1:1]
+        horovod/run/common/service/driver_service.py [1:1]
+        horovod/run/common/service/task_service.py [1:1]
+        horovod/run/common/util/codec.py [1:1]
+        horovod/run/common/util/env.py [1:1]
+        horovod/run/common/util/host_hash.py [1:1]
+        horovod/run/common/util/network.py [1:1]
+        horovod/run/common/util/safe_shell_exec.py [1:1]
+        horovod/run/common/util/secret.py [1:1]
+        horovod/run/common/util/settings.py [1:1]
+        horovod/run/common/util/timeout.py [1:1]
+        horovod/run/driver/driver_service.py [1:1]
+        horovod/run/run.py [1:1]
+        horovod/run/task/task_service.py [1:1]
+        horovod/run/task_fn.py [1:1]
+        horovod/run/util/cache.py [1:1]
+        horovod/run/util/threads.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c875a2342cd747ad1dd544836d148e34
+BELONGS horovod/common/ya.make horovod/tensorflow/ya.make ya.make
+    License text:
+           Copyright 2018 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [2:2]
+        horovod/_keras/callbacks.py [1:1]
+        horovod/common/common.cc [1:1]
+        horovod/common/common.h [1:1]
+        horovod/common/fusion_buffer_manager.cc [1:1]
+        horovod/common/fusion_buffer_manager.h [1:1]
+        horovod/common/half.cc [1:1]
+        horovod/common/hashes.h [1:1]
+        horovod/common/parameter_manager.cc [1:1]
+        horovod/common/parameter_manager.h [1:1]
+        horovod/tensorflow/compression.py [1:1]
+        horovod/tensorflow/keras/__init__.py [1:1]
+        horovod/tensorflow/keras/callbacks.py [1:1]
+        horovod/tensorflow/util.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dbb09bb5296cc7978cb2ca54318dc22c
+BELONGS horovod/common/ya.make
+    License text:
+        // Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/response_cache.cc [1:1]
+        horovod/common/response_cache.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ddc388d7e1e410e1e043d406f39a0214
+BELONGS horovod/common/ya.make
+    License text:
+        // Modifications copyright (C) 2017 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/wire/message.fbs [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e2cb2564a98bbd648f18d0537cdb2f5a
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2016 Yixuan Qiu <yixuan.qiu@cos.name> & Dirk Toewe <DirkToewe@GoogleMail.com>
+        // Under MIT license
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        third_party/lbfgs/include/LBFGS/LineSearchBracketing.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f62b0ae3ec4022f657660e0f14afc344
+BELONGS horovod/common/ya.make horovod/tensorflow/ya.make
+    License text:
+        // Modifications copyright (C) 2019 Uber Technologies, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        horovod/common/global_state.h [2:2]
+        horovod/common/message.cc [2:2]
+        horovod/common/message.h [2:2]
+        horovod/common/mpi_context.cc [2:2]
+        horovod/common/mpi_context.h [2:2]
+        horovod/common/operations.cc [2:3]
+        horovod/common/ops/collective_operations.cc [2:2]
+        horovod/common/ops/collective_operations.h [2:2]
+        horovod/common/ops/cuda_operations.cc [2:2]
+        horovod/common/ops/cuda_operations.h [2:2]
+        horovod/common/ops/ddl_operations.cc [2:2]
+        horovod/common/ops/ddl_operations.h [2:2]
+        horovod/common/ops/mlsl_operations.cc [2:3]
+        horovod/common/ops/mlsl_operations.h [2:3]
+        horovod/common/ops/mpi_cuda_operations.cc [2:2]
+        horovod/common/ops/mpi_cuda_operations.h [2:2]
+        horovod/common/ops/mpi_operations.cc [2:2]
+        horovod/common/ops/mpi_operations.h [2:2]
+        horovod/common/ops/nccl_operations.cc [2:2]
+        horovod/common/ops/nccl_operations.h [2:2]
+        horovod/common/util.py [2:2]
+        horovod/tensorflow/__init__.py [2:2]
+        horovod/tensorflow/mpi_ops.py [2:2]

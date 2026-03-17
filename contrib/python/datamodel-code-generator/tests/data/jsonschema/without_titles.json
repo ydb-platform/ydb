@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ProcessingStatus": {
+      "enum": [
+        "COMPLETED",
+        "PENDING",
+        "FAILED"
+      ],
+      "type": "string",
+      "description": "The processing status"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "ExtendedProcessingTask": {
+      "oneOf": [
+        {
+          "$ref": "#"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "comment": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "ExtendedProcessingTasks": {
+      "type": "array",
+      "items": [
+        {
+          "$ref": "#/definitions/ExtendedProcessingTask"
+        }
+      ]
+    },
+    "ProcessingTask": {
+      "type": "object",
+      "properties": {
+        "processing_status_union": {
+          "oneOf": [
+               {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "$ref": "#/definitions/ExtendedProcessingTask"
+            },
+            {
+              "$ref": "#/definitions/ProcessingStatus"
+            }
+          ],
+          "default": "COMPLETED"
+        },
+        "processing_status": {
+          "$ref": "#/definitions/ProcessingStatus",
+          "default": "COMPLETED"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/kind"
+        }
+      }
+    }
+  },
+  "type": "array",
+      "items": [
+        {
+          "$ref": "#/definitions/ProcessingTask"
+        }
+      ]
+}

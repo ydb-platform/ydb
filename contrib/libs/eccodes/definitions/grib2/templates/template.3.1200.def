@@ -1,0 +1,63 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.1200, Time section grid
+# This template is simply experimental, was not validated at the time of publication
+# and should be used only for bilateral previously agreed tests
+transient template_is_experimental = 1 : hidden;
+
+constant isGridded = true;
+
+#  NT - Number of time steps
+unsigned[4] numberOfTimeSteps  : dump;
+
+alias NT =  numberOfTimeSteps;
+#  Unit of offset from reference time
+codetable[1] unitOfOffsetFromReferenceTime ('4.4.table',masterDir,localDir) : dump;
+
+#  Offset from reference of first time
+# (negative value when first bit set)
+unsigned[4] offsetFromReferenceOfFirstTime  : dump;
+
+#  Type of time increment
+codetable[1] typeOfTimeIncrement ('4.11.table',masterDir,localDir) : dump;
+
+#  Unit of time increment
+codetable[1] unitOfTimeIncrement ('4.4.table',masterDir,localDir) : dump;
+
+#  Time increment
+# (negative value when first bit set)
+unsigned[4] timeIncrement : dump;
+
+#  Year
+unsigned[2] year  : dump;
+
+#  Month
+unsigned[1] month  : dump;
+
+#  Day
+unsigned[1] day  : dump;
+
+#  Hour
+unsigned[1] hour  : dump;
+
+#  Minute
+unsigned[1] minute  : dump;
+
+#  Second
+unsigned[1] second  : dump;
+
+#  Number of vertical points
+unsigned[2] numberOfVerticalPoints  : dump;
+
+#  Physical meaning of vertical coordinate
+codetable[1] physicalMeaningOfVerticalCoordinate ('3.15.table',masterDir,localDir) : dump;
+
+#  Vertical dimension coordinate values definition
+codetable[1] verticalCoordinate ('3.21.table',masterDir,localDir) : dump;
+
+#  NC - Number of coefficients or values used to specify vertical coordinates
+unsigned[2] NC  : dump;
+
+# Octets 43-(42+NC*4) : Coefficients to define vertical dimension coordinate values in functional form, or the explicit coordinate values
+# (IEEE 32-bit floating-point values)
+# ????          coefficients_to_define_vertical_dimension;

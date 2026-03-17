@@ -1,0 +1,185 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2126819077ed1c7dba55e0eb4042729f
+BELONGS ya.make
+    License text:
+        Copyright (c) ONNX Project Contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        CONTRIBUTING.md [2:2]
+        INSTALL.md [2:2]
+        README.md [2:2]
+        REUSE.toml [1:1]
+        REUSE.toml [13:14]
+        REUSE.toml [19:20]
+        REUSE.toml [25:26]
+        REUSE.toml [31:32]
+        REUSE.toml [37:38]
+        REUSE.toml [43:44]
+        REUSE.toml [49:50]
+        REUSE.toml [55:56]
+        REUSE.toml [61:62]
+        REUSE.toml [67:68]
+        REUSE.toml [73:74]
+        REUSE.toml [79:80]
+        REUSE.toml [85:86]
+        REUSE.toml [91:92]
+        REUSE.toml [97:98]
+        REUSE.toml [103:104]
+        REUSE.toml [109:110]
+        REUSE.toml [115:116]
+        REUSE.toml [121:122]
+        REUSE.toml [127:128]
+        REUSE.toml [133:134]
+        REUSE.toml [139:140]
+        REUSE.toml [145:146]
+        REUSE.toml [151:152]
+        REUSE.toml [157:158]
+        REUSE.toml [163:164]
+        REUSE.toml [169:170]
+        REUSE.toml [175:176]
+        REUSE.toml [181:182]
+        REUSE.toml [187:188]
+        REUSE.toml [193:194]
+        REUSE.toml [199:200]
+        REUSE.toml [205:206]
+        REUSE.toml [211:212]
+        SECURITY.md [2:2]
+        onnx/__init__.py [1:1]
+        onnx/_custom_element_types.py [1:1]
+        onnx/checker.cc [1:1]
+        onnx/checker.h [1:1]
+        onnx/checker.py [1:1]
+        onnx/common/array_ref.h [1:1]
+        onnx/common/assertions.cc [1:1]
+        onnx/common/assertions.h [1:1]
+        onnx/common/common.h [1:1]
+        onnx/common/constants.h [1:1]
+        onnx/common/file_utils.h [1:1]
+        onnx/common/graph_node_list.h [1:1]
+        onnx/common/interned_strings.cc [1:1]
+        onnx/common/interned_strings.h [1:1]
+        onnx/common/ir.h [1:1]
+        onnx/common/ir_pb_converter.cc [1:1]
+        onnx/common/ir_pb_converter.h [1:1]
+        onnx/common/model_helpers.cc [1:1]
+        onnx/common/model_helpers.h [1:1]
+        onnx/common/path.cc [5:5]
+        onnx/common/path.h [5:5]
+        onnx/common/platform_helpers.h [1:1]
+        onnx/common/proto_util.h [1:1]
+        onnx/common/status.cc [1:1]
+        onnx/common/status.h [1:1]
+        onnx/common/tensor.h [1:1]
+        onnx/common/visitor.h [1:1]
+        onnx/compose.py [1:1]
+        onnx/cpp2py_export.cc [1:1]
+        onnx/defs/__init__.py [1:1]
+        onnx/defs/attr_proto_util.cc [1:1]
+        onnx/defs/attr_proto_util.h [1:1]
+        onnx/defs/controlflow/defs.cc [1:1]
+        onnx/defs/controlflow/old.cc [1:1]
+        onnx/defs/data_propagators.h [1:1]
+        onnx/external_data_helper.py [1:1]
+        onnx/helper.py [1:1]
+        onnx/hub.py [1:1]
+        onnx/inliner.py [1:1]
+        onnx/inliner/inliner.cc [1:1]
+        onnx/inliner/inliner.h [1:1]
+        onnx/mapping.py [1:1]
+        onnx/model_container.py [1:1]
+        onnx/numpy_helper.py [1:1]
+        onnx/onnx_cpp2py_export/inliner.pyi [1:1]
+        onnx/onnx_operators_ml.proto [6:7]
+        onnx/parser.py [1:1]
+        onnx/printer.py [1:1]
+        onnx/proto_utils.h [1:1]
+        onnx/py_utils.h [1:1]
+        onnx/serialization.py [1:1]
+        onnx/shape_inference.py [1:1]
+        onnx/shape_inference/attribute_binder.h [1:1]
+        onnx/shape_inference/implementation.cc [1:1]
+        onnx/shape_inference/implementation.h [1:1]
+        onnx/string_utils.h [1:1]
+        onnx/subbyte.py [1:1]
+        onnx/utils.py [1:1]
+        onnx/version_converter.py [1:1]
+        onnx/version_converter/BaseConverter.h [1:1]
+        onnx/version_converter/adapters/adapter.h [1:1]
+        onnx/version_converter/adapters/axes_attribute_to_input.h [1:1]
+        onnx/version_converter/adapters/axes_input_to_attribute.h [1:1]
+        onnx/version_converter/adapters/axis_attribute_to_input.h [1:1]
+        onnx/version_converter/adapters/axis_input_to_attribute.h [1:1]
+        onnx/version_converter/adapters/batch_normalization_13_14.h [1:1]
+        onnx/version_converter/adapters/broadcast_backward_compatibility.h [1:1]
+        onnx/version_converter/adapters/broadcast_forward_compatibility.h [1:1]
+        onnx/version_converter/adapters/cast_9_8.h [1:1]
+        onnx/version_converter/adapters/clip_10_11.h [1:1]
+        onnx/version_converter/adapters/compatible.h [1:1]
+        onnx/version_converter/adapters/dropout_11_12.h [1:1]
+        onnx/version_converter/adapters/extend_supported_types.h [1:1]
+        onnx/version_converter/adapters/gemm_6_7.h [1:1]
+        onnx/version_converter/adapters/gemm_7_6.h [1:1]
+        onnx/version_converter/adapters/gridsample_19_20.h [1:1]
+        onnx/version_converter/adapters/group_normalization_20_21.h [1:1]
+        onnx/version_converter/adapters/maxpool_8_7.h [1:1]
+        onnx/version_converter/adapters/no_previous_version.h [1:1]
+        onnx/version_converter/adapters/pad_10_11.h [1:1]
+        onnx/version_converter/adapters/q_dq_21_20.h [1:1]
+        onnx/version_converter/adapters/remove_consumed_inputs.h [1:1]
+        onnx/version_converter/adapters/reshape_4_5.h [1:1]
+        onnx/version_converter/adapters/reshape_5_4.h [1:1]
+        onnx/version_converter/adapters/resize_10_11.h [1:1]
+        onnx/version_converter/adapters/scan_8_9.h [1:1]
+        onnx/version_converter/adapters/scan_9_8.h [1:1]
+        onnx/version_converter/adapters/scatter_10_11.h [1:1]
+        onnx/version_converter/adapters/slice_9_10.h [1:1]
+        onnx/version_converter/adapters/softmax_12_13.h [1:1]
+        onnx/version_converter/adapters/softmax_13_12.h [1:1]
+        onnx/version_converter/adapters/split_12_13.h [1:1]
+        onnx/version_converter/adapters/split_13_12.h [1:1]
+        onnx/version_converter/adapters/split_17_18.h [1:1]
+        onnx/version_converter/adapters/sum_8_7.h [1:1]
+        onnx/version_converter/adapters/topk_9_10.h [1:1]
+        onnx/version_converter/adapters/transformers.h [1:1]
+        onnx/version_converter/adapters/type_restriction.h [1:1]
+        onnx/version_converter/adapters/upsample_6_7.h [1:1]
+        onnx/version_converter/adapters/upsample_8_9.h [1:1]
+        onnx/version_converter/adapters/upsample_9_10.h [1:1]
+        onnx/version_converter/adapters/upsample_9_8.h [1:1]
+        onnx/version_converter/convert.cc [1:1]
+        onnx/version_converter/convert.h [1:1]
+        onnx/version_converter/helper.cc [1:1]
+        onnx/version_converter/helper.h [1:1]

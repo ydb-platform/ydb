@@ -1,0 +1,49 @@
+Metadata-Version: 2.4
+Name: murmurhash
+Version: 1.0.15
+Summary: Cython bindings for MurmurHash
+Home-page: https://github.com/explosion/murmurhash
+Author: Explosion
+Author-email: contact@explosion.ai
+License: MIT
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Programming Language :: Cython
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Scientific/Engineering
+Requires-Python: >=3.6,<3.15
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires-python
+Dynamic: summary
+
+<a href="https://explosion.ai"><img src="https://explosion.ai/assets/img/logo.svg" width="125" height="125" align="right" /></a>
+
+# Cython bindings for MurmurHash2
+
+[![tests](https://github.com/explosion/murmurhash/actions/workflows/tests.yml/badge.svg)](https://github.com/explosion/murmurhash/actions/workflows/tests.yml)
+[![pypi Version](https://img.shields.io/pypi/v/murmurhash.svg?style=flat-square&logo=pypi&logoColor=white)](https://pypi.python.org/pypi/murmurhash)
+[![conda Version](https://img.shields.io/conda/vn/conda-forge/murmurhash.svg?style=flat-square&logo=conda-forge&logoColor=white)](https://anaconda.org/conda-forge/murmurhash)
+[![Python wheels](https://img.shields.io/badge/wheels-%E2%9C%93-4c1.svg?longCache=true&style=flat-square&logo=python&logoColor=white)](https://github.com/explosion/wheelwright/releases)

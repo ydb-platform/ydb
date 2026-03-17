@@ -1,0 +1,1 @@
+import{a8 as t}from"./index-Cp3b7MWQ.js";const e=[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M12 3v18",key:"108xh3"}]],c=t("columns-2",e);export{e as __iconNode,c as default};

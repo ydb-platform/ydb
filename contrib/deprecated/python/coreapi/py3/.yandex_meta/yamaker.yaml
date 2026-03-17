@@ -1,0 +1,3 @@
+requirements:
+  - setuptools
+  - standard-cgi

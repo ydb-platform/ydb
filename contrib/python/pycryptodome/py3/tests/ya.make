@@ -1,0 +1,107 @@
+PY3TEST()
+
+SIZE(MEDIUM)
+
+PEERDIR(
+    contrib/python/pycryptodome
+)
+
+SRCDIR(contrib/python/pycryptodome/py3)
+
+PY_SRCS(
+    TOP_LEVEL
+    Crypto/SelfTest/__init__.py
+    Crypto/SelfTest/loader.py
+    Crypto/SelfTest/st_common.py
+)
+
+TEST_SRCS(
+    Crypto/SelfTest/Cipher/__init__.py
+    #Crypto/SelfTest/Cipher/common.py
+    Crypto/SelfTest/Cipher/test_AES.py
+    Crypto/SelfTest/Cipher/test_ARC2.py
+    Crypto/SelfTest/Cipher/test_ARC4.py
+    Crypto/SelfTest/Cipher/test_Blowfish.py
+    Crypto/SelfTest/Cipher/test_CAST.py
+    #Crypto/SelfTest/Cipher/test_CBC.py
+    Crypto/SelfTest/Cipher/test_CCM.py
+    #Crypto/SelfTest/Cipher/test_CFB.py
+    Crypto/SelfTest/Cipher/test_CTR.py
+    Crypto/SelfTest/Cipher/test_ChaCha20.py
+    Crypto/SelfTest/Cipher/test_ChaCha20_Poly1305.py
+    Crypto/SelfTest/Cipher/test_DES.py
+    Crypto/SelfTest/Cipher/test_DES3.py
+    Crypto/SelfTest/Cipher/test_EAX.py
+    #Crypto/SelfTest/Cipher/test_GCM.py
+    #Crypto/SelfTest/Cipher/test_OCB.py
+    #Crypto/SelfTest/Cipher/test_OFB.py
+    #Crypto/SelfTest/Cipher/test_OpenPGP.py
+    #Crypto/SelfTest/Cipher/test_SIV.py
+    #Crypto/SelfTest/Cipher/test_Salsa20.py
+    #Crypto/SelfTest/Cipher/test_pkcs1_15.py
+    #Crypto/SelfTest/Cipher/test_pkcs1_oaep.py
+    Crypto/SelfTest/Hash/__init__.py
+    #Crypto/SelfTest/Hash/common.py
+    #Crypto/SelfTest/Hash/test_BLAKE2.py
+    #Crypto/SelfTest/Hash/test_CMAC.py
+    #Crypto/SelfTest/Hash/test_HMAC.py
+    #Crypto/SelfTest/Hash/test_KMAC.py
+    Crypto/SelfTest/Hash/test_KangarooTwelve.py
+    Crypto/SelfTest/Hash/test_MD2.py
+    Crypto/SelfTest/Hash/test_MD4.py
+    Crypto/SelfTest/Hash/test_MD5.py
+    #Crypto/SelfTest/Hash/test_Poly1305.py
+    Crypto/SelfTest/Hash/test_RIPEMD160.py
+    Crypto/SelfTest/Hash/test_SHA1.py
+    #Crypto/SelfTest/Hash/test_SHA224.py
+    #Crypto/SelfTest/Hash/test_SHA256.py
+    #Crypto/SelfTest/Hash/test_SHA384.py
+    #Crypto/SelfTest/Hash/test_SHA3_224.py
+    #Crypto/SelfTest/Hash/test_SHA3_256.py
+    #Crypto/SelfTest/Hash/test_SHA3_384.py
+    #Crypto/SelfTest/Hash/test_SHA3_512.py
+    #Crypto/SelfTest/Hash/test_SHA512.py
+    #Crypto/SelfTest/Hash/test_SHAKE.py
+    #Crypto/SelfTest/Hash/test_TupleHash.py
+    #Crypto/SelfTest/Hash/test_cSHAKE.py
+    #Crypto/SelfTest/Hash/test_keccak.py
+    Crypto/SelfTest/IO/__init__.py
+    Crypto/SelfTest/IO/test_PBES.py
+    Crypto/SelfTest/IO/test_PKCS8.py
+    Crypto/SelfTest/Math/__init__.py
+    #Crypto/SelfTest/Math/test_Numbers.py
+    #Crypto/SelfTest/Math/test_Primality.py
+    Crypto/SelfTest/Math/test_modexp.py
+    Crypto/SelfTest/Protocol/__init__.py
+    Crypto/SelfTest/Protocol/test_KDF.py
+    Crypto/SelfTest/Protocol/test_SecretSharing.py
+    Crypto/SelfTest/Protocol/test_rfc1751.py
+    #Crypto/SelfTest/PublicKey/__init__.py
+    Crypto/SelfTest/PublicKey/test_DSA.py
+    Crypto/SelfTest/PublicKey/test_ECC_Curve25519.py
+    Crypto/SelfTest/PublicKey/test_ECC_Curve448.py
+    Crypto/SelfTest/PublicKey/test_ECC_NIST.py
+    Crypto/SelfTest/PublicKey/test_ElGamal.py
+    Crypto/SelfTest/PublicKey/test_RSA.py
+    Crypto/SelfTest/PublicKey/test_import_DSA.py
+    #Crypto/SelfTest/PublicKey/test_import_ECC.py
+    Crypto/SelfTest/PublicKey/test_import_RSA.py
+    Crypto/SelfTest/Random/__init__.py
+    Crypto/SelfTest/Random/test_random.py
+    #Crypto/SelfTest/Signature/__init__.py
+    Crypto/SelfTest/Signature/test_dss.py
+    #Crypto/SelfTest/Signature/test_eddsa.py
+    Crypto/SelfTest/Signature/test_pkcs1_15.py
+    Crypto/SelfTest/Signature/test_pss.py
+    Crypto/SelfTest/Util/__init__.py
+    Crypto/SelfTest/Util/test_Counter.py
+    Crypto/SelfTest/Util/test_Padding.py
+    Crypto/SelfTest/Util/test_asn1.py
+    Crypto/SelfTest/Util/test_number.py
+    Crypto/SelfTest/Util/test_rfc1751.py
+    Crypto/SelfTest/Util/test_strxor.py
+)
+
+NO_LINT()
+
+END()

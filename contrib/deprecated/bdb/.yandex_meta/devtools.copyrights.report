@@ -1,0 +1,426 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 12e5e3c3d59cd5dba18c4b90af94623c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996
+         *	The President and Fellows of Harvard University.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/txn/txn_rec.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 16ed76d63a9c46131af23245e9ca696b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1991, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dbinc/queue.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1820e0d9a0509548008a8e5a3875a54a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1989, 1991, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/clib/getcwd.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e3fac604b8094bdf8916ba7d3036acb
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1982, 1986, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dbinc/clock.h [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22cbfbea346da7b289091ccad7abeb58
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990, 2011 Oracle and/or its affiliates.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [12:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2c40ecad57696e74bbc604f93bb7b4ce
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996, 2012 Oracle and/or its affiliates.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/btree/bt_compare.c [4:4]
+        src/btree/bt_delete.c [4:4]
+        src/btree/bt_open.c [4:4]
+        src/btree/bt_put.c [4:4]
+        src/btree/bt_rsearch.c [4:4]
+        src/btree/bt_search.c [4:4]
+        src/btree/bt_split.c [4:4]
+        src/clib/getcwd.c [4:4]
+        src/clib/getopt.c [4:4]
+        src/clib/memcmp.c [4:4]
+        src/clib/memmove.c [4:4]
+        src/common/db_log2.c [4:4]
+        src/db/db.c [4:4]
+        src/db/db_conv.c [4:4]
+        src/db/db_dispatch.c [4:4]
+        src/db/db_meta.c [4:4]
+        src/db/db_overflow.c [4:4]
+        src/db/db_ovfl_vrfy.c [4:4]
+        src/dbinc/btree.h [4:4]
+        src/dbinc/db_185.in [4:4]
+        src/dbinc/db_dispatch.h [4:4]
+        src/dbinc/db_swap.h [4:4]
+        src/dbinc/hash.h [4:4]
+        src/dbinc/queue.h [4:4]
+        src/dbreg/dbreg_rec.c [4:4]
+        src/hash/hash.c [4:4]
+        src/hash/hash.src [4:4]
+        src/hash/hash_dup.c [4:4]
+        src/hash/hash_func.c [4:4]
+        src/hash/hash_open.c [4:4]
+        src/hash/hash_page.c [4:4]
+        src/hash/hash_rec.c [4:4]
+        src/txn/txn.c [4:4]
+        src/txn/txn_chkpt.c [4:4]
+        src/txn/txn_rec.c [4:4]
+        util/db_recover.c [4:4]
+        util/db_recover.c [14:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2fd61c37b1b8ef3799bc9905986749fa
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1995, 1996
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/common/db_log2.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c86ce309ba5e341fe0d832153e81074
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1995, 1996
+         *	The President and Fellows of Harvard University.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [74:75]
+        src/db/db_dispatch.c [7:8]
+        src/dbinc/db_dispatch.h [7:8]
+        src/dbreg/dbreg_rec.c [7:8]
+        src/hash/hash.src [13:14]
+        src/hash/hash_rec.c [11:12]
+        src/txn/txn.c [7:8]
+        src/txn/txn_chkpt.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4028c44f059694cb11eb0665c692fb82
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1995, 1996
+         *	Margo Seltzer.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hash/hash.src [9:10]
+        src/hash/hash_rec.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 51fbc4b3979b7fbb316442eb566ab270
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005, 2012 Oracle and/or its affiliates.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dbinc/clock.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ac482aab2ee8bf12db24a2bdd4523b9
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1988, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/clib/atoi.c [2:3]
+        src/clib/atol.c [2:3]
+        src/clib/strcat.c [2:3]
+        src/clib/strdup.c [2:3]
+        src/clib/strerror.c [7:8]
+        src/clib/strrchr.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 675f7e136410dbbf46d96e27d9573886
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1997, 2012 Oracle and/or its affiliates.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/clib/strerror.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71a5570b4ed12474c30d73d9c6d6af57
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1992, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/clib/qsort.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c2936cc0453639e0a55b4d9f729353c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        util/db_recover.c [202:203]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7d1bea1f4b3740390787ad95188cd1ef
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1989, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/clib/strncmp.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 84cfb8491adbaa769ce510799197dfed
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1982, 1985, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/clib/strerror.c [38:39]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 91ed2a52abb6d4174e5a50147be44f81
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/btree/bt_rsearch.c [11:12]
+        src/clib/memcmp.c [7:8]
+        src/clib/memmove.c [7:8]
+        src/clib/strchr.c [2:3]
+        src/clib/strncat.c [2:3]
+        src/clib/strsep.c [2:3]
+        src/clib/strtol.c [2:3]
+        src/clib/strtoul.c [2:3]
+        src/hash/hash_func.c [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d779b0d83ae00030ec57f9afde03f57
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1987, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/clib/strcasecmp.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ad8265c48e794b4bd9aefdd55fccb919
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990, 1993, 1994
+         *	Margo Seltzer.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dbinc/hash.h [7:8]
+        src/hash/hash.c [7:8]
+        src/hash/hash_open.c [7:8]
+        src/hash/hash_page.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b37157572d5331eae9368c72731e5f39
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2000-2005 INRIA, France Telecom
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [104:105]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea2ed5d6faf815afd69d9adcfdbf683
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990, 1993, 1994, 1995
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [46:47]
+        src/btree/bt_compare.c [11:12]
+        src/btree/bt_delete.c [11:12]
+        src/btree/bt_open.c [11:12]
+        src/btree/bt_put.c [11:12]
+        src/btree/bt_search.c [11:12]
+        src/btree/bt_split.c [11:12]
+        src/db/db.c [11:12]
+        src/db/db_conv.c [11:12]
+        src/db/db_meta.c [11:12]
+        src/db/db_overflow.c [11:12]
+        src/db/db_ovfl_vrfy.c [11:12]
+        src/dbinc/btree.h [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d12b8202acdc34f252a484c521ddb9de
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990, 1993, 1994
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dbinc/db_185.in [7:8]
+        src/dbinc/db_swap.h [7:8]
+        src/dbinc/hash.h [11:12]
+        src/hash/hash.c [11:12]
+        src/hash/hash_dup.c [7:8]
+        src/hash/hash_open.c [11:12]
+        src/hash/hash_page.c [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dffdc5a13914a03b0404c240b945503b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990, 1993, 1994, 1995, 1996
+         *	Keith Bostic.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/btree/bt_compare.c [7:8]
+        src/btree/bt_delete.c [7:8]
+        src/btree/bt_open.c [7:8]
+        src/btree/bt_put.c [7:8]
+        src/btree/bt_rsearch.c [7:8]
+        src/btree/bt_search.c [7:8]
+        src/btree/bt_split.c [7:8]
+        src/db/db.c [7:8]
+        src/db/db_conv.c [7:8]
+        src/db/db_meta.c [7:8]
+        src/db/db_overflow.c [7:8]
+        src/db/db_ovfl_vrfy.c [7:8]
+        src/dbinc/btree.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e3220d3e8215ff7cae9eb529c481c8de
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1987, 1993, 1994
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/clib/getopt.c [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f589ab8df5aebe480a41b78982f024b7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/crypto/mersenne/mt19937db.c [24:26]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f7b896d6ac1fc6b8358716379d8b06fc
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990, 1993
+         *	Margo Seltzer.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hash/hash_func.c [7:8]

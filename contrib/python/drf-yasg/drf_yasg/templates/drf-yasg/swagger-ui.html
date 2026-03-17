@@ -1,0 +1,89 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>{% block title %}{{ title }}{% endblock %}</title>
+
+    {% block extra_head %}
+        {# -- Add any extra HTML heads tags here - except scripts and styles -- #}
+    {% endblock %}
+
+    {% block favicon %}
+        {# -- Maybe replace the favicon -- #}
+        <link rel="icon" type="image/png" href="{% static 'drf-yasg/swagger-ui-dist/favicon-32x32.png' %}"/>
+    {% endblock %}
+
+    {% block main_styles %}
+        <link rel="stylesheet" type="text/css" href="{% static 'drf-yasg/style.css' %}"/>
+        <link rel="stylesheet" type="text/css" href="{% static 'drf-yasg/swagger-ui-dist/swagger-ui.css' %}">
+    {% endblock %}
+    {% block extra_styles %}
+        {# -- Add any additional CSS scripts here -- #}
+    {% endblock %}
+</head>
+
+<body class="swagger-body">
+
+{% block extra_body %}
+    {# -- Add any header/body markup here (rendered BEFORE the swagger-ui/redoc element) -- #}
+{% endblock %}
+
+<div id="swagger-ui"></div>
+
+{% block footer %}
+    {# -- Add any footer markup here (rendered AFTER the swagger-ui/redoc element) -- #}
+{% endblock %}
+
+<script id="swagger-settings" type="application/json">{{ swagger_settings | safe }}</script>
+<script id="oauth2-config" type="application/json">{{ oauth2_config | safe }}</script>
+
+{% block main_scripts %}
+    <script src="{% static 'drf-yasg/swagger-ui-dist/swagger-ui-bundle.js' %}"></script>
+    <script src="{% static 'drf-yasg/swagger-ui-dist/swagger-ui-standalone-preset.js' %}"></script>
+    <script src="{% static 'drf-yasg/insQ.min.js' %}"></script>
+    <script src="{% static 'drf-yasg/immutable.min.js' %}"></script>
+    <script src="{% static 'drf-yasg/swagger-ui-init.js' %}"></script>
+{% endblock %}
+{% block extra_scripts %}
+    {# -- Add any additional scripts here -- #}
+{% endblock %}
+
+<a id="oauth2-redirect-url" href="{% static 'drf-yasg/swagger-ui-dist/oauth2-redirect.html' %}" class="hidden"></a>
+
+{% if USE_SESSION_AUTH %}
+    <div id="django-session-auth" class="hidden">
+        {% block session_auth_button %}
+            {% csrf_token %}
+
+            {% block user_context_message %}
+                {% if request.user.is_authenticated %}
+                    <div class="hello">
+                        <span class="django-session">Django</span>
+                        <span class="label label-primary">{{ request.user }}</span>
+                    </div>
+                {% endif %}
+            {% endblock %}
+
+            {% if request.user.is_authenticated %}
+                <div class='btn authorize'>
+                    <form method="post" action="{{ LOGOUT_URL }}?next={{ request.path }}">
+                        {% csrf_token %}
+                        <button type="submit" id="auth" class="header__btn" data-sw-translate>
+                        {% block django_logout_message %}Django Logout{% endblock %}
+                        </button>
+                    </form>
+                </div>
+            {% else %}
+                <div class='btn authorize'>
+                    <a id="auth" class="header__btn" href="{{ LOGIN_URL }}?next={{ request.path }}" data-sw-translate>
+                        {% block django_login_message %}Django Login{% endblock %}
+                    </a>
+                </div>
+            {% endif %}
+        {% endblock %}
+    </div>
+{% endif %}
+</body>
+
+</html>

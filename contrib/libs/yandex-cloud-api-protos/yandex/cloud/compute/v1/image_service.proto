@@ -1,0 +1,337 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/compute/v1/hardware_generation.proto";
+import "yandex/cloud/compute/v1/image.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// A set of methods for managing Image resources.
+service ImageService {
+  // Returns the specified Image resource.
+  //
+  // To get the list of available Image resources, make a [List] request.
+  rpc Get(GetImageRequest) returns (Image) {
+    option (google.api.http) = {get: "/compute/v1/images/{image_id}"};
+  }
+
+  // Returns the latest image that is part of an image family.
+  rpc GetLatestByFamily(GetImageLatestByFamilyRequest) returns (Image) {
+    option (google.api.http) = {get: "/compute/v1/images:latestByFamily"};
+  }
+
+  // Retrieves the list of Image resources in the specified folder.
+  rpc List(ListImagesRequest) returns (ListImagesResponse) {
+    option (google.api.http) = {get: "/compute/v1/images"};
+  }
+
+  // Creates an image in the specified folder.
+  //
+  // You can create an image from a disk, snapshot, other image or URI.
+  // Method starts an asynchronous operation that can be cancelled while it is in progress.
+  rpc Create(CreateImageRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/images"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateImageMetadata"
+      response: "Image"
+    };
+  }
+
+  // Updates the specified image.
+  rpc Update(UpdateImageRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/compute/v1/images/{image_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateImageMetadata"
+      response: "Image"
+    };
+  }
+
+  // Deletes the specified image.
+  //
+  // Deleting an image removes its data permanently and is irreversible.
+  rpc Delete(DeleteImageRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/compute/v1/images/{image_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteImageMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists operations for the specified image.
+  rpc ListOperations(ListImageOperationsRequest) returns (ListImageOperationsResponse) {
+    option (google.api.http) = {get: "/compute/v1/images/{image_id}/operations"};
+  }
+
+  // access
+
+  // Lists access bindings for the image.
+  rpc ListAccessBindings(access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = {get: "/compute/v1/images/{resource_id}:listAccessBindings"};
+  }
+
+  // Sets access bindings for the image.
+  rpc SetAccessBindings(access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/images/{resource_id}:setAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Updates access bindings for the image.
+  rpc UpdateAccessBindings(access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/compute/v1/images/{resource_id}:updateAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+}
+
+message GetImageRequest {
+  // ID of the Image resource to return.
+  // To get the image ID, use a [ImageService.List] request.
+  string image_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message GetImageLatestByFamilyRequest {
+  // ID of the folder to get the image from.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the image family to search for.
+  string family = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+}
+
+message ListImagesRequest {
+  // ID of the folder to list images in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListImagesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListImagesResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression consists of one or more conditions united by `AND` operator: `<condition1> [AND <condition2> [<...> AND <conditionN>]]`.
+  //
+  // Each condition has the form `<field> <operator> <value>`, where:
+  // 1. `<field>` is the field name. Currently you can use filtering only on the limited number of fields.
+  // 2. `<operator>` is a logical operator, one of `=`, `!=`, `IN`, `NOT IN`.
+  // 3. `<value>` represents a value.
+  // String values should be written in double (`"`) or single (`'`) quotes. C-style escape sequences are supported (`\"` turns to `"`, `\'` to `'`, `\\` to backslash).
+  string filter = 4 [(length) = "<=1000"];
+
+  // By which column the listing should be ordered and in which direction,
+  // format is "createdAt desc". "id asc" if omitted.
+  // The default sorting order is ascending
+  string order_by = 5 [(length) = "<=100"];
+}
+
+message ListImagesResponse {
+  // List of images.
+  repeated Image images = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListSnapshotsRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListSnapshotsRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateImageRequest {
+  reserved 13 to 16;
+  // ID of the folder to create an image in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the image.
+  string name = 2 [(pattern) = "|[a-z]([-_a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the image.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 4 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+
+  // The name of the image family to which this image belongs. For more information, see [Image family](/docs/compute/concepts/image#family).
+  //
+  // To get an information about the most recent image from a family, use a [ImageService.GetLatestByFamily] request.
+  string family = 5 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Minimum size of the disk that will be created from this image.
+  // Specified in bytes. Should be more than the volume of source data.
+  int64 min_disk_size = 6 [(value) = "4194304-4398046511104"]; // optional, should be > source data
+
+  // License IDs that indicate which licenses are attached to this resource.
+  // License IDs are used to calculate additional charges for the use of the virtual machine.
+  //
+  // The correct license ID is generated by the platform. IDs are inherited by new resources created from this resource.
+  //
+  // If you know the license IDs, specify them when you create the image.
+  // For example, if you create a disk image using a third-party utility and load it into Object Storage, the license IDs will be lost.
+  // You can specify them in this request.
+  repeated string product_ids = 7 [(length) = "<=50"];
+
+  oneof source {
+    option (exactly_one) = true;
+
+    // ID of the source image to create the new image from.
+    string image_id = 8 [(length) = "<=50"];
+
+    // ID of the disk to create the image from.
+    string disk_id = 9 [(length) = "<=50"];
+
+    // ID of the snapshot to create the image from.
+    string snapshot_id = 10 [(length) = "<=50"];
+
+    // URI of the source image to create the new image from.
+    // Currently only supports links to images that are stored in Object Storage.
+    // Must be a valid [pre-signed URL](/docs/storage/concepts/pre-signed-urls).
+    // Currently only supports Qcow2, VMDK, and RAW image formats.
+    string uri = 11;
+  }
+
+  // Operating system that is contained in the image.
+  //
+  // If not specified and you used the `image_id` or `disk_id` field to set the source, then the value can be inherited from the source resource.
+  Os os = 12;
+
+  // When true, an image pool will be created for fast creation disks from the image.
+  bool pooled = 17;
+
+  // Specify the overrides to hardware_generation of a source disk, image or snapshot,
+  // or to the default values if the source does not define it.
+  HardwareGeneration hardware_generation = 18;
+}
+
+message CreateImageMetadata {
+  // ID of the image that is being created.
+  string image_id = 1;
+}
+
+message UpdateImageRequest {
+  // ID of the Image resource to update.
+  // To get the image ID, use a [ImageService.List] request.
+  string image_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which fields of the Image resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the image.
+  string name = 3 [(pattern) = "|[a-z]([-_a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the image.
+  string description = 4 [(length) = "<=256"];
+
+  // Minimum size of the disk that can be created from this image.
+  // Specified in bytes. Should be more than the volume of source data and more than the virtual disk size.
+  int64 min_disk_size = 5 [(value) = "4194304-4398046511104"];
+
+  // Resource labels as `key:value` pairs.
+  //
+  // Existing set of `labels` is completely replaced by the provided set.
+  map<string, string> labels = 6 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_./\\@0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"
+  ];
+}
+
+message UpdateImageMetadata {
+  // ID of the Image resource that is being updated.
+  string image_id = 1;
+}
+
+message DeleteImageRequest {
+  // ID of the image to delete.
+  // To get the image ID, use a [ImageService.List] request.
+  string image_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteImageMetadata {
+  // ID of the image that is being deleted.
+  string image_id = 1;
+}
+
+message ListImageOperationsRequest {
+  // ID of the Image resource to list operations for.
+  string image_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListImageOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListImageOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListImageOperationsResponse {
+  // List of operations for the specified image.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListImageOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListImageOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

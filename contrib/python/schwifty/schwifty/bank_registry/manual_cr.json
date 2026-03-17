@@ -1,0 +1,194 @@
+[
+  {
+    "country_code": "CR",
+    "bank_code": "0100",
+    "primary": true,
+    "bic": "BCCRCRSJ",
+    "name": "Banco Central de Costa Rica",
+    "short_name": "Banco Central de Costa Rica"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0102",
+    "primary": true,
+    "bic": "BSNJCRSJ",
+    "name": "Banco BAC San Jos\u00e9",
+    "short_name": "Banco BAC San Jos\u00e9"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0104",
+    "primary": true,
+    "bic": "BXBACRSJ",
+    "name": "Davivienda Puesto de Bolsa (Costa Rica) S.A.",
+    "short_name": "Banco Davivienda"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0114",
+    "primary": true,
+    "bic": "BCCECRSJ",
+    "name": "Banco Lafise, S.A.",
+    "short_name": "Banco Lafise"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0116",
+    "primary": true,
+    "bic": "PRMKCRSJ",
+    "name": "Banco Promerica",
+    "short_name": "Banco Promerica"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0120",
+    "primary": true,
+    "bic": "BIMPCRSJXXX",
+    "name": "Banco Improsa, S.A.",
+    "short_name": "Banco Improsa"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0125",
+    "primary": true,
+    "bic": "KTAYCRSJ",
+    "name": "BANCO CATHAY DE COSTA RICA, S.A.",
+    "short_name": "BANCO CATHAY"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0126",
+    "primary": true,
+    "bic": "BAGECRSJ",
+    "name": "BANCO GENERAL DE COSTA RICA, S.A.",
+    "short_name": "BANCO GENERAL DE COSTA RICA"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0151",
+    "primary": true,
+    "bic": "BNCRCRSJXXX",
+    "name": "BANCO NACIONAL DE COSTA RICA",
+    "short_name": "BANCO NACIONAL DE COSTA RICA"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0152",
+    "primary": true,
+    "bic": "BCRICRSJ",
+    "name": "BANCO DE COSTA RICA",
+    "short_name": "BANCO DE COSTA RICA"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0161",
+    "primary": true,
+    "bic": "BPDCCRSJ",
+    "name": "BANCO POPULAR Y DE DESARROLLO COMUNAL",
+    "short_name": "BANCO POPULAR Y DE DESARROLLO COMUNAL"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0310",
+    "primary": true,
+    "bic": "FCCRCRS1",
+    "name": "FINANCIERA G AND T CONTINENTAL COSTA RICA S.A.",
+    "short_name": "FINANCIERA G AND T CONTINENTAL COSTA RICA S.A."
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0556",
+    "primary": true,
+    "bic": "CCIOCRSJ",
+    "name": "BANCO BCT S.A.",
+    "short_name": "BANCO BCT S.A."
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0570",
+    "primary": true,
+    "bic": "BXBACRSJDP1",
+    "name": "Davivienda Puesto de Bolsa (Costa Rica) S.A.",
+    "short_name": "Banco Davivienda"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0581",
+    "primary": true,
+    "bic": "BSNJCRSJXXX",
+    "name": "Banco BAC San Jos\u00e9",
+    "short_name": "Banco BAC San Jos\u00e9"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0594",
+    "primary": true,
+    "bic": "BIMPCRSJ",
+    "name": "Banco Improsa, S.A.",
+    "short_name": "Banco Improsa"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0734",
+    "primary": true,
+    "bic": "ICELCRSJ",
+    "name": "Instituto Costarricense Electricidad",
+    "short_name": "ICE"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0747",
+    "primary": true,
+    "bic": "ISNSCRS1",
+    "name": "INSTITUTO NACIONAL DE SEGUROS",
+    "short_name": "INS"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0803",
+    "primary": true,
+    "bic": "GMAVCRS1XXX",
+    "name": "Grupo Mutual Alajuela - La Vivienda",
+    "short_name": "Grupo Mutual Alajuela - La Vivienda"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0814",
+    "primary": true,
+    "bic": "CPOPCRS1",
+    "name": "COOPENAE",
+    "short_name": "COOPENAE"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0824",
+    "primary": true,
+    "bic": "CAOVCRS1",
+    "name": "COOPERATIVA DE AHORRO Y CREDITO DE LOS SERVIDORES PUBLICOS",
+    "short_name": "COOPERATIVA DE AHORRO Y CREDITO"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0839",
+    "primary": true,
+    "bic": "ICVSCRSJXXX",
+    "name": "INTERCLEAR CENTRAL DE VALORES, S.A.",
+    "short_name": "INTERCLEAR CENTRAL DE VALORES, S.A."
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0841",
+    "primary": true,
+    "bic": "BVPBCRS1",
+    "name": "BCT VALORES PUESTO DE BOLSA SA",
+    "short_name": "BCT VALORES PUESTO DE BOLSA SA"
+  },
+  {
+    "country_code": "CR",
+    "bank_code": "0900",
+    "primary": true,
+    "bic": "TELDCRSJXXX",
+    "name": "TELEDOLAR S.A.",
+    "short_name": "TELEDOLAR S.A."
+  }
+]

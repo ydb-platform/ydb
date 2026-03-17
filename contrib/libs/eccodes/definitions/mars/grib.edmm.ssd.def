@@ -1,0 +1,5 @@
+alias mars.instrument = instrumentType;
+alias mars.ident = satelliteNumber;
+
+alias mars.number = perturbationNumber;
+

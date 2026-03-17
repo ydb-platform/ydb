@@ -1,0 +1,189 @@
+# Czech (Czechia) translations for WTForms.
+# Copyright (C) 2020 WTForms Team
+# This file is distributed under the same license as the WTForms project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2020.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: WTForms 2.0.2dev\n"
+"Report-Msgid-Bugs-To: ghostbarik@gmail.com\n"
+"POT-Creation-Date: 2020-04-22 09:05-0700\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Daniil Barabash <ghostbarik@gmail.com>\n"
+"Language: cs_CZ\n"
+"Language-Team: cz <ghostbarik@gmail.com>\n"
+"Plural-Forms: nplurals=3; plural=((n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.8.0\n"
+
+#: wtforms/validators.py:68
+#, python-format
+msgid "Invalid field name '%s'."
+msgstr "Neplatný název pole '%s'."
+
+#: wtforms/validators.py:76
+#, python-format
+msgid "Field must be equal to %(other_name)s."
+msgstr "Hodnota pole má být stejná jako u %(other_name)s."
+
+#: wtforms/validators.py:109
+#, python-format
+msgid "Field must be at least %(min)d character long."
+msgid_plural "Field must be at least %(min)d characters long."
+msgstr[0] "Počet znaků daného pole má být minimálně %(min)d."
+msgstr[1] "Počet znaků daného pole má být minimálně %(min)d."
+msgstr[2] ""
+
+#: wtforms/validators.py:112
+#, python-format
+msgid "Field cannot be longer than %(max)d character."
+msgid_plural "Field cannot be longer than %(max)d characters."
+msgstr[0] "Počet znaků daného pole má byt maximálně %(max)d."
+msgstr[1] "Počet znaků daného pole má byt maximálně %(max)d."
+msgstr[2] ""
+
+#: wtforms/validators.py:115
+#, python-format
+msgid "Field must be exactly %(max)d character long."
+msgid_plural "Field must be exactly %(max)d characters long."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: wtforms/validators.py:118
+#, python-format
+msgid "Field must be between %(min)d and %(max)d characters long."
+msgstr "Délka pole ma být mezi %(min)d a %(max)d."
+
+#: wtforms/validators.py:154
+#, python-format
+msgid "Number must be at least %(min)s."
+msgstr "Hodnota čísla má být alespoň %(min)s."
+
+#: wtforms/validators.py:156
+#, python-format
+msgid "Number must be at most %(max)s."
+msgstr "Hodnota čísla má být maximálně %(max)s."
+
+#: wtforms/validators.py:158
+#, python-format
+msgid "Number must be between %(min)s and %(max)s."
+msgstr "Hodnota čísla má být mezi %(min)s and %(max)s."
+
+#: wtforms/validators.py:218 wtforms/validators.py:258
+msgid "This field is required."
+msgstr "Toto pole je povinné."
+
+#: wtforms/validators.py:290
+msgid "Invalid input."
+msgstr "Neplatný vstup."
+
+#: wtforms/validators.py:355
+msgid "Invalid email address."
+msgstr "Neplatná emailová adresa."
+
+#: wtforms/validators.py:388
+msgid "Invalid IP address."
+msgstr "Neplatná IP adresa."
+
+#: wtforms/validators.py:430
+msgid "Invalid Mac address."
+msgstr "Neplatná MAC adresa."
+
+#: wtforms/validators.py:465
+msgid "Invalid URL."
+msgstr "Neplatné URL."
+
+#: wtforms/validators.py:485
+msgid "Invalid UUID."
+msgstr "Neplatné UUID."
+
+#: wtforms/validators.py:515
+#, python-format
+msgid "Invalid value, must be one of: %(values)s."
+msgstr "Neplatná hodnota, povolené hodnoty jsou: %(values)s."
+
+#: wtforms/validators.py:547
+#, python-format
+msgid "Invalid value, can't be any of: %(values)s."
+msgstr "Neplatná hodnota, nesmí být mezi: %(values)s."
+
+#: wtforms/csrf/core.py:98 wtforms/ext/csrf/form.py:47
+msgid "Invalid CSRF Token"
+msgstr "Neplatný CSRF token."
+
+#: wtforms/csrf/session.py:61 wtforms/ext/csrf/session.py:58
+msgid "CSRF token missing"
+msgstr "Chybí CSRF token."
+
+#: wtforms/csrf/session.py:69 wtforms/ext/csrf/session.py:66
+msgid "CSRF failed"
+msgstr "Chyba CSRF."
+
+#: wtforms/csrf/session.py:74 wtforms/ext/csrf/session.py:71
+msgid "CSRF token expired"
+msgstr "Hodnota CSRF tokenu."
+
+#: wtforms/ext/appengine/fields.py:87 wtforms/ext/appengine/fields.py:164
+#: wtforms/ext/appengine/fields.py:166 wtforms/ext/django/fields.py:95
+#: wtforms/ext/sqlalchemy/fields.py:125 wtforms/ext/sqlalchemy/fields.py:127
+#: wtforms/ext/sqlalchemy/fields.py:180 wtforms/ext/sqlalchemy/fields.py:185
+#: wtforms/fields/core.py:513
+msgid "Not a valid choice"
+msgstr "Neplatná volba."
+
+#: wtforms/ext/appengine/fields.py:185
+msgid "Not a valid list"
+msgstr "Neplatná hodnota pro seznam"
+
+#: wtforms/ext/appengine/fields.py:204
+msgid "Not a valid integer list"
+msgstr "Neplatná hodnota pro seznam celých čísel."
+
+#: wtforms/ext/dateutil/fields.py:63
+msgid "Please input a date/time value"
+msgstr "Uveďte, prosím, datum/čas."
+
+#: wtforms/ext/dateutil/fields.py:75 wtforms/ext/dateutil/fields.py:83
+msgid "Invalid date/time input"
+msgstr "Neplatná hodnota pro datum/čas."
+
+#: wtforms/fields/core.py:505
+msgid "Invalid Choice: could not coerce"
+msgstr "Neplatná volba: nelze převést."
+
+#: wtforms/fields/core.py:539
+msgid "Invalid choice(s): one or more data inputs could not be coerced"
+msgstr "Neplatná volba: jeden nebo více datových vstupů nemohou být převedeny."
+
+#: wtforms/fields/core.py:546
+#, python-format
+msgid "'%(value)s' is not a valid choice for this field"
+msgstr "'%(value)s' není platnou volbou pro dané pole."
+
+#: wtforms/fields/core.py:629 wtforms/fields/core.py:639
+msgid "Not a valid integer value"
+msgstr "Neplatná hodnota pro celé číslo."
+
+#: wtforms/fields/core.py:705
+msgid "Not a valid decimal value"
+msgstr "Neplatná hodnota pro desetinné číslo."
+
+#: wtforms/fields/core.py:732
+msgid "Not a valid float value"
+msgstr "Neplatná hodnota pro desetinné číslo."
+
+#: wtforms/fields/core.py:793
+msgid "Not a valid datetime value"
+msgstr "Neplatná hodnota pro datum a čas."
+
+#: wtforms/fields/core.py:810
+msgid "Not a valid date value"
+msgstr "Neplatná hodnota pro datum."
+
+#: wtforms/fields/core.py:827
+msgid "Not a valid time value"
+msgstr ""
+

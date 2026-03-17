@@ -1,0 +1,7 @@
+# Product discipline 0 - Meteorological products, parameter category 14: trace gases
+0 0 Total ozone (DU)
+1 1 Ozone mixing ratio (kg/kg)
+2 2 Total column integrated ozone (DU)
+# 3-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

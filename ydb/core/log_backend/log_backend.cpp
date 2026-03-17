@@ -240,21 +240,4 @@ TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> Create
     return logBackends;
 }
 
-TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> CreateTopicCloudEventsAuditLogBackends(
-    const TKikimrRunConfig& runConfig,
-    NMonitoring::TDynamicCounterPtr counters) {
-    TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> logBackends;
-
-    if (!runConfig.AppConfig.HasPQConfig()) {
-        return logBackends;
-    }
-
-    if (runConfig.AppConfig.GetPQConfig().HasTopicCloudEventsAudit()) {
-        const auto& auditConfig = runConfig.AppConfig.GetPQConfig().GetTopicCloudEventsAudit();
-        AddAuditConfigLogBackends(auditConfig, logBackends, runConfig, counters);
-    }
-
-    return logBackends;
-}
-
 } // NKikimr

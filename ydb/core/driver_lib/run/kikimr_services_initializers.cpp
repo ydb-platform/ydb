@@ -2996,7 +2996,7 @@ TAuditWriterInitializer::TAuditWriterInitializer(const TKikimrRunConfig &runConf
 
 void TAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData)
 {
-    auto logBackends = NKikimr::CreateAuditLogBackends(KikimrRunConfig, appData->Counters);
+    auto logBackends = CreateAuditLogBackends(KikimrRunConfig, appData->Counters);
 
     if (logBackends.size() == 0)
         return;
@@ -3023,7 +3023,12 @@ TTopicAuditWriterInitializer::TTopicAuditWriterInitializer(const TKikimrRunConfi
 
 void TTopicAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData)
 {
-    auto logBackends = NKikimr::CreateTopicCloudEventsAuditLogBackends(KikimrRunConfig, appData->Counters);
+
+    TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> logBackends;
+    if (KikimrRunConfig.AppConfig.HasPQConfig() && KikimrRunConfig.AppConfig.GetPQConfig().HasTopicCloudEventsAudit()) {
+        const auto& auditConfig = KikimrRunConfig.AppConfig.GetPQConfig().GetTopicCloudEventsAudit();
+        AddAuditConfigLogBackends(auditConfig, logBackends, KikimrRunConfig, appData->Counters);
+    }
 
     if (logBackends.size() == 0)
         return;

@@ -165,7 +165,7 @@ void FillTopicRequestParameters(TRequestParameters* params, const TString& path,
     }
 }
 
-static void FillRequestedPermission(
+void FillRequestedPermission(
     google::protobuf::RepeatedPtrField<yandex::cloud::events::RequestedPermissions>* permissions,
     const TCloudEventInfo& info)
 {
@@ -177,7 +177,8 @@ static void FillRequestedPermission(
     permission->set_authorized(true);
 }
 
-static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
+template <typename TEvent>
+void FillCommonEventFields(TEvent& ev, const TCloudEventInfo& info) {
     // Authentication
     ev.mutable_authentication()->set_authenticated(true);
     ev.mutable_authentication()->set_subject_id(info.UserSID);
@@ -198,91 +199,46 @@ static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
 
     // RequestMetadata
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
-
-    if (info.OperationStatus == NKikimrScheme::StatusSuccess) {
-        ev.set_event_status(EStatus::DONE);
-    } else if (info.OperationStatus == NKikimrScheme::StatusAccepted) {
-        ev.set_event_status(EStatus::STARTED);
-    } else {
-        ev.set_event_status(EStatus::ERROR);
-        ev.mutable_error()->set_message(info.Issue);
-    }
-
-    Y_VERIFY(info.ModifyScheme.HasCreatePersQueueGroup());
-
-    auto* details = ev.mutable_details();
-    details->set_path(info.TopicPath);
-    FillTopicDetails(details, info.ModifyScheme.GetCreatePersQueueGroup());
-
-    auto* requestParams = ev.mutable_request_parameters();
-    FillTopicRequestParameters(requestParams, info.TopicPath, info.ModifyScheme.GetCreatePersQueueGroup());
 }
 
-static void Fill(TAlterTopicEvent& ev, const TCloudEventInfo& info) {
-    ev.mutable_authentication()->set_authenticated(true);
-    ev.mutable_authentication()->set_subject_id(info.UserSID);
-    ev.mutable_authentication()->set_subject_type(
-        yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
-    ev.mutable_authorization()->set_authorized(true);
-    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), info);
-
-    ev.mutable_event_metadata()->set_event_id(CreateGuidAsString());
-    ev.mutable_event_metadata()->set_event_type("yandex.cloud.events.ydb.topics." + GetOperationType(info.ModifyScheme));
-    auto ts = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(info.CreatedAt.MilliSeconds());
-    *ev.mutable_event_metadata()->mutable_created_at() = ts;
-    ev.mutable_event_metadata()->set_cloud_id(info.CloudId);
-    ev.mutable_event_metadata()->set_folder_id(info.FolderId);
-
-    ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
-
-    if (info.OperationStatus == NKikimrScheme::StatusSuccess) {
-        ev.set_event_status(EStatus::DONE);
-    } else if (info.OperationStatus == NKikimrScheme::StatusAccepted) {
-        ev.set_event_status(EStatus::STARTED);
-    } else {
-        ev.set_event_status(EStatus::ERROR);
-        ev.mutable_error()->set_message(info.Issue);
-    }
-
-    Y_VERIFY(info.ModifyScheme.HasAlterPersQueueGroup());
-
-    auto* details = ev.mutable_details();
-    details->set_path(info.TopicPath);
-    FillTopicDetails(details, info.ModifyScheme.GetAlterPersQueueGroup());
-
-    auto* requestParams = ev.mutable_request_parameters();
-    FillTopicRequestParameters(requestParams, info.TopicPath, info.ModifyScheme.GetAlterPersQueueGroup());
+template <typename TEvent, typename TFillBody>
+void FillTopicEvent(TEvent& ev, const TCloudEventInfo& info, TFillBody&& fillBody) {
+    FillCommonEventFields(ev, info);
+    fillBody(ev);
 }
 
-static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
-    ev.mutable_authentication()->set_authenticated(true);
-    ev.mutable_authentication()->set_subject_id(info.UserSID);
-    ev.mutable_authentication()->set_subject_type(
-        yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
-    ev.mutable_authorization()->set_authorized(true);
-    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), info);
+template <typename TEvent>
+void Fill(TEvent& ev, const TCloudEventInfo& info) {
+    FillTopicEvent(ev, info, [&info](TEvent& event) {
+        if (info.OperationStatus == NKikimrScheme::StatusSuccess) {
+            event.set_event_status(EStatus::DONE);
+        } else if (info.OperationStatus == NKikimrScheme::StatusAccepted) {
+            event.set_event_status(EStatus::STARTED);
+        } else {
+            event.set_event_status(EStatus::ERROR);
+            event.mutable_error()->set_message(info.Issue);
+        }
 
-    ev.mutable_event_metadata()->set_event_id(CreateGuidAsString());
-    ev.mutable_event_metadata()->set_event_type("yandex.cloud.events.ydb.topics." + GetOperationType(info.ModifyScheme));
-    auto ts = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(info.CreatedAt.MilliSeconds());
-    *ev.mutable_event_metadata()->mutable_created_at() = ts;
-    ev.mutable_event_metadata()->set_cloud_id(info.CloudId);
-    ev.mutable_event_metadata()->set_folder_id(info.FolderId);
+        auto* details = event.mutable_details();
+        details->set_path(info.TopicPath);
 
-    ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
-
-    if (info.Issue.empty()) {
-        ev.set_event_status(EStatus::DONE);
-    } else {
-        ev.set_event_status(EStatus::ERROR);
-        ev.mutable_error()->set_message(info.Issue);
-    }
-
-    ev.mutable_details()->set_path(info.TopicPath);
-
-    auto* requestParams = ev.mutable_request_parameters();
-    requestParams->set_path(info.TopicPath);
+        if constexpr (std::is_same_v<TEvent, TAlterTopicEvent>) {
+            const auto& desc = info.ModifyScheme.GetAlterPersQueueGroup();
+            FillTopicDetails(details, desc);
+            FillTopicRequestParameters(event.mutable_request_parameters(), info.TopicPath, desc);
+        } else if constexpr (std::is_same_v<TEvent, TCreateTopicEvent>) {
+            const auto& desc = info.ModifyScheme.GetCreatePersQueueGroup();
+            FillTopicDetails(details, desc);
+            FillTopicRequestParameters(event.mutable_request_parameters(), info.TopicPath, desc);
+        } else if constexpr (std::is_same_v<TEvent, TDeleteTopicEvent>) {
+            event.mutable_request_parameters()->set_path(info.TopicPath);
+        }
+    });
 }
+
+template void Fill<TAlterTopicEvent>(TAlterTopicEvent& ev, const TCloudEventInfo& info);
+template void Fill<TCreateTopicEvent>(TCreateTopicEvent& ev, const TCloudEventInfo& info);
+template void Fill<TDeleteTopicEvent>(TDeleteTopicEvent& ev, const TCloudEventInfo& info);
 
 template<typename TEvent>
 TString SerializeEvent(const TEvent& ev) {

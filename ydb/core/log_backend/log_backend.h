@@ -19,7 +19,9 @@ TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> Create
     const TKikimrRunConfig& runConfig,
     NMonitoring::TDynamicCounterPtr counters);
 
-TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> CreateTopicCloudEventsAuditLogBackends(
+void AddAuditConfigLogBackends(
+    const NKikimrConfig::TAuditConfig& auditConfig,
+    TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>>& logBackends,
     const TKikimrRunConfig& runConfig,
     NMonitoring::TDynamicCounterPtr counters);
 

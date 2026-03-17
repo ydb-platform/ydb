@@ -442,7 +442,6 @@ public:
 
     void Handle(TEvBackupInfo::TPtr& ev, const TActorContext& ctx) {
         TotalBytes = ev->Get()->TotalBytes;
-        PreviousChangelogChecksum = NBackup::ComputeInitialChecksum(ev->Get()->Generation, ev->Get()->Step);
 
         if (DryRun) {
             auto* dryRunExec = new TDryRunExecutor(TabletID());
@@ -693,7 +692,6 @@ private:
 
     TActorId RestoreSubscriber; // only for tests
 
-    TString PreviousChangelogChecksum;
     bool SkipChecksumValidation = false;
     bool DryRun = false;
 }; // TRecoveryShard
@@ -877,7 +875,6 @@ public:
 
         while (i < Changelog->Get()->Lines.size()) {
             const auto& line = Changelog->Get()->Lines[i];
-            TString lineChecksum;
 
             NJson::TJsonValue json;
             try {
@@ -890,44 +887,6 @@ public:
             if (!json.IsMap()) {
                 Result.Error(TStringBuilder() << "Invalid JSON format in changelog line: " << line);
                 return true;
-            }
-
-            if (!Self->SkipChecksumValidation) {
-                if (!json.Has("sha256")) {
-                    Result.Error(TStringBuilder() << "Changelog line is missing 'sha256' field: " << line);
-                    return true;
-                }
-
-                if (!json["sha256"].IsString()) {
-                    Result.Error(TStringBuilder() << "Invalid 'sha256' field in changelog line: " << line);
-                    return true;
-                }
-
-                const TString& expectedChecksum = json["sha256"].GetString();
-
-                static constexpr TStringBuf sha256Prefix = "\"sha256\":\"";
-                auto pos = line.rfind(sha256Prefix);
-                if (pos == TString::npos) {
-                    Result.Error(TStringBuilder() << "Changelog line is missing 'sha256' field: " << line);
-                    return true;
-                }
-
-                auto valueStart = pos + sha256Prefix.size();
-                auto valueEnd = line.find('"', valueStart);
-                if (valueEnd == TString::npos) {
-                    Result.Error(TStringBuilder() << "Malformed sha256 field in changelog line: " << line);
-                    return true;
-                }
-
-                TStringBuf before(line.data(), pos);
-                TStringBuf after(line.data() + valueEnd + 1, line.size() - valueEnd - 1);
-                lineChecksum = NBackup::ComputeChecksum(before, after, Self->PreviousChangelogChecksum);
-    
-                if (lineChecksum != expectedChecksum) {
-                    Result.Error(TStringBuilder() << "Changelog checksum mismatch:"
-                        << " expected " << expectedChecksum << ", got " << lineChecksum << ", line: " << line);
-                    return true;
-                }
             }
 
             if (json.Has("schema_changes")) {
@@ -981,7 +940,6 @@ public:
                 }
             }
 
-            Self->PreviousChangelogChecksum = std::move(lineChecksum);
             processedBytes += line.size() + 1; // +1 for newline;
             ++i;
 
@@ -1040,6 +998,7 @@ public:
         , SnapshotDirPath(BackupPath.Child("snapshot"))
         , SchemaFilePath(SnapshotDirPath.Child("schema.json"))
         , ChangelogFilePath(BackupPath.Child("changelog.json"))
+        , ChangelogMetaPath(BackupPath.Child("changelog_meta.json"))
         , ExpectedTabletType(tabletType)
         , ExpectedTabletId(tabletId)
         , SkipChecksumValidation(skipChecksumValidation)
@@ -1050,20 +1009,12 @@ public:
             return SendResultAndDie(false, TStringBuilder() << "Backup dir doesn't exist: " << BackupPath);
         }
 
-        if (!SnapshotDirPath.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
-        }
-
-        if (!ValidateManifest(SnapshotDirPath)) {
+        if (!ValidateSnapshot()) {
             return;
         }
 
-        if (!SchemaFilePath.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Snapshot schema file doesn't exist: " << SchemaFilePath);
-        }
-
-        if (!ChangelogFilePath.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Changelog file doesn't exist: " << ChangelogFilePath);
+        if (!ValidateChangelog()) {
+            return;
         }
 
         ui64 totalBytes = 0;
@@ -1073,7 +1024,7 @@ public:
             return SendResultAndDie(false, TStringBuilder() << "Cannot calculate total size: " << e.what());
         }
 
-        Send(Owner, new TEvBackupInfo(totalBytes, Generation, Step));
+        Send(Owner, new TEvBackupInfo(totalBytes));
         Become(&TThis::StateWork);
     }
 
@@ -1123,10 +1074,10 @@ public:
                     } catch (const TIoException& e) {
                         return SendResultAndDie(false, TStringBuilder() << "Failed to open snapshot file " << CurrentFilePath << ": " << e.what());
                     }
-                } else if (!ChangelogProcessed) {
+                } else if (!ProcessingChangelog) {
                     CurrentFilePath = ChangelogFilePath;
                     CurrentTableName.clear();
-                    ChangelogProcessed = true;
+                    ProcessingChangelog = true;
 
                     try {
                         CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
@@ -1145,6 +1096,14 @@ public:
             try {
                 TString line;
                 while (linesSize < RestoreInFlightBytes() && CurrentFileInput->ReadLine(line)) {
+                    if (ProcessingChangelog) {
+                        if (ValidChangelogLines && ChangelogLinesSent >= *ValidChangelogLines)  {
+                            break;
+                        } else {
+                            ++ChangelogLinesSent;
+                        }
+                    }
+
                     linesSize += line.size() + 1; // +1 for \n
                     lines.push_back(std::move(line));
                 }
@@ -1167,8 +1126,18 @@ public:
         }
     }
 
-    bool ValidateManifest(const TFsPath& snapshotDir) {
-        auto manifestFile = snapshotDir.Child("manifest.json");
+    bool ValidateSnapshot() {
+        if (!SnapshotDirPath.Exists()) {
+            SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
+            return false;
+        }
+ 
+        if (!SchemaFilePath.Exists()) {
+            SendResultAndDie(false, TStringBuilder() << "Snapshot schema file doesn't exist: " << SchemaFilePath);
+            return false;
+        }
+    
+        auto manifestFile = SnapshotDirPath.Child("manifest.json");
         if (!manifestFile.Exists()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest file doesn't exist: " << manifestFile);
             return false;
@@ -1183,7 +1152,7 @@ public:
         }
 
         if (!SkipChecksumValidation) {
-            auto manifestChecksumFile = snapshotDir.Child("manifest.json.sha256");
+            auto manifestChecksumFile = SnapshotDirPath.Child("manifest.json.sha256");
             if (!manifestChecksumFile.Exists()) {
                 SendResultAndDie(false, TStringBuilder() << "Manifest checksum file doesn't exist: " << manifestChecksumFile);
                 return false;
@@ -1246,13 +1215,13 @@ public:
             SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'generation' field or it is not an unsigned integer: " << manifest);
             return false;
         }
-        Generation = manifest["generation"].GetUInteger();
+        SnapshotGeneration = manifest["generation"].GetUInteger();
 
         if (!manifest.Has("step") || !manifest["step"].IsUInteger()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'step' field or it is not an unsigned integer: " << manifest);
             return false;
         }
-        Step = manifest["step"].GetUInteger();
+        SnapshotStep = manifest["step"].GetUInteger();
 
         if (!manifest.Has("files") || !manifest["files"].IsArray()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'files' array or it is not an array: " << manifest);
@@ -1268,7 +1237,7 @@ public:
 
             TString name = fileEntry["name"].GetString();
 
-            auto filePath = snapshotDir.Child(name);
+            auto filePath = SnapshotDirPath.Child(name);
             if (!filePath.Exists()) {
                 SendResultAndDie(false, TStringBuilder() << "File listed in manifest not found: " << filePath);
                 return false;
@@ -1314,6 +1283,188 @@ public:
         return true;
     }
 
+    bool ValidateChangelog() {
+        if (!ChangelogFilePath.Exists()) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog file doesn't exist: " << ChangelogFilePath);
+            return false;
+        }
+
+        if (!ChangelogMetaPath.Exists()) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog meta file doesn't exist: " << ChangelogMetaPath);
+            return false;
+        }
+
+        TString metaStr;
+        try {
+            metaStr = TFileInput(ChangelogMetaPath).ReadAll();
+        } catch (const TIoException& e) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Failed to read changelog meta " << ChangelogMetaPath << ": " << e.what());
+            return false;
+        }
+
+        NJson::TJsonValue meta;
+        try {
+            NJson::ReadJsonTree(metaStr, &meta, true);
+        } catch (const std::exception& e) {
+            SendResultAndDie(false, TStringBuilder() 
+                << "Failed to parse changelog meta " << ChangelogMetaPath << ": " << e.what());
+            return false;
+        }
+
+        if (!meta.Has("tablet_id") || !meta["tablet_id"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog meta is missing 'tablet_id' field: " << ChangelogMetaPath);
+            return false;
+        }
+
+        ui64 metaTabletId = meta["tablet_id"].GetUInteger();
+        if (metaTabletId != ExpectedTabletId) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog meta tablet id mismatch: expected " << ExpectedTabletId
+                << ", got " << metaTabletId);
+            return false;
+        }
+
+        if (!meta.Has("generation") || !meta["generation"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog meta is missing 'generation' field: " << ChangelogMetaPath);
+            return false;
+        }
+
+        ui32 metaGen = meta["generation"].GetUInteger();
+        if (metaGen != SnapshotGeneration) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog meta generation mismatch: expected " << SnapshotGeneration
+                << ", got " << metaGen);
+            return false;
+        }
+
+        if (!meta.Has("step") || !meta["step"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog meta is missing 'step' field: " << ChangelogMetaPath);
+            return false;
+        }
+
+        ui32 metaStep = meta["step"].GetUInteger();
+        if (metaStep < SnapshotStep) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog meta step mismatch: expected greater or equal than " << SnapshotStep
+                << ", got " << metaStep);
+            return false;
+        }
+
+        if (SkipChecksumValidation) {
+            return true;
+        }
+
+        TString metaLastHash;
+        if (meta.Has("last_sha256") && meta["last_sha256"].IsString()) {
+            metaLastHash = meta["last_sha256"].GetString();
+        }
+
+        TString prevLine;
+        TString prevHash;
+        ui32 prevStep = SnapshotStep;
+        bool failOnError = prevStep < metaStep;
+        
+        ValidChangelogLines = 0;
+
+        // validate all changelog lines using hash chain until the first error:
+        // - lines up to metaStep are required to be valid
+        // - lines beyond metaStep are treated as potentially torn writes and validated best-effort
+        try {
+            TFileInput input(ChangelogFilePath, 1_MB);
+            TString line;
+
+            while (input.ReadLine(line)) {
+                NJson::TJsonValue json;
+                try {
+                    NJson::ReadJsonTree(line, &json, true);
+                } catch (const std::exception& e) {
+                    if (failOnError) {
+                        SendResultAndDie(false, TStringBuilder()
+                            << "Failed to parse changelog line " << line << ": " << e.what());
+                        return false;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (!json.Has("step") || !json["step"].IsUInteger()) {
+                    if (failOnError) {
+                        SendResultAndDie(false, TStringBuilder()
+                            << "Changelog line is missing 'step' field: " << line);
+                        return false;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (prevHash) {
+                    if (!json.Has("prev_sha256") || !json["prev_sha256"].IsString()) {
+                        if (failOnError) {
+                            SendResultAndDie(false, TStringBuilder()
+                                << "Changelog line is missing 'prev_sha256' field: " << line);
+                            return false;
+                        } else {
+                            break;
+                        }
+                    }
+    
+                    TString expectedHash = json["prev_sha256"].GetString();
+                    if (expectedHash != prevHash) {
+                        if (failOnError) {
+                            SendResultAndDie(false, TStringBuilder()
+                                << "Changelog checksum mismatch for " << prevLine
+                                << ": expected " << expectedHash
+                                << ", got " << prevHash);
+                            return false;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        ++*ValidChangelogLines;
+                    }
+                }
+
+                prevHash = NBackup::ComputeChecksum(line);
+                prevLine = std::move(line);
+                prevStep = json["step"].GetUInteger();
+                failOnError = prevStep < metaStep;
+            }
+        } catch (const TIoException& e) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Failed to read changelog " << ChangelogFilePath << ": " << e.what());
+            return false;
+        }
+
+        // validate the last line using the last hash from meta
+        if (prevLine && prevStep == metaStep) {
+            if (prevHash != metaLastHash) {
+                SendResultAndDie(false, TStringBuilder()
+                    << "Changelog checksum mismatch for " << prevLine
+                    << ": expected " << metaLastHash
+                    << ", got " << prevHash);
+                return false;
+            } else {
+                ++*ValidChangelogLines;
+            }   
+        }
+
+        // validate that the changelog is not truncated
+        if (prevStep < metaStep) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog is truncated: expected step " << metaStep
+                << ", got step " << prevStep);
+            return false;
+        }
+
+        return true;
+    }
+
     ui64 CalculateTotalSize() const {
         ui64 totalBytes = 0;
         totalBytes += GetFileSize(ChangelogFilePath);
@@ -1341,6 +1492,7 @@ private:
     const TFsPath SnapshotDirPath;
     const TFsPath SchemaFilePath;
     const TFsPath ChangelogFilePath;
+    const TFsPath ChangelogMetaPath;
 
     const TTabletTypes::EType ExpectedTabletType;
     const ui64 ExpectedTabletId;
@@ -1348,13 +1500,16 @@ private:
 
     TDeque<TFsPath> SnapshotFiles;
 
-    ui32 Generation = 0;
-    ui32 Step = 0;
+    ui32 SnapshotGeneration;
+    ui32 SnapshotStep;
+
+    std::optional<ui64> ValidChangelogLines;
+    ui64 ChangelogLinesSent = 0;
 
     TFsPath CurrentFilePath;
     TString CurrentTableName;
     THolder<TFileInput> CurrentFileInput;
-    bool ChangelogProcessed = false;
+    bool ProcessingChangelog = false;
 }; // TBackupReader
 
 IActor* CreateRecoveryShard(const TActorId &tablet, TTabletStorageInfo *info) {

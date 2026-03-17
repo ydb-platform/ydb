@@ -8,14 +8,6 @@
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 
 TString FormatChecksumDigest(const NOpenSsl::NSha256::TDigest& digest);
-
-template <typename... Ts>
-TString ComputeChecksum(const Ts&... parts) {
-    NOpenSsl::NSha256::TCalcer calcer;
-    (calcer.Update(TStringBuf(parts)), ...);
-    return FormatChecksumDigest(calcer.Final());
-}
-
-TString ComputeInitialChecksum(ui32 generation, ui32 step);
+TString ComputeChecksum(TStringBuf data);
 
 } // namespace NKikimr::NTabletFlatExecutor::NBackup

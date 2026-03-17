@@ -616,9 +616,6 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
     }
 
     Y_UNIT_TEST(LeftJoinViewsWithNoMatch) {
-        // https://github.com/ydb-platform/ydb/issues/36050
-        return;
-
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
 

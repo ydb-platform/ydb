@@ -96,14 +96,14 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
 
     void BuildWith(IBlockLayoutConverter::TPackResult data) {
         BuildData_ = std::move(data);
-        MKQL_ENSURE(BuildData_.NTuples >= 0 && BuildData_.NTuples <= std::numeric_limits<ui32>::max(),
-                    TStringBuilder() << "NTuples (" << BuildData_.NTuples << ") exceeds ui32 range");
+        MKQL_ENSURE(BuildData_.NTuples >= 0 && BuildData_.NTuples <= std::numeric_limits<int>::max(),
+                    TStringBuilder() << "NTuples (" << BuildData_.NTuples << ") exceeds int range");
         MKQL_ENSURE(
             BuildData_.PackedTuples.size() >= static_cast<size_t>(BuildData_.NTuples) * RowWidth_,
             TStringBuilder() << "NTuples (" << BuildData_.NTuples << ") exceeds PackedTuples capacity ("
                              << BuildData_.PackedTuples.size() << " bytes, row width " << RowWidth_ << ")");
         Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(),
-                     static_cast<ui32>(BuildData_.NTuples));
+                     BuildData_.NTuples);
         if (TrackUsed_ && BuildData_.NTuples > 0) {
             Used_.resize(BuildData_.NTuples, 0);
         }
@@ -114,7 +114,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.Empty();
     }
 
-    i64 RequiredMemoryForBuild(ui32 nTuples) const {
+    i64 RequiredMemoryForBuild(int nTuples) const {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 

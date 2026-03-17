@@ -94,19 +94,3 @@ junk/
 # YDB CLI configuration file location is `~/ydb/config/config.yaml`
 config/config.yaml
 path.bash.inc
-
-# Clang format
-/.clang-format
-
-# Editor config
-/.editorconfig
-
-# Cursor ignore
-.cursor/
-.cursorignore
-
-# Claude Code
-.claude/
-
-# Harness local cluster working directory
-.ydbd_working_dir/

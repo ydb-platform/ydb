@@ -852,21 +852,26 @@ TJoinTestData OutputBufferBoundedTestData() {
     return td;
 }
 
-void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
-    FilterRenamesForSemiAndOnlyJoins(testData);
+TJoinDescription MakeJoinDescription(TJoinTestData& td) {
+    FilterRenamesForSemiAndOnlyJoins(td);
     TJoinDescription descr;
-    descr.CustomRenames = testData.Renames;
-    descr.Setup = testData.Setup.get();
-    descr.LeftSource.KeyColumnIndexes = testData.LeftKeyColmns;
+    descr.CustomRenames = td.Renames;
+    descr.Setup = td.Setup.get();
+    descr.LeftSource.KeyColumnIndexes = td.LeftKeyColmns;
     descr.LeftSource.ColumnTypes =
-        AS_TYPE(TTupleType, AS_TYPE(TListType, testData.Left.Type)->GetItemType())->GetElements();
-    descr.LeftSource.ValuesList = testData.Left.Value;
-    descr.RightSource.KeyColumnIndexes = testData.RightKeyColmns;
+        AS_TYPE(TTupleType, AS_TYPE(TListType, td.Left.Type)->GetItemType())->GetElements();
+    descr.LeftSource.ValuesList = td.Left.Value;
+    descr.RightSource.KeyColumnIndexes = td.RightKeyColmns;
     descr.RightSource.ColumnTypes =
-        AS_TYPE(TTupleType, AS_TYPE(TListType, testData.Right.Type)->GetItemType())->GetElements();
-    descr.RightSource.ValuesList = testData.Right.Value;
-    descr.BlockSize = testData.BlockSize;
-    descr.SliceBlocks = testData.SliceBlocks;
+        AS_TYPE(TTupleType, AS_TYPE(TListType, td.Right.Type)->GetItemType())->GetElements();
+    descr.RightSource.ValuesList = td.Right.Value;
+    descr.BlockSize = td.BlockSize;
+    descr.SliceBlocks = td.SliceBlocks;
+    return descr;
+}
+
+void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
+    auto descr = MakeJoinDescription(testData);
     if (testData.JoinMemoryConstraint){
         descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
     } else {
@@ -1032,21 +1037,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
     Y_UNIT_TEST(TestOutputBufferBounded) {
         auto td = OutputBufferBoundedTestData();
-        FilterRenamesForSemiAndOnlyJoins(td);
-
-        TJoinDescription descr;
-        descr.CustomRenames = td.Renames;
-        descr.Setup = td.Setup.get();
-        descr.LeftSource.KeyColumnIndexes = td.LeftKeyColmns;
-        descr.LeftSource.ColumnTypes =
-            AS_TYPE(TTupleType, AS_TYPE(TListType, td.Left.Type)->GetItemType())->GetElements();
-        descr.LeftSource.ValuesList = td.Left.Value;
-        descr.RightSource.KeyColumnIndexes = td.RightKeyColmns;
-        descr.RightSource.ColumnTypes =
-            AS_TYPE(TTupleType, AS_TYPE(TListType, td.Right.Type)->GetItemType())->GetElements();
-        descr.RightSource.ValuesList = td.Right.Value;
-        descr.BlockSize = td.BlockSize;
-        descr.SliceBlocks = td.SliceBlocks;
+        auto descr = MakeJoinDescription(td);
         descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
 
         THolder<IComputationGraph> graph = ConstructJoinGraphStream(

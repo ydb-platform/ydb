@@ -61,6 +61,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
         }
     }
 
@@ -71,6 +72,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     void SendAuthRequest(const NActors::TActorContext& ctx);
     void CreateConsumerGroupIfNecessary(const TString& topicName,

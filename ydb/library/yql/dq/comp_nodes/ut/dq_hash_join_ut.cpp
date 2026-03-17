@@ -1041,7 +1041,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         descr.RightSource.ValuesList = td.Right.Value;
         descr.BlockSize = td.BlockSize;
         descr.SliceBlocks = td.SliceBlocks;
-        descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+        descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
 
         THolder<IComputationGraph> graph = ConstructJoinGraphStream(
             td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);

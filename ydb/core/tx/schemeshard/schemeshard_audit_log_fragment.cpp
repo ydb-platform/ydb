@@ -292,8 +292,6 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "CHANGE PATH STATE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         return "RESTORE INCREMENTAL FINALIZE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
-        return "SET CONSTRAINT";
     // secret
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
         return "CREATE SECRET";
@@ -687,8 +685,6 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         // For incremental restore finalization, we don't have a specific path in the message
         // since it operates on paths determined at runtime
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsInitiate().GetTableName()}));
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSecret().GetName()}));
         break;

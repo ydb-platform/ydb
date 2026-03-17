@@ -37,7 +37,17 @@ void TWriteQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
 }
 
 bool TWriteQuoter::CanExaust(TInstant now) {
-    return TPartitionQuoterBase::CanExaust(now) && PartitionDeduplicationIdQuotaTracker.CanExaust(now);
+    if (!TPartitionQuoterBase::CanExaust(now)) {
+        return false;
+    }
+    if (!PartitionDeduplicationIdQuotaTracker.CanExaust(now)) {
+        if (!PartitionDeduplicationIdQuotaStartWaitTime) {
+            PartitionDeduplicationIdQuotaStartWaitTime = now;
+        }
+        return false;
+    }
+
+    return true;
 }
 
 void TWriteQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
@@ -109,7 +119,13 @@ ui64 TWriteQuoter::GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig&
 }
 
 IEventBase* TWriteQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
-    return new TEvPQ::TEvApproveWriteQuota(context.Request->Cookie, context.AccountQuotaWaitTime, ActorContext().Now() - context.PartitionQuotaWaitStart);
+    auto now = ActorContext().Now();
+    return new TEvPQ::TEvApproveWriteQuota(
+        context.Request->Cookie,
+        context.AccountQuotaWaitTime,
+        now - context.PartitionQuotaWaitStart,
+        PartitionDeduplicationIdQuotaStartWaitTime ? now - PartitionDeduplicationIdQuotaStartWaitTime : TDuration::Zero()
+    );
 };
 
 TAccountQuoterHolder* TWriteQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>&) {

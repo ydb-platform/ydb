@@ -48,9 +48,10 @@ void RequestQuota(auto& runtime, auto& quoterId, auto& edgeActorId) {
         new TEvPQ::TEvRequestQuota(1, new IEventHandle(quoterId, edgeActorId, writeRequest)));
 }
 
-bool WaitForQuotaApproved(TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(1)) {
+THolder<TEvPQ::TEvApproveWriteQuota> WaitForQuotaApproved(TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(1)) {
     auto event = runtime.GrabEdgeEvent<TEvPQ::TEvApproveWriteQuota>(timeout);
-    return !!event;
+    UNIT_ASSERT(event);
+    return std::move(event);
 }
 
 void ConsumeQuota(auto& runtime, auto& quoterId, auto& edgeActorId, size_t bytes, size_t deduplicationIds) {
@@ -65,14 +66,15 @@ Y_UNIT_TEST(WaitDeduplicationIdQuota) {
 
     auto quoterId = RegisterQuoter(runtime, edgeActorId, 1_MB, 1);
     RequestQuota(runtime, quoterId, edgeActorId);
-    UNIT_ASSERT(WaitForQuotaApproved(runtime));
+    WaitForQuotaApproved(runtime);
 
     TInstant start = TInstant::Now();
 
     ConsumeQuota(runtime, quoterId, edgeActorId, 1_KB, 1);
 
     RequestQuota(runtime, quoterId, edgeActorId);
-    UNIT_ASSERT(WaitForQuotaApproved(runtime));
+    auto approveEvent = WaitForQuotaApproved(runtime);
+    UNIT_ASSERT_GT_C(approveEvent->DeduplicationIdQuotaWaitTime, TDuration::MilliSeconds(950), "duration: " << approveEvent->DeduplicationIdQuotaWaitTime);
 
     auto duration = TInstant::Now() - start;
     UNIT_ASSERT_GT_C(duration, TDuration::MilliSeconds(950), "duration: " << duration);

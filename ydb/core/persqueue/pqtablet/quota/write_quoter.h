@@ -56,6 +56,7 @@ private:
     bool QuotingEnabled;
     THolder<TAccountQuoterHolder> AccountQuotaTracker;
 
+    TInstant PartitionDeduplicationIdQuotaStartWaitTime;
     TQuotaTracker PartitionDeduplicationIdQuotaTracker;
 };
 

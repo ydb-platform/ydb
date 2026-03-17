@@ -1057,14 +1057,16 @@ struct TEvPQ {
     };
 
     struct TEvApproveWriteQuota : public TEventLocal<TEvApproveWriteQuota, EvApproveWriteQuota> {
-        TEvApproveWriteQuota(ui64 requestCookie, const TDuration& accountWaitTime, const TDuration& partitionWaitTime)
+        TEvApproveWriteQuota(ui64 requestCookie, const TDuration& accountWaitTime, const TDuration& partitionWaitTime, const TDuration deduplicationIdQuotaWaitTime)
             : Cookie(requestCookie)
             , AccountQuotaWaitTime(accountWaitTime)
             , PartitionQuotaWaitTime(partitionWaitTime)
+            , DeduplicationIdQuotaWaitTime(deduplicationIdQuotaWaitTime)
         {}
         ui64 Cookie;
         TDuration AccountQuotaWaitTime;
         TDuration PartitionQuotaWaitTime;
+        TDuration DeduplicationIdQuotaWaitTime;
     };
 
     struct TEvConsumed : public TEventLocal<TEvConsumed, EvConsumed> {

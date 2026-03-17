@@ -359,7 +359,7 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
     auto request =
         std::make_unique<TEvBatchErasePersistentBuffer>(it->second.Credentials);
     for (size_t i = 0; i < it->second.Selectors.size(); ++i) {
-        request->AddErase(it->second.Selectors[i], it->second.Lsns[i]);
+        request->AddErase(it->second.Selectors[i], it->second.Lsns[i], it->second.Credentials.Generation);
     }
 
     ctx.Send(MakeHolder<IEventHandle>(
@@ -422,6 +422,7 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
         it->second.Credentials,
         it->second.Selector,
         it->second.Lsn,
+        it->second.Credentials.Generation,
         it->second.Instruction);
 
     ctx.Send(MakeHolder<IEventHandle>(
@@ -558,7 +559,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         it->second.DDiskInstanceGuid);
 
     for (size_t i = 0; i < it->second.Selectors.size(); ++i) {
-        request->AddSegment(it->second.Selectors[i], it->second.Lsns[i]);
+        request->AddSegment(it->second.Selectors[i], it->second.Lsns[i], it->second.Credentials.Generation);
     }
 
     ctx.Send(MakeHolder<IEventHandle>(

@@ -405,10 +405,11 @@ struct TPersistentBufferFormat {
             }
         }
 
-        void AddErase(const TBlockSelector& selector, ui64 lsn) {
+        void AddErase(const TBlockSelector& selector, ui64 lsn, ui32 generation) {
             auto *erase = Record.AddErases();
             selector.Serialize(erase->MutableSelector());
             erase->SetLsn(lsn);
+            erase->SetGeneration(generation);
         }
     };
 

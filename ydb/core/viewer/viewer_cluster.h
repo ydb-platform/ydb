@@ -1002,7 +1002,7 @@ private:
             for (const NKikimrSysView::TGroupEntry& entry : GroupsResponse->Get()->Record.GetEntries()) {
                 const NKikimrSysView::TGroupKey& key = entry.GetKey();
                 const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
-                if (key.GetGroupId() < 0x80000000) {
+                if (TGroupID(key.GetGroupId()).ConfigurationType() == EGroupConfigurationType::Static) {
                     continue; // ignore static groups
                 }
                 if (proxyGroups.count(key.GetGroupId())) {

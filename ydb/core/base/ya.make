@@ -88,6 +88,8 @@ SRCS(
     tx_processing.cpp
     user_registry.h
     wilson_tracing_control.cpp
+    json_index.cpp
+    json_index.h
 )
 
 PEERDIR(

@@ -6,6 +6,7 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -961,6 +962,126 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     )";
     Y_UNIT_TEST(ChunkDetailsDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsDictionary)).Execute();
+    }
+
+    // One table with a column per supported (comparable) type; set DICTIONARY on each, insert one row, read back.
+    // Supported for dictionary: Bool, Int*, Uint*, Float, Double, String/Utf8, Date, Datetime, Timestamp. (Bytes omitted: X'...' literal not supported in script.)
+    TString scriptDictionarySupportedTypes = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            c_bool Bool,
+            c_int8 Int8,
+            c_int16 Int16,
+            c_int32 Int32,
+            c_int64 Int64,
+            c_uint8 Uint8,
+            c_uint16 Uint16,
+            c_uint32 Uint32,
+            c_uint64 Uint64,
+            c_float Float,
+            c_double Double,
+            c_utf8 Utf8,
+            c_string String,
+            c_date Date,
+            c_datetime Datetime,
+            c_timestamp Timestamp,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_bool, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int8, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int16, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int32, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int64, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint8, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint16, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint32, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint64, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_float, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_double, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_utf8, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_string, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_date, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_datetime, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_timestamp, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, c_bool, c_int8, c_int16, c_int32, c_int64, c_uint8, c_uint16, c_uint32, c_uint64, c_float, c_double, c_utf8, c_string, c_date, c_datetime, c_timestamp) VALUES
+            (1u, true, CAST(1 AS Int8), CAST(2 AS Int16), 3, CAST(4 AS Int64), CAST(5 AS Uint8), CAST(6 AS Uint16), CAST(7 AS Uint32), CAST(8 AS Uint64), CAST(1.0 AS Float), 2.0, 'u', 's', Date("2020-01-01"), Datetime("2020-01-01T00:00:00Z"), Timestamp("2020-01-01T00:00:00Z"));
+        ------
+        READ: SELECT pk, c_bool, c_int8, c_int16, c_int32, c_int64, c_uint8, c_uint16, c_uint32, c_uint64, c_float, c_double, c_utf8, c_string, c_date, c_datetime, c_timestamp FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;[%true];[1];[2];[3];[4];[5u];[6u];[7u];[8u];[1.];[2.];["u"];["s"];[18262u];[1577836800u];[1577836800000000u]]]
+    )";
+    Y_UNIT_TEST(DictionarySupportedTypes) {
+        Variator::ToExecutor(Variator::SingleScript(scriptDictionarySupportedTypes)).Execute();
+    }
+
+    // Dictionary cannot be applied to non-comparable types (Json, JsonDocument, Yson). ALTER must fail for each.
+    // Create column table directly under /Root (no tablestore) to avoid schema preset conflict.
+    Y_UNIT_TEST(DictionaryUnsupportedTypes) {
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        guard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        TString createTable = R"(
+            CREATE TABLE `/Root/UnsupportedTypesTable` (
+                pk Uint64 NOT NULL,
+                jcol Json,
+                jdcol JsonDocument,
+                ycol Yson,
+                PRIMARY KEY (pk)
+            )
+            PARTITION BY HASH(pk)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        )";
+        auto createResult = session.ExecuteSchemeQuery(createTable).GetValueSync();
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+        for (const TString& col : {"jcol", "jdcol", "ycol"}) {
+            TString alterQuery = "ALTER OBJECT `/Root/UnsupportedTypesTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=" + col + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_C(!alterResult.IsSuccess(), TString("ALTER COLUMN DICTIONARY on ") + col + " must fail");
+        }
     }
 }
 
